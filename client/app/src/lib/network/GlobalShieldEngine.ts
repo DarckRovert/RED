@@ -194,7 +194,7 @@ export class GlobalShieldEngine {
     private listeners: Set<(telemetry: GlobalShieldTelemetry) => void> = new Set();
     private auditListeners: Set<(log: ShieldAuditLogEntry[]) => void> = new Set();
 
-    private currentDefcon: DefconLevel = 4;
+    private currentDefcon: DefconLevel = 5;
     private isShieldActive: boolean = true;
     private sybilAttacksDeflected: number = 0;
     private replayAttacksDeflected: number = 0;

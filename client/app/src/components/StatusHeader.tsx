@@ -7,6 +7,7 @@ import { RedAPI } from "../lib/api";
 import { KineticDutyGovernor } from "../lib/sensors/KineticDutyGovernor";
 import { SwarmHealthHUD } from "./SwarmHealthHUD";
 import { satelliteMeshGateway, SatelliteGatewayTelemetry } from "../lib/mesh/SatelliteMeshGatewayEngine";
+import { globalShield, GlobalShieldTelemetry } from "../lib/network/GlobalShieldEngine";
 
 export default function StatusHeader() {
     const { nodeOnline, status, navigate, preferences, updatePreferences } = useRedStore();
@@ -16,6 +17,7 @@ export default function StatusHeader() {
     const [meshCounts, setMeshCounts] = useState({ wifi: 0, ble: 0, lora: 0, sound: 0, total: 0 });
     const [loraActive, setLoraActive] = useState(false);
     const [satTelem, setSatTelem] = useState<SatelliteGatewayTelemetry>(() => satelliteMeshGateway.getTelemetry());
+    const [shieldTelem, setShieldTelem] = useState<GlobalShieldTelemetry>(() => globalShield.getTelemetry());
     const [batteryInfo, setBatteryInfo] = useState<{ level: number; charging: boolean; profile: string }>({
         level: 100,
         charging: false,
@@ -80,10 +82,12 @@ export default function StatusHeader() {
         syncTelemetry();
 
         const unsubSat = satelliteMeshGateway.subscribe(setSatTelem);
+        const unsubShield = globalShield.subscribe(setShieldTelem);
         const timer = setInterval(syncTelemetry, 3500);
         return () => {
             clearInterval(timer);
             unsubSat();
+            unsubShield();
         };
     }, [syncTelemetry]);
 
@@ -252,6 +256,33 @@ export default function StatusHeader() {
 
                 {/* ── Right: Real Hardware Telemetry & Tactical Actions ── */}
                 <div style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0 }}>
+                    {/* DEFCON Tactical Pill */}
+                    <button
+                        type="button"
+                        onClick={() => navigate("globalShield")}
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            background: "rgba(0, 0, 0, 0.55)",
+                            border: `1px solid ${shieldTelem.activeProfile.color || '#00E676'}60`,
+                            padding: "4px 7px",
+                            borderRadius: "9px",
+                            fontSize: "10px",
+                            fontFamily: "JetBrains Mono, monospace",
+                            fontWeight: 900,
+                            color: shieldTelem.activeProfile.color || "#00E676",
+                            cursor: "pointer",
+                            boxShadow: `0 0 8px ${shieldTelem.activeProfile.color || '#00E676'}20`,
+                            flexShrink: 0,
+                            transition: "all 0.15s ease"
+                        }}
+                        title={`🛡️ Escudo Global DEFCON ${shieldTelem.currentDefcon}: ${shieldTelem.activeProfile.label}. Clic para abrir matriz`}
+                    >
+                        <span style={{ fontSize: "11px" }}>🛡️</span>
+                        <span style={{ letterSpacing: "0.4px" }}>D-{shieldTelem.currentDefcon}</span>
+                    </button>
+
                     {/* Orbital LEO Gateway Satellite Badge */}
                     <button
                         type="button"

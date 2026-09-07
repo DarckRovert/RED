@@ -272,7 +272,7 @@ export default function Sidebar() {
             icon: "🛡️",
             primaryAction: "globalShield",
             badge: `DEFCON ${shieldTelemetry.currentDefcon}`,
-            badgeColor: shieldTelemetry.activeProfile.color || (shieldTelemetry.currentDefcon === 1 ? 'var(--accent-crimson)' : shieldTelemetry.currentDefcon === 2 ? '#FF8008' : shieldTelemetry.currentDefcon === 3 ? '#FFB300' : '#00E5FF'),
+            badgeColor: shieldTelemetry.activeProfile?.color || (shieldTelemetry.currentDefcon === 1 ? 'var(--accent-crimson)' : shieldTelemetry.currentDefcon === 2 ? '#FF8008' : shieldTelemetry.currentDefcon === 3 ? '#FFB300' : shieldTelemetry.currentDefcon === 5 ? '#00E676' : '#00E5FF'),
             tools: [
                 { icon: "🛡️", label: "Escudo Global DEFCON", action: "globalShield" },
                 { icon: "☢️", label: "Detector Radiológico & Satélite", action: "cbrnSatellite" },

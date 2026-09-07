@@ -8,6 +8,8 @@ import { LocalAIEngine } from "../lib/localAiEngine";
 import { queryAICopilot } from "../api/ai";
 import { DnsTunnelEngine } from "../lib/dnsTunnelEngine";
 import { SniSpoofEngine } from "../lib/sniSpoofEngine";
+import { dtnStorage } from "../lib/mesh/dtnStorage";
+import { meshRouter } from "../lib/mesh/meshRouter";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 
@@ -34,6 +36,34 @@ export default function NetworkPanel() {
     // Covert Channel Dynamic Tunnel States
     const [tunnelTesting, setTunnelTesting] = useState(false);
     const [testResult, setTestResult] = useState<string | null>(null);
+
+    // DTN Store & Forward State
+    const [dtnCount, setDtnCount] = useState<number>(() => dtnStorage.count);
+    const [isFlushingDtn, setIsFlushingDtn] = useState(false);
+
+    const handleFlushDtn = async () => {
+        setIsFlushingDtn(true);
+        try {
+            await meshRouter.flushPendingQueue();
+            setDtnCount(dtnStorage.count);
+            toast.success(`⚡ Búfer DTN procesado (${dtnStorage.count} paquetes en espera)`);
+        } catch {
+            toast.error("Error al forzar transmisión DTN");
+        } finally {
+            setIsFlushingDtn(false);
+        }
+    };
+
+    const handlePurgeExpiredDtn = () => {
+        dtnStorage.purgeExpired();
+        setDtnCount(dtnStorage.count);
+        toast.info("🧹 Barrido de paquetes DTN expirados completado");
+    };
+
+    const handleResetDtnTimers = () => {
+        dtnStorage.forceResetRetryTimers();
+        toast.info("🔄 Temporizadores de reintento DTN reiniciados a 0ms");
+    };
 
     const handleChannelHop = async () => {
         setHoppingChannel(true);
@@ -98,6 +128,10 @@ export default function NetworkPanel() {
         setLoraEnabled(typeof window !== "undefined" && localStorage.getItem("red_lora_enabled") === "true");
         setLoraPort((typeof window !== "undefined" && localStorage.getItem("red_lora_port")) || "/dev/ttyUSB0");
         setLoraBaud((typeof window !== "undefined" && localStorage.getItem("red_lora_baud")) || "115200");
+
+        const dtnTimer = setInterval(() => {
+            setDtnCount(dtnStorage.count);
+        }, 2500);
 
         const fetchIp = async () => {
             try {
@@ -308,6 +342,73 @@ export default function NetworkPanel() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.72rem", color: "var(--text-muted)", paddingTop: "4px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                             <span>FEC: <strong style={{ color: "#fff" }}>{rfMetrics?.fec_rate || "Reed-Solomon 1/2"}</strong></span>
                             <span>Saltos registrados: <strong style={{ color: "var(--accent-cyan)" }}>{rfMetrics?.hops_count ?? 0}</strong></span>
+                        </div>
+                    </div>
+
+                    {/* Búfer Táctico DTN (Store & Forward) */}
+                    <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "12px", border: "1.5px solid rgba(0, 229, 255, 0.3)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                                <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "var(--accent-cyan)", display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <span>📦</span> Búfer DTN (Store & Forward)
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    Enrutamiento epidémico tolerante a retrasos y particiones off-grid
+                                </div>
+                            </div>
+                            <span style={{
+                                padding: "3px 8px", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 900,
+                                background: dtnCount > 0 ? "rgba(255, 179, 0, 0.15)" : "rgba(0, 230, 118, 0.15)",
+                                color: dtnCount > 0 ? "#FFB300" : "#00E676",
+                                border: `1px solid ${dtnCount > 0 ? "#FFB300" : "#00E676"}`
+                            }}>
+                                {dtnCount > 0 ? `${dtnCount} PAQUETES EN ESPERA` : "BÚFER VACÍO (AL DÍA)"}
+                            </span>
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", fontFamily: "JetBrains Mono, monospace" }}>
+                            <div style={{ padding: "8px 10px", borderRadius: "8px", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>CIFRADO EN REPOSO</div>
+                                <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#00E5FF", marginTop: "2px" }}>
+                                    PBKDF2-SHA256 (310k)
+                                </div>
+                                <div style={{ fontSize: "0.60rem", color: "#64748B" }}>AES-256-GCM Grado Militar</div>
+                            </div>
+
+                            <div style={{ padding: "8px 10px", borderRadius: "8px", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>ALMACENAMIENTO</div>
+                                <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#00E676", marginTop: "2px" }}>
+                                    IndexedDB + Memoria
+                                </div>
+                                <div style={{ fontSize: "0.60rem", color: "#64748B" }}>Purga TTL 72h Automática</div>
+                            </div>
+                        </div>
+
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", paddingTop: "4px" }}>
+                            <button
+                                onClick={handleFlushDtn}
+                                disabled={isFlushingDtn}
+                                className="btn-tactical-primary"
+                                style={{ flex: 1, minWidth: "140px", padding: "8px 12px", fontSize: "0.76rem" }}
+                            >
+                                {isFlushingDtn ? "Transmitiendo..." : "⚡ Forzar Envío DTN"}
+                            </button>
+                            <button
+                                onClick={handleResetDtnTimers}
+                                className="btn-tactical-secondary"
+                                style={{ padding: "8px 10px", fontSize: "0.76rem" }}
+                                title="Resetear backoff de reintentos a 0ms"
+                            >
+                                🔄 Reintentar
+                            </button>
+                            <button
+                                onClick={handlePurgeExpiredDtn}
+                                className="btn-tactical-secondary"
+                                style={{ padding: "8px 10px", fontSize: "0.76rem" }}
+                                title="Purgar paquetes vencidos por tiempo de vida"
+                            >
+                                🧹 Purgar
+                            </button>
                         </div>
                     </div>
 

@@ -3,21 +3,28 @@
 import React, { useState, useEffect } from "react";
 import { dynamicBearerGovernor, SwarmHealthTelemetry, TacticalBearerType } from "../lib/mesh/DynamicBearerGovernor";
 import { frequencyHopping, HoppingChannel } from "../lib/mesh/FrequencyHoppingEngine";
+import { dtnStorage } from "../lib/mesh/dtnStorage";
+import { meshRouter } from "../lib/mesh/meshRouter";
 import { toast } from "./Toast";
 
 export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
     const [telemetry, setTelemetry] = useState<SwarmHealthTelemetry>(() => dynamicBearerGovernor.getTelemetry());
     const [currentHop, setCurrentHop] = useState<HoppingChannel>(() => frequencyHopping.getCurrentChannel());
+    const [dtnCount, setDtnCount] = useState<number>(() => dtnStorage.count);
 
     useEffect(() => {
         const unsub = dynamicBearerGovernor.subscribe(setTelemetry);
         const hopInterval = setInterval(() => {
             setCurrentHop(frequencyHopping.getCurrentChannel());
         }, 500);
+        const dtnTimer = setInterval(() => {
+            setDtnCount(dtnStorage.count);
+        }, 2000);
 
         return () => {
             unsub();
             clearInterval(hopInterval);
+            clearInterval(dtnTimer);
         };
     }, []);
 
@@ -224,6 +231,39 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                         );
                     })}
                 </div>
+            </div>
+
+            {/* DTN Store-and-Forward Telemetry */}
+            <div style={{
+                background: "rgba(0, 0, 0, 0.45)", borderRadius: "14px", padding: "10px 14px",
+                border: "1px solid rgba(0, 229, 255, 0.2)", display: "flex", justifyContent: "space-between", alignItems: "center"
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "1.1rem" }}>📦</span>
+                    <div>
+                        <div style={{ fontSize: "0.74rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            Búfer DTN Store & Forward
+                        </div>
+                        <div style={{ fontSize: "0.60rem", color: "#94A3B8" }}>
+                            PBKDF2-SHA256 (310k) · {dtnCount} en espera
+                        </div>
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    onClick={async () => {
+                        await meshRouter.flushPendingQueue();
+                        setDtnCount(dtnStorage.count);
+                        toast.success(`⚡ Búfer DTN transmitido (${dtnStorage.count} en cola)`);
+                    }}
+                    style={{
+                        padding: "5px 10px", borderRadius: "8px", fontSize: "0.68rem", fontWeight: 900,
+                        background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.4)",
+                        color: "#00E5FF", cursor: "pointer"
+                    }}
+                >
+                    ⚡ Forzar Envío
+                </button>
             </div>
         </div>
     );

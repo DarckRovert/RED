@@ -276,8 +276,8 @@ export default function GlobalShieldPanel() {
                             </span>
                         </div>
 
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
-                            {([4, 3, 2, 1] as DefconLevel[]).map((lvl) => {
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "6px" }}>
+                            {([5, 4, 3, 2, 1] as DefconLevel[]).map((lvl) => {
                                 const p = DEFCON_PROFILES[lvl];
                                 const isSelected = telemetry.currentDefcon === lvl;
                                 return (
@@ -286,18 +286,18 @@ export default function GlobalShieldPanel() {
                                         onClick={() => handleSelectDefcon(lvl)}
                                         className={isSelected ? "btn-tactical-primary" : "btn-tactical-secondary"}
                                         style={{
-                                            padding: "12px 6px",
-                                            display: "flex", flexDirection: "column", alignItems: "center", gap: "4px",
+                                            padding: "10px 4px",
+                                            display: "flex", flexDirection: "column", alignItems: "center", gap: "3px",
                                             borderColor: isSelected ? p.color : "var(--glass-border)",
                                             background: isSelected ? `linear-gradient(135deg, ${p.color}25 0%, rgba(10,10,20,0.9) 100%)` : undefined,
                                             boxShadow: isSelected ? `0 0 16px ${p.color}40` : "none"
                                         }}
                                     >
-                                        <span style={{ fontSize: "1.1rem", fontWeight: 900, color: p.color, fontFamily: "JetBrains Mono, monospace" }}>
+                                        <span style={{ fontSize: "1.05rem", fontWeight: 900, color: p.color, fontFamily: "JetBrains Mono, monospace" }}>
                                             D-{lvl}
                                         </span>
-                                        <span style={{ fontSize: "0.64rem", fontWeight: 800, textAlign: "center", whiteSpace: "nowrap" }}>
-                                            {lvl === 4 ? "ESTÁNDAR" : lvl === 3 ? "ELEVADO" : lvl === 2 ? "HOSTIL" : "APAGÓN"}
+                                        <span style={{ fontSize: "0.58rem", fontWeight: 800, textAlign: "center", whiteSpace: "nowrap" }}>
+                                            {lvl === 5 ? "PAZ" : lvl === 4 ? "ESTÁNDAR" : lvl === 3 ? "ELEVADO" : lvl === 2 ? "HOSTIL" : "APAGÓN"}
                                         </span>
                                     </button>
                                 );

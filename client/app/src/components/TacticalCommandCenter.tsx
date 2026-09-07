@@ -8,6 +8,7 @@ import { MonetizationEngine } from '../lib/network/MonetizationEngine';
 import { meshSosBeacon } from '../lib/emergency/MeshSosBeaconEngine';
 import { rfSigintWatchdog, SigintTelemetry } from '../lib/sensors/RfSigintWatchdogEngine';
 import { dynamicBearerGovernor, SwarmHealthTelemetry } from '../lib/mesh/DynamicBearerGovernor';
+import { dtnStorage } from '../lib/mesh/dtnStorage';
 import { SwarmHealthHUD } from './SwarmHealthHUD';
 import { GlobalSearchModal } from './GlobalSearchModal';
 import { toast } from './Toast';
@@ -35,11 +36,18 @@ export const TacticalCommandCenter: React.FC = () => {
     const [sigintTelemetry, setSigintTelemetry] = useState<SigintTelemetry>(() => rfSigintWatchdog.getTelemetry());
     const [swarmTelemetry, setSwarmTelemetry] = useState<SwarmHealthTelemetry>(() => dynamicBearerGovernor.getTelemetry());
     const [shieldTelemetry, setShieldTelemetry] = useState(() => globalShield.getTelemetry());
+    const [dtnPacketCount, setDtnPacketCount] = useState<number>(() => dtnStorage.count);
     const [showSwarmHUD, setShowSwarmHUD] = useState<boolean>(false);
 
     useEffect(() => {
         const unsub = globalShield.subscribe(setShieldTelemetry);
-        return unsub;
+        const dtnTimer = setInterval(() => {
+            setDtnPacketCount(dtnStorage.count);
+        }, 2000);
+        return () => {
+            unsub();
+            clearInterval(dtnTimer);
+        };
     }, []);
 
     useEffect(() => {
@@ -144,8 +152,18 @@ export const TacticalCommandCenter: React.FC = () => {
                 title: 'Lienzo Táctico Colaborativo',
                 subtitle: 'Pizarra gráfica sincronizada para mapas, marcas y notas de misión.',
                 badge: 'CANVAS',
-                badgeColor: '#FFB300',
-                accentGlow: 'rgba(255, 179, 0, 0.2)'
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
+                id: 'dtnStorage',
+                action: 'network',
+                icon: '📦',
+                title: 'Búfer DTN Store & Forward',
+                subtitle: 'Cola asíncrona tolerante a retrasos con cifrado PBKDF2 (310k iteraciones).',
+                badge: `${dtnPacketCount} EN COLA`,
+                badgeColor: dtnPacketCount > 0 ? '#FFB300' : '#00E676',
+                accentGlow: dtnPacketCount > 0 ? 'rgba(255, 179, 0, 0.2)' : 'rgba(0, 230, 118, 0.2)'
             },
             {
                 id: 'broadcast',
@@ -400,8 +418,8 @@ export const TacticalCommandCenter: React.FC = () => {
                 title: 'Escudo Global DEFCON',
                 subtitle: 'Monitoreo de integridad perimetral, firewall local y detección de ataques.',
                 badge: `DEFCON ${shieldTelemetry.currentDefcon}`,
-                badgeColor: shieldTelemetry.activeProfile.color || (shieldTelemetry.currentDefcon === 1 ? 'var(--accent-crimson)' : shieldTelemetry.currentDefcon === 2 ? '#FF8008' : shieldTelemetry.currentDefcon === 3 ? '#FFB300' : '#00E5FF'),
-                accentGlow: shieldTelemetry.currentDefcon === 1 ? 'rgba(255, 51, 85, 0.2)' : shieldTelemetry.currentDefcon === 2 ? 'rgba(255, 128, 8, 0.2)' : 'rgba(0, 229, 255, 0.2)'
+                badgeColor: shieldTelemetry.activeProfile?.color || (shieldTelemetry.currentDefcon === 1 ? 'var(--accent-crimson)' : shieldTelemetry.currentDefcon === 2 ? '#FF8008' : shieldTelemetry.currentDefcon === 3 ? '#FFB300' : shieldTelemetry.currentDefcon === 5 ? '#00E676' : '#00E5FF'),
+                accentGlow: shieldTelemetry.currentDefcon === 1 ? 'rgba(255, 51, 85, 0.2)' : shieldTelemetry.currentDefcon === 2 ? 'rgba(255, 128, 8, 0.2)' : shieldTelemetry.currentDefcon === 5 ? 'rgba(0, 230, 118, 0.2)' : 'rgba(0, 229, 255, 0.2)'
             },
             {
                 id: 'c4isrEmpDrill',
@@ -708,10 +726,14 @@ export const TacticalCommandCenter: React.FC = () => {
                             {activeSosCount > 0 ? `🚨 ${activeSosCount}` : '0 ALERTAS'}
                         </div>
                     </div>
-                    <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <div 
+                        onClick={() => navigate('globalShield')}
+                        style={{ textAlign: 'center', borderLeft: '1px solid rgba(255, 255, 255, 0.08)', cursor: 'pointer' }}
+                        title="Abrir Escudo Global DEFCON"
+                    >
                         <div style={{ fontSize: '0.6rem', color: '#94A3B8', fontWeight: 800 }}>DEFCON</div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#00E5FF' }}>
-                            NIVEL {shieldTelemetry.currentDefcon || 4}
+                        <div style={{ fontSize: '0.85rem', fontWeight: 900, color: shieldTelemetry.activeProfile?.color || (shieldTelemetry.currentDefcon === 5 ? '#00E676' : '#00E5FF') }}>
+                            NIVEL {shieldTelemetry.currentDefcon || 5}
                         </div>
                     </div>
                     <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255, 255, 255, 0.08)' }}>
