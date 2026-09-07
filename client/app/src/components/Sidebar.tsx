@@ -16,6 +16,7 @@ import { SidebarHeader, ChatFilterType } from "./sidebar/SidebarHeader";
 import { ConversationList } from "./sidebar/ConversationList";
 import { ContactList } from "./sidebar/ContactList";
 import { NewChatModal } from "./chat/NewChatModal";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 
 interface TacticalHubItem {
     id: string;
@@ -109,6 +110,55 @@ export default function Sidebar() {
             window.removeEventListener("red:pair_web_companion" as any, pairHandler);
         };
     }, []);
+
+    // Register Back Interceptors for Sidebar Modals & Contacts View
+    useEffect(() => {
+        if (!addContactOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setAddContactOpen(false);
+            return true;
+        });
+    }, [addContactOpen]);
+
+    useEffect(() => {
+        if (!globalSearchOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setGlobalSearchOpen(false);
+            return true;
+        });
+    }, [globalSearchOpen]);
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setMenuOpen(false);
+            return true;
+        });
+    }, [menuOpen]);
+
+    useEffect(() => {
+        if (!webPairingCode) return;
+        return BackHandlerRegistry.register(() => {
+            setWebPairingCode(null);
+            return true;
+        });
+    }, [webPairingCode]);
+
+    useEffect(() => {
+        if (!storyModal) return;
+        return BackHandlerRegistry.register(() => {
+            setStoryModal(null);
+            return true;
+        });
+    }, [storyModal]);
+
+    useEffect(() => {
+        if (activeTab !== "contacts") return;
+        return BackHandlerRegistry.register(() => {
+            setActiveTab("chats");
+            return true;
+        });
+    }, [activeTab]);
 
     const unreadTotal = useMemo(() => {
         return conversations.reduce((acc: number, c: any) => acc + (c.unread_count || 0), 0);

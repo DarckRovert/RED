@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRedStore } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { toast } from "../components/Toast";
 
 const MainNavigationShell   = dynamic(() => import("../components/navigation/MainNavigationShell").then(m => ({ default: m.MainNavigationShell })), { ssr: false, loading: () => <AppLoader /> });
 const Sidebar               = dynamic(() => import("../components/Sidebar"),               { ssr: false, loading: () => <AppLoader /> });
@@ -366,22 +367,36 @@ export default function AppRouter() {
       } catch {}
     };
 
+    let lastBackPressTime = 0;
+    let removeBackHandler: (() => void) | null = null;
+
     const setupBackButton = async () => {
       try {
         const { App: CapApp } = await import("@capacitor/app");
         const backHandler = await CapApp.addListener("backButton", () => {
           const state = useRedStore.getState();
-          if (state.currentScreen !== "sidebar") {
-            state.goBack();
-          } else {
-            CapApp.minimizeApp();
+          const handled = state.goBack();
+          if (!handled) {
+            const now = Date.now();
+            if (now - lastBackPressTime < 2000) {
+              CapApp.minimizeApp();
+            } else {
+              lastBackPressTime = now;
+              toast.info("Presiona atrás nuevamente para salir");
+            }
           }
         });
-        return () => backHandler.remove();
-      } catch {
-        return () => {};
-      }
+        removeBackHandler = () => backHandler.remove();
+      } catch {}
     };
+
+    const handlePopState = () => {
+      try {
+        const state = useRedStore.getState();
+        state.goBack({ fromPopState: true });
+      } catch {}
+    };
+    window.addEventListener("popstate", handlePopState);
 
     const checkProfile = async () => {
       try {
@@ -459,6 +474,8 @@ export default function AppRouter() {
       window.removeEventListener("resize", checkViewport);
       window.removeEventListener("red:open_conversation", handleNativeOpenConv);
       window.removeEventListener("red:open_landing", handleOpenLanding);
+      window.removeEventListener("popstate", handlePopState);
+      if (removeBackHandler) removeBackHandler();
     };
   }, []);
 

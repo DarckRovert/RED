@@ -12,6 +12,7 @@ import { WebCompanionLinkModal } from "./WebCompanionLinkModal";
 import { RED_VERSION_NAME } from "../lib/version";
 import { getGuardianStatus } from "../api/ai";
 import { GuardianStatus } from "../api/types";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 
 const RedDisguise = registerPlugin<any>("RedDisguise");
 
@@ -43,6 +44,39 @@ export default function SecurityPanel() {
     const [reportModalOpen, setReportModalOpen] = useState(false);
     const [backupModalOpen, setBackupModalOpen] = useState(false);
     const [companionModalOpen, setCompanionModalOpen] = useState(false);
+
+    // Register Back Interceptors for Security Modals
+    useEffect(() => {
+        if (!healthModalOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setHealthModalOpen(false);
+            return true;
+        });
+    }, [healthModalOpen]);
+
+    useEffect(() => {
+        if (!reportModalOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setReportModalOpen(false);
+            return true;
+        });
+    }, [reportModalOpen]);
+
+    useEffect(() => {
+        if (!backupModalOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setBackupModalOpen(false);
+            return true;
+        });
+    }, [backupModalOpen]);
+
+    useEffect(() => {
+        if (!companionModalOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setCompanionModalOpen(false);
+            return true;
+        });
+    }, [companionModalOpen]);
 
     // ── Guardian AI Status (Live Polling) ──────────────────────────────────────
     const [guardianStatus, setGuardianStatus] = useState<GuardianStatus | null>(null);

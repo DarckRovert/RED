@@ -19,6 +19,7 @@ import { pedestrianDeadReckoning, PdrState } from "../lib/sensors/PedestrianDead
 import { tacticalRdf } from "../lib/sensors/TacticalRdfEngine";
 import { meshUavRelayEngine } from "../lib/mesh/MeshUavRelayEngine";
 import { cbrnPlumeDispersionEngine } from "../lib/tactical/CbrnPlumeDispersionEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 
 function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
@@ -127,6 +128,31 @@ export default function NodeMap() {
     const [pdrState, setPdrState] = useState<PdrState>(() => pedestrianDeadReckoning.getState());
     const [isPdrActive, setIsPdrActive] = useState(false);
     const pdrOriginRef = useRef<{ lat: number; lng: number }>({ lat: 0, lng: 0 });
+
+    // Register Back Interceptors for Map Overlays
+    useEffect(() => {
+        if (!showVaultModal) return;
+        return BackHandlerRegistry.register(() => {
+            setShowVaultModal(false);
+            return true;
+        });
+    }, [showVaultModal]);
+
+    useEffect(() => {
+        if (!showTelemetryDrawer) return;
+        return BackHandlerRegistry.register(() => {
+            setShowTelemetryDrawer(false);
+            return true;
+        });
+    }, [showTelemetryDrawer]);
+
+    useEffect(() => {
+        if (!selectedPeer) return;
+        return BackHandlerRegistry.register(() => {
+            setSelectedPeer(null);
+            return true;
+        });
+    }, [selectedPeer]);
 
     useEffect(() => {
         const unsub = pedestrianDeadReckoning.subscribe((state) => {

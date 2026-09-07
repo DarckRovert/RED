@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRedStore } from "../../store/useRedStore";
 import { SettingsManager } from "../../lib/settingsManager";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
@@ -16,6 +16,7 @@ import { StorageTab } from "./StorageTab";
 import { MeshTab } from "./MeshTab";
 import { UpdatesTab } from "./UpdatesTab";
 import { LinkedDevicesView } from "./LinkedDevicesView";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 
 interface FamiliarSettingsViewProps {
     onClose?: () => void;
@@ -28,6 +29,24 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
     const { identity, preferences, updatePreferences } = useRedStore();
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const [activeSection, setActiveSection] = useState<SubSection>(null);
+
+    // Register back interceptor for sub-sections
+    useEffect(() => {
+        if (activeSection === null) return;
+        return BackHandlerRegistry.register(() => {
+            setActiveSection(null);
+            return true;
+        });
+    }, [activeSection]);
+
+    // Register back interceptor for QR modal
+    useEffect(() => {
+        if (!qrModalOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setQrModalOpen(false);
+            return true;
+        });
+    }, [qrModalOpen]);
 
     const isFamiliar = (preferences?.uiMode ?? "familiar") !== "tactical";
 

@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { GroupAdminModal } from "./GroupAdminModal";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { Badge } from "./ui/Badge";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 
 export default function GroupsPanel() {
     const { contacts: rawContacts, groups: rawGroups, conversations: rawConvs, goBack, navigate, fetchData } = useRedStore();
@@ -18,6 +19,15 @@ export default function GroupsPanel() {
     const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
     const [creationStatus, setCreationStatus] = useState("");
     const [adminGroup, setAdminGroup] = useState<any | null>(null);
+
+    // Register Back Interceptor for Group Admin Modal
+    useEffect(() => {
+        if (!adminGroup) return;
+        return BackHandlerRegistry.register(() => {
+            setAdminGroup(null);
+            return true;
+        });
+    }, [adminGroup]);
 
     // Build unread + last message index from conversations for groups
     const groupConvIndex = useMemo(() => {

@@ -1,12 +1,14 @@
 import { StateCreator } from 'zustand';
-import { RedStore, ScreenView } from '../types';
+import { RedStore, ScreenView, NavTab, NavigationEntry } from '../types';
 import { SettingsManager, DEFAULT_PREFERENCES, UserPreferences } from '../../lib/settingsManager';
 import { RedAPI } from '../../api/client';
 import { localTransport } from '../../lib/mesh/localTransport';
 import { meshRouter } from '../../lib/mesh/meshRouter';
 import { ConversationItem, MessageItem } from '../../api/types';
+import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
 
 const OVERLAY_SCREENS = new Set<string>(['call', 'updater']);
+const MAX_HISTORY_LENGTH = 30;
 
 export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = (set, get) => ({
     preferences: typeof window !== 'undefined' ? SettingsManager.init() : DEFAULT_PREFERENCES,
@@ -26,13 +28,47 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
     // ── Contact Authorization initial state ──────────────────────────────────,
 
     currentScreen: 'sidebar',
+    activeTab: 'chats' as NavTab,
     activeMiniAppBundle: null,
+    navigationHistory: [] as NavigationEntry[],
+
+    setActiveTab: (tab: NavTab) => {
+        const prevTab = get().activeTab;
+        if (prevTab !== tab) {
+            set({ activeTab: tab });
+        }
+    },
 
     launchMiniApp: (bundle: any) => {
+        get().navigate('miniApp', undefined);
         set({ activeMiniAppBundle: bundle, currentScreen: 'miniApp' });
     },
 
-    navigate: (screen: ScreenView, contextId?: string) => {
+    navigate: (screen: ScreenView, contextId?: string, options?: { replace?: boolean; skipHistory?: boolean }) => {
+        const current = get();
+        const prevScreen = current.currentScreen;
+        const prevContext = current.activeConversationId;
+        const prevTab = current.activeTab;
+
+        // Push to history unless skipped or replacing
+        const isSameState = prevScreen === screen && (contextId !== undefined ? prevContext === contextId : true);
+        if (!options?.skipHistory && !options?.replace && !isSameState) {
+            const newEntry: NavigationEntry = {
+                screen: prevScreen,
+                contextId: prevContext,
+                activeTab: prevTab,
+                timestamp: Date.now()
+            };
+            const currentHistory = Array.isArray(current.navigationHistory) ? current.navigationHistory : [];
+            const trimmed = [...currentHistory, newEntry].slice(-MAX_HISTORY_LENGTH);
+            set({ navigationHistory: trimmed });
+
+            if (typeof window !== 'undefined' && window.history && typeof window.history.pushState === 'function') {
+                try {
+                    window.history.pushState({ screen, contextId, activeTab: prevTab }, '');
+                } catch {}
+            }
+        }
         // Overlay screens: navigate without touching activeConversationId unless contextId provided
         if (OVERLAY_SCREENS.has(screen)) {
             if (contextId) {
@@ -199,7 +235,46 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
         }
     },
 
-    goBack: () => {
-        set({ currentScreen: 'sidebar', activeConversationId: null });
+    goBack: (options?: { fromPopState?: boolean } | unknown) => {
+        // 1. Check LIFO back interceptors first (open modals, search bars, viewers)
+        if (BackHandlerRegistry.hasInterceptors()) {
+            const handled = BackHandlerRegistry.executeTop();
+            if (handled) return true;
+        }
+
+        const state = get();
+        const history = Array.isArray(state.navigationHistory) ? [...state.navigationHistory] : [];
+
+        // 2. Pop navigation stack if available
+        if (history.length > 0) {
+            const prevEntry = history.pop()!;
+            set({ navigationHistory: history });
+
+            if (prevEntry.screen === 'chat' && prevEntry.contextId) {
+                state.navigate('chat', prevEntry.contextId, { skipHistory: true });
+            } else {
+                set({
+                    currentScreen: prevEntry.screen,
+                    activeConversationId: prevEntry.contextId || null,
+                    activeTab: prevEntry.activeTab || state.activeTab
+                });
+            }
+            return true;
+        }
+
+        // 3. If on root ('sidebar') but in a secondary tab, return to 'chats'
+        if (state.currentScreen === 'sidebar' && state.activeTab !== 'chats') {
+            set({ activeTab: 'chats' });
+            return true;
+        }
+
+        // 4. If on another screen without history, fallback to sidebar
+        if (state.currentScreen !== 'sidebar') {
+            set({ currentScreen: 'sidebar', activeConversationId: null });
+            return true;
+        }
+
+        // 5. At root (sidebar + chats tab + empty history)
+        return false;
     },
 });

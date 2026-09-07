@@ -52,6 +52,15 @@ export interface PendingContactRequest {
 
 export type ScreenView = 'sidebar' | 'commandCenter' | 'chat' | 'settings' | 'updater' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'explorer' | 'network' | 'dms' | 'amber' | 'amberAdmin' | 'guardian' | 'compass' | 'channels' | 'publicChannels' | 'sos' | 'walkie' | 'weather' | 'weatherAlert' | 'idVault' | 'identityVault' | 'proximity' | 'proximityWave' | 'canvas' | 'liveCanvas' | 'ecoMesh' | 'proximitySettings' | 'proximity_settings' | 'aiCopilot' | 'copilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon' | 'rfSpectrum' | 'stegoVault' | 'security' | 'groups' | 'squads' | 'p2pCompass' | 'socialFeed' | 'shakePair' | 'p2pPay' | 'redP2PPay' | 'blackout' | 'health' | 'systemHealth' | 'nodeLogs' | 'logs' | 'calculator' | 'secReport' | 'backup' | 'landing' | 'commercialHub' | 'hub' | 'globalShield' | 'web3Vault' | 'webCompanionLink' | 'companionLink' | 'hyperBrowser' | 'appStore' | 'miniApp' | 'tacticalVisionScan' | 'shamirRecovery' | 'cbrnSatellite' | 'zkBarterSubsurface' | 'tcccBallistics' | 'c4isrEmpDrill' | 'airGapStego' | 'celestialPdr' | 'acousticWarfare' | 'vitalResources' | 'sonarSeismic' | 'tacticalFoxhunt' | 'atmosphericSafety' | 'loraTransceiver' | 'extremeSurvival' | 'survivalHud';
 
+export type NavTab = 'chats' | 'status' | 'calls' | 'tools' | 'settings';
+
+export interface NavigationEntry {
+    screen: ScreenView;
+    contextId?: string | null;
+    activeTab?: NavTab;
+    timestamp: number;
+}
+
 export interface RedStore {
     // 0. User Preferences & UI Customization
     preferences: UserPreferences;
@@ -72,8 +81,10 @@ export interface RedStore {
     
     // 3. SPA UI State (The core of Mobile-First architecture)
     currentScreen: ScreenView;
+    activeTab: NavTab;
     activeConversationId: string | null;
     activeMiniAppBundle: any | null;
+    navigationHistory: NavigationEntry[];
     
     // 4. Actions
     login: (password: string) => Promise<boolean>;
@@ -82,9 +93,10 @@ export interface RedStore {
     fetchData: () => Promise<void>;
     
     // Navigation Action
-    navigate: (screen: ScreenView, contextId?: string) => void;
+    navigate: (screen: ScreenView, contextId?: string, options?: { replace?: boolean; skipHistory?: boolean }) => void;
     launchMiniApp: (bundle: any) => void;
-    goBack: () => void;
+    goBack: (options?: { fromPopState?: boolean } | unknown) => boolean;
+    setActiveTab: (tab: NavTab) => void;
     
     // Chat Actions
     sendMessage:  (content: string, options?: Record<string, any>) => Promise<void>;

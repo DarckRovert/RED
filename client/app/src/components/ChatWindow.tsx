@@ -25,6 +25,7 @@ import { useTranslation } from "../lib/i18n/i18nEngine";
 import { TacticalVoiceAnalyzer } from "../lib/audio/TacticalVoiceAnalyzer";
 import { WhatsAppDoodleBackground } from "./chat/WhatsAppDoodleBackground";
 import { MediaSendPreviewModal } from "./chat/MediaSendPreviewModal";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 
 /* ── Avatar helpers ───────────────────────────────────────────────────────── */
 const AVATAR_COLORS = [
@@ -138,6 +139,113 @@ export default function ChatWindow() {
     const [activeWallpaper, setActiveWallpaper] = useState<string>("doodle_green");
     const audioInputRef = useRef<HTMLInputElement | null>(null);
     const isNativeRecorderRef = useRef(false);
+
+    // Register Back Interceptors for Chat Overlays & Modals
+    useEffect(() => {
+        if (!selectedViewerMedia) return;
+        return BackHandlerRegistry.register(() => {
+            setSelectedViewerMedia(null);
+            return true;
+        });
+    }, [selectedViewerMedia]);
+
+    useEffect(() => {
+        if (!isContactProfileOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setIsContactProfileOpen(false);
+            return true;
+        });
+    }, [isContactProfileOpen]);
+
+    useEffect(() => {
+        if (!searchOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setSearchOpen(false);
+            setSearchQuery("");
+            return true;
+        });
+    }, [searchOpen]);
+
+    useEffect(() => {
+        if (!isSelectionMode) return;
+        return BackHandlerRegistry.register(() => {
+            setIsSelectionMode(false);
+            setSelectedMsgIds(new Set());
+            return true;
+        });
+    }, [isSelectionMode]);
+
+    useEffect(() => {
+        if (!forwardingMsg) return;
+        return BackHandlerRegistry.register(() => {
+            setForwardingMsg(null);
+            return true;
+        });
+    }, [forwardingMsg]);
+
+    useEffect(() => {
+        if (!showPollModal) return;
+        return BackHandlerRegistry.register(() => {
+            setShowPollModal(false);
+            return true;
+        });
+    }, [showPollModal]);
+
+    useEffect(() => {
+        if (!isContactShareModalOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setIsContactShareModalOpen(false);
+            return true;
+        });
+    }, [isContactShareModalOpen]);
+
+    useEffect(() => {
+        if (!isStarredModalOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setIsStarredModalOpen(false);
+            return true;
+        });
+    }, [isStarredModalOpen]);
+
+    useEffect(() => {
+        if (!isWallpaperModalOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setIsWallpaperModalOpen(false);
+            return true;
+        });
+    }, [isWallpaperModalOpen]);
+
+    useEffect(() => {
+        if (!isClearChatConfirmOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setIsClearChatConfirmOpen(false);
+            return true;
+        });
+    }, [isClearChatConfirmOpen]);
+
+    useEffect(() => {
+        if (!activeSquadCall) return;
+        return BackHandlerRegistry.register(() => {
+            setActiveSquadCall(null);
+            return true;
+        });
+    }, [activeSquadCall]);
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setMenuOpen(false);
+            return true;
+        });
+    }, [menuOpen]);
+
+    useEffect(() => {
+        if (!burnMenuOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setBurnMenuOpen(false);
+            return true;
+        });
+    }, [burnMenuOpen]);
 
     useEffect(() => {
         const saved = (peerHash ? localStorage.getItem(`red_wallpaper_${peerHash}`) : null) 

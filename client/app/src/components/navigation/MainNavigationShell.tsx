@@ -17,6 +17,8 @@ import { TacticalCommandCenter } from "../TacticalCommandCenter";
 import { SettingsModal } from "../SettingsModal";
 import { FamiliarSettingsView } from "../settings/FamiliarSettingsView";
 
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+
 export type NavTab = "chats" | "status" | "calls" | "tools" | "settings";
 
 interface MainNavigationShellProps {
@@ -27,10 +29,10 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
     const { t } = useTranslation();
     const { 
         conversations: rawConvs, identity, nodeOnline, navigate,
-        peerStories, activeConversationId, preferences
+        peerStories, activeConversationId, preferences,
+        activeTab = "chats", setActiveTab
     } = useRedStore();
 
-    const [activeTab, setActiveTab] = useState<NavTab>("chats");
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
     const [storyCreatorOpen, setStoryCreatorOpen] = useState(false);
     const [topMenuOpen, setTopMenuOpen] = useState(false);
@@ -41,6 +43,31 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
         return unsub;
     }, []);
 
+    // Register Back Interceptors for local modals
+    useEffect(() => {
+        if (!globalSearchOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setGlobalSearchOpen(false);
+            return true;
+        });
+    }, [globalSearchOpen]);
+
+    useEffect(() => {
+        if (!storyCreatorOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setStoryCreatorOpen(false);
+            return true;
+        });
+    }, [storyCreatorOpen]);
+
+    useEffect(() => {
+        if (!topMenuOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setTopMenuOpen(false);
+            return true;
+        });
+    }, [topMenuOpen]);
+
     // Listen for tab switch requests
     useEffect(() => {
         const handleSwitchTab = (e: any) => {
@@ -50,7 +77,7 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
         };
         window.addEventListener("red:switch_tab", handleSwitchTab);
         return () => window.removeEventListener("red:switch_tab", handleSwitchTab);
-    }, []);
+    }, [setActiveTab]);
 
     const conversations = Array.isArray(rawConvs) ? rawConvs : [];
     

@@ -12,6 +12,7 @@ import { dtnStorage } from '../lib/mesh/dtnStorage';
 import { SwarmHealthHUD } from './SwarmHealthHUD';
 import { GlobalSearchModal } from './GlobalSearchModal';
 import { toast } from './Toast';
+import { BackHandlerRegistry } from '../lib/navigation/BackHandlerRegistry';
 
 type CommandDomain = 'favs' | 'comms' | 'nav' | 'survival' | 'security' | 'economy';
 
@@ -28,7 +29,7 @@ interface ModuleCardItem {
 
 export const TacticalCommandCenter: React.FC = () => {
     const { t } = useTranslation();
-    const { navigate, identity, nodeOnline } = useRedStore();
+    const { navigate, identity, nodeOnline, currentScreen, goBack } = useRedStore();
     const [activeDomain, setActiveDomain] = useState<CommandDomain>('favs');
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -38,6 +39,23 @@ export const TacticalCommandCenter: React.FC = () => {
     const [shieldTelemetry, setShieldTelemetry] = useState(() => globalShield.getTelemetry());
     const [dtnPacketCount, setDtnPacketCount] = useState<number>(() => dtnStorage.count);
     const [showSwarmHUD, setShowSwarmHUD] = useState<boolean>(false);
+
+    // Register Back Interceptors for Search and Swarm HUD
+    useEffect(() => {
+        if (!isSearchOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setIsSearchOpen(false);
+            return true;
+        });
+    }, [isSearchOpen]);
+
+    useEffect(() => {
+        if (!showSwarmHUD) return;
+        return BackHandlerRegistry.register(() => {
+            setShowSwarmHUD(false);
+            return true;
+        });
+    }, [showSwarmHUD]);
 
     useEffect(() => {
         const unsub = globalShield.subscribe(setShieldTelemetry);
@@ -663,6 +681,16 @@ export const TacticalCommandCenter: React.FC = () => {
             }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {currentScreen === 'commandCenter' && (
+                            <button
+                                onClick={goBack}
+                                className="btn-icon"
+                                style={{ width: '36px', height: '36px', color: '#00E5FF' }}
+                                title="Volver"
+                            >
+                                ←
+                            </button>
+                        )}
                         <div style={{
                             width: '38px', height: '38px', borderRadius: '12px',
                             background: 'rgba(0, 229, 255, 0.15)', border: '1px solid rgba(0, 229, 255, 0.4)',
