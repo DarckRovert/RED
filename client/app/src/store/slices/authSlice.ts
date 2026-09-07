@@ -15,6 +15,9 @@ let _mainSSE: EventSource | null = null;
 let _outboundSSE: EventSource | null = null;
 let _sseDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let _identityResolvedUnsub: (() => void) | null = null;
+// [RIESGO-01 FIX] Guardar el unsubscriber de onLocalDelivery para cancerlarlo antes de re-registrar.
+// Sin esto, múltiples login/logout acumulan handlers huérfanos en localDeliveryHandlers Set.
+let _meshLocalDeliveryUnsub: (() => void) | null = null;
 
 export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = (set, get) => ({
     isAuthenticated: false,
@@ -209,34 +212,10 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 // Load initial data (conversations, contacts from web storage)
                 await get().fetchData();
 
-                // Wire meshRouter local packet delivery
-                meshRouter.onLocalDelivery((packet) => {
-                    try {
-                        const payloadStr = new TextDecoder().decode(packet.payload);
-                        let parsed: any;
-                        const normTs = packet.timestamp ? (packet.timestamp > 1e11 ? packet.timestamp / 1000 : packet.timestamp) : Date.now() / 1000;
-                        try {
-                            parsed = JSON.parse(payloadStr);
-                        } catch {
-                            parsed = {
-                                id: packet.nonce || `msg_${packet.sender.slice(0, 8)}_${Math.floor(normTs)}`,
-                                content: payloadStr,
-                                sender: packet.sender,
-                                timestamp: normTs,
-                                is_mine: false,
-                                msg_type: 'text'
-                            };
-                        }
-                        if (parsed) {
-                            if (!parsed.sender) parsed.sender = packet.sender;
-                            if (parsed.timestamp && parsed.timestamp > 1e11) parsed.timestamp = parsed.timestamp / 1000;
-                            if (!parsed.timestamp) parsed.timestamp = normTs;
-                            get().addIncomingMessage(parsed);
-                        }
-                    } catch (deliveryErr) {
-                        console.warn('[RED Web] Error handling mesh packet delivery:', deliveryErr);
-                    }
-                });
+                // [BUG-01 FIX] El registro de onLocalDelivery se consolida en un único punto:
+                // initNodeConnection() → localTransport.init() → meshRouter.onLocalDelivery()
+                // Registrar aquí (path web) causaba mensajes duplicados porque localTransport.init()
+                // también registra el mismo handler. El handler unificado vive en L750+ de este archivo.
 
                 // Wire Live Companion Sync Bridge (WhatsApp Web Style Real-time Mirror)
                 companionSyncEngine.onLiveEvent((event) => {
@@ -428,10 +407,12 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
         if (typeof window !== 'undefined' && !localStorage.getItem('red_decoy_identity_seed')) {
             try { localStorage.setItem('red_decoy_identity_seed', decoySeed); } catch {}
         }
-        const myHash = decoySeed.slice(0, 32);
-        const contact1Hash = getCryptoHex(16);
-        const contact2Hash = getCryptoHex(16);
-        const contact3Hash = getCryptoHex(16);
+        // [MINOR-04 FIX] myHash ahora es 64 chars (32 bytes hex) para cumplir el protocolo.
+        // Antes era decoySeed.slice(0, 32) = 32 chars que rompía comparaciones en getCanonicalId().
+        const myHash = decoySeed; // getCryptoHex(32) produce exactamente 64 hex chars
+        const contact1Hash = getCryptoHex(32);
+        const contact2Hash = getCryptoHex(32);
+        const contact3Hash = getCryptoHex(32);
 
         const decoyIdentity = {
             identity_hash: myHash,
@@ -747,7 +728,10 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 connectOutboundSSE();
 
                 localTransport.init(identity.identity_hash).then(() => {
-                    meshRouter.onLocalDelivery((packet) => {
+                    // [RIESGO-01 FIX] Cancelar handler previo antes de registrar uno nuevo.
+                    // Previene acumulación de handlers huérfanos tras múltiples login.
+                    if (_meshLocalDeliveryUnsub) { _meshLocalDeliveryUnsub(); _meshLocalDeliveryUnsub = null; }
+                    _meshLocalDeliveryUnsub = meshRouter.onLocalDelivery((packet) => {
                         try {
                             const payloadStr = new TextDecoder().decode(packet.payload);
                             let parsed: any;
@@ -862,6 +846,11 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
 
                 if (dms.wipe_identity) {
                     localStorage.clear();
+                    if (_meshLocalDeliveryUnsub) { _meshLocalDeliveryUnsub(); _meshLocalDeliveryUnsub = null; }
+                    if (_fetchInterval) { clearInterval(_fetchInterval); _fetchInterval = null; }
+                    if (_mainSSE) { _mainSSE.close(); _mainSSE = null; }
+                    if (_outboundSSE) { _outboundSSE.close(); _outboundSSE = null; }
+                    if (_identityResolvedUnsub) { _identityResolvedUnsub(); _identityResolvedUnsub = null; }
                     set({
                         identity: null,
                         isAuthenticated: false,

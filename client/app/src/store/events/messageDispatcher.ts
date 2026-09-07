@@ -658,6 +658,28 @@ export async function dispatchIncomingMessage(
 
                 // ── CASO B: RESPUESTA DE CONTACTO ACEPTADA (Handshake Bidireccional) ──
                 if (msgType === 'contact_response') {
+                    // [BUG-10 FIX] Verificar que enviamos una solicitud previa a este peer.
+                    // Sin este guard, un nodo malicioso puede inyectar contact_response y
+                    // añadirse a nuestra agenda sin consentimiento explícito.
+                    const pendingRequests = get().pendingContactRequests || [];
+                    const storedOutbound = typeof window !== 'undefined'
+                        ? (() => { try { return JSON.parse(localStorage.getItem('red_outbound_contact_requests') || '[]'); } catch { return []; } })()
+                        : [];
+                    const hadOutboundRequest = [...pendingRequests, ...storedOutbound].some((r: any) =>
+                        r && (r.senderHash === senderHash ||
+                        (senderHash.length >= 8 && (r.senderHash || '').startsWith(senderHash.slice(0, 8))))
+                    );
+                    // Also allow if sender is already an existing contact (mutual re-confirmation)
+                    const isExistingContact = (get().contacts || []).some((c: any) => {
+                        const cHash = normalizeIdentity(c?.identity_hash || '');
+                        return cHash === senderHash || (senderHash.length >= 8 && cHash.startsWith(senderHash.slice(0, 8)));
+                    });
+
+                    if (!hadOutboundRequest && !isExistingContact) {
+                        console.warn(`[RED][Security] contact_response rechazado de ${senderHash.slice(0, 12)}: no existe solicitud previa enviada a este peer`);
+                        return;
+                    }
+
                     if (parsed.accepted !== false) {
                         const currentContacts = get().contacts || [];
                         const cIdx = currentContacts.findIndex(c => {

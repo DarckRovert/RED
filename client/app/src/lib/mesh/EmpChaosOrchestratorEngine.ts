@@ -6,7 +6,7 @@
  */
 
 import { dynamicBearerGovernor } from './DynamicBearerGovernor';
-import { globalShield } from '../network/GlobalShieldEngine';
+import { globalShield, DefconLevel } from '../network/GlobalShieldEngine';
 
 export type ChaosScenario = 'EMP_SIMULATION' | 'RF_JAMMING_FLOOD' | 'MESH_PARTITION' | 'DURESS_PANIC_STRESS' | 'CLEAR';
 
@@ -29,6 +29,7 @@ export class EmpChaosOrchestratorEngine {
     private faradayIsolationEnabled: boolean = false;
     private elapsedDrillSeconds: number = 0;
     private timer: any = null;
+    private previousDefcon: DefconLevel = 5;
 
     private listeners: Set<(s: ChaosEngineState) => void> = new Set();
 
@@ -55,7 +56,14 @@ export class EmpChaosOrchestratorEngine {
     }
 
     public startScenario(scenario: ChaosScenario) {
-        this.stopScenario();
+        if (this.activeScenario === 'CLEAR') {
+            try {
+                this.previousDefcon = globalShield.getTelemetry().currentDefcon || 5;
+            } catch {
+                this.previousDefcon = 5;
+            }
+        }
+        this.stopScenario(false);
         this.activeScenario = scenario;
         this.isInjectingErrors = true;
         this.elapsedDrillSeconds = 0;
@@ -88,7 +96,7 @@ export class EmpChaosOrchestratorEngine {
         this.notify();
     }
 
-    public stopScenario() {
+    public stopScenario(restoreDefcon: boolean = true) {
         this.activeScenario = 'CLEAR';
         this.isInjectingErrors = false;
         this.packetDropRatePct = 0;
@@ -101,7 +109,9 @@ export class EmpChaosOrchestratorEngine {
             this.timer = null;
         }
 
-        globalShield.setDefcon(4);
+        if (restoreDefcon) {
+            globalShield.setDefcon(this.previousDefcon || 5);
+        }
         this.notify();
     }
 

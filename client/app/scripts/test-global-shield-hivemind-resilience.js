@@ -44,7 +44,12 @@ const hmePath = path.join(__dirname, '..', 'src', 'lib', 'network', 'hiveMindEng
 const hmeCode = fs.readFileSync(hmePath, 'utf8');
 
 runTest('1. GlobalShieldEngine: Sanitización de safeLevel y reseteo en destroy()', () => {
-    assert(gseCode.includes('const safeLevel: DefconLevel = ([1, 2, 3, 4].includes(level as any)) ? level : 4;'), 'Debe sanitizar safeLevel');
+    // [BUG-03 FIX] Guard actualizado a [1, 2, 3, 4, 5] — DEFCON 5 es nivel de paz ahora soportado
+    assert(
+        gseCode.includes('const safeLevel: DefconLevel = ([1, 2, 3, 4, 5].includes(level as any)) ? level : 4;'),
+        'Debe sanitizar safeLevel incluyendo DEFCON 5 como nivel válido'
+    );
+    assert(gseCode.includes('NORMALCY'), 'Debe tener perfil DEFCON 5 con codename NORMALCY');
     assert(gseCode.includes('GlobalShieldEngine.instance = null;'), 'Debe reiniciar instance en destroy()');
 });
 

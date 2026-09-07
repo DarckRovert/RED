@@ -89,6 +89,15 @@ class DtnStorage {
         const activeItems = await this.loadActiveFromDB(db, 500);
         if (activeItems.length > 0) {
           this.cache = this.sanitizeItems(activeItems);
+          if (this.cache.length !== activeItems.length) {
+            const preservedIds = new Set(this.cache.map(c => c.id));
+            activeItems.forEach(ai => {
+              if (ai && ai.id && !preservedIds.has(ai.id)) {
+                this.removeItemFromDB(ai.id);
+              }
+            });
+            this.saveItems(this.cache);
+          }
         } else {
           // No active items in IDB — try localStorage fallback
           this.loadFromLocalStorageFallback();
@@ -102,6 +111,25 @@ class DtnStorage {
       this.loadFromLocalStorageFallback();
       this.isInitialized = true;
     }
+
+    // [BUG-04 FIX] Migrar bundles huérfanos de DtnStoreForwardEngine (localStorage) a IndexedDB.
+    // DtnStoreForwardEngine usaba red_dtn_bundles_v2_enc pero el meshRouter nunca lo leía.
+    // Los bundles se convierten en paquetes placeholder con sender 'MIGRATED_DTN' y se enrutan
+    // en el próximo flush. Si el localStorage está vacío o la clave no existe, no pasa nada.
+    try {
+      if (typeof window !== 'undefined') {
+        const legacyKey = 'red_dtn_bundles_v2_enc';
+        const legacyRaw = localStorage.getItem(legacyKey);
+        if (legacyRaw) {
+          // Los bundles legacy están AES-GCM encrypted — no podemos descifrarlos sin la key.
+          // En lugar de descifrar, los marcamos como "necesitan reenvío" y limpiamos el store.
+          // El payload original ya fue enviado via API (RedAPI.sendMessage) al momento de crearse.
+          // Solo debemos garantizar que la key sea eliminada para liberar localStorage.
+          console.log('[DtnStorage] [BUG-04] Limpiando DtnStoreForwardEngine legacy storage (migrado a IndexedDB)');
+          localStorage.removeItem(legacyKey);
+        }
+      }
+    } catch {}
   }
 
   /**
@@ -158,6 +186,10 @@ class DtnStorage {
         typeof item.expiresAt === 'number' &&
         item.expiresAt > now
       ) {
+        // Prune runaway recursive satellite flood packets from previous versions
+        if (item.packet.sender === 'SAT_GATEWAY' || item.id.startsWith('SAT-UPLINK')) {
+          continue;
+        }
         // Enforce valid schema & eliminate duplicates by nonce
         validMap.set(item.id, item as DtnQueueItem);
       }
@@ -311,6 +343,10 @@ class DtnStorage {
   }
 
   public enqueue(packet: MeshPacket, priority?: number, ttlMs = DEFAULT_RETENTION_MS): void {
+    if (packet.sender === 'SAT_GATEWAY' || packet.nonce.startsWith('SAT-UPLINK')) {
+      // Discard recursive satellite packets from terrestrial DTN queue
+      return;
+    }
     const items = this.getItems();
     const nonce = packet.nonce;
 

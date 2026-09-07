@@ -232,7 +232,11 @@ runTest('16. Integración MeshRouter: forwardPacket protege broadcasts y filtra 
 });
 
 console.log('\n================================================================================');
-console.log(`📊 RESUMEN FINAL: ${passedTests}/${totalTests} PRUEBAS SUPERADAS EXITOSAMENTE (100% PASS)`);
+// [FIX] Mostrar porcentaje real — antes siempre decía "100% PASS" sin verificar
+const pct = Math.round((passedTests / totalTests) * 100);
+console.log(`📊 RESUMEN FINAL: ${passedTests}/${totalTests} PRUEBAS SUPERADAS EXITOSAMENTE (${pct}% PASS)`);
 console.log('================================================================================\n');
 
-assert.strictEqual(passedTests, totalTests, 'Todas las pruebas deben pasar');
+if (passedTests !== totalTests) {
+    process.exit(1);
+}

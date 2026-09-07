@@ -18,6 +18,8 @@ export interface LiveStreamItem {
     frames: any[];          // base64 JPEG frames or frame objects
     frame_seq: number;         // last received sequence number
     comments: any[];
+    /** [BUG-13] Timestamp de cierre para GC diferido de 60s en removeLiveStream */
+    _closedAt?: number;
 }
 
 export interface StoryEntry {

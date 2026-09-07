@@ -6,6 +6,7 @@ const assert = require('assert');
 console.log('=== TEST DE RESILIENCIA: TIMEOUT INFERENCIA 60S & RAG VECTORIAL INT8 ===\n');
 
 let passedTests = 0;
+const totalTests = 6;
 
 // Test 1: Timeout de Inferencia en core.ts ampliado a 60s (Erradicación del timeout forzado de 4s)
 {
@@ -152,5 +153,5 @@ let passedTests = 0;
     passedTests++;
 }
 
-console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${passedTests} TESTS PASARON EXITOSAMENTE (100%).`);
-process.exit(0);
+console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${totalTests} TESTS PASARON EXITOSAMENTE (100%).`);
+if (passedTests !== totalTests) { process.exit(1); }

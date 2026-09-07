@@ -501,10 +501,21 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
     removeLiveStream: (streamId: string) => {
         const liveStreams = { ...get().liveStreams };
         if (liveStreams[streamId]) {
-            liveStreams[streamId] = { ...liveStreams[streamId], is_active: false };
+            liveStreams[streamId] = { ...liveStreams[streamId], is_active: false, _closedAt: Date.now() };
         }
         const activeLiveStreamId = get().activeLiveStreamId === streamId ? null : get().activeLiveStreamId;
         set({ liveStreams, activeLiveStreamId });
+
+        // [BUG-13 FIX] Purga diferida: eliminar el stream del estado completamente
+        // después de 60s para liberar memoria. Antes solo se marcaba is_active=false
+        // y los streams inactivos se acumulaban indefinidamente en Zustand.
+        setTimeout(() => {
+            const current = { ...get().liveStreams };
+            if (current[streamId] && !current[streamId].is_active) {
+                delete current[streamId];
+                set({ liveStreams: current });
+            }
+        }, 60_000);
     },
 
     addLiveComment: (streamId: string, sender: string, text: string) => {

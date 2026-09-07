@@ -240,3 +240,6 @@ console.log("  ✅ [PASS] Transmisión de Ráfaga de Voz Vocoder en Paquetes LoR
 console.log("\n================================================================================");
 console.log("📊 RESUMEN: 6/6 PRUEBAS SUPERADAS EXITOSAMENTE (ATAK CoT + LoRa Meshtastic)");
 console.log("================================================================================\n");
+// [FIX] Si algún assert falló arriba, Node ya termina con exit 1 por la excepción.
+// Si llegamos aquí, todos pasaron. Exit explícito 0.
+process.exit(0);

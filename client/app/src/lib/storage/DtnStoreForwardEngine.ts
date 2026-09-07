@@ -32,6 +32,8 @@ export class DtnStoreForwardEngine {
     private static async deriveStorageKey(): Promise<CryptoKey> {
         const identityHash = (() => {
             try {
+                const direct = localStorage.getItem('red_identity_hash');
+                if (direct) return direct;
                 const raw = localStorage.getItem('red_identity');
                 if (raw) {
                     const parsed = JSON.parse(raw);
@@ -50,7 +52,9 @@ export class DtnStoreForwardEngine {
         );
 
         return crypto.subtle.deriveKey(
-            { name: 'PBKDF2', salt: new TextEncoder().encode('RED_DTN_SALT_v1'), iterations: 10000, hash: 'SHA-256' },
+            // [RIESGO-06 FIX] OWASP 2024 recomienda mínimo 310,000 iteraciones para PBKDF2-SHA256.
+            // Con 10,000 iteraciones previas, una GPU podía derivar la clave en segundos.
+            { name: 'PBKDF2', salt: new TextEncoder().encode('RED_DTN_SALT_v1'), iterations: 310_000, hash: 'SHA-256' },
             keyMaterial,
             { name: 'AES-GCM', length: 256 },
             false,
@@ -88,12 +92,12 @@ export class DtnStoreForwardEngine {
 
             let plaintext: ArrayBuffer | null = null;
 
-            // 1. Intento con clave actual
+            // 1. Intento con clave derivada actual
             try {
                 const key = await this.deriveStorageKey();
                 plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
             } catch {
-                // 2. Intento de fallback con clave de nodo por defecto
+                // 2. Intento de fallback con clave de nodo por defecto (310,000 iteraciones)
                 try {
                     const fallbackMaterial = await crypto.subtle.importKey(
                         'raw',
@@ -102,17 +106,36 @@ export class DtnStoreForwardEngine {
                         false,
                         ['deriveBits', 'deriveKey']
                     );
-                    const fallbackKey = await crypto.subtle.deriveKey(
-                        { name: 'PBKDF2', salt: new TextEncoder().encode('RED_DTN_SALT_v1'), iterations: 10000, hash: 'SHA-256' },
+                    const fallbackKey310k = await crypto.subtle.deriveKey(
+                        { name: 'PBKDF2', salt: new TextEncoder().encode('RED_DTN_SALT_v1'), iterations: 310_000, hash: 'SHA-256' },
                         fallbackMaterial,
                         { name: 'AES-GCM', length: 256 },
                         false,
                         ['encrypt', 'decrypt']
                     );
-                    plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, fallbackKey, ct);
+                    plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, fallbackKey310k, ct);
                 } catch {
-                    // Mantener almacenamiento intacto para no destruir paquetes diferidos en reintentos
-                    return [];
+                    // 3. Intento de fallback con clave legacy v1 (10,000 iteraciones)
+                    try {
+                        const fallbackMaterial = await crypto.subtle.importKey(
+                            'raw',
+                            new TextEncoder().encode('red_dtn_default_node_key'),
+                            { name: 'PBKDF2' },
+                            false,
+                            ['deriveBits', 'deriveKey']
+                        );
+                        const fallbackKey10k = await crypto.subtle.deriveKey(
+                            { name: 'PBKDF2', salt: new TextEncoder().encode('RED_DTN_SALT_v1'), iterations: 10000, hash: 'SHA-256' },
+                            fallbackMaterial,
+                            { name: 'AES-GCM', length: 256 },
+                            false,
+                            ['encrypt', 'decrypt']
+                        );
+                        plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, fallbackKey10k, ct);
+                    } catch {
+                        // Mantener almacenamiento intacto para no destruir paquetes diferidos en reintentos
+                        return [];
+                    }
                 }
             }
 

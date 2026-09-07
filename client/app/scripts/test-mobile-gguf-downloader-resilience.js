@@ -6,6 +6,7 @@ const assert = require('assert');
 console.log('=== TEST DE RESILIENCIA Y CERO-OOM: GGUF DOWNLOADER (MÓVIL) ===\n');
 
 let passedTests = 0;
+const totalTests = 9;
 
 // Test 1: Verificar firma canónica GGUF (0x47, 0x47, 0x55, 0x46 -> "GGUF")
 {
@@ -125,6 +126,6 @@ let passedTests = 0;
     passedTests++;
 }
 
-console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${passedTests} TESTS PASARON EXITOSAMENTE (100%).`);
-process.exit(0);
+console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${totalTests} TESTS PASARON EXITOSAMENTE (100%).`);
+if (passedTests !== totalTests) { process.exit(1); }
 

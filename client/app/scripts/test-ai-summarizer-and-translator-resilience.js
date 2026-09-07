@@ -6,6 +6,7 @@ const assert = require('assert');
 console.log('=== TEST DE RESILIENCIA: RESUMIDOR Y TRADUCTOR IA NATIVO / LOCAL (CICLO AI-5) ===\n');
 
 let passedTests = 0;
+const totalTests = 5;
 
 // Test 1: Conexión de summarizeChannelAI a Endpoint Nativo con Fallback
 {
@@ -63,5 +64,5 @@ let passedTests = 0;
     passedTests++;
 }
 
-console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${passedTests} TESTS PASARON EXITOSAMENTE (100%).`);
-process.exit(0);
+console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${totalTests} TESTS PASARON EXITOSAMENTE (100%).`);
+if (passedTests !== totalTests) { process.exit(1); }

@@ -750,7 +750,7 @@ class MeshRouter {
             is_gateway: this.hasInternetAccess,
             has_internet: this.hasInternetAccess,
             gateway_metric: this.hasInternetAccess ? 100 : 0,
-            version: '31.1.0'
+            version: RED_VERSION
           }
         }
       };
@@ -900,6 +900,28 @@ class MeshRouter {
       this.bindDeviceToCanonical(fromTransportId, canonicalSender);
     }
 
+    // [BUG-09 FIX] Verificar que el solicitante sea un contacto autorizado antes de responder.
+    // Un nodo adversario no puede enviar SYNC_STATE_QUERY para extraer el historial.
+    let isAuthorized = false;
+    if (typeof window !== 'undefined') {
+      try {
+        const storedContacts = localStorage.getItem('red_web_contacts');
+        if (storedContacts) {
+          const contacts: any[] = JSON.parse(storedContacts);
+          isAuthorized = contacts.some(c =>
+            c && c.identity_hash &&
+            (c.identity_hash.toLowerCase() === canonicalSender.toLowerCase() ||
+             (canonicalSender.length >= 8 && c.identity_hash.toLowerCase().startsWith(canonicalSender.slice(0, 8).toLowerCase())))
+          );
+        }
+      } catch {}
+    }
+
+    if (!isAuthorized) {
+      console.warn(`[MeshRouter][Security] SYNC_STATE_QUERY rechazado de peer no autorizado: ${canonicalSender.slice(0, 12)}`);
+      return;
+    }
+
     const missingMsgs: any[] = [];
     if (typeof window !== 'undefined') {
       try {
@@ -1042,10 +1064,10 @@ class MeshRouter {
       }
     } catch {}
 
-    // Store-and-Forward: register in persistent DTN tracker to guarantee delivery
-    if (!isBroadcast && !isProtocol) {
-      dtnStorage.enqueue(packet);
-    }
+    // [BUG-07 FIX] La pre-encolada DTN se eliminó. forwardPacket() encola en DTN internamente
+    // cuando todos los transportes fallan (retorna 'queued'). Hacerlo aquí causaba:
+    //   1. Doble encolada con mismo nonce (consumía ciclos IDB sin resultado)
+    //   2. El contador 'attempts' se incrementaba a 1 antes de cualquier intento real
 
     return this.forwardPacket(packet, null);
   }
@@ -1086,6 +1108,18 @@ class MeshRouter {
         }
       }
     } catch {}
+
+    // [BUG-08 FIX] Si no hay peers disponibles, encolar en DTN para reintento diferido.
+    // Los SOS, CBRN y beacons de emergencia no deben perderse silenciosamente.
+    if (sent === 0) {
+      try {
+        const packet = decode(payload);
+        if (packet) {
+          dtnStorage.enqueue(packet, 10); // priority 10 = broadcast/SOS
+          console.warn('[MeshRouter] broadcast() sin peers — guardado en DTN para reintento cuando haya conectividad');
+        }
+      } catch {}
+    }
 
     return sent;
   }
@@ -1593,12 +1627,23 @@ class MeshRouter {
 
     // ─── 6. AUTONOMOUS LEO SATELLITE GATEWAY FALLBACK & ORBITAL UPLINK ───
     // If no terrestrial routes succeeded, dispatch via LEO Satellite Gateway if in AOS or priority packet:
-    if (!anySent) {
+    if (!anySent && packet.sender !== 'SAT_GATEWAY') {
       try {
-        const { satelliteMeshGateway } = await import('./SatelliteMeshGatewayEngine');
-        const satTelem = satelliteMeshGateway.getTelemetry();
-        if (satTelem.isUplinkAvailable || packet.flags === 0x01 || isBroadcast) {
-          const payloadStr = new TextDecoder().decode(packet.payload);
+        const payloadStr = new TextDecoder().decode(packet.payload);
+        const isSatProtocol = payloadStr.startsWith('SAT_BURST_V1:') ||
+                              payloadStr.startsWith('SAT_RELAY_V1|') ||
+                              payloadStr.startsWith('SAT_DOWNLINK_MSG:') ||
+                              payloadStr.startsWith('SBD_V1|') ||
+                              packet.nonce.startsWith('SAT-UPLINK');
+
+        const isCriticalOrEmergency = (packet.flags & 0x01) !== 0 ||
+                                     payloadStr.includes('SOS') ||
+                                     payloadStr.includes('CBRN') ||
+                                     packet.nonce.includes('sos');
+
+        if (!isSatProtocol && isCriticalOrEmergency) {
+          const { satelliteMeshGateway } = await import('./SatelliteMeshGatewayEngine');
+          const satTelem = satelliteMeshGateway.getTelemetry();
           satelliteMeshGateway.enqueueOutboundUplink(payloadStr, 8);
           if (satTelem.isUplinkAvailable) {
             satelliteMeshGateway.triggerSatelliteBurst();
@@ -1685,11 +1730,14 @@ class MeshRouter {
       const res = await this.forwardPacket(packet, null);
       if (res === 'sent') {
         flushed++;
+        // [BUG-06 FIX] Marcar como entregado para eliminar del DTN queue sin esperar DELIVERY_ACK.
+        // En redes sin ACK explícito (modo web, pruebas), el queue crecía indefinidamente.
+        dtnStorage.markAttempt(packet.nonce, true);
       }
     }
 
     if (flushed > 0) {
-      console.log(`[MeshRouter] 🔄 Retransmitted ${flushed}/${items.length} DTN packets awaiting DELIVERY_ACK`);
+      console.log(`[MeshRouter] 🔄 Retransmitted ${flushed}/${items.length} DTN packets — removed from queue`);
     }
 
     // Periodically purge dead expired packets (>30 days)

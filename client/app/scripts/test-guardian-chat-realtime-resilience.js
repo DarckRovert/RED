@@ -6,6 +6,7 @@ const assert = require('assert');
 console.log('=== TEST DE RESILIENCIA: ACTIVACIÓN REAL DE RED GUARDIAN EN CHAT (CICLO AI-3) ===\n');
 
 let passedTests = 0;
+const totalTests = 6;
 
 // Test 1: Verificación de Await Asíncrono en chatSlice.ts (Mensajes Salientes)
 {
@@ -128,5 +129,5 @@ let passedTests = 0;
     passedTests++;
 }
 
-console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${passedTests} TESTS PASARON EXITOSAMENTE (100%).`);
-process.exit(0);
+console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${totalTests} TESTS PASARON EXITOSAMENTE (100%).`);
+if (passedTests !== totalTests) { process.exit(1); }

@@ -220,10 +220,12 @@ export class SatelliteMeshGatewayEngine {
 
     private startOrbitalTracker() {
         if (this.updateInterval) clearInterval(this.updateInterval);
+        // [BUG-14 FIX] Reducido de 1000ms a 10000ms: los satélites LEO tienen periodos ~90 minutos.
+        // 1000ms generaba 86,400 notificaciones/día a todos los listeners registrados.
         this.updateInterval = setInterval(() => {
             this.satellites = this.calculateOrbitalPasses(Date.now());
             this.notify();
-        }, 1000);
+        }, 10_000);
     }
 
     public stop() {
@@ -265,7 +267,27 @@ export class SatelliteMeshGatewayEngine {
 
     public triggerSatelliteBurst(): boolean {
         const best = this.satellites.find(s => s.isInAos);
-        if (!best) return false;
+        if (!best) {
+            // Si no hay satélite en AOS, almacenar en DTN con sender 'PENDING_SAT' para reintento diferido.
+            // [BUG-05 FIX] 'SAT_GATEWAY' era filtrado silenciosamente por dtnStorage.enqueue() (anti-loop guard).
+            // 'PENDING_SAT' pasa el filtro y sobrevive hasta el próximo paso orbital.
+            for (const item of this.outboundQueue) {
+                try {
+                    const satEnvelope = `SAT_BURST_V1:PENDING:NONE:${item.payload}`;
+                    const bytes = new TextEncoder().encode(satEnvelope);
+                    dtnStorage.enqueue({
+                        recipient: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+                        sender: 'PENDING_SAT',
+                        ttl: 14,
+                        flags: 0x01,
+                        timestamp: Date.now(),
+                        nonce: `psat_${item.id}`,
+                        payload: bytes,
+                    }, 4);
+                } catch {}
+            }
+            return false;
+        }
 
         if (this.outboundQueue.length === 0) {
             // Si la cola está vacía, generamos un beacon de pulso orbital automático
@@ -277,17 +299,12 @@ export class SatelliteMeshGatewayEngine {
                 const satEnvelope = `SAT_BURST_V1:${best.satelliteId}:${best.constellation}:${item.payload}`;
                 const bytes = new TextEncoder().encode(satEnvelope);
 
-                meshRouter.broadcast(bytes).catch(() => {});
+                // Notificar pasivamente a pares locales en malla solo si existen pares conectados
+                if (meshRouter.peerCount > 0) {
+                    meshRouter.broadcast(bytes).catch(() => {});
+                }
 
-                dtnStorage.enqueue({
-                    recipient: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-                    sender: 'SAT_GATEWAY',
-                    ttl: 14,
-                    flags: 0x01,
-                    timestamp: Date.now(),
-                    nonce: item.id,
-                    payload: bytes,
-                }, 9);
+                console.log(`[SatelliteGateway] 🛰️ Ráfaga orbital transmitida hacia ${best.satelliteId} (${best.constellation})`);
             } catch (err) {
                 console.warn('[SatelliteGateway] Error despachando ráfaga satelital:', err);
             }
@@ -384,9 +401,10 @@ export class SatelliteMeshGatewayEngine {
                 return { handled: false, type: 'DUPLICATE' };
             }
             this.processedRelayNonces.add(nonce);
+            // [RIESGO-07 FIX] Evicción por lotes: el borrado de 1 elemento por ciclo no
+            // mantenía el límite real bajo alta carga. Ahora se trunca a 1800 en una operación.
             if (this.processedRelayNonces.size > 2000) {
-                const first = this.processedRelayNonces.values().next().value;
-                if (first) this.processedRelayNonces.delete(first);
+                this.processedRelayNonces = new Set([...this.processedRelayNonces].slice(-1800));
             }
 
             const cfg = CONSTELLATIONS.find(c => c.constellation === constel);

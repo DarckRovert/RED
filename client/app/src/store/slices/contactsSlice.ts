@@ -404,6 +404,23 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
                     timestamp: Date.now() / 1000
                 }));
                 meshRouter.broadcast(bcPacket).catch(() => {});
+
+                // [BUG-10 FIX] Registrar solicitud saliente en localStorage para validar
+                // el contact_response entrante y prevenir suplantación de identidad.
+                try {
+                    const existing: any[] = (() => {
+                        try { return JSON.parse(localStorage.getItem('red_outbound_contact_requests') || '[]'); } catch { return []; }
+                    })();
+                    const alreadyTracked = existing.some((r: any) =>
+                        r && r.senderHash === cleanHash
+                    );
+                    if (!alreadyTracked) {
+                        existing.push({ senderHash: cleanHash, sentAt: Date.now() });
+                        // Mantener máx. 200 solicitudes salientes; eliminar las más antiguas
+                        const trimmed = existing.slice(-200);
+                        localStorage.setItem('red_outbound_contact_requests', JSON.stringify(trimmed));
+                    }
+                } catch {}
             } catch {}
         }
 

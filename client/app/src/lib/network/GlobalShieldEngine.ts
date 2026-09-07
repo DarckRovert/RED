@@ -18,7 +18,7 @@ import { DnsTunnelEngine } from './dnsTunnelEngine';
 import { KineticDutyGovernor } from '../sensors/KineticDutyGovernor';
 import { BiometricLockEngine } from '../crypto/BiometricLockEngine';
 
-export type DefconLevel = 4 | 3 | 2 | 1;
+export type DefconLevel = 5 | 4 | 3 | 2 | 1;
 
 export interface DefconProfile {
     level: DefconLevel;
@@ -39,6 +39,25 @@ export interface DefconProfile {
 }
 
 export const DEFCON_PROFILES: Record<DefconLevel, DefconProfile> = {
+    // [BUG-03 FIX] DEFCON 5 añadido — nivel de operación normal sin restricciones de seguridad elevadas.
+    // El i18n ya definía defcon_5 en todos los locales; el engine ahora lo soporta completamente.
+    5: {
+        level: 5,
+        codename: "NORMALCY",
+        label: "DEFCON 5 · PEACETIME",
+        description: "Operación en tiempo de paz. Sin restricciones de red, cleartext permitido, PoW mínimo para máxima performance.",
+        color: "var(--accent-sky)",
+        powDifficulty: 0,
+        sniObfuscationForced: false,
+        dnsTunnelFallbackForced: false,
+        pqcStrictRatcheting: false,
+        isolateWan: false,
+        biometricInstantLock: false,
+        onionHops: 0,
+        allowCleartext: true,
+        soundMesh: false,
+        maxPacketsPerPeer10s: 100,
+    },
     4: {
         level: 4,
         codename: "PEACE_SENTRY",
@@ -200,7 +219,8 @@ export class GlobalShieldEngine {
             const saved = localStorage.getItem(STORAGE_DEFCON_KEY);
             if (saved) {
                 const parsed = parseInt(saved, 10) as DefconLevel;
-                if ([4, 3, 2, 1].includes(parsed)) {
+                // [BUG-03 FIX] Incluir 5 como nivel válido
+                if ([5, 4, 3, 2, 1].includes(parsed)) {
                     this.currentDefcon = parsed;
                 }
             }
@@ -224,7 +244,8 @@ export class GlobalShieldEngine {
      * Sets the global network DEFCON level and enforces security parameters
      */
     public setDefcon(level: DefconLevel): void {
-        const safeLevel: DefconLevel = ([1, 2, 3, 4].includes(level as any)) ? level : 4;
+        // [BUG-03 FIX] Guard actualizado para incluir DEFCON 5
+        const safeLevel: DefconLevel = ([1, 2, 3, 4, 5].includes(level as any)) ? level : 4;
         this.currentDefcon = safeLevel;
         this.lastDefconTransition = Date.now();
         if (typeof window !== "undefined") {

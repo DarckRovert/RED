@@ -6,6 +6,7 @@ const assert = require('assert');
 console.log('=== TEST DE RESILIENCIA: MOTOR NATIVO RUST DESKTOP (CICLO AI-4) ===\n');
 
 let passedTests = 0;
+const totalTests = 6;
 
 const desktopCopilotPath = path.join(__dirname, '../../../node/src/ai_copilot.rs');
 const content = fs.readFileSync(desktopCopilotPath, 'utf8');
@@ -70,5 +71,5 @@ const content = fs.readFileSync(desktopCopilotPath, 'utf8');
     passedTests++;
 }
 
-console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${passedTests} TESTS PASARON EXITOSAMENTE (100%).`);
-process.exit(0);
+console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${totalTests} TESTS PASARON EXITOSAMENTE (100%).`);
+if (passedTests !== totalTests) { process.exit(1); }

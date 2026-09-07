@@ -6,6 +6,7 @@ const assert = require('assert');
 console.log('=== TEST DE RESILIENCIA: OMNICANALIDAD DE IA Y BLINDAJE AUDIOCONTEXT (CICLO AI-6) ===\n');
 
 let passedTests = 0;
+const totalTests = 9;
 
 // Test 1: ChatInput.tsx utiliza translateTextAI unificado
 {
@@ -108,5 +109,5 @@ let passedTests = 0;
     passedTests++;
 }
 
-console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${passedTests} TESTS PASARON EXITOSAMENTE (100%).`);
-process.exit(0);
+console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${totalTests} TESTS PASARON EXITOSAMENTE (100%).`);
+if (passedTests !== totalTests) { process.exit(1); }

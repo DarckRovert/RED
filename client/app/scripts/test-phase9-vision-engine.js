@@ -262,3 +262,5 @@ console.log('  ✅ [PASS] Fuego real con núcleo incandescente detectado con éx
 console.log('\n================================================================================');
 console.log('📊 RESUMEN FASE 9: 6/6 PRUEBAS DE VISIÓN SUPERADAS EXITOSAMENTE (100% PASS)');
 console.log('================================================================================\n');
+// [FIX] Si algún assert lanzó excepción el proceso habrá terminado antes. Si no, exit 0.
+// No se necesita proceso.exit(1) adicional porque assert.strictEqual ya lo maneja.
