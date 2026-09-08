@@ -43,9 +43,9 @@ Despliegue en limpio y sesión de depuración activa en tiempo real vía `adb lo
 ---
 
 ### 4. Binarios Oficiales para Descarga Directa
-- **APK Oficial:** `red-v95.0.0-release.apk` (58.85 MB / 61,704,558 bytes)
-- **APK Canónico:** `red-latest.apk` (58.85 MB / 61,704,558 bytes)
-- **SHA-256 Checksum:** `149AD7AEBBB67129F6F7938656AB5C1DDF0C11D67ACC10B3422D40812CD53769`
+- **APK Oficial:** `red-v95.0.0-release.apk` (58.84 MB / 61,703,330 bytes)
+- **APK Canónico:** `red-latest.apk` (58.84 MB / 61,703,330 bytes)
+- **SHA-256 Checksum:** `2372556E0CE919AAE6D3DFBDF46589F7CFD2DD2731A0D9B6382B01D0D1C506FA`
 - **Registro de Integridad:** `SHA256SUMS.txt`
 
 > **Web App & Descarga Directa:** [https://darckrovert.github.io/RED/](https://darckrovert.github.io/RED/)
