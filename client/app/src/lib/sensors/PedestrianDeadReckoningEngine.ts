@@ -16,6 +16,8 @@ export interface PdrState {
     averageSpeedMps: number;
 }
 
+import { tacticalCompass } from './TacticalCompassEngine';
+
 export class PedestrianDeadReckoningEngine {
     private static instance: PedestrianDeadReckoningEngine | null = null;
 
@@ -35,7 +37,7 @@ export class PedestrianDeadReckoningEngine {
     private isPeakAscending: boolean = false;
     private lastStepTimestamp: number = 0;
     private motionHandler: ((e: DeviceMotionEvent) => void) | null = null;
-    private orientationHandler: ((e: DeviceOrientationEvent) => void) | null = null;
+    private compassUnsub: (() => void) | null = null;
 
     private listeners: Set<(s: PdrState) => void> = new Set();
 
@@ -66,10 +68,12 @@ export class PedestrianDeadReckoningEngine {
 
         // Limpiar listeners previos para evitar duplicaciones
         if (typeof window !== 'undefined') {
-            if (this.orientationHandler) window.removeEventListener('deviceorientation', this.orientationHandler);
             if (this.motionHandler) window.removeEventListener('devicemotion', this.motionHandler);
-            this.orientationHandler = null;
             this.motionHandler = null;
+        }
+        if (this.compassUnsub) {
+            this.compassUnsub();
+            this.compassUnsub = null;
         }
 
         this.isTracking = true;
@@ -77,18 +81,13 @@ export class PedestrianDeadReckoningEngine {
         this.prevAccelMag = 0;
         this.gravityEma = 9.81;
 
-        // Conectar sensores inerciales del dispositivo si está en navegador / WebView Capacitor
+        // Conectar sensor de orientación táctica unificado (Fusión 3D tilt-compensated + fallback cinemático)
+        this.compassUnsub = tacticalCompass.subscribe((telemetry) => {
+            this.currentHeadingDeg = telemetry.headingDeg;
+        });
+
+        // Conectar sensor inercial de movimiento para podometría táctica
         if (typeof window !== 'undefined') {
-            this.orientationHandler = (e: DeviceOrientationEvent) => {
-                let heading = 0;
-                if ((e as any).webkitCompassHeading !== undefined && isFinite((e as any).webkitCompassHeading)) {
-                    heading = (e as any).webkitCompassHeading;
-                } else if (typeof e.alpha === 'number' && isFinite(e.alpha)) {
-                    heading = (360 - e.alpha);
-                }
-                const safeHeading = ((Math.round(heading) % 360) + 360) % 360;
-                this.currentHeadingDeg = isFinite(safeHeading) ? safeHeading : 0;
-            };
 
             this.motionHandler = (e: DeviceMotionEvent) => {
                 let mag = 0;
@@ -129,7 +128,6 @@ export class PedestrianDeadReckoningEngine {
                 this.prevAccelMag = mag;
             };
 
-            window.addEventListener('deviceorientation', this.orientationHandler);
             window.addEventListener('devicemotion', this.motionHandler);
         }
 
@@ -138,10 +136,12 @@ export class PedestrianDeadReckoningEngine {
 
     public stopTracking() {
         this.isTracking = false;
+        if (this.compassUnsub) {
+            this.compassUnsub();
+            this.compassUnsub = null;
+        }
         if (typeof window !== 'undefined') {
-            if (this.orientationHandler) window.removeEventListener('deviceorientation', this.orientationHandler);
             if (this.motionHandler) window.removeEventListener('devicemotion', this.motionHandler);
-            this.orientationHandler = null;
             this.motionHandler = null;
         }
         this.prevAccelMag = 0;

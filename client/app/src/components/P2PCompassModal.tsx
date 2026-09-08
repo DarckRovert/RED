@@ -6,6 +6,7 @@ import { useTranslation } from "../lib/i18n/i18nEngine";
 import { getProximityNodes, ProximityNode } from "../lib/api";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalLocationEngine, TacticalLocation } from "../lib/sensors/TacticalLocationEngine";
+import { tacticalCompass, TacticalCompassTelemetry } from "../lib/sensors/TacticalCompassEngine";
 import { toast } from "./Toast";
 
 function calculateGreatCircleBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -34,6 +35,7 @@ export const P2PCompassModal: React.FC = () => {
     const { t } = useTranslation();
     const [heading, setHeading] = useState<number>(0);
     const [headingSource, setHeadingSource] = useState<"sensor" | "manual">("manual");
+    const [compassTelemetry, setCompassTelemetry] = useState<TacticalCompassTelemetry>(() => tacticalCompass.getTelemetry());
     const [nodes, setNodes] = useState<ProximityNode[]>([]);
     const [activeTab, setActiveTab] = useState<"compass" | "nodes">("compass");
     const [trackedPeerId, setTrackedPeerId] = useState<string | null>(null);
@@ -70,9 +72,6 @@ export const P2PCompassModal: React.FC = () => {
         return () => unsub();
     }, []);
 
-    // Vector Low-Pass Filter state for silky smooth compass rotation without 0 <-> 360 jumps
-    const vecX = useRef<number>(0);
-    const vecY = useRef<number>(0);
 
     // Intercepción LIFO de hardware Android y tecla Escape
     useEffect(() => {
@@ -109,65 +108,15 @@ export const P2PCompassModal: React.FC = () => {
         return () => clearInterval(interval);
     }, [loadNodes]);
 
-    // Smooth heading updater using trigonometric vector low-pass filter
-    const updateSmoothHeading = useCallback((deg: number) => {
-        if (isNaN(deg) || !isFinite(deg)) return;
-        const rad = (deg * Math.PI) / 180;
-        const curSin = Math.sin(rad);
-        const curCos = Math.cos(rad);
-
-        if (vecX.current === 0 && vecY.current === 0) {
-            vecX.current = curCos;
-            vecY.current = curSin;
-        } else {
-            vecX.current = vecX.current * 0.82 + curCos * 0.18;
-            vecY.current = vecY.current * 0.82 + curSin * 0.18;
-        }
-
-        let smoothDeg = Math.round((Math.atan2(vecY.current, vecX.current) * 180) / Math.PI);
-        smoothDeg = ((smoothDeg % 360) + 360) % 360;
-        setHeading(smoothDeg);
-        setHeadingSource("sensor");
-    }, []);
-
-    // Real magnetic heading & GPS orientation listeners
+    // Telemetría unificada de orientación táctica (Giroscopio 3D + Magnetómetro + Filtro Circular + Fallbacks)
     useEffect(() => {
-        const handleOrientation = (event: DeviceOrientationEvent) => {
-            const webkit = (event as any).webkitCompassHeading;
-            const alpha = event.alpha;
-
-            if (webkit != null && isFinite(webkit)) {
-                updateSmoothHeading(webkit);
-            } else if (alpha != null && isFinite(alpha)) {
-                updateSmoothHeading(360 - alpha);
-            }
-        };
-
-        window.addEventListener("deviceorientation", handleOrientation, true);
-        window.addEventListener("deviceorientationabsolute" as any, handleOrientation, true);
-
-        // Geolocation GPS heading fallback
-        let watchId: number | null = null;
-        if (typeof navigator !== "undefined" && navigator.geolocation) {
-            watchId = navigator.geolocation.watchPosition(
-                (pos) => {
-                    if (pos.coords.heading !== null && isFinite(pos.coords.heading)) {
-                        updateSmoothHeading(pos.coords.heading);
-                    }
-                },
-                () => {},
-                { enableHighAccuracy: true }
-            );
-        }
-
-        return () => {
-            window.removeEventListener("deviceorientation", handleOrientation, true);
-            window.removeEventListener("deviceorientationabsolute" as any, handleOrientation, true);
-            if (watchId !== null && typeof navigator !== "undefined" && navigator.geolocation) {
-                navigator.geolocation.clearWatch(watchId);
-            }
-        };
-    }, [updateSmoothHeading]);
+        const unsub = tacticalCompass.subscribe((telemetry) => {
+            setCompassTelemetry(telemetry);
+            setHeading(telemetry.headingDeg);
+            setHeadingSource(telemetry.source === "manual" ? "manual" : "sensor");
+        });
+        return () => unsub();
+    }, []);
 
     const getCardinal = (deg: number) => {
         const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
@@ -349,9 +298,7 @@ export const P2PCompassModal: React.FC = () => {
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
                             {trackedPeer
                                 ? `● RASTREANDO: ${trackedPeer.nickname || trackedPeer.display_name || "Nodo P2P"}`
-                                : headingSource === "sensor"
-                                    ? `● ${t('compass.subtitle') || "Giroscopio & Magnetómetro en Vivo"}`
-                                    : (t('compass.calibrate_hint') || "Calibrando orientación...")
+                                : `● ${tacticalCompass.getSourceDescription(compassTelemetry.source)}`
                             }
                         </div>
                     </div>
@@ -434,7 +381,58 @@ export const P2PCompassModal: React.FC = () => {
                                 <div style={{ fontSize: "1rem", fontWeight: 800, color: "var(--accent-crimson-bright, #FF3355)", letterSpacing: "2px", marginTop: "4px" }}>
                                     RUMBO {getCardinal(heading)}
                                 </div>
+                                <div style={{ fontSize: "0.68rem", color: "#888", marginTop: "4px", fontFamily: "JetBrains Mono, monospace" }}>
+                                    {tacticalCompass.getSourceDescription(compassTelemetry.source)}
+                                </div>
                             </div>
+
+                            {/* Controles de Calibración / Ajuste Manual para dispositivos sin Magnetómetro (Lenovo Tablet) */}
+                            {!compassTelemetry.hasMagnetometer && (
+                                <div style={{
+                                    display: "flex", gap: "8px", alignItems: "center", justifyContent: "center",
+                                    padding: "6px 12px", borderRadius: "10px",
+                                    background: "rgba(255,179,0,0.1)", border: "1px solid rgba(255,179,0,0.3)"
+                                }}>
+                                    <span style={{ fontSize: "0.72rem", color: "#FFB300", fontWeight: 700 }}>
+                                        Sin Magnetómetro:
+                                    </span>
+                                    <button
+                                        onClick={() => tacticalCompass.adjustManualHeading(-15)}
+                                        style={{
+                                            padding: "4px 8px", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800,
+                                            background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)",
+                                            color: "#FFF", cursor: "pointer"
+                                        }}
+                                        title="Ajustar rumbo -15°"
+                                    >
+                                        ◀ -15°
+                                    </button>
+                                    <button
+                                        onClick={() => tacticalCompass.adjustManualHeading(15)}
+                                        style={{
+                                            padding: "4px 8px", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800,
+                                            background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)",
+                                            color: "#FFF", cursor: "pointer"
+                                        }}
+                                        title="Ajustar rumbo +15°"
+                                    >
+                                        +15° ▶
+                                    </button>
+                                    {myCoords && (
+                                        <button
+                                            onClick={() => tacticalCompass.calibrateSolarAzimuth(myCoords.lat, myCoords.lon)}
+                                            style={{
+                                                padding: "4px 8px", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800,
+                                                background: "rgba(255,179,0,0.25)", border: "1px solid #FFB300",
+                                                color: "#FFB300", cursor: "pointer"
+                                            }}
+                                            title="Calibrar apuntando hacia el Sol"
+                                        >
+                                            ☀️ Calibrar Sol
+                                        </button>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Tarjeta de Par Rastreado en Tiempo Real (Peer Vector Guidance) */}
                             {trackedPeer && trackingGuidance && (

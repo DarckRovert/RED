@@ -20,6 +20,7 @@ import { RedAPI, sendVoiceBurst } from "../lib/api";
 import { LowBitrateVocoder } from "../lib/LowBitrateVocoder";
 import { AudioContextManager } from "../lib/audio/AudioContextManager";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { tacticalCompass } from "../lib/sensors/TacticalCompassEngine";
 import { toast } from "./Toast";
 
 interface TacticalWaypoint {
@@ -141,23 +142,16 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
             });
         });
 
-        const handleOrientation = (e: DeviceOrientationEvent) => {
-            if (e.alpha !== null) {
-                const compassHeading = (e as any).webkitCompassHeading ?? (360 - e.alpha);
-                setHeading(Math.round(compassHeading));
-            }
-        };
+        // Telemetría unificada de orientación táctica (Giroscopio 3D + Magnetómetro + Filtro Circular + Fallback COG)
+        const unsubCompass = tacticalCompass.subscribe((telemetry) => {
+            setHeading(telemetry.headingDeg);
+        });
 
-        if (typeof window !== "undefined") {
-            window.addEventListener("deviceorientation", handleOrientation, true);
-        }
         return () => {
             isMounted = false;
             stopAcousticBeacon();
             if (unsubGps) (unsubGps as any)();
-            if (typeof window !== "undefined") {
-                window.removeEventListener("deviceorientation", handleOrientation, true);
-            }
+            unsubCompass();
             if (mediaStreamRef.current) {
                 mediaStreamRef.current.getTracks().forEach(t => t.stop());
                 mediaStreamRef.current = null;

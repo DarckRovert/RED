@@ -156,12 +156,20 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
     };
 
     return (
-        <div style={{
-            position: "fixed", inset: 0, zIndex: 100000,
-            background: "rgba(3, 7, 18, 0.88)", backdropFilter: "blur(12px)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            padding: "20px"
-        }}>
+        <div 
+            onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                    TacticalAudioEngine.playTap();
+                    onClose();
+                }
+            }}
+            style={{
+                position: "fixed", inset: 0, zIndex: 100000,
+                background: "rgba(3, 7, 18, 0.88)", backdropFilter: "blur(12px)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                padding: "20px"
+            }}
+        >
             <div 
                 className="modal-card-scrollable"
                 style={{

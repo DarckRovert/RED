@@ -16,6 +16,7 @@ import { deadDropVault } from "../lib/storage/DeadDropVaultEngine";
 import { milStd2525 } from "../lib/tactical/MilStd2525Engine";
 import { sitrepEngine, SitrepReport } from "../lib/tactical/SitrepEngine";
 import { pedestrianDeadReckoning, PdrState } from "../lib/sensors/PedestrianDeadReckoningEngine";
+import { tacticalCompass } from "../lib/sensors/TacticalCompassEngine";
 import { tacticalRdf } from "../lib/sensors/TacticalRdfEngine";
 import { meshUavRelayEngine } from "../lib/mesh/MeshUavRelayEngine";
 import { cbrnPlumeDispersionEngine, CbrnIncidentSource } from "../lib/tactical/CbrnPlumeDispersionEngine";
@@ -139,6 +140,26 @@ export default function NodeMap() {
     const [pdrState, setPdrState] = useState<PdrState>(() => pedestrianDeadReckoning.getState());
     const [isPdrActive, setIsPdrActive] = useState(false);
     const pdrOriginRef = useRef<{ lat: number; lng: number }>({ lat: 0, lng: 0 });
+
+    // ── Brújula Táctica 3D con Compensación de Inclinación y Filtro Circular ──
+    const [compassHeading, setCompassHeading] = useState<number>(() => tacticalCompass.getTelemetry().headingDeg);
+
+    useEffect(() => {
+        const unsub = tacticalCompass.subscribe((telemetry) => {
+            setCompassHeading(telemetry.headingDeg);
+            const coneEl = document.getElementById("tactical-self-cone");
+            if (coneEl) {
+                coneEl.style.transform = `rotate(${telemetry.headingDeg}deg)`;
+            }
+        });
+        return unsub;
+    }, []);
+
+    const effectiveHeading = isPdrActive
+        ? pdrState.currentHeadingDeg
+        : (gpsData.heading !== undefined && (gpsData.speed || 0) > 1.2
+            ? gpsData.heading
+            : compassHeading);
 
     // Interceptor Base LIFO para NodeMap (Cierre ordenado al pulsar Atrás)
     useEffect(() => {
@@ -334,7 +355,7 @@ export default function NodeMap() {
         } catch {}
 
         if (gpsData.lat !== 0 && gpsData.lng !== 0) {
-            const g = OffGridNavigationEngine.calculateTacticalGuidance(gpsData.lat, gpsData.lng, newTarget.lat, newTarget.lon, gpsData.heading || 0);
+            const g = OffGridNavigationEngine.calculateTacticalGuidance(gpsData.lat, gpsData.lng, newTarget.lat, newTarget.lon, effectiveHeading);
             toast.success(`🎯 Objetivo Fijado: ${g.formattedDistance} | Rumbo ${g.bearingDegrees}° ${g.cardinal}`);
         } else {
             toast.success(`🎯 Objetivo Fijado: [${newTarget.lat.toFixed(5)}, ${newTarget.lon.toFixed(5)}]`);
@@ -356,7 +377,7 @@ export default function NodeMap() {
             effectiveLng,
             target.lat,
             target.lon,
-            isPdrActive ? pdrState.currentHeadingDeg : (gpsData.heading || 0)
+            effectiveHeading
         )
         : null;
 
@@ -691,16 +712,24 @@ export default function NodeMap() {
             if (markersGroupRef.current) {
                 markersGroupRef.current.clearLayers();
 
-                // Marcador de Ubicación Propia (GPS Real o PDR Inercial)
+                // Marcador de Ubicación Propia (GPS Real o PDR Inercial con Cono de Rumbo 3D)
                 const selfIcon = L.divIcon({
                     className: "custom-self-marker",
                     html: isPdrActive ? (
-                        `<div style="width:26px;height:26px;border-radius:50%;background:#FF9100;border:3px solid #fff;box-shadow:0 0 20px #FF9100;animation:pulse 1.2s infinite;display:flex;align-items:center;justify-content:center;color:#000;font-size:12px;font-weight:900;transform:rotate(${pdrState.currentHeadingDeg}deg);">🧭</div>`
+                        `<div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;">
+                            <div style="position:absolute;width:34px;height:34px;border-radius:50%;background:rgba(255,145,0,0.25);animation:pulse 1.2s infinite;"></div>
+                            <div id="tactical-self-cone" style="position:absolute;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:18px solid #FF9100;top:-2px;filter:drop-shadow(0 0 8px #FF9100);transform-origin:50% 19px;transform:rotate(${pdrState.currentHeadingDeg}deg);transition:transform 0.12s ease-out;"></div>
+                            <div style="width:16px;height:16px;border-radius:50%;background:#FF9100;border:2px solid #fff;box-shadow:0 0 12px #FF9100;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:#000;z-index:2;">🧭</div>
+                        </div>`
                     ) : (
-                        `<div style="width:22px;height:22px;border-radius:50%;background:#00E5FF;border:3px solid #fff;box-shadow:0 0 20px #00E5FF;animation:pulse 1.5s infinite;display:flex;align-items:center;justify-content:center;color:#000;font-size:10px;font-weight:900;">📍</div>`
+                        `<div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;">
+                            <div style="position:absolute;width:34px;height:34px;border-radius:50%;background:rgba(0,229,255,0.25);animation:pulse 1.5s infinite;"></div>
+                            <div id="tactical-self-cone" style="position:absolute;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:18px solid #00E5FF;top:-2px;filter:drop-shadow(0 0 8px #00E5FF);transform-origin:50% 19px;transform:rotate(${effectiveHeading}deg);transition:transform 0.12s ease-out;"></div>
+                            <div style="width:14px;height:14px;border-radius:50%;background:#00E5FF;border:2px solid #fff;box-shadow:0 0 12px #00E5FF;z-index:2;"></div>
+                        </div>`
                     ),
-                    iconSize: [26, 26],
-                    iconAnchor: [13, 13]
+                    iconSize: [34, 34],
+                    iconAnchor: [17, 17]
                 });
                 L.marker([effectiveLat, effectiveLng], { icon: selfIcon }).addTo(markersGroupRef.current);
 
@@ -1164,7 +1193,7 @@ export default function NodeMap() {
                             <div style={{ fontSize: "0.75rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                 {gpsData.lat.toFixed(5)}, {gpsData.lng.toFixed(5)}
                                 <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", marginLeft: "6px" }}>
-                                    {gpsData.altitude != null ? `${gpsData.altitude.toFixed(0)}m` : ""}
+                                    {gpsData.altitude != null ? `${gpsData.altitude.toFixed(0)}m` : ""} · {effectiveHeading}°
                                 </span>
                             </div>
                         ) : (

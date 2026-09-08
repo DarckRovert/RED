@@ -5,6 +5,7 @@ import { tacticalRdf, TargetSignalType, PolarSector } from "../lib/sensors/Tacti
 import { rdfTriangulation, LineOfBearing, RdfTargetFix } from "../lib/sensors/RdfTriangulationEngine";
 import { rfSigintWatchdog, DetectedEmitter, SigintTelemetry } from "../lib/sensors/RfSigintWatchdogEngine";
 import { loraBridge, LoraTelemetry } from "../lib/hardware/LoraSerialBridgeEngine";
+import { tacticalCompass } from "../lib/sensors/TacticalCompassEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { meshRouter } from "../lib/mesh/meshRouter";
@@ -68,16 +69,10 @@ export function TacticalFoxhuntModal() {
             }
         });
 
-        // Live Device Orientation / Compass Listener
-        const handleOrientation = (e: any) => {
-            const heading = e.webkitCompassHeading ?? (e.alpha !== null ? (360 - e.alpha) % 360 : null);
-            if (heading !== null && !isNaN(heading)) {
-                setCurrentHeading(Math.round(heading));
-            }
-        };
-
-        window.addEventListener("deviceorientation", handleOrientation, true);
-        window.addEventListener("deviceorientationabsolute" as any, handleOrientation, true);
+        // Telemetría unificada de orientación táctica (Giroscopio 3D + Magnetómetro + Filtro Circular)
+        const unsubCompass = tacticalCompass.subscribe((telemetry) => {
+            setCurrentHeading(telemetry.headingDeg);
+        });
 
         // Live Geolocation for RDF fixes
         let isMounted = true;
@@ -102,8 +97,7 @@ export function TacticalFoxhuntModal() {
             unsubTriang();
             unsubSigint();
             unbindLoraRx();
-            window.removeEventListener("deviceorientation", handleOrientation, true);
-            window.removeEventListener("deviceorientationabsolute" as any, handleOrientation, true);
+            unsubCompass();
         };
     }, [selectedTargetId]);
 

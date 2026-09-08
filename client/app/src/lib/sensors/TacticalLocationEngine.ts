@@ -4,14 +4,18 @@
  * Motor Soberano de Posicionamiento Táctico y Mitigación de Pérdida GNSS en Emergencias.
  *
  * Diseñado para operaciones de desastre, catástrofe e incomunicación:
- * 1. Erradicación de Null Island (0,0): Ninguna lectura (0,0) es tratada como válida.
- * 2. Caché Táctico Persistente: Registra cada posición GPS válida en 'red_last_known_gps'
- *    con timestamp, altitud y precisión.
- * 3. Doble fase de Adquisición para Emergencias (Immediate + Accurate):
+ * 1. Enlace Nativo con @capacitor/geolocation: Solicita y valida permisos ACCESS_FINE_LOCATION
+ *    de forma automática en Android/iOS nativo mediante FusedLocationProviderClient.
+ * 2. Erradicación de Null Island (0,0): Ninguna lectura (0,0) es tratada como válida.
+ * 3. Captura y derivación de Course-Over-Ground (COG): Captura el rumbo real del chip GPS
+ *    y calcula automáticamente el acimut de avance entre fijaciones consecutivas.
+ * 4. Caché Táctico Persistente: Registra cada posición GPS válida en 'red_last_known_gps'
+ *    con timestamp, altitud, precisión, rumbo y velocidad.
+ * 5. Doble fase de Adquisición para Emergencias (Immediate + Accurate):
  *    - Si se solicita SOS y los satélites están bloqueados (sótano, búnker o túnel),
  *      retorna inmediatamente la última posición conocida válida para no demorar el auxilio.
  *    - Dispara en paralelo la búsqueda satelital de alta precisión con timeout adaptativo.
- * 4. Seguimiento Continuo (Watch): Monitorea la posición durante emergencias y actualiza
+ * 6. Seguimiento Continuo (Watch): Monitorea la posición durante emergencias y actualiza
  *    automáticamente la baliza activa en MeshSosBeaconEngine en cuanto los satélites enganchan.
  */
 
@@ -22,17 +26,23 @@ export interface TacticalLocation {
     lon?: number;
     alt?: number;
     accuracy?: number;
+    heading?: number; // Rumbo sobre el terreno en grados (0..360) clockwise desde el Norte Verdadero
+    speed?: number;   // Velocidad instantánea en metros por segundo
     timestamp: number;
     isEstimated?: boolean; // True si proviene de la caché histórica por falta de satélites
     ageMs?: number;        // Antigüedad de la posición en ms
+    source?: 'capacitor' | 'html5' | 'cache';
 }
 
 const STORAGE_KEY_GPS = 'red_last_known_gps';
 
 export class TacticalLocationEngine {
     private static listeners: Set<(loc: TacticalLocation) => void> = new Set();
-    private static activeWatchId: number | null = null;
+    private static activeHtml5WatchId: number | null = null;
+    private static activeCapacitorWatchId: string | null = null;
     private static lastReportedLocation: TacticalLocation | null = null;
+    private static lastKnownCoordsForCog: { lat: number; lon: number; timestamp: number } | null = null;
+    private static isCapacitorActive: boolean = false;
 
     /**
      * Valida que las coordenadas no sean nulas, indefinidas ni correspondan a Null Island (0,0)
@@ -45,6 +55,36 @@ export class TacticalLocationEngine {
         // Validar rangos geográficos reales
         if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return false;
         return true;
+    }
+
+    /**
+     * Calcula Course-Over-Ground (COG) en grados (0..360) entre dos puntos geográficos consecutivos.
+     * Retorna null si la distancia recorrida es insignificante (< 1.5 metros) para filtrar ruido GNSS.
+     */
+    public static calculateCourseOverGround(
+        prevLat: number, prevLon: number,
+        curLat: number, curLon: number
+    ): number | null {
+        const R = 6371000;
+        const radLat1 = (prevLat * Math.PI) / 180;
+        const radLat2 = (curLat * Math.PI) / 180;
+        const deltaLat = ((curLat - prevLat) * Math.PI) / 180;
+        const deltaLon = ((curLon - prevLon) * Math.PI) / 180;
+
+        const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+                  Math.cos(radLat1) * Math.cos(radLat2) *
+                  Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
+        const distMeters = R * c;
+
+        // Umbral mínimo de movimiento para considerar rumbo válido
+        if (distMeters < 1.5) return null;
+
+        const y = Math.sin(deltaLon) * Math.cos(radLat2);
+        const x = Math.cos(radLat1) * Math.sin(radLat2) -
+                  Math.sin(radLat1) * Math.cos(radLat2) * Math.cos(deltaLon);
+        const theta = Math.atan2(y, x);
+        return Math.round((((theta * 180) / Math.PI) + 360) % 360);
     }
 
     /**
@@ -65,9 +105,12 @@ export class TacticalLocationEngine {
                     lon,
                     alt: parsed.alt,
                     accuracy: parsed.accuracy,
+                    heading: typeof parsed.heading === 'number' && isFinite(parsed.heading) ? parsed.heading : undefined,
+                    speed: typeof parsed.speed === 'number' && isFinite(parsed.speed) ? parsed.speed : undefined,
                     timestamp: ts,
                     isEstimated: true,
-                    ageMs: Math.max(0, Date.now() - ts)
+                    ageMs: Math.max(0, Date.now() - ts),
+                    source: 'cache'
                 };
             }
         } catch {}
@@ -75,19 +118,52 @@ export class TacticalLocationEngine {
     }
 
     /**
-     * Guarda una posición táctica válida en la caché persistente
+     * Guarda una posición táctica válida en la caché persistente y notifica a todos los escuchas
      */
-    public static saveLocation(lat: number, lon: number, alt?: number, accuracy?: number): TacticalLocation | null {
+    public static saveLocation(
+        lat: number,
+        lon: number,
+        alt?: number,
+        accuracy?: number,
+        heading?: number | null,
+        speed?: number | null,
+        source: 'capacitor' | 'html5' | 'cache' = 'html5'
+    ): TacticalLocation | null {
         if (!this.isValidCoordinates(lat, lon)) return null;
+
+        let finalHeading: number | undefined = (typeof heading === 'number' && isFinite(heading) && heading >= 0)
+            ? Math.round(heading)
+            : undefined;
+
+        // Si el chip GPS no entrega heading, calcular COG por desplazamiento cinemático
+        if (finalHeading === undefined && this.lastKnownCoordsForCog) {
+            const cog = this.calculateCourseOverGround(
+                this.lastKnownCoordsForCog.lat, this.lastKnownCoordsForCog.lon,
+                lat, lon
+            );
+            if (cog !== null) {
+                finalHeading = cog;
+            }
+        }
+
+        // Actualizar referencia cinemática para el siguiente cálculo de COG
+        this.lastKnownCoordsForCog = { lat, lon, timestamp: Date.now() };
+
+        const finalSpeed = (typeof speed === 'number' && isFinite(speed) && speed >= 0)
+            ? Math.round(speed * 10) / 10
+            : undefined;
 
         const loc: TacticalLocation = {
             lat,
             lon,
             alt: typeof alt === 'number' && !isNaN(alt) ? Math.round(alt) : undefined,
             accuracy: typeof accuracy === 'number' && !isNaN(accuracy) ? Math.round(accuracy) : undefined,
+            heading: finalHeading,
+            speed: finalSpeed,
             timestamp: Date.now(),
             isEstimated: false,
-            ageMs: 0
+            ageMs: 0,
+            source
         };
 
         this.lastReportedLocation = loc;
@@ -100,6 +176,8 @@ export class TacticalLocationEngine {
                     lng: loc.lon,
                     alt: loc.alt,
                     accuracy: loc.accuracy,
+                    heading: loc.heading,
+                    speed: loc.speed,
                     timestamp: loc.timestamp
                 }));
             } catch {}
@@ -122,50 +200,78 @@ export class TacticalLocationEngine {
 
     /**
      * Obtiene la posición de emergencia con resolución en dos fases:
-     * 1. Si no hay señal GNSS inmediata, retorna la última conocida válida para no demorar el auxilio.
-     * 2. Intenta fijación por satélite de alta precisión con timeout configurado (por defecto 10s).
+     * 1. Retorna inmediatamente la última conocida válida si no hay satélites al instante.
+     * 2. Intenta fijación satelital con @capacitor/geolocation (o HTML5) con timeout configurado.
      */
     public static async getEmergencyLocation(timeoutMs = 10000): Promise<TacticalLocation> {
         const cached = this.getLastKnownLocation();
 
-        if (typeof navigator === 'undefined' || !navigator.geolocation) {
-            return cached || { timestamp: Date.now(), isEstimated: false };
+        // 1. Intento primario nativo con Capacitor
+        try {
+            const { Geolocation } = await import('@capacitor/geolocation');
+            const perm = await Geolocation.checkPermissions().catch(() => null);
+            if (perm?.location !== 'granted') {
+                await Geolocation.requestPermissions().catch(() => null);
+            }
+            const pos = await Promise.race([
+                Geolocation.getCurrentPosition({ enableHighAccuracy: true }),
+                new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Capacitor GPS timeout')), timeoutMs))
+            ]) as any;
+
+            if (pos?.coords && this.isValidCoordinates(pos.coords.latitude, pos.coords.longitude)) {
+                const saved = this.saveLocation(
+                    pos.coords.latitude,
+                    pos.coords.longitude,
+                    pos.coords.altitude ?? undefined,
+                    pos.coords.accuracy ?? undefined,
+                    pos.coords.heading ?? undefined,
+                    pos.coords.speed ?? undefined,
+                    'capacitor'
+                );
+                if (saved) return saved;
+            }
+        } catch {}
+
+        // 2. Intento secundario HTML5
+        if (typeof navigator !== 'undefined' && navigator.geolocation) {
+            return new Promise<TacticalLocation>((resolve) => {
+                let hasFinished = false;
+                const timer = setTimeout(() => {
+                    if (!hasFinished) {
+                        hasFinished = true;
+                        resolve(cached || { timestamp: Date.now(), isEstimated: false });
+                    }
+                }, timeoutMs);
+
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        if (hasFinished) return;
+                        hasFinished = true;
+                        clearTimeout(timer);
+
+                        const saved = this.saveLocation(
+                            pos.coords.latitude,
+                            pos.coords.longitude,
+                            pos.coords.altitude !== null ? pos.coords.altitude : undefined,
+                            pos.coords.accuracy !== null ? pos.coords.accuracy : undefined,
+                            pos.coords.heading !== null ? pos.coords.heading : undefined,
+                            pos.coords.speed !== null ? pos.coords.speed : undefined,
+                            'html5'
+                        );
+                        resolve(saved || cached || { timestamp: Date.now(), isEstimated: false });
+                    },
+                    () => {
+                        if (hasFinished) return;
+                        hasFinished = true;
+                        clearTimeout(timer);
+                        resolve(cached || { timestamp: Date.now(), isEstimated: false });
+                    },
+                    { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 4000 }
+                );
+            });
         }
 
-        return new Promise<TacticalLocation>((resolve) => {
-            let hasFinished = false;
-
-            const timer = setTimeout(() => {
-                if (!hasFinished) {
-                    hasFinished = true;
-                    // Fallback a posición conocida (o sin coordenadas, NUNCA 0,0)
-                    resolve(cached || { timestamp: Date.now(), isEstimated: false });
-                }
-            }, timeoutMs);
-
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    if (hasFinished) return;
-                    hasFinished = true;
-                    clearTimeout(timer);
-
-                    const lat = pos.coords.latitude;
-                    const lon = pos.coords.longitude;
-                    const alt = pos.coords.altitude !== null ? pos.coords.altitude : undefined;
-                    const acc = pos.coords.accuracy !== null ? pos.coords.accuracy : undefined;
-
-                    const saved = this.saveLocation(lat, lon, alt, acc);
-                    resolve(saved || cached || { timestamp: Date.now(), isEstimated: false });
-                },
-                (_err) => {
-                    if (hasFinished) return;
-                    hasFinished = true;
-                    clearTimeout(timer);
-                    resolve(cached || { timestamp: Date.now(), isEstimated: false });
-                },
-                { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 5000 }
-            );
-        });
+        return cached || { timestamp: Date.now(), isEstimated: false };
     }
 
     /**
@@ -180,33 +286,111 @@ export class TacticalLocationEngine {
             callback(cached);
         }
 
-        if (typeof navigator !== 'undefined' && navigator.geolocation && this.activeWatchId === null) {
-            try {
-                this.activeWatchId = navigator.geolocation.watchPosition(
-                    (pos) => {
-                        const lat = pos.coords.latitude;
-                        const lon = pos.coords.longitude;
-                        const alt = pos.coords.altitude !== null ? pos.coords.altitude : undefined;
-                        const acc = pos.coords.accuracy !== null ? pos.coords.accuracy : undefined;
-                        this.saveLocation(lat, lon, alt, acc);
-                    },
-                    (err) => {
-                        console.warn('[TacticalLocationEngine] GNSS watch error:', err?.message);
-                    },
-                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
-                );
-            } catch (e) {
-                console.warn('[TacticalLocationEngine] Fallo al registrar watchPosition:', e);
-            }
+        // Si ya hay un watcher activo, reutilizarlo
+        if (this.activeCapacitorWatchId !== null || this.activeHtml5WatchId !== null) {
+            return () => this.listeners.delete(callback);
         }
+
+        // 1. Iniciar seguimiento nativo prioritario con Capacitor
+        const startNativeWatch = async () => {
+            try {
+                const { Geolocation } = await import('@capacitor/geolocation');
+                const perm = await Geolocation.checkPermissions().catch(() => null);
+                if (perm?.location !== 'granted') {
+                    await Geolocation.requestPermissions().catch(() => null);
+                }
+
+                // Fijación inmediata
+                Geolocation.getCurrentPosition({ enableHighAccuracy: true }).then(pos => {
+                    if (pos?.coords) {
+                        this.saveLocation(
+                            pos.coords.latitude,
+                            pos.coords.longitude,
+                            pos.coords.altitude ?? undefined,
+                            pos.coords.accuracy ?? undefined,
+                            pos.coords.heading ?? undefined,
+                            pos.coords.speed ?? undefined,
+                            'capacitor'
+                        );
+                    }
+                }).catch(() => {});
+
+                // Rastreo continuo
+                const watchId = await Geolocation.watchPosition(
+                    { enableHighAccuracy: true },
+                    (pos, err) => {
+                        if (err || !pos?.coords) {
+                            console.warn('[TacticalLocationEngine] Capacitor watchPosition tick error:', err);
+                            return;
+                        }
+                        this.saveLocation(
+                            pos.coords.latitude,
+                            pos.coords.longitude,
+                            pos.coords.altitude ?? undefined,
+                            pos.coords.accuracy ?? undefined,
+                            pos.coords.heading ?? undefined,
+                            pos.coords.speed ?? undefined,
+                            'capacitor'
+                        );
+                    }
+                );
+
+                if (watchId) {
+                    this.activeCapacitorWatchId = watchId;
+                    this.isCapacitorActive = true;
+                    return;
+                }
+            } catch {
+                this.isCapacitorActive = false;
+            }
+
+            // 2. Fallback a HTML5 Geolocation si Capacitor no está disponible (ej. navegador de escritorio)
+            if (typeof navigator !== 'undefined' && navigator.geolocation && this.activeHtml5WatchId === null) {
+                try {
+                    this.activeHtml5WatchId = navigator.geolocation.watchPosition(
+                        (pos) => {
+                            this.saveLocation(
+                                pos.coords.latitude,
+                                pos.coords.longitude,
+                                pos.coords.altitude !== null ? pos.coords.altitude : undefined,
+                                pos.coords.accuracy !== null ? pos.coords.accuracy : undefined,
+                                pos.coords.heading !== null ? pos.coords.heading : undefined,
+                                pos.coords.speed !== null ? pos.coords.speed : undefined,
+                                'html5'
+                            );
+                        },
+                        (err) => {
+                            console.warn('[TacticalLocationEngine] HTML5 GNSS watch error:', err?.message);
+                        },
+                        { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
+                    );
+                } catch (e) {
+                    console.warn('[TacticalLocationEngine] Fallo al registrar watchPosition HTML5:', e);
+                }
+            }
+        };
+
+        startNativeWatch();
 
         return () => {
             this.listeners.delete(callback);
-            if (this.listeners.size === 0 && this.activeWatchId !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
-                try {
-                    navigator.geolocation.clearWatch(this.activeWatchId);
-                } catch {}
-                this.activeWatchId = null;
+            if (this.listeners.size === 0) {
+                // Detener Capacitor Watcher
+                if (this.activeCapacitorWatchId !== null) {
+                    const id = this.activeCapacitorWatchId;
+                    this.activeCapacitorWatchId = null;
+                    import('@capacitor/geolocation').then(({ Geolocation }) => {
+                        Geolocation.clearWatch({ id });
+                    }).catch(() => {});
+                }
+                // Detener HTML5 Watcher
+                if (this.activeHtml5WatchId !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
+                    try {
+                        navigator.geolocation.clearWatch(this.activeHtml5WatchId);
+                    } catch {}
+                    this.activeHtml5WatchId = null;
+                }
+                this.isCapacitorActive = false;
             }
         };
     }

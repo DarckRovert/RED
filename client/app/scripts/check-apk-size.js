@@ -14,8 +14,15 @@ const sizeBytes = stats.size;
 const sizeKB = (sizeBytes / 1024).toFixed(2);
 const sizeMB = (sizeBytes / (1024 * 1024)).toFixed(2);
 
+let appVersion = '95.0.0';
+try {
+    const vContent = fs.readFileSync(path.join(__dirname, '../src/lib/version.ts'), 'utf8');
+    const m = vContent.match(/RED_VERSION\s*=\s*["']([^"']+)["']/);
+    if (m) appVersion = m[1];
+} catch {}
+
 console.log("================================================================================");
-console.log("📦 VERIFICACIÓN DE TAMAÑO & EMBALAJE DE RELEASE APK (RED v64.0.0)");
+console.log(`📦 VERIFICACIÓN DE TAMAÑO & EMBALAJE DE RELEASE APK (RED v${appVersion})`);
 console.log("================================================================================");
 console.log(`📍 Ruta Origen: ${apkPath}`);
 console.log(`📊 Tamaño Exacto: ${sizeBytes} bytes (${sizeKB} KB / ${sizeMB} MB)`);
@@ -27,16 +34,16 @@ if (!fs.existsSync(releaseDir)) {
 const crypto = require('crypto');
 
 const targetLatest = path.join(releaseDir, 'red-latest.apk');
-const targetVersion = path.join(releaseDir, 'red-v64.0.0.apk');
+const targetVersion = path.join(releaseDir, `red-v${appVersion}.apk`);
 
 fs.copyFileSync(apkPath, targetLatest);
 fs.copyFileSync(apkPath, targetVersion);
 
 console.log(`✅ Sincronizado a release-assets/red-latest.apk (${sizeMB} MB)`);
-console.log(`✅ Sincronizado a release-assets/red-v64.0.0.apk (${sizeMB} MB)`);
+console.log(`✅ Sincronizado a release-assets/red-v${appVersion}.apk (${sizeMB} MB)`);
 
 // Generate SHA256SUMS.txt
-const releaseFiles = ['red-v64.0.0.apk', 'red-latest.apk', 'red-node-windows-v64.0.0.zip', 'red-node.exe'];
+const releaseFiles = [`red-v${appVersion}.apk`, 'red-latest.apk', `red-node-windows-v${appVersion}.zip`, 'red-node.exe'];
 const sums = [];
 
 for (const file of releaseFiles) {

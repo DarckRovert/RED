@@ -234,9 +234,13 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
         }
     },
 
-    goBack: (options?: { fromPopState?: boolean } | unknown) => {
-        // 1. Check LIFO back interceptors first (open modals, search bars, viewers)
-        if (BackHandlerRegistry.hasInterceptors()) {
+    goBack: (options?: { fromPopState?: boolean; skipInterceptors?: boolean } | unknown) => {
+        const opts = (typeof options === 'object' && options !== null)
+            ? options as { fromPopState?: boolean; skipInterceptors?: boolean }
+            : {};
+
+        // 1. Check LIFO back interceptors first (open modals, search bars, viewers) unless explicitly skipped
+        if (!opts.skipInterceptors && BackHandlerRegistry.hasInterceptors()) {
             const handled = BackHandlerRegistry.executeTop();
             if (handled) return true;
         }
@@ -244,22 +248,29 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
         const state = get();
         const history = Array.isArray(state.navigationHistory) ? [...state.navigationHistory] : [];
 
-        // 2. Pop navigation stack if available
-        if (history.length > 0) {
+        // 2. Pop navigation stack if available (unwinding any duplicate entries of the current state)
+        while (history.length > 0) {
             const prevEntry = history.pop()!;
-            set({ navigationHistory: history });
+            // Ensure we transition to a distinct screen or distinct conversation context
+            const isDistinct = prevEntry.screen !== state.currentScreen || 
+                (prevEntry.screen === 'chat' && prevEntry.contextId !== state.activeConversationId);
+            
+            if (isDistinct || history.length === 0) {
+                set({ navigationHistory: history });
 
-            if (prevEntry.screen === 'chat' && prevEntry.contextId) {
-                state.navigate('chat', prevEntry.contextId, { skipHistory: true });
-            } else {
-                set({
-                    currentScreen: prevEntry.screen,
-                    activeConversationId: prevEntry.contextId || null,
-                    activeTab: prevEntry.activeTab || state.activeTab
-                });
+                if (prevEntry.screen === 'chat' && prevEntry.contextId) {
+                    state.navigate('chat', prevEntry.contextId, { skipHistory: true });
+                } else {
+                    set({
+                        currentScreen: prevEntry.screen,
+                        activeConversationId: prevEntry.contextId || null,
+                        activeTab: prevEntry.activeTab || state.activeTab
+                    });
+                }
+                return true;
             }
-            return true;
         }
+        set({ navigationHistory: [] });
 
         // 3. If on root ('sidebar') but in a secondary tab, return to 'chats'
         if (state.currentScreen === 'sidebar' && state.activeTab !== 'chats') {

@@ -557,7 +557,7 @@ export default function AppRouter() {
                 {currentScreen === "commandCenter" && <TacticalCommandCenter />}
                 {currentScreen === "chat" && <ChatWindow />}
                 {currentScreen === "sidebar" && <TacticalTabletWorkspace onOpenTool={(s) => navigate(s)} />}
-                {currentScreen === "explorer" && <BlockchainExplorer />}
+                {currentScreen === "explorer" && <BlockchainExplorer onClose={goBack} />}
                 {currentScreen === "socialFeed" && <SocialFeedPanel />}
                 {(currentScreen === "channels" || currentScreen === "publicChannels") && <PublicChannelsPanel />}
                 {(currentScreen === "groups" || currentScreen === "squads") && <GroupsPanel />}
@@ -619,7 +619,7 @@ export default function AppRouter() {
                 {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
                 {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
                 {currentScreen === "globalShield" && <GlobalShieldPanel />}
-                {currentScreen === "web3Vault" && <Web3VaultModal />}
+                {currentScreen === "web3Vault" && <Web3VaultModal onClose={goBack} />}
                 {currentScreen === "commercialHub" || currentScreen === "hub" ? <CommercialHubModal isOpen={true} onClose={goBack} /> : null}
                 {currentScreen === "nodemap" && <NodeMap />}
                 {currentScreen === "radar" && <RadarWindow />}
@@ -675,7 +675,7 @@ export default function AppRouter() {
               {currentScreen === "crypto" && <CryptoPanel />}
               {(currentScreen === "groups" || currentScreen === "squads") && <GroupsPanel />}
               {currentScreen === "status" && <StatusView />}
-              {currentScreen === "explorer" && <BlockchainExplorer />}
+              {currentScreen === "explorer" && <BlockchainExplorer onClose={goBack} />}
               {currentScreen === "nodemap" && <NodeMap />}
               {currentScreen === "network" && <NetworkPanel />}
               {currentScreen === "dms" && <DMSSettings />}
@@ -734,7 +734,7 @@ export default function AppRouter() {
               {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
               {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
               {currentScreen === "globalShield" && <GlobalShieldPanel />}
-              {currentScreen === "web3Vault" && <Web3VaultModal />}
+              {currentScreen === "web3Vault" && <Web3VaultModal onClose={goBack} />}
               {(currentScreen === "commercialHub" || currentScreen === "hub") && <CommercialHubModal isOpen={true} onClose={goBack} />}
               {currentScreen === "hyperBrowser" && (
                 <RedHyperBrowserModal

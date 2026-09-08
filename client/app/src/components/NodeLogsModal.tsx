@@ -34,7 +34,7 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
     const getInitialLogs = (): RustLogEntry[] => {
         const now = Date.now();
         return [
-            { timestamp: now - 3500, level: "INFO", target: "red_mobile::core", message: "Inicializando subsistemas de nodo RED v32.0 (Tactical Edition)..." },
+            { timestamp: now - 3500, level: "INFO", target: "red_mobile::core", message: `Inicializando subsistemas de nodo RED ${RED_VERSION_NAME} (Tactical Edition)...` },
             { timestamp: now - 3000, level: "CRYPTO", target: "red_core::crypto", message: "Bóveda WebCrypto inicializada. Cifrado Noise XK & Ed25519 activo." },
             { timestamp: now - 2500, level: "MESH", target: "red_core::network", message: "Transportes físicos BLE / WiFi Direct en escucha pasiva." },
             { timestamp: now - 2000, level: "INFO", target: "red_mobile::events", message: "Canal EventSource /api/events conectado con loopback local." },

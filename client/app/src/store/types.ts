@@ -95,7 +95,7 @@ export interface RedStore {
     // Navigation Action
     navigate: (screen: ScreenView, contextId?: string, options?: { replace?: boolean; skipHistory?: boolean }) => void;
     launchMiniApp: (bundle: any) => void;
-    goBack: (options?: { fromPopState?: boolean } | unknown) => boolean;
+    goBack: (options?: { fromPopState?: boolean; skipInterceptors?: boolean } | unknown) => boolean;
     setActiveTab: (tab: NavTab) => void;
     
     // Chat Actions

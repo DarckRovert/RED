@@ -5,14 +5,99 @@ import { dynamicBearerGovernor, SwarmHealthTelemetry, TacticalBearerType } from 
 import { frequencyHopping, HoppingChannel } from "../lib/mesh/FrequencyHoppingEngine";
 import { dtnStorage } from "../lib/mesh/dtnStorage";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { useRedStore } from "../store/useRedStore";
+import { ScreenView } from "../store/types";
 import { toast } from "./Toast";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
+interface BearerTacticalInfo {
+    name: string;
+    category: string;
+    summary: string;
+    howToUse: string;
+    hardwareDetails: (hasTransceiver: boolean) => string;
+    maxRange: string;
+    bestFor: string;
+    actionLabel: string;
+    actionScreen: ScreenView;
+}
+
+const BEARER_INFO_MAP: Record<TacticalBearerType, BearerTacticalInfo> = {
+    WIFI_DIRECT: {
+        name: "Wi-Fi Direct P2P",
+        category: "Alta Velocidad / Corto Alcance",
+        summary: "Enlace punto a punto inalámbrico de alta velocidad sin depender de routers ni antenas externas.",
+        howToUse: "Se activa automáticamente al detectar otros nodos RED cercanos (<100m). Soporta streaming de video, llamadas de voz P2P y transferencia de mapas.",
+        hardwareDetails: () => "🟢 Hardware nativo integrado en Moto G22 y Lenovo Tab (Wi-Fi 802.11ac).",
+        maxRange: "50 a 100 metros (Línea de vista directa)",
+        bestFor: "Llamadas de voz en tiempo real, streaming, mapas offline y archivos grandes.",
+        actionLabel: "Abrir Mapa Táctico 🗺️",
+        actionScreen: "nodemap"
+    },
+    BLE: {
+        name: "Bluetooth Low Energy (BLE Mesh)",
+        category: "Ultra Bajo Consumo / Malla Silenciosa",
+        summary: "Malla epidémica continua con consumo mínimo de batería que opera incluso con la pantalla apagada.",
+        howToUse: "Los paquetes de datos saltan de teléfono en teléfono formando un enjambre descentralizado sin intervención del usuario.",
+        hardwareDetails: () => "🟢 Hardware nativo integrado en Moto G22 y Lenovo Tab (Bluetooth 5.0+ LE).",
+        maxRange: "10 a 25 metros por salto (extensible por múltiples saltos en el enjambre)",
+        bestFor: "Mensajería de texto cifrada, balizas SOS y sincronización de coordenadas GPS.",
+        actionLabel: "Radar de Proximidad 📡",
+        actionScreen: "proximity"
+    },
+    LORA_RF: {
+        name: "LoRa Sub-GHz (915 MHz)",
+        category: "Largo Alcance Táctico / Anti-Corte",
+        summary: "Ondas de radiofrecuencia de espectro ensanchado (CSS) con alcance de hasta 25 km, inmune a la caída celular.",
+        howToUse: "Conecta un transceptor LoRa (ej. Heltec V3, T-Beam o dongle USB-C SX1262) al puerto USB OTG o vincúlalo por Bluetooth.",
+        hardwareDetails: (hasTx) => hasTx ? "🟢 Transceptor USB/Serial Conectado y Activo" : "🟡 Requiere módulo externo LoRa USB-C OTG o Bluetooth",
+        maxRange: "Hasta 25 km en campo abierto / 3 a 5 km en entorno urbano",
+        bestFor: "Telemetría de campo, reportes de situación SITREP, balizas de emergencia a larga distancia.",
+        actionLabel: "Consola LoRa Táctica 📻",
+        actionScreen: "loraTransceiver"
+    },
+    SOUNDMESH: {
+        name: "SoundMesh Acústico",
+        category: "Anti-Inhibición / Canal Ultrasónico",
+        summary: "Modulación de datos en frecuencias audibles y near-ultrasound (18 a 20 kHz) usando altavoces y micrófonos.",
+        howToUse: "Ideal en búnkeres o durante ataques de guerra electrónica (EW/Jammers) donde todas las frecuencias de radio estén bloqueadas.",
+        hardwareDetails: () => "🟢 Utiliza los transductores de altavoz y micrófono nativos del dispositivo.",
+        maxRange: "1 a 8 metros en la misma habitación, trinchera o vehículo blindado.",
+        bestFor: "Intercambio de claves criptográficas, alertas breves y autenticación sin RF.",
+        actionLabel: "Guerra Acústica & Jammer 🔊",
+        actionScreen: "acousticWarfare"
+    },
+    LIFI_OPTICAL: {
+        name: "LiFi Óptico Esteganográfico",
+        category: "Silencio Radial Absoluto / Óptico",
+        summary: "Transmisión binaria mediante pulsos de luz del Flash LED y decodificación por sensor de cámara CMOS.",
+        howToUse: "Apunta la cámara al flash del otro teléfono. Cero emisión de radiofrecuencia: imposible de detectar o triangular con analizadores de espectro hostiles.",
+        hardwareDetails: () => "🟢 Utiliza el Flash LED trasero y la cámara CMOS nativa.",
+        maxRange: "Línea de vista directa (hasta 50 metros en oscuridad / 10 metros de día)",
+        bestFor: "Transmisiones ultra-secretas en condiciones de sigilo electromagnético estricto.",
+        actionLabel: "Consola LiFi & Morse ⚡",
+        actionScreen: "airGapStego"
+    },
+    SATELLITE_LEO: {
+        name: "Pasarela Satelital LEO",
+        category: "Cobertura Global Espacial",
+        summary: "Enlace con constelaciones orbitales de baja altitud (Iridium-NEXT, Starlink Direct-to-Cell, Orbcomm OG2) para contingencias extremas.",
+        howToUse: "Calcula los pasos satelitales sobre tus coordenadas. Cuando un satélite está a más de 25° de elevación (AOS), despacha ráfagas de datos breves (SBD). Si no hay satélite visible, los guarda en el búfer DTN cifrado.",
+        hardwareDetails: () => "🟢 Motor de cálculo orbital SGP4 integrado + Despacho de ráfagas SBD.",
+        maxRange: "Global (cobertura inter-continental e inter-malla sin fronteras)",
+        bestFor: "SITREPs de evacuación, telemetría radiológica CBRN, balizas SOS satelitales.",
+        actionLabel: "Radar SkyView Satelital 🛰️",
+        actionScreen: "cbrnSatellite"
+    }
+};
+
 export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
+    const { navigate } = useRedStore();
     const [telemetry, setTelemetry] = useState<SwarmHealthTelemetry>(() => dynamicBearerGovernor.getTelemetry());
     const [currentHop, setCurrentHop] = useState<HoppingChannel>(() => frequencyHopping.getCurrentChannel());
     const [dtnCount, setDtnCount] = useState<number>(() => dtnStorage.count);
+    const [expandedBearer, setExpandedBearer] = useState<TacticalBearerType | null>(null);
 
     useEffect(() => {
         if (!onClose) return;
@@ -48,8 +133,9 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
             return;
         }
         if (b === 'SOUNDMESH' || b === 'LIFI_OPTICAL') {
+            dynamicBearerGovernor.forceSwitchBearer(b);
             TacticalAudioEngine.playRogerBeep();
-            toast.info(`Portador ${b} listo para transmisión táctica`);
+            toast.info(`Portador ${b} forzado para transmisión táctica`);
             return;
         }
         if (b === 'SATELLITE_LEO') {
@@ -61,6 +147,12 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
         dynamicBearerGovernor.forceSwitchBearer(b);
         TacticalAudioEngine.playRogerBeep();
         toast.success(`Portador de enjambre conmutado a: ${b}`);
+    };
+
+    const handleResumeAutoMode = () => {
+        TacticalAudioEngine.playRogerBeep();
+        dynamicBearerGovernor.resumeAutomaticMode();
+        toast.success("🔄 Enrutamiento Autónomo QoS Restablecido");
     };
 
     const getBearerIcon = (b: string) => {
@@ -101,25 +193,27 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
             boxShadow: "0 15px 50px rgba(0, 0, 0, 0.9), 0 0 30px rgba(0, 229, 255, 0.15)",
             backdropFilter: "blur(25px)",
             WebkitBackdropFilter: "blur(25px)",
-            maxWidth: "520px",
-            width: "100%"
+            maxWidth: "560px",
+            width: "100%",
+            maxHeight: "88vh",
+            overflowY: "auto"
         }}>
             {/* Header */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", paddingBottom: "12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <div style={{
-                        width: "38px", height: "38px", borderRadius: "10px",
+                        width: "40px", height: "40px", borderRadius: "10px",
                         background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.3)",
-                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem"
+                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem"
                     }}>
                         🛰️
                     </div>
                     <div>
-                        <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#00E5FF", letterSpacing: "0.5px" }}>
-                            ENJAMBRE MULTI-BEARER & EW C2
+                        <div style={{ fontSize: "0.90rem", fontWeight: 900, color: "#00E5FF", letterSpacing: "0.5px" }}>
+                            ENJAMBRE MULTI-BEARER & REDES
                         </div>
-                        <div style={{ fontSize: "0.65rem", color: "var(--text-secondary, #94A3B8)" }}>
-                            Monitoreo de Enlaces Físicos & Matriz de Portadores
+                        <div style={{ fontSize: "0.66rem", color: "var(--text-secondary, #94A3B8)" }}>
+                            Gestión Autónoma de Portadores & Enlace Satelital
                         </div>
                     </div>
                 </div>
@@ -130,7 +224,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                         color: telemetry.connectedPeersCount > 0 ? "#00E676" : "#FFB300",
                         border: `1px solid ${telemetry.connectedPeersCount > 0 ? "#00E676" : "#FFB300"}`
                     }}>
-                        {telemetry.connectedPeersCount > 0 ? `🟢 ${telemetry.connectedPeersCount} NODOS ACTIVOS` : "🟡 STANDALONE"}
+                        {telemetry.connectedPeersCount > 0 ? `🟢 ${telemetry.connectedPeersCount} NODOS` : "🟡 STANDALONE"}
                     </span>
                     {onClose && (
                         <button
@@ -140,7 +234,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                             }}
                             style={{
                                 background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", color: "#FFFFFF",
-                                width: "28px", height: "28px", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem",
+                                width: "30px", height: "30px", borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem",
                                 fontWeight: 900
                             }}
                         >
@@ -150,110 +244,246 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                 </div>
             </div>
 
-            {/* RF Spectrum & Physical Hardware Monitor */}
+            {/* Banner de Modo de Gobernanza QoS (Automático vs Manual) */}
             <div style={{
-                background: "rgba(0, 0, 0, 0.55)", borderRadius: "14px", padding: "12px 14px",
-                border: "1px solid rgba(0, 229, 255, 0.2)", display: "flex", flexDirection: "column", gap: "8px",
-                boxShadow: "inset 0 0 15px rgba(0, 0, 0, 0.6)"
+                background: telemetry.isManualOverride
+                    ? "linear-gradient(135deg, rgba(255, 171, 0, 0.15) 0%, rgba(20, 15, 5, 0.5) 100%)"
+                    : "linear-gradient(135deg, rgba(0, 230, 118, 0.12) 0%, rgba(5, 25, 15, 0.5) 100%)",
+                border: `1px solid ${telemetry.isManualOverride ? "rgba(255, 171, 0, 0.4)" : "rgba(0, 230, 118, 0.35)"}`,
+                borderRadius: "12px", padding: "10px 12px",
+                display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px"
+            }}>
+                <div style={{ flex: 1 }}>
+                    <div style={{
+                        fontSize: "0.74rem", fontWeight: 900,
+                        color: telemetry.isManualOverride ? "#FFB300" : "#00E676",
+                        display: "flex", alignItems: "center", gap: "6px"
+                    }}>
+                        <span>{telemetry.isManualOverride ? "⚠️" : "🛡️"}</span>
+                        {telemetry.isManualOverride
+                            ? `MODO MANUAL: FORZADO EN ${telemetry.primaryBearer}`
+                            : "GOBERNANZA AUTÓNOMA DE ENJAMBRE (QoS ACTIVO)"}
+                    </div>
+                    <div style={{ fontSize: "0.62rem", color: "#94A3B8", marginTop: "2px", lineHeight: "1.3" }}>
+                        {telemetry.isManualOverride
+                            ? "Has fijado este canal manualmente. RED no conmutará de forma automática en caso de pérdida."
+                            : "RED evalúa continuamente la señal, batería y alcance para conmutar automáticamente al mejor canal disponible."}
+                    </div>
+                </div>
+
+                {telemetry.isManualOverride && (
+                    <button
+                        type="button"
+                        onClick={handleResumeAutoMode}
+                        style={{
+                            padding: "6px 10px", borderRadius: "8px", fontSize: "0.68rem", fontWeight: 900,
+                            background: "rgba(0, 230, 118, 0.2)", border: "1px solid #00E676",
+                            color: "#00E676", cursor: "pointer", whiteSpace: "nowrap"
+                        }}
+                    >
+                        🔄 Auto QoS
+                    </button>
+                )}
+            </div>
+
+            {/* RF Spectrum & Hardware Monitor */}
+            <div style={{
+                background: "rgba(0, 0, 0, 0.55)", borderRadius: "14px", padding: "10px 12px",
+                border: "1px solid rgba(0, 229, 255, 0.2)", display: "flex", flexDirection: "column", gap: "6px"
             }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#00E5FF", animation: "pulse 1.5s infinite", display: "inline-block" }} />
-                        <span style={{ fontSize: "0.72rem", color: "#38BDF8", fontWeight: 900, letterSpacing: "0.3px" }}>
-                            ESTADO DE ESPECTRO & RADIOFRECUENCIA
+                        <span style={{ fontSize: "0.72rem", color: "#38BDF8", fontWeight: 900 }}>
+                            RADIOFRECUENCIA & ESPECTRO FÍSICO
                         </span>
                     </div>
                     <span style={{ fontSize: "0.62rem", color: "#AAA", background: "rgba(255,255,255,0.06)", padding: "2px 6px", borderRadius: "4px" }}>
-                        RTT: {telemetry.lastPingMs || 10} ms
+                        RTT: {telemetry.lastPingMs || 10} ms · {telemetry.totalFailoversExecuted} saltos
                     </span>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(0, 229, 255, 0.04)", padding: "8px 12px", borderRadius: "10px", border: "1px solid rgba(0, 229, 255, 0.12)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(0, 229, 255, 0.04)", padding: "6px 10px", borderRadius: "8px" }}>
                     <div>
-                        <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "#00E676" }}>
+                        <div style={{ fontSize: "0.78rem", fontWeight: 900, color: "#00E676" }}>
                             {currentHop.rfBandLabel}
                         </div>
-                        <div style={{ fontSize: "0.64rem", color: "#94A3B8", marginTop: "2px" }}>
-                            Modo: {currentHop.operatingMode}
+                        <div style={{ fontSize: "0.62rem", color: "#94A3B8" }}>
+                            {currentHop.operatingMode}
                         </div>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: "0.78rem", fontWeight: 900, color: currentHop.hasHardwareTransceiver ? "#00E676" : "#94A3B8" }}>
+                        <div style={{ fontSize: "0.74rem", fontWeight: 900, color: currentHop.hasHardwareTransceiver ? "#00E676" : "#94A3B8" }}>
                             {currentHop.hasHardwareTransceiver ? "CONECTADO" : "SIN TRANSCEPTOR EXT."}
                         </div>
-                        <div style={{ fontSize: "0.60rem", color: "#64748B" }}>
+                        <div style={{ fontSize: "0.58rem", color: "#64748B" }}>
                             {currentHop.hasHardwareTransceiver ? "LoRa SX1262 Activo" : "Operando Wi-Fi / BLE"}
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Bearers Matrix */}
+            {/* Matriz de Portadores (Conexiones) con Guía Interactiva */}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.68rem", color: "#AAA", fontWeight: 800, textTransform: "uppercase" }}>
-                    <span>MATRIZ DE PORTADORES DE RADIO</span>
-                    <span style={{ color: "var(--accent-cyan)" }}>{telemetry.totalFailoversExecuted} CONMUTACIONES</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.68rem", color: "#AAA", fontWeight: 800 }}>
+                    <span>CONEXIONES DISPONIBLES ({telemetry.bearers.length} CAPAS)</span>
+                    <span style={{ color: "var(--accent-cyan)", fontSize: "0.62rem" }}>TOCA PARA DETALLES & ACCIONES</span>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     {telemetry.bearers.map(b => {
                         const isPrimary = telemetry.primaryBearer === b.bearer;
-                        const bColor = getBearerColor(b.bearer, b.isOnline);
+                        const isExpanded = expandedBearer === b.bearer;
+                        const info = BEARER_INFO_MAP[b.bearer];
 
                         return (
-                            <button
+                            <div
                                 key={b.bearer}
-                                type="button"
-                                onClick={() => handleForceBearer(b.bearer)}
                                 style={{
-                                    padding: "10px 12px", borderRadius: "12px",
-                                    background: isPrimary ? "linear-gradient(135deg, rgba(0, 229, 255, 0.16) 0%, rgba(10, 25, 45, 0.7) 100%)" : "rgba(255, 255, 255, 0.03)",
+                                    borderRadius: "12px",
+                                    background: isPrimary
+                                        ? "linear-gradient(135deg, rgba(0, 229, 255, 0.16) 0%, rgba(10, 25, 45, 0.7) 100%)"
+                                        : "rgba(255, 255, 255, 0.03)",
                                     border: `1.5px solid ${isPrimary ? "#00E5FF" : b.isOnline ? "rgba(0, 229, 255, 0.25)" : "rgba(255, 255, 255, 0.06)"}`,
                                     boxShadow: isPrimary ? "0 0 12px rgba(0, 229, 255, 0.18)" : "none",
-                                    display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer",
-                                    textAlign: "left", transition: "all 0.15s ease",
-                                    opacity: b.isOnline || isPrimary ? 1 : 0.65
+                                    overflow: "hidden",
+                                    transition: "all 0.15s ease"
                                 }}
                             >
-                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                    <span style={{ fontSize: "1.1rem", width: "22px", textAlign: "center" }}>
-                                        {getBearerIcon(b.bearer)}
-                                    </span>
-                                    <div>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                            <span style={{ fontSize: "0.78rem", fontWeight: 900, color: isPrimary ? "#00E5FF" : b.isOnline ? "#FFFFFF" : "var(--text-muted)" }}>
-                                                {b.bearer}
-                                            </span>
-                                            {isPrimary && (
-                                                <span style={{ fontSize: "0.58rem", color: "#00E5FF", background: "rgba(0, 229, 255, 0.2)", padding: "1px 5px", borderRadius: "4px", fontWeight: 900 }}>
-                                                    PRIMARIO
+                                {/* Barra Principal del Portador */}
+                                <div
+                                    onClick={() => {
+                                        TacticalAudioEngine.playTap();
+                                        setExpandedBearer(prev => prev === b.bearer ? null : b.bearer);
+                                    }}
+                                    style={{
+                                        padding: "10px 12px",
+                                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                                        cursor: "pointer", userSelect: "none"
+                                    }}
+                                >
+                                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                        <span style={{ fontSize: "1.2rem", width: "24px", textAlign: "center" }}>
+                                            {getBearerIcon(b.bearer)}
+                                        </span>
+                                        <div>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                                <span style={{ fontSize: "0.80rem", fontWeight: 900, color: isPrimary ? "#00E5FF" : b.isOnline ? "#FFFFFF" : "var(--text-muted)" }}>
+                                                    {info?.name || b.bearer}
                                                 </span>
-                                            )}
+                                                {isPrimary && (
+                                                    <span style={{ fontSize: "0.58rem", color: "#00E5FF", background: "rgba(0, 229, 255, 0.2)", padding: "1px 5px", borderRadius: "4px", fontWeight: 900 }}>
+                                                        EN USO
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div style={{ fontSize: "0.62rem", color: b.isOnline ? "#94A3B8" : "var(--text-muted)", marginTop: "1px" }}>
+                                                {b.statusLabel} · {info?.category || "Enlace"}
+                                            </div>
                                         </div>
-                                        <div style={{ fontSize: "0.64rem", color: b.isOnline ? "#94A3B8" : "var(--text-muted)", marginTop: "1px" }}>
-                                            {b.statusLabel}
+                                    </div>
+
+                                    <div style={{ textAlign: "right", display: "flex", alignItems: "center", gap: "8px" }}>
+                                        <div>
+                                            <div style={{
+                                                fontSize: "0.70rem", fontWeight: 900,
+                                                color: b.isOnline ? (isPrimary ? "#00E5FF" : "#00E676") : "var(--text-muted)"
+                                            }}>
+                                                {b.isOnline ? (b.throughputKbps > 0 ? `${b.throughputKbps} kbps` : "EN LÍNEA") : "STANDBY"}
+                                            </div>
+                                            <div style={{ fontSize: "0.58rem", color: "#64748B" }}>
+                                                {b.isOnline ? (b.latencyMs > 0 ? `${b.latencyMs}ms RTT` : "Listo") : "Sin tráfico"}
+                                            </div>
                                         </div>
+                                        <span style={{ fontSize: "0.75rem", color: isExpanded ? "#00E5FF" : "#64748B", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+                                            ▼
+                                        </span>
                                     </div>
                                 </div>
 
-                                <div style={{ textAlign: "right" }}>
+                                {/* Despliegue Explicativo y Operativo al Expandir */}
+                                {isExpanded && info && (
                                     <div style={{
-                                        fontSize: "0.70rem", fontWeight: 900,
-                                        color: b.isOnline ? (isPrimary ? "#00E5FF" : "#00E676") : "var(--text-muted)"
+                                        padding: "10px 14px 12px 14px",
+                                        background: "rgba(0, 0, 0, 0.4)",
+                                        borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                                        display: "flex", flexDirection: "column", gap: "8px",
+                                        fontSize: "0.68rem"
                                     }}>
-                                        {b.isOnline ? (b.throughputKbps > 0 ? `${b.throughputKbps} kbps` : "EN LÍNEA") : "OFFLINE"}
+                                        <div>
+                                            <span style={{ color: "#00E5FF", fontWeight: 800 }}>📖 ¿Qué es y para qué sirve?</span>
+                                            <div style={{ color: "#CBD5E1", marginTop: "2px", lineHeight: "1.35" }}>
+                                                {info.summary}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <span style={{ color: "#00E676", fontWeight: 800 }}>💡 ¿Cómo se usa en este dispositivo?</span>
+                                            <div style={{ color: "#CBD5E1", marginTop: "2px", lineHeight: "1.35" }}>
+                                                {info.howToUse}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", background: "rgba(255,255,255,0.03)", padding: "6px 8px", borderRadius: "6px" }}>
+                                            <div>
+                                                <span style={{ color: "#94A3B8", fontSize: "0.60rem" }}>ALCANCE ESTIMADO:</span>
+                                                <div style={{ color: "#FFFFFF", fontWeight: 700, fontSize: "0.65rem" }}>{info.maxRange}</div>
+                                            </div>
+                                            <div>
+                                                <span style={{ color: "#94A3B8", fontSize: "0.60rem" }}>ESTADO DE HARDWARE:</span>
+                                                <div style={{ color: "#FFFFFF", fontWeight: 700, fontSize: "0.65rem" }}>
+                                                    {info.hardwareDetails(currentHop.hasHardwareTransceiver)}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Botones de Acción Táctica */}
+                                        <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleForceBearer(b.bearer);
+                                                }}
+                                                disabled={isPrimary}
+                                                style={{
+                                                    flex: 1, padding: "7px 10px", borderRadius: "8px",
+                                                    background: isPrimary ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(2, 132, 199, 0.4) 100%)",
+                                                    border: `1px solid ${isPrimary ? "rgba(255,255,255,0.1)" : "#00E5FF"}`,
+                                                    color: isPrimary ? "#64748B" : "#FFFFFF",
+                                                    fontWeight: 800, fontSize: "0.66rem", cursor: isPrimary ? "default" : "pointer"
+                                                }}
+                                            >
+                                                {isPrimary ? "✅ Portador Activo" : "⚡ Forzar este Portador"}
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    TacticalAudioEngine.playTap();
+                                                    navigate(info.actionScreen);
+                                                    onClose?.();
+                                                }}
+                                                style={{
+                                                    flex: 1, padding: "7px 10px", borderRadius: "8px",
+                                                    background: "rgba(255, 255, 255, 0.08)",
+                                                    border: "1px solid rgba(255, 255, 255, 0.2)",
+                                                    color: "#38BDF8", fontWeight: 800, fontSize: "0.66rem", cursor: "pointer"
+                                                }}
+                                            >
+                                                {info.actionLabel}
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div style={{ fontSize: "0.60rem", color: "#64748B" }}>
-                                        {b.isOnline ? (b.latencyMs > 0 ? `${b.latencyMs}ms RTT` : "Listo") : "Sin enlace"}
-                                    </div>
-                                </div>
-                            </button>
+                                )}
+                            </div>
                         );
                     })}
                 </div>
             </div>
 
-            {/* DTN Store-and-Forward Telemetry */}
+            {/* Búfer DTN Store & Forward */}
             <div style={{
                 background: "rgba(0, 0, 0, 0.45)", borderRadius: "14px", padding: "10px 14px",
                 border: "1px solid rgba(0, 229, 255, 0.2)", display: "flex", justifyContent: "space-between", alignItems: "center"
@@ -279,7 +509,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                         toast.success(`⚡ Búfer DTN transmitido (${dtnStorage.count} en cola)`);
                     }}
                     style={{
-                        padding: "5px 10px", borderRadius: "8px", fontSize: "0.68rem", fontWeight: 900,
+                        padding: "6px 12px", borderRadius: "8px", fontSize: "0.68rem", fontWeight: 900,
                         background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.4)",
                         color: "#00E5FF", cursor: "pointer"
                     }}

@@ -25,6 +25,7 @@ export interface BearerQuality {
 
 export interface SwarmHealthTelemetry {
     primaryBearer: TacticalBearerType;
+    isManualOverride: boolean;
     totalPacketsRouted: number;
     totalFailoversExecuted: number;
     isElectronicWarfareActive: boolean;
@@ -37,6 +38,7 @@ export class DynamicBearerGovernor {
     private static instance: DynamicBearerGovernor | null = null;
 
     private primaryBearer: TacticalBearerType = 'WIFI_DIRECT';
+    private isManualOverride: boolean = false;
     private totalPacketsRouted: number = 0;
     private totalFailovers: number = 0;
     private lastPingMs: number = 0;
@@ -264,6 +266,7 @@ export class DynamicBearerGovernor {
 
         return {
             primaryBearer: this.primaryBearer,
+            isManualOverride: this.isManualOverride,
             totalPacketsRouted: this.totalPacketsRouted,
             totalFailoversExecuted: this.totalFailovers,
             isElectronicWarfareActive: hasJamming,
@@ -343,6 +346,7 @@ export class DynamicBearerGovernor {
 
     public async forceSwitchBearer(bearer: TacticalBearerType): Promise<void> {
         this.primaryBearer = bearer;
+        this.isManualOverride = true;
         this.totalFailovers++;
 
         // Si se fuerza BLE en Android, asegurar que el servidor GATT esté activo
@@ -355,6 +359,17 @@ export class DynamicBearerGovernor {
             } catch {}
         }
 
+        this.notify();
+    }
+
+    public resumeAutomaticMode(): void {
+        this.isManualOverride = false;
+        const candidates: TacticalBearerType[] = ['WIFI_DIRECT', 'BLE', 'LORA_RF', 'SATELLITE_LEO'];
+        const best = candidates.find(b => {
+            const s = this.bearerStats.get(b);
+            return s && s.isOnline;
+        }) || 'WIFI_DIRECT';
+        this.primaryBearer = best;
         this.notify();
     }
 

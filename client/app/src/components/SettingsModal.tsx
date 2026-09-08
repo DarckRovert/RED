@@ -51,12 +51,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     ];
 
     return (
-        <div style={{
-            position: "fixed", inset: 0, zIndex: 1000,
-            background: "rgba(5, 5, 10, 0.85)", backdropFilter: "blur(16px)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            padding: "16px", animation: "fadeIn 0.2s ease"
-        }}>
+        <div 
+            onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                    TacticalAudioEngine.playTap();
+                    handleClose();
+                }
+            }}
+            style={{
+                position: "fixed", inset: 0, zIndex: 1000,
+                background: "rgba(5, 5, 10, 0.85)", backdropFilter: "blur(16px)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                padding: "16px", animation: "fadeIn 0.2s ease"
+            }}
+        >
             <div style={{
                 width: "100%", maxWidth: "840px", maxHeight: "90vh",
                 background: "var(--bg-card, #0F111E)",

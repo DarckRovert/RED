@@ -10,6 +10,7 @@ export type BackInterceptor = () => boolean;
 
 export class BackHandlerRegistry {
     private static handlers: Array<BackInterceptor> = [];
+    private static isExecuting = false;
 
     /**
      * Registers a back interceptor.
@@ -31,16 +32,24 @@ export class BackHandlerRegistry {
      * @returns `true` if a handler consumed the back event, `false` otherwise.
      */
     public static executeTop(): boolean {
+        // Prevent reentrant execution. If an active interceptor invokes goBack(),
+        // the nested goBack() must bypass interceptors to pop the navigation history.
+        if (this.isExecuting) {
+            return false;
+        }
         if (this.handlers.length === 0) return false;
-        // LIFO order: highest z-index / most recently opened modal has priority
-        const topHandler = this.handlers[this.handlers.length - 1];
+
+        this.isExecuting = true;
         try {
+            const topHandler = this.handlers[this.handlers.length - 1];
             return Boolean(topHandler());
         } catch (err) {
             console.warn("[BackHandlerRegistry] Error executing back interceptor:", err);
             // Remove failing handler to prevent permanent lock
             this.handlers.pop();
             return false;
+        } finally {
+            this.isExecuting = false;
         }
     }
 
@@ -63,5 +72,6 @@ export class BackHandlerRegistry {
      */
     public static clear(): void {
         this.handlers = [];
+        this.isExecuting = false;
     }
 }

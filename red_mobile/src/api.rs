@@ -77,7 +77,7 @@ pub fn get_or_init_global_logs() -> Arc<std::sync::RwLock<std::collections::VecD
             timestamp: now,
             level: "INFO".to_string(),
             target: "red_mobile::core".to_string(),
-            message: "Motor Nativo RED Rust v64.0.0 inicializado en puerto 7333".to_string(),
+            message: format!("Motor Nativo RED Rust v{} inicializado en puerto 7333", env!("CARGO_PKG_VERSION")),
         });
         Arc::new(std::sync::RwLock::new(initial))
     }).clone()

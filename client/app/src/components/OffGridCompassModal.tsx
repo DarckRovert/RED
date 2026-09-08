@@ -11,7 +11,8 @@ import { magneticDetector, MagneticTelemetry } from "../lib/sensors/MagneticAnom
 import { CelestialNavigationEngine, CelestialEphemeris } from "../lib/sensors/CelestialNavigationEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { pedestrianDeadReckoning, PdrState } from "../lib/sensors/PedestrianDeadReckoningEngine";
-import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
+import { TacticalLocationEngine, TacticalLocation } from "../lib/sensors/TacticalLocationEngine";
+import { tacticalCompass, CompassTelemetry } from "../lib/sensors/TacticalCompassEngine";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
@@ -71,7 +72,14 @@ export function OffGridCompassModal() {
         toast.info("Odometría inercial puesta a cero");
     }, []);
 
-    const [heading, setHeading] = useState<number>(0);
+    const [compassTelemetry, setCompassTelemetry] = useState<CompassTelemetry>(() => tacticalCompass.getTelemetry());
+    const heading = compassTelemetry.headingDeg;
+
+    useEffect(() => {
+        const unsub = tacticalCompass.subscribe(setCompassTelemetry);
+        return () => unsub();
+    }, []);
+
     const [solarAzimuth, setSolarAzimuth] = useState<{ azimuthDegrees: number; elevationDegrees: number; isNight: boolean }>({ azimuthDegrees: 0, elevationDegrees: 0, isNight: false });
     const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
     const [utmString, setUtmString] = useState<string>("Buscando señal GPS...");
@@ -98,10 +106,6 @@ export function OffGridCompassModal() {
     const mapContainerRef = useRef<HTMLDivElement | null>(null);
     const leafletMapRef = useRef<any>(null);
     const markersGroupRef = useRef<any>(null);
-
-    // Vector Low-Pass Filter state for silky smooth compass without 0<->360 jumps
-    const vecX = useRef<number>(0);
-    const vecY = useRef<number>(0);
 
     // One-time initialization guard to prevent GPS watch ticks from overwriting user typing input
     const hasInitializedLandmarks = useRef<boolean>(false);
@@ -148,40 +152,6 @@ export function OffGridCompassModal() {
             const savedB2 = localStorage.getItem("red_offgrid_bearing2");
             if (savedB2) setBearing2(savedB2);
         } catch {}
-
-        // Listen for device orientation with single listener registration & vector low-pass filter
-        const handleOrientation = (e: DeviceOrientationEvent) => {
-            let compass: number | null = null;
-            const webkitHeading = (e as unknown as { webkitCompassHeading?: number }).webkitCompassHeading;
-            if (webkitHeading !== undefined && webkitHeading !== null) {
-                compass = webkitHeading;
-            } else if (e.alpha !== null && e.alpha !== undefined) {
-                compass = (360 - e.alpha) % 360;
-            }
-
-            if (compass === null) return;
-
-            // Vector Low-Pass Filter: Prevents 0 <-> 360 degree wraparound jumps
-            const rad = (compass * Math.PI) / 180;
-            const curSin = Math.sin(rad);
-            const curCos = Math.cos(rad);
-
-            if (vecX.current === 0 && vecY.current === 0) {
-                vecX.current = curCos;
-                vecY.current = curSin;
-            } else {
-                vecX.current = vecX.current * 0.82 + curCos * 0.18;
-                vecY.current = vecY.current * 0.82 + curSin * 0.18;
-            }
-
-            let smoothDeg = Math.round((Math.atan2(vecY.current, vecX.current) * 180) / Math.PI);
-            smoothDeg = ((smoothDeg % 360) + 360) % 360;
-
-            setHeading(smoothDeg);
-        };
-
-        const eventName = ("ondeviceorientationabsolute" in window) ? "deviceorientationabsolute" : "deviceorientation";
-        window.addEventListener(eventName, handleOrientation, true);
 
         // Restore last known GPS coordinates via TacticalLocationEngine & cache
         const lastKnown = TacticalLocationEngine.getLastKnownLocation();
@@ -233,7 +203,6 @@ export function OffGridCompassModal() {
         });
 
         return () => {
-            window.removeEventListener(eventName, handleOrientation, true);
             if (unsubGps) unsubGps();
         };
     }, []);
@@ -1117,9 +1086,77 @@ export function OffGridCompassModal() {
                             {/* Heading & Zoom Selector */}
                             <div style={{ marginTop: '10px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
                                 <div style={{ textAlign: 'center' }}>
-                                    <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace' }}>{heading}°</div>
-                                    <div style={{ fontSize: '0.68rem', color: '#888', textTransform: 'uppercase', letterSpacing: '1px' }}>Rumbo Geomagnético Actual</div>
+                                    <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace' }}>
+                                        {heading}° {compassTelemetry.cardinal}
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '2px' }}>
+                                        {compassTelemetry.source === 'magnetometer' && (
+                                            <span style={{ fontSize: '0.68rem', color: '#00E676', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                                                ● 🧭 Magnetómetro Fusión 3D
+                                            </span>
+                                        )}
+                                        {compassTelemetry.source === 'gps_cog' && (
+                                            <span style={{ fontSize: '0.68rem', color: '#00E5FF', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                                                ● 🛰️ Rumbo GPS Cinemático (COG)
+                                            </span>
+                                        )}
+                                        {compassTelemetry.source === 'solar' && (
+                                            <span style={{ fontSize: '0.68rem', color: '#FFB300', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                                                ● ☀️ Brújula Solar Calibrada
+                                            </span>
+                                        )}
+                                        {compassTelemetry.source === 'manual' && (
+                                            <span style={{ fontSize: '0.68rem', color: '#FF9100', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                                                ● ✋ Rumbo Manual (Sin Magnetómetro)
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
+
+                                {/* Controles Tácticos de Calibración cuando no hay magnetómetro de hardware */}
+                                {compassTelemetry.source !== 'magnetometer' && (
+                                    <div style={{
+                                        display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center',
+                                        background: 'rgba(0,0,0,0.4)', padding: '6px 10px', borderRadius: '8px',
+                                        border: '1px solid rgba(255,255,255,0.08)', marginTop: '4px'
+                                    }}>
+                                        <button
+                                            onClick={() => tacticalCompass.setManualHeading((heading - 15 + 360) % 360)}
+                                            style={{
+                                                padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)',
+                                                color: '#FFF', border: 'none', cursor: 'pointer', fontSize: '0.70rem', fontWeight: 800
+                                            }}
+                                            title="Girar 15° a babor"
+                                        >
+                                            ◀ -15°
+                                        </button>
+                                        <button
+                                            onClick={() => tacticalCompass.setManualHeading((heading + 15) % 360)}
+                                            style={{
+                                                padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)',
+                                                color: '#FFF', border: 'none', cursor: 'pointer', fontSize: '0.70rem', fontWeight: 800
+                                            }}
+                                            title="Girar 15° a estribor"
+                                        >
+                                            +15° ▶
+                                        </button>
+                                        {solarAzimuth && !solarAzimuth.isNight && (
+                                            <button
+                                                onClick={() => {
+                                                    tacticalCompass.calibrateWithSolarAzimuth(solarAzimuth.azimuthDegrees);
+                                                    toast.success(`☀️ Brújula orientada con el Sol: ${solarAzimuth.azimuthDegrees}°`);
+                                                }}
+                                                style={{
+                                                    padding: '4px 10px', borderRadius: '6px', background: 'rgba(255,179,0,0.18)',
+                                                    color: '#FFB300', border: '1px solid #FFB300', cursor: 'pointer', fontSize: '0.70rem', fontWeight: 800
+                                                }}
+                                                title="Alinear rumbo con el acimut solar actual"
+                                            >
+                                                ☀️ Alinear Sol ({solarAzimuth.azimuthDegrees}°)
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Radar Range Scale Selector */}
                                 <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
