@@ -540,9 +540,9 @@ export class RedAPIClient {
             const body = {
                 recipient: cleanRecipient,
                 content,
-                sender_name: myNickname || options?.sender_name,
-                sender_pk: myPk || options?.sender_pk,
-                avatar_url: myAvatar || options?.avatar_url,
+                sender_name: options?.sender_name ?? myNickname,
+                sender_pk: options?.sender_pk ?? myPk,
+                avatar_url: options?.avatar_url !== undefined ? options.avatar_url : myAvatar,
                 ...options,
                 id: msgId
             };
@@ -574,9 +574,9 @@ export class RedAPIClient {
                 id: msgId,
                 content,
                 sender: myDid,
-                sender_name: myNickname || options?.sender_name,
-                sender_pk: myPk || options?.sender_pk,
-                avatar_url: myAvatar || options?.avatar_url,
+                sender_name: options?.sender_name ?? myNickname,
+                sender_pk: options?.sender_pk ?? myPk,
+                avatar_url: options?.avatar_url !== undefined ? options.avatar_url : myAvatar,
                 recipient: cleanRecipient,
                 msg_type: options?.msg_type || 'text',
                 timestamp: Date.now() / 1000,
@@ -621,23 +621,19 @@ export class RedAPIClient {
     }
 
     /**
-     * Send a single MJPEG frame to all contacts & P2P broadcast wildcard.
+     * Send a single MJPEG frame directly to P2P mesh broadcast wildcard.
      * media_data: base64 JPEG string.
      * duration_ms is reused to carry the frame sequence number (no backend change needed).
      */
-    async sendLiveFrame(contacts: any[], streamId: string, frameB64: string, seq: number): Promise<void> {
-        const recipients = new Set<string>(contacts.map(c => c.identity_hash));
-        recipients.add('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
-        for (const recipientHash of recipients) {
-            try {
-                await this.sendMessage(recipientHash, '', {
-                    msg_type: 'live_frame',
-                    media_data: frameB64,
-                    conversation_id: streamId,
-                    duration_ms: seq,
-                });
-            } catch { /* best-effort frame delivery */ }
-        }
+    async sendLiveFrame(_contacts: any[], streamId: string, frameB64: string, seq: number): Promise<void> {
+        try {
+            await this.sendMessage('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', '', {
+                msg_type: 'live_frame',
+                media_data: frameB64,
+                conversation_id: streamId,
+                duration_ms: seq,
+            });
+        } catch { /* best-effort frame delivery */ }
     }
 
     /**
@@ -1225,6 +1221,115 @@ export class RedAPIClient {
                 await meshRouter.send(groupId, encoded);
             } catch { /* non-fatal */ }
         }
+    }
+
+    /**
+     * Join or import an existing squad from a QR code or tactical invite string.
+     * Supports both JSON format (type: 'group_invite') and tactical URI (red://squad/...).
+     */
+    async joinGroupFromInvite(inviteInput: string | Record<string, any>): Promise<{ id: string; name: string }> {
+        let parsed: any = null;
+        if (typeof inviteInput === 'string') {
+            const trimmed = inviteInput.trim();
+            if (trimmed.startsWith('red://squad/') || trimmed.startsWith('red://group/')) {
+                try {
+                    const url = new URL(trimmed.replace(/^red:\/\//i, 'http://dummy.red/'));
+                    const id = url.searchParams.get('id') || url.pathname.replace(/^\/(squad|group)\/?/i, '');
+                    const name = url.searchParams.get('name') || 'Escuadrón Malla';
+                    const creator = url.searchParams.get('creator') || '';
+                    const rawMembers = url.searchParams.get('members')?.split(',') || [];
+                    parsed = { group_id: id, name, creator, members: rawMembers };
+                } catch {
+                    // Fallback to regex extraction
+                    const idMatch = trimmed.match(/id=([a-fA-F0-9]{16,64})/);
+                    const nameMatch = trimmed.match(/name=([^&]+)/);
+                    if (idMatch) {
+                        parsed = {
+                            group_id: idMatch[1],
+                            name: nameMatch ? decodeURIComponent(nameMatch[1]) : 'Escuadrón Malla',
+                            creator: '',
+                            members: []
+                        };
+                    }
+                }
+            } else {
+                try {
+                    parsed = JSON.parse(trimmed);
+                } catch {
+                    throw new Error("Formato de invitación de escuadrón inválido");
+                }
+            }
+        } else {
+            parsed = inviteInput;
+        }
+
+        const groupId: string = parsed?.group_id || parsed?.groupId || parsed?.id || '';
+        const groupName: string = parsed?.name || parsed?.group_name || 'Escuadrón Malla';
+        const creator: string = parsed?.creator || '';
+        const rawMembers: any[] = Array.isArray(parsed?.members) ? parsed.members : [];
+
+        if (!groupId || groupId.length < 8) {
+            throw new Error("ID de escuadrón no válido en la invitación");
+        }
+
+        let myHash = '';
+        try { myHash = localStorage.getItem('red_identity_hash') || ''; } catch {}
+
+        const members = [
+            ...rawMembers.map((m: any) =>
+                typeof m === 'string'
+                    ? { identity_hash: m, role: m === creator ? 'Admin' : 'Member', joined_at: Math.floor(Date.now() / 1000) }
+                    : { role: 'Member', joined_at: Math.floor(Date.now() / 1000), ...m }
+            )
+        ];
+        if (myHash && !members.some(m => m.identity_hash === myHash)) {
+            members.push({ identity_hash: myHash, role: 'Member', joined_at: Math.floor(Date.now() / 1000) });
+        }
+
+        const groupObj = {
+            id: groupId,
+            name: groupName,
+            members,
+            creator,
+            created_at: parsed?.created_at ? Math.floor(parsed.created_at / 1000) : Math.floor(Date.now() / 1000),
+            last_activity: Math.floor(Date.now() / 1000)
+        };
+
+        // 1. Update web store
+        const existingGroups = this.getWebStore<any[]>('red_web_groups', []);
+        const gIdx = existingGroups.findIndex(g => g.id === groupId || g.group_id === groupId);
+        if (gIdx >= 0) {
+            existingGroups[gIdx] = { ...existingGroups[gIdx], ...groupObj };
+        } else {
+            existingGroups.push(groupObj);
+        }
+        this.setWebStore('red_web_groups', existingGroups);
+
+        // 2. Add conversation entry
+        const convs = this.getWebStore<any[]>('red_web_conversations', []);
+        if (!convs.some(c => c.id === groupId || c.peer === groupId)) {
+            convs.unshift({
+                id: groupId,
+                peer: groupId,
+                peer_name: groupName,
+                last_message: `Unido al escuadrón ${groupName}`,
+                last_timestamp: Date.now() / 1000,
+                unread_count: 0,
+                is_group: true
+            });
+            this.setWebStore('red_web_conversations', convs);
+        }
+
+        // 3. Sync Zustand store
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            useRedStore.setState({ groups: existingGroups, conversations: convs });
+        } catch {}
+
+        // 4. Request DTN history sync so we get recent messages
+        this.requestGroupHistory(groupId, Date.now() / 1000 - 86400 * 3, 50).catch(() => {});
+
+        return { id: groupId, name: groupName };
     }
 
     async addContact(identity_hash: string, display_name: string, public_key?: string | null): Promise<void> {

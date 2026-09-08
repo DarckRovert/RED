@@ -11,6 +11,25 @@ import {
 } from "../lib/api";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
+
+/** Clipboard with textarea fallback for air-gapped / tactical WebView */
+function copyToClipboard(text: string, label = 'Dato'): void {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).catch(() => legacyCopy(text, label));
+    } else {
+        legacyCopy(text, label);
+    }
+}
+function legacyCopy(text: string, label: string): void {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); toast.success(`${label} copiado`); }
+    finally { document.body.removeChild(ta); }
+}
 
 interface AmberAdminPanelProps {
     onClose?: () => void;
@@ -41,6 +60,9 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
     const [alerts, setAlerts] = useState<AmberAlert[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [confirmAlertId, setConfirmAlertId] = useState<string | null>(null);
+    const [qrModalAlert, setQrModalAlert] = useState<AmberAlert | null>(null);
+    const [qrModalDataUrl, setQrModalDataUrl] = useState<string | null>(null);
 
     // Formulario de nueva alerta
     const [form, setForm] = useState<any>({
@@ -67,11 +89,37 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
         fetchAlerts();
     }, [fetchAlerts]);
 
+    // ── LIFO Back interception
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (qrModalAlert) {
+                setQrModalAlert(null);
+                setQrModalDataUrl(null);
+                return true;
+            }
+            if (confirmAlertId) {
+                setConfirmAlertId(null);
+                return true;
+            }
+            if (view === "create") {
+                setView("list");
+                return true;
+            }
+            handleClose();
+            return true;
+        });
+        const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); BackHandlerRegistry.executeTop(); } };
+        document.addEventListener('keydown', onEsc);
+        return () => { unregister(); document.removeEventListener('keydown', onEsc); };
+    }, [qrModalAlert, confirmAlertId, view, handleClose]);
+
     const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         if (file.size > 512 * 1024) {
+            TacticalAudioEngine.playWarning();
             toast.error("La foto debe ser menor a 512KB");
             return;
         }
@@ -82,16 +130,18 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
             const cleanB64 = b64.split(",")[1];
             setForm((f: any) => ({ ...f, photo_b64: cleanB64 }));
             setPhotoPreview(b64);
+            TacticalAudioEngine.playRogerBeep();
         };
         reader.readAsDataURL(file);
     };
 
     const handleCreate = async () => {
-        if (!form.name?.trim()) { toast.warning("El nombre es requerido"); return; }
-        if (!form.age || form.age < 0) { toast.warning("La edad es requerida"); return; }
-        if (!form.description?.trim()) { toast.warning("La descripción es requerida"); return; }
+        if (!form.name?.trim()) { TacticalAudioEngine.playWarning(); toast.warning("El nombre es requerido"); return; }
+        if (!form.age || form.age < 0) { TacticalAudioEngine.playWarning(); toast.warning("La edad es requerida"); return; }
+        if (!form.description?.trim()) { TacticalAudioEngine.playWarning(); toast.warning("La descripción es requerida"); return; }
 
         setSubmitting(true);
+        TacticalAudioEngine.playTap();
 
         let lat = form.last_seen_lat;
         let lon = form.last_seen_lon;
@@ -125,6 +175,7 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                 ttl_secs: form.ttl_secs || 72 * 3600,
             } as any);
 
+            TacticalAudioEngine.playEmergencyAlarm();
             toast.success("🚨 Alerta AMBER emitida y propagada en la malla");
             setView("list");
             setForm({ authority_node_id: nodeId, authority_signature: nodeId, ttl_secs: 72 * 3600 });
@@ -132,15 +183,15 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
             setPhotoPreview(null);
             fetchAlerts();
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al emitir la alerta AMBER");
         } finally {
             setSubmitting(false);
         }
     };
 
-    const [confirmAlertId, setConfirmAlertId] = useState<string | null>(null);
-
     const handleResolve = (alertId: string) => {
+        TacticalAudioEngine.playTap();
         setConfirmAlertId(alertId);
     };
 
@@ -148,18 +199,53 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
         if (!confirmAlertId) return;
         const alertId = confirmAlertId;
         setConfirmAlertId(null);
+        TacticalAudioEngine.playTap();
         try {
             const resolveSig = await signAuthorityPayload(nodeId, `RESOLVE:${alertId}`);
             await resolveAmberAlert(alertId, {
                 authority_node_id: nodeId,
                 authority_signature: resolveSig,
             });
+            TacticalAudioEngine.playRogerBeep();
             toast.success("✅ Alerta marcada como resuelta");
             fetchAlerts();
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al resolver la alerta");
         }
     };
+
+    const handleOpenQrModal = async (alertItem: AmberAlert) => {
+        TacticalAudioEngine.playTap();
+        setQrModalAlert(alertItem);
+        try {
+            const dataToEncode = JSON.stringify({
+                type: "red_amber_alert",
+                id: alertItem.id,
+                name: alertItem.name,
+                age: alertItem.age,
+                desc: alertItem.description,
+                loc: alertItem.last_seen_location,
+                lat: alertItem.last_seen_lat,
+                lon: alertItem.last_seen_lon,
+                auth: alertItem.authority_node_id,
+                issued: alertItem.issued_at,
+            });
+            const dataUrl = await OfflineQrEngine.generateDataUrl(dataToEncode, {
+                width: 320,
+                darkColor: "#FFB300",
+                lightColor: "#04060A",
+            });
+            setQrModalDataUrl(dataUrl);
+            TacticalAudioEngine.playRogerBeep();
+        } catch {
+            TacticalAudioEngine.playWarning();
+            toast.error("Error al generar código QR off-grid");
+        }
+    };
+
+    const activeCount = alerts.filter(a => !(a as any).resolved && a.status !== 'Resolved').length;
+    const resolvedCount = alerts.filter(a => (a as any).resolved || a.status === 'Resolved').length;
 
     return (
         <div style={{
@@ -224,6 +310,42 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                 </div>
             </header>
 
+            {/* HUD Telemetría SAR */}
+            <div style={{
+                display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between",
+                padding: "8px 20px", background: "rgba(255,179,0,0.06)", borderBottom: "1px solid rgba(255,179,0,0.15)",
+                fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace", gap: "10px", zIndex: 5
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                    <span style={{ color: "var(--accent-amber)", fontWeight: 700 }}>
+                        🚨 {activeCount} ACTIVAS
+                    </span>
+                    <span style={{ color: "var(--accent-emerald)", fontWeight: 700 }}>
+                        ✅ {resolvedCount} RESUELTAS
+                    </span>
+                    <span style={{ color: "var(--text-muted)" }}>
+                        AUTORIDAD: <span style={{ color: "#FFF" }}>{nodeId.slice(0, 10)}...</span>
+                    </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span className="badge-tactical badge-tactical-cyan" style={{ fontSize: "0.66rem", padding: "2px 8px" }}>
+                        📡 MALLA P2P ACTIVA
+                    </span>
+                    <button
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            fetchAlerts();
+                            toast.info("Alertas actualizadas");
+                        }}
+                        className="btn-ghost"
+                        style={{ padding: "2px 8px", fontSize: "0.68rem" }}
+                        title="Refrescar alertas"
+                    >
+                        🔄
+                    </button>
+                </div>
+            </div>
+
             {/* Contenido Principal con Scroll Seguro */}
             <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -277,6 +399,52 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                                                     style={{ width: "100%", maxHeight: "200px", objectFit: "cover", borderRadius: "10px", border: "1px solid var(--glass-border)" }}
                                                 />
                                             )}
+
+                                            {/* Acciones Tácticas y Ficha QR */}
+                                            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "4px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px" }}>
+                                                <button
+                                                    onClick={() => handleOpenQrModal(a)}
+                                                    className="btn-tactical-secondary"
+                                                    style={{ padding: "4px 10px", fontSize: "0.70rem", display: "flex", alignItems: "center", gap: "5px", color: "var(--accent-amber)", borderColor: "rgba(255,179,0,0.3)" }}
+                                                >
+                                                    📱 Ficha QR Off-Grid
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        TacticalAudioEngine.playTap();
+                                                        copyToClipboard(a.id, 'ID de Alerta');
+                                                    }}
+                                                    className="btn-ghost"
+                                                    style={{ padding: "4px 8px", fontSize: "0.70rem" }}
+                                                    title="Copiar ID"
+                                                >
+                                                    📋 ID
+                                                </button>
+                                                {a.last_seen_lat !== undefined && a.last_seen_lon !== undefined && (
+                                                    <button
+                                                        onClick={() => {
+                                                            TacticalAudioEngine.playTap();
+                                                            copyToClipboard(`${a.last_seen_lat}, ${a.last_seen_lon}`, 'Coordenadas GPS');
+                                                        }}
+                                                        className="btn-ghost"
+                                                        style={{ padding: "4px 8px", fontSize: "0.70rem" }}
+                                                        title="Copiar Coordenadas"
+                                                    >
+                                                        📍 GPS ({a.last_seen_lat.toFixed(4)}, {a.last_seen_lon.toFixed(4)})
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => {
+                                                        TacticalAudioEngine.playTap();
+                                                        copyToClipboard(a.description, 'Descripción');
+                                                    }}
+                                                    className="btn-ghost"
+                                                    style={{ padding: "4px 8px", fontSize: "0.70rem" }}
+                                                    title="Copiar Descripción"
+                                                >
+                                                    📝 Texto
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -408,6 +576,76 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                                 style={{ padding: "10px", fontSize: "0.82rem", background: "var(--accent-emerald)" }}
                             >
                                 Sí, Marcar Resuelta
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Ficha QR Off-Grid */}
+            {qrModalAlert && qrModalDataUrl && (
+                <div style={{
+                    position: "fixed", inset: 0, zIndex: 10001,
+                    background: "rgba(0,0,0,0.85)", backdropFilter: "blur(10px)",
+                    display: "flex", alignItems: "center", justifyContent: "center", padding: "20px"
+                }}>
+                    <div className="card-tactical animate-pop" style={{
+                        maxWidth: "400px", width: "100%", padding: "22px",
+                        background: "linear-gradient(180deg, rgba(24,18,10,0.98) 0%, rgba(10,8,6,0.99) 100%)",
+                        border: "1px solid var(--accent-amber)", borderRadius: "16px",
+                        boxShadow: "0 12px 48px rgba(255,179,0,0.3)",
+                        display: "flex", flexDirection: "column", gap: "14px", alignItems: "center", textAlign: "center"
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                            <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-amber)", display: "flex", alignItems: "center", gap: "8px" }}>
+                                🚨 FICHA SAR OFF-GRID
+                            </div>
+                            <button
+                                onClick={() => { TacticalAudioEngine.playTap(); setQrModalAlert(null); setQrModalDataUrl(null); }}
+                                className="btn-icon" style={{ width: 32, height: 32 }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                            Escanea para importar la ficha de búsqueda sin necesidad de conexión a internet o radiofrecuencia.
+                        </div>
+
+                        <div style={{
+                            padding: "12px", background: "#04060A", borderRadius: "12px",
+                            border: "1px solid rgba(255,179,0,0.3)"
+                        }}>
+                            <img src={qrModalDataUrl} alt="QR Alerta AMBER" style={{ width: "240px", height: "240px", display: "block" }} />
+                        </div>
+
+                        <div style={{ width: "100%", textAlign: "left", background: "rgba(0,0,0,0.4)", padding: "10px", borderRadius: "8px", border: "1px solid var(--glass-border)", fontSize: "0.75rem" }}>
+                            <div style={{ fontWeight: 800, color: "#FFF" }}>{qrModalAlert.name} ({qrModalAlert.age} años)</div>
+                            <div style={{ color: "var(--text-muted)", fontSize: "0.70rem" }}>{qrModalAlert.last_seen_location || "Ubicación desconocida"}</div>
+                            <div style={{ color: "var(--accent-amber)", fontSize: "0.68rem", fontFamily: "JetBrains Mono, monospace", marginTop: "4px" }}>
+                                ID: {qrModalAlert.id}
+                            </div>
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", width: "100%" }}>
+                            <a
+                                href={qrModalDataUrl}
+                                download={`amber_${qrModalAlert.id}.png`}
+                                onClick={() => TacticalAudioEngine.playTap()}
+                                className="btn-tactical-secondary"
+                                style={{ padding: "8px", fontSize: "0.72rem", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}
+                            >
+                                💾 Descargar PNG
+                            </a>
+                            <button
+                                onClick={() => {
+                                    TacticalAudioEngine.playTap();
+                                    copyToClipboard(JSON.stringify(qrModalAlert, null, 2), 'JSON de Alerta');
+                                }}
+                                className="btn-tactical-primary"
+                                style={{ padding: "8px", fontSize: "0.72rem", background: "var(--accent-amber)", color: "#000" }}
+                            >
+                                📋 Copiar JSON
                             </button>
                         </div>
                     </div>

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { companionSyncEngine, CompanionSyncPayload } from "../lib/mesh/companionSyncEngine";
-import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 import { getSecurePin } from "../lib/crypto/BiometricLockEngine";
@@ -18,6 +19,19 @@ export const WebCompanionPairConfirmationModal: React.FC<WebCompanionPairConfirm
     const { identity, contacts, conversations } = useRedStore();
     const [status, setStatus] = useState<"idle" | "transmitting" | "success" | "error">("idle");
     const [statusMessage, setStatusMessage] = useState<string>("");
+
+    // Registro LIFO de retroceso físico / Esc
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (status === "transmitting") {
+                return false; // Evitar cancelar durante cifrado y transmisión crítica
+            }
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [status, onClose]);
 
     const handleConfirmPairing = async () => {
         try {
@@ -94,7 +108,7 @@ export const WebCompanionPairConfirmationModal: React.FC<WebCompanionPairConfirm
                 }}
             >
                 <button
-                    onClick={onClose}
+                    onClick={() => { TacticalAudioEngine.playTap(); onClose(); }}
                     disabled={status === "transmitting"}
                     style={{
                         position: "absolute", top: "16px", right: "16px",
@@ -159,7 +173,7 @@ export const WebCompanionPairConfirmationModal: React.FC<WebCompanionPairConfirm
                 {status === "idle" && (
                     <div style={{ width: "100%", display: "flex", gap: "10px" }}>
                         <button
-                            onClick={onClose}
+                            onClick={() => { TacticalAudioEngine.playTap(); onClose(); }}
                             className="btn-tactical-secondary"
                             style={{ flex: 1, padding: "12px", fontSize: "0.85rem" }}
                         >
@@ -178,7 +192,7 @@ export const WebCompanionPairConfirmationModal: React.FC<WebCompanionPairConfirm
                 {status === "error" && (
                     <div style={{ width: "100%", display: "flex", gap: "10px" }}>
                         <button
-                            onClick={onClose}
+                            onClick={() => { TacticalAudioEngine.playTap(); onClose(); }}
                             className="btn-tactical-secondary"
                             style={{ flex: 1, padding: "12px", fontSize: "0.85rem" }}
                         >

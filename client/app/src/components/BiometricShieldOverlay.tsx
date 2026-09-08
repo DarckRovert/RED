@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import { BiometricLockEngine, verifySecurePin } from "../lib/crypto/BiometricLockEngine";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 
 export const BiometricShieldOverlay: React.FC = () => {
     const { t } = useTranslation();
@@ -23,14 +25,27 @@ export const BiometricShieldOverlay: React.FC = () => {
         return unsub;
     }, []);
 
+    // Intercepción LIFO de Seguridad: El retroceso físico o Escape no puede saltar la bóveda biométrica
+    useEffect(() => {
+        if (!isLocked) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playWarning();
+            return true; // Consume el evento de retroceso impidiendo navegación no autorizada
+        });
+        return unregister;
+    }, [isLocked]);
+
     if (!isLocked) return null;
 
     const handleBiometricClick = async () => {
         setErrorMsg("");
+        TacticalAudioEngine.playTap();
         const res = await BiometricLockEngine.authenticate();
         if (res.success) {
+            TacticalAudioEngine.playRogerBeep();
             toast.success(t.common?.success || "Desbloqueado");
         } else {
+            TacticalAudioEngine.playWarning();
             setErrorMsg(t.auth?.biometric_btn ? `${t.auth.biometric_btn} Cancelado` : "Biometría no reconocida");
         }
     };
@@ -40,10 +55,12 @@ export const BiometricShieldOverlay: React.FC = () => {
         setErrorMsg("");
         const isValid = await verifySecurePin("master_pin", pinInput);
         if (isValid) {
+            TacticalAudioEngine.playRogerBeep();
             BiometricLockEngine.unlock();
             setPinInput("");
             toast.success(t.common?.success || "Desbloqueado");
         } else {
+            TacticalAudioEngine.playWarning();
             setErrorMsg(t.common?.error || "PIN incorrecto");
             setPinInput("");
         }

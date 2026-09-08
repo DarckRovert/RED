@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useState, useMemo, useEffect } from "react";
 import { useRedStore } from "../../store/useRedStore";
 import { meshRouter } from "../../lib/mesh/meshRouter";
@@ -8,6 +6,8 @@ import { avatarStyle } from "../sidebar/types";
 import { ContactQrModal } from "./ContactQrModal";
 import { NewContactModal } from "./NewContactModal";
 import { WebCompanionPairConfirmationModal } from "../WebCompanionPairConfirmationModal";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 
 interface NewChatModalProps {
     isOpen: boolean;
@@ -35,6 +35,37 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
     const [webPairingCode, setWebPairingCode] = useState<string | null>(null);
     // Tracks which nearby peer is currently being added (hash | null)
     const [addingPeerHash, setAddingPeerHash] = useState<string | null>(null);
+
+    // Registro LIFO jerárquico de retroceso físico / Esc
+    useEffect(() => {
+        if (!isOpen) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (qrModalTab !== null) {
+                setQrModalTab(null);
+                return true;
+            }
+            if (newContactOpen) {
+                setNewContactOpen(false);
+                return true;
+            }
+            if (webPairingCode !== null) {
+                setWebPairingCode(null);
+                return true;
+            }
+            if (manualOpen) {
+                setManualOpen(false);
+                return true;
+            }
+            if (searchQuery.trim()) {
+                setSearchQuery("");
+                return true;
+            }
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [isOpen, qrModalTab, newContactOpen, webPairingCode, manualOpen, searchQuery, onClose]);
 
     // Nearby discovered peers in radio range
     const nearbyPeers = useMemo(() => {
@@ -72,6 +103,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
     // Called when the user taps an already-saved contact from the list.
     // No handshake needed — contact already exists.
     const handleSelectContact = (peerHash: string) => {
+        TacticalAudioEngine.playTap();
         onClose();
         navigate("chat", peerHash);
     };
@@ -80,6 +112,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
     // Executes the full P2P handshake: saves contact → emits contact_request over BLE + meshRouter broadcast.
     const handleAddNearbyPeer = async (peerHash: string, peerName: string) => {
         if (addingPeerHash) return; // prevent double-tap
+        TacticalAudioEngine.playTap();
         setAddingPeerHash(peerHash);
         try {
             await addContact(peerHash, peerName);
@@ -140,7 +173,10 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                 padding: "16px",
                 animation: "fadeIn 0.15s ease-out"
             }}
-            onClick={onClose}
+            onClick={() => {
+                TacticalAudioEngine.playTap();
+                onClose();
+            }}
         >
             <div
                 className="animate-enter modal-card-scrollable"
@@ -186,7 +222,10 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                         </div>
                     </div>
                     <button
-                        onClick={onClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
                         style={{
                             background: "transparent",
                             border: "none",
@@ -242,7 +281,10 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                     <div style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.06)", paddingBottom: "6px" }}>
                         {/* 0. Nuevo Contacto — PRIMERA ACCIÓN (WhatsApp UX) */}
                         <div
-                            onClick={() => setNewContactOpen(true)}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setNewContactOpen(true);
+                            }}
                             style={{
                                 display: "flex", alignItems: "center", gap: "16px",
                                 padding: "12px 20px", cursor: "pointer", transition: "background 0.15s"
@@ -270,7 +312,11 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
 
                         {/* 1. Nuevo Grupo */}
                         <div
-                            onClick={() => { onClose(); navigate("groups"); }}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                onClose();
+                                navigate("groups");
+                            }}
                             style={{
                                 display: "flex", alignItems: "center", gap: "16px",
                                 padding: "12px 20px", cursor: "pointer", transition: "background 0.15s"
@@ -293,7 +339,10 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
 
                         {/* 2. Escanear Código QR */}
                         <div
-                            onClick={() => setQrModalTab("scan")}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setQrModalTab("scan");
+                            }}
                             style={{
                                 display: "flex", alignItems: "center", gap: "16px",
                                 padding: "12px 20px", cursor: "pointer", transition: "background 0.15s"
@@ -321,7 +370,10 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
 
                         {/* 3. Mi Código QR */}
                         <div
-                            onClick={() => setQrModalTab("my_qr")}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setQrModalTab("my_qr");
+                            }}
                             style={{
                                 display: "flex", alignItems: "center", gap: "16px",
                                 padding: "12px 20px", cursor: "pointer", transition: "background 0.15s"

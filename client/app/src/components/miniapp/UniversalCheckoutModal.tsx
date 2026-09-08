@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PaymentIntentRequest, PaymentReceipt, PaymentRail } from '../../lib/miniapp/RedSDKTypes';
 import { redPaymentGateway } from '../../lib/miniapp/RedPaymentGatewayEngine';
 import { Web3BridgeEngine } from '../../lib/network/Web3BridgeEngine';
 import { MonetizationEngine } from '../../lib/network/MonetizationEngine';
 import { toast } from '../Toast';
+import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
+import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
 
 interface UniversalCheckoutModalProps {
     intent: PaymentIntentRequest;
@@ -28,6 +30,19 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
     const [isProcessing, setIsProcessing] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [completedReceipt, setCompletedReceipt] = useState<PaymentReceipt | null>(null);
+
+    // Registro LIFO de retroceso físico / Esc
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (isProcessing) {
+                return false; // Evitar interrumpir pasarela de pago en vuelo
+            }
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [isProcessing, onClose]);
 
     const userCredits = MonetizationEngine.getProStatus().credits;
     const web3State = Web3BridgeEngine.getInstance().getState();
@@ -58,21 +73,46 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
 
             setIsProcessing(false);
             setCompletedReceipt(receipt);
+            TacticalAudioEngine.playRogerBeep();
             toast.success("✅ ¡Pago procesado y firmado criptográficamente!");
         } catch (err: any) {
             setIsProcessing(false);
             setErrorMsg(err.message || "Error al procesar el pago.");
+            TacticalAudioEngine.playWarning();
         }
     };
 
     const handleCopyTxHash = () => {
         if (!completedReceipt) return;
-        navigator.clipboard.writeText(completedReceipt.transactionId);
-        toast.info("📋 Hash de transacción copiado al portapapeles.");
+        TacticalAudioEngine.playTap();
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(completedReceipt.transactionId)
+                .then(() => toast.info("📋 Hash de transacción copiado al portapapeles."))
+                .catch(() => fallbackCopy(completedReceipt.transactionId));
+        } else {
+            fallbackCopy(completedReceipt.transactionId);
+        }
+    };
+
+    const fallbackCopy = (text: string) => {
+        try {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            toast.info("📋 Hash de transacción copiado al portapapeles.");
+        } catch {
+            toast.error("Error al copiar al portapapeles.");
+        }
     };
 
     const handleDownloadReceipt = () => {
         if (!completedReceipt) return;
+        TacticalAudioEngine.playTap();
         const blob = new Blob([JSON.stringify(completedReceipt, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -127,7 +167,10 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                         </div>
                     </div>
                     <button 
-                        onClick={onClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
                         style={{
                             background: "rgba(255, 255, 255, 0.08)",
                             border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -194,7 +237,10 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
 
                         <button
                             type="button"
-                            onClick={() => onSuccess(completedReceipt)}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                onSuccess(completedReceipt);
+                            }}
                             style={{
                                 width: "100%",
                                 padding: "10px",
@@ -237,7 +283,10 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                                 {supportedRails.includes('paypal') && (
                                     <button
                                         type="button"
-                                        onClick={() => setSelectedRail('paypal')}
+                                        onClick={() => {
+                                            TacticalAudioEngine.playTap();
+                                            setSelectedRail('paypal');
+                                        }}
                                         style={{
                                             padding: "10px",
                                             borderRadius: "12px",
@@ -259,7 +308,10 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                                 {supportedRails.includes('web3_usdt') && (
                                     <button
                                         type="button"
-                                        onClick={() => setSelectedRail('web3_usdt')}
+                                        onClick={() => {
+                                            TacticalAudioEngine.playTap();
+                                            setSelectedRail('web3_usdt');
+                                        }}
                                         style={{
                                             padding: "10px",
                                             borderRadius: "12px",
@@ -281,7 +333,10 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                                 {supportedRails.includes('lightning') && (
                                     <button
                                         type="button"
-                                        onClick={() => setSelectedRail('lightning')}
+                                        onClick={() => {
+                                            TacticalAudioEngine.playTap();
+                                            setSelectedRail('lightning');
+                                        }}
                                         style={{
                                             padding: "10px",
                                             borderRadius: "12px",
@@ -303,7 +358,10 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                                 {supportedRails.includes('offgrid_voucher') && (
                                     <button
                                         type="button"
-                                        onClick={() => setSelectedRail('offgrid_voucher')}
+                                        onClick={() => {
+                                            TacticalAudioEngine.playTap();
+                                            setSelectedRail('offgrid_voucher');
+                                        }}
                                         style={{
                                             padding: "10px",
                                             borderRadius: "12px",
@@ -329,7 +387,7 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                                     <div>
                                         <p style={{ color: "#FFFFFF", fontWeight: 800, margin: 0 }}>Pasarela Fiat / PayPal</p>
                                         <p style={{ color: "var(--text-secondary)", fontSize: "0.72rem", margin: "2px 0 0 0" }}>
-                                            Destino: <span style={{ fontFamily: "JetBrains Mono, monospace", color: "#60A5FA" }}>@{intent.merchant.paypalUsername || 'redmesh'}</span>
+                                             Destino: <span style={{ fontFamily: "JetBrains Mono, monospace", color: "#60A5FA" }}>@{intent.merchant.paypalUsername || 'redmesh'}</span>
                                         </p>
                                     </div>
                                 )}
@@ -373,7 +431,10 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                         <div style={{ padding: "14px 16px", background: "rgba(6, 8, 16, 0.95)", borderTop: "1px solid rgba(255, 255, 255, 0.12)", display: "flex", gap: "8px" }}>
                             <button
                                 type="button"
-                                onClick={onClose}
+                                onClick={() => {
+                                    TacticalAudioEngine.playTap();
+                                    onClose();
+                                }}
                                 disabled={isProcessing}
                                 style={{ flex: 1, padding: "10px", background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.14)", borderRadius: "12px", color: "var(--text-secondary)", fontSize: "0.78rem", fontWeight: 800, cursor: "pointer" }}
                             >

@@ -10,6 +10,26 @@ import { redPaymentGateway } from '../../lib/miniapp/RedPaymentGatewayEngine';
 import { UniversalCheckoutModal } from './UniversalCheckoutModal';
 import { useTranslation } from '../../lib/i18n/i18nEngine';
 import { toast } from '../Toast';
+import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
+import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
+
+/** Clipboard with <textarea> fallback for environments without Clipboard API */
+function copyToClipboard(text: string): void {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).catch(() => legacyCopy(text));
+    } else {
+        legacyCopy(text);
+    }
+}
+function legacyCopy(text: string): void {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try { document.execCommand('copy'); } finally { document.body.removeChild(ta); }
+}
 
 interface RedHyperBrowserModalProps {
     userDid: string;
@@ -116,7 +136,45 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
         return new RedSDKBridge(currentAppBundle.manifest, ctx);
     }, [currentAppBundle, userDid, nickname, publicKey, grantedPermissions]);
 
-    // Setup RedSDK event listener and payment handler
+    // ── LIFO Back Handler (BackHandlerRegistry) ─────────────────────────
+    // Priority chain: UniversalCheckout > SecurityShield flyout > nav history > close
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (activeCheckoutIntent) {
+                activeCheckoutIntent.reject(new Error('Pago cancelado por el usuario'));
+                setActiveCheckoutIntent(null);
+                TacticalAudioEngine.playWarning();
+                return true;
+            }
+            if (showSecurityShield) {
+                setShowSecurityShield(false);
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            if (activeTab.historyIndex > 0) {
+                handleGoBack(); // navigateTo() inside already fires playTap()
+                return true;
+            }
+            onClose();
+            return true;
+        });
+
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                BackHandlerRegistry.executeTop();
+            }
+        };
+        document.addEventListener('keydown', handleEsc);
+
+        return () => {
+            unregister();
+            document.removeEventListener('keydown', handleEsc);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeCheckoutIntent, showSecurityShield, activeTab.historyIndex]);
+
+    // ── RedSDK event listener, payment handler & NAVIGATE_APP_STORE ─────
     useEffect(() => {
         redPaymentGateway.registerUIHandler({
             onOpenCheckoutModal: (intent, resolve, reject) => {
@@ -125,8 +183,16 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
         });
 
         const handleIframeMessage = (e: MessageEvent) => {
+            // SDK bridge delegation
             if (bridge) {
                 bridge.handleMessage(e);
+            }
+            // Handle NAVIGATE_APP_STORE deep-link from dApps
+            if (e.data?.channel === 'RED_SDK' && e.data?.type === 'NAVIGATE_APP_STORE') {
+                TacticalAudioEngine.playTap();
+                onClose();
+                // Emit a custom event that the parent Hub can listen to
+                window.dispatchEvent(new CustomEvent('red:open-app-store'));
             }
         };
 
@@ -137,7 +203,7 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
                 bridge.destroy();
             }
         };
-    }, [bridge]);
+    }, [bridge, onClose]);
 
     const handleIframeLoad = useCallback(() => {
         if (iframeRef.current && iframeRef.current.contentWindow && bridge) {
@@ -164,6 +230,7 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
     };
 
     const navigateTo = async (url: string, pushHistory = true) => {
+        TacticalAudioEngine.playTap();
         let cleanUrl = url.trim();
         if (!cleanUrl) return;
 
@@ -272,6 +339,7 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
                 }
             }
         } catch (err: any) {
+            TacticalAudioEngine.playWarning();
             setRenderedContent({
                 type: 'html',
                 src: `<div style="background:#060810;color:#FFF;font-family:sans-serif;padding:40px;text-align:center;margin:20px;border-radius:12px;border:1px solid rgba(255,51,85,0.3);">
@@ -284,6 +352,13 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
             setIsLoading(false);
         }
     };
+
+    // ── Copy current URL to clipboard ────────────────────────────────────
+    const handleCopyUrl = useCallback(() => {
+        copyToClipboard(activeTab.url);
+        TacticalAudioEngine.playMessageSent();
+        toast.success('URL copiada al portapapeles');
+    }, [activeTab.url]);
 
     const handleGoBack = () => {
         if (!canGoBack) return;
@@ -312,6 +387,7 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
     }, [activeTabId]);
 
     const handleAddTab = () => {
+        TacticalAudioEngine.playTap();
         const newId = `tab_${Date.now()}`;
         const newTab: BrowserTab = {
             id: newId,
@@ -330,6 +406,7 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
     const handleCloseTab = (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
         if (tabs.length === 1) return;
+        TacticalAudioEngine.playTap();
         const nextTabs = tabs.filter(t => t.id !== id);
         setTabs(nextTabs);
         if (activeTabId === id) {
@@ -466,6 +543,25 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
                                     <span>Lanzar dApp</span>
                                 </button>
                             )}
+
+                            {/* Copy URL button */}
+                            <button
+                                type="button"
+                                onClick={handleCopyUrl}
+                                style={{
+                                    background: "rgba(255, 255, 255, 0.06)",
+                                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                                    color: "var(--text-secondary)",
+                                    width: "32px",
+                                    height: "32px",
+                                    borderRadius: "8px",
+                                    cursor: "pointer",
+                                    fontSize: "0.82rem"
+                                }}
+                                title="Copiar URL al portapapeles"
+                            >
+                                📋
+                            </button>
 
                             <button
                                 type="button"

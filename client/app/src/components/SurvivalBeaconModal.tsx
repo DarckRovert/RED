@@ -10,11 +10,13 @@ import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { opticalMorseLiFi, MorseTransmissionState } from "../lib/sensors/OpticalMorseLiFiEngine";
 import { TacticalLocationEngine, TacticalLocation } from "../lib/sensors/TacticalLocationEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 type BeaconTab = "sos" | "actuators" | "soundmesh" | "feed";
 
 export function SurvivalBeaconModal() {
-    const { navigate, identity } = useRedStore();
+    const { navigate, goBack, identity } = useRedStore();
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<BeaconTab>("sos");
 
@@ -48,6 +50,18 @@ export function SurvivalBeaconModal() {
     const [isListening, setIsListening] = useState(false);
     const [receivedPackets, setReceivedPackets] = useState<SoundMeshPacket[]>([]);
 
+    // Auto-empaquetar telemetría GNSS real en el módem ultrasónico
+    useEffect(() => {
+        if (coords.lat && coords.lon) {
+            setSoundMeshMsg(prev => {
+                if (prev.endsWith(":RED_SOS_ACTIVE") || prev.includes(":SOS_")) {
+                    return `${localHash}:${distressType}:${coords.lat?.toFixed(4)},${coords.lon?.toFixed(4)}`;
+                }
+                return prev;
+            });
+        }
+    }, [coords.lat, coords.lon, distressType, localHash]);
+
     // Morse Li-Fi Transceiver States
     const [customMorseMsg, setCustomMorseMsg] = useState<string>("SOS");
     const [isMorseLiFiTransmitting, setIsMorseLiFiTransmitting] = useState<boolean>(false);
@@ -69,6 +83,7 @@ export function SurvivalBeaconModal() {
             return;
         }
         setIsMorseLiFiTransmitting(true);
+        TacticalAudioEngine.playRogerBeep();
         toast.info("Iniciando transmisión óptica Li-Fi...");
         try {
             await opticalMorseLiFi.transmitMessage(customMorseMsg, 12, { useTorch: true, useAudio: true });
@@ -150,6 +165,10 @@ export function SurvivalBeaconModal() {
                 try { sirenOscRef.current.stop(); } catch {}
                 sirenOscRef.current = null;
             }
+            if (audioCtxRef.current) {
+                try { audioCtxRef.current.close(); } catch {}
+                audioCtxRef.current = null;
+            }
             if (flashIntervalRef.current) {
                 clearInterval(flashIntervalRef.current);
                 flashIntervalRef.current = null;
@@ -182,8 +201,10 @@ export function SurvivalBeaconModal() {
                 beaconStreamRef.current = null;
             }
             setFlashActive(false);
+            TacticalAudioEngine.playTap();
             toast.info("Flash LED SOS detenido");
         } else {
+            TacticalAudioEngine.playWarning();
             if (Capacitor.isNativePlatform()) {
                 try {
                     const RedNode = registerPlugin<any>("RedNode");
@@ -236,9 +257,15 @@ export function SurvivalBeaconModal() {
                 try { sirenOscRef.current.stop(); } catch {}
                 sirenOscRef.current = null;
             }
+            if (audioCtxRef.current) {
+                try { audioCtxRef.current.close(); } catch {}
+                audioCtxRef.current = null;
+            }
             setSoundSirenActive(false);
+            TacticalAudioEngine.playTap();
             toast.info("Sirena acústica detenida");
         } else {
+            TacticalAudioEngine.playEmergencyAlarm();
             try {
                 const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
                 const ctx = new AudioCtx();
@@ -282,6 +309,65 @@ export function SurvivalBeaconModal() {
         return () => { if (timer) clearInterval(timer); };
     }, [screenFlashActive]);
 
+    // ── LIFO Back Navigation Handler: Actuadores -> SOS -> Salir ──────────────────
+    useEffect(() => {
+        const unreg = BackHandlerRegistry.register(() => {
+            if (flashActive || soundSirenActive || screenFlashActive) {
+                if (flashActive) toggleFlash();
+                if (soundSirenActive) toggleSiren();
+                if (screenFlashActive) setScreenFlashActive(false);
+                TacticalAudioEngine.playWarning();
+                return true;
+            }
+            if (activeTab !== "sos") {
+                setActiveTab("sos");
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return unreg;
+    }, [flashActive, soundSirenActive, screenFlashActive, activeTab, goBack]);
+
+    // Fallback resiliente para copia de coordenadas al portapapeles
+    const copyCoordinates = (lat?: number, lon?: number) => {
+        if (lat === undefined || lon === undefined) return;
+        const text = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                TacticalAudioEngine.playMessageSent();
+                toast.success(`Coordenadas copiadas: ${text}`);
+            }).catch(() => fallbackCopyCoords(text));
+        } else {
+            fallbackCopyCoords(text);
+        }
+    };
+
+    const fallbackCopyCoords = (text: string) => {
+        try {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-999999px";
+            textArea.style.top = "-999999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            const successful = document.execCommand("copy");
+            document.body.removeChild(textArea);
+            if (successful) {
+                TacticalAudioEngine.playMessageSent();
+                toast.success(`Coordenadas copiadas: ${text}`);
+            } else {
+                toast.error("No se pudo copiar al portapapeles");
+            }
+        } catch {
+            toast.error("Error al copiar coordenadas");
+        }
+    };
+
     // ── 5. Mesh SOS Gossip Broadcast ───────────────────────────────────────────────
     const handleToggleMeshSos = async () => {
         if (meshSosActive) {
@@ -295,10 +381,12 @@ export function SurvivalBeaconModal() {
             setMeshSosActive(false);
             setMyBeaconId(null);
             await loadBeacons();
+            TacticalAudioEngine.playRogerBeep();
             toast.info("Baliza SOS cancelada en la red malla");
         } else {
             // Activar baliza SOS
             setIsBroadcasting(true);
+            TacticalAudioEngine.playEmergencyAlarm();
             try {
                 let medInfo = "";
                 try {
@@ -352,6 +440,7 @@ export function SurvivalBeaconModal() {
     const handleTransmitSoundMesh = async () => {
         if (!soundMeshMsg.trim() || isTransmitting) return;
         setIsTransmitting(true);
+        TacticalAudioEngine.playMessageSent();
         toast.info("🔊 Transmitiendo paquete por ultrasonido FSK...");
         try {
             await SoundMeshEngine.transmit(soundMeshMsg.trim());
@@ -398,7 +487,10 @@ export function SurvivalBeaconModal() {
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
-                        onClick={() => navigate("sidebar")}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            goBack();
+                        }}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -426,7 +518,10 @@ export function SurvivalBeaconModal() {
                 </div>
 
                 <button
-                    onClick={() => navigate("sidebar")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        goBack();
+                    }}
                     style={{
                         width: 34, height: 34, borderRadius: "9px",
                         background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -447,28 +542,40 @@ export function SurvivalBeaconModal() {
                 overflowX: "auto", flexShrink: 0
             }}>
                 <button
-                    onClick={() => setActiveTab("sos")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("sos");
+                    }}
                     className={activeTab === "sos" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
                     🚨 {t.sos_module?.tab_sos || "Baliza SOS Mesh"}
                 </button>
                 <button
-                    onClick={() => setActiveTab("actuators")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("actuators");
+                    }}
                     className={activeTab === "actuators" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
                     🔦 {t.sos_module?.tab_actuators || "Actuadores Hardware"}
                 </button>
                 <button
-                    onClick={() => setActiveTab("soundmesh")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("soundmesh");
+                    }}
                     className={activeTab === "soundmesh" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
                     🔊 {t.sos_module?.tab_soundmesh || "Módem SoundMesh"}
                 </button>
                 <button
-                    onClick={() => setActiveTab("feed")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("feed");
+                    }}
                     className={activeTab === "feed" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
@@ -835,9 +942,74 @@ export function SurvivalBeaconModal() {
                                             <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "6px", display: "flex", gap: "12px", fontFamily: "JetBrains Mono, monospace" }}>
                                                 <span>Emisor: {b.sender_hash?.substring(0, 8)}…</span>
                                                 {b.latitude && b.longitude && (
-                                                    <span style={{ color: "var(--accent-cyan)" }}>
-                                                        📍 GPS: {b.latitude.toFixed(4)}, {b.longitude.toFixed(4)}
-                                                    </span>
+                                                    <>
+                                                        <button
+                                                            onClick={() => copyCoordinates(b.latitude, b.longitude)}
+                                                            style={{
+                                                                background: "rgba(0, 229, 255, 0.1)",
+                                                                border: "1px solid rgba(0, 229, 255, 0.3)",
+                                                                borderRadius: "6px",
+                                                                padding: "2px 6px",
+                                                                color: "var(--accent-cyan)",
+                                                                cursor: "pointer",
+                                                                display: "inline-flex",
+                                                                alignItems: "center",
+                                                                gap: "4px",
+                                                                fontFamily: "JetBrains Mono, monospace",
+                                                                fontSize: "0.72rem"
+                                                            }}
+                                                            title="Clic para copiar coordenadas GPS"
+                                                        >
+                                                            <span>📍 GPS: {b.latitude.toFixed(4)}, {b.longitude.toFixed(4)}</span>
+                                                            <span style={{ fontSize: "0.62rem", opacity: 0.8 }}>📋</span>
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => {
+                                                                TacticalAudioEngine.playTap();
+                                                                try {
+                                                                    const target = {
+                                                                        name: b.is_mine ? "Tu Baliza SOS" : `SOS: ${b.sender_hash?.slice(0, 8) || "Víctima"}`,
+                                                                        lat: b.latitude,
+                                                                        lon: b.longitude,
+                                                                        type: "SOS_BEACON"
+                                                                    };
+                                                                    localStorage.setItem("red_active_target", JSON.stringify(target));
+                                                                    const rawWps = localStorage.getItem("red_offgrid_waypoints");
+                                                                    const wps = rawWps ? JSON.parse(rawWps) : [];
+                                                                    if (!wps.some((w: any) => Math.abs(w.lat - b.latitude!) < 0.0001 && Math.abs(w.lon - b.longitude!) < 0.0001)) {
+                                                                        wps.push({
+                                                                            id: `beacon-${b.beacon_id}`,
+                                                                            name: `SOS: ${b.sender_hash?.slice(0, 8) || "Víctima"}`,
+                                                                            lat: b.latitude,
+                                                                            lon: b.longitude,
+                                                                            type: "SOS_BEACON"
+                                                                        });
+                                                                        localStorage.setItem("red_offgrid_waypoints", JSON.stringify(wps));
+                                                                    }
+                                                                } catch {}
+                                                                toast.success("🧭 Objetivo fijado en Brújula y Mapa Táctico");
+                                                                navigate("compass");
+                                                            }}
+                                                            style={{
+                                                                background: "rgba(0, 230, 118, 0.15)",
+                                                                border: "1px solid #00E676",
+                                                                borderRadius: "6px",
+                                                                padding: "2px 8px",
+                                                                color: "#00E676",
+                                                                cursor: "pointer",
+                                                                display: "inline-flex",
+                                                                alignItems: "center",
+                                                                gap: "4px",
+                                                                fontFamily: "JetBrains Mono, monospace",
+                                                                fontSize: "0.72rem",
+                                                                fontWeight: 800
+                                                            }}
+                                                            title="Fijar objetivo y abrir brújula para rescate"
+                                                        >
+                                                            <span>🧭 NAVEGAR / RESCATAR</span>
+                                                        </button>
+                                                    </>
                                                 )}
                                                 {b.battery_pct !== undefined && <span>🔋 {b.battery_pct}%</span>}
                                             </div>

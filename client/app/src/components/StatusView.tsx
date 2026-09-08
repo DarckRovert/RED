@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI, MessageItem } from "../lib/api";
 import { useTranslation } from "../lib/i18n/i18nEngine";
@@ -9,6 +9,8 @@ import StoryCreator from "./stories/StoryCreator";
 import { LiveStreamBroadcaster } from "./LiveStreamBroadcaster";
 import { LiveStreamViewer } from "./LiveStreamViewer";
 import { EmptyState } from "./ui/EmptyState";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 const AVATAR_COLORS = [
     ["#E8213A","#C0152A"], ["#FF7043","#E64A19"], ["#FFA726","#F57C00"],
@@ -84,6 +86,21 @@ export default function StatusView() {
         const arr = Array.isArray(myStories) ? myStories : [];
         return arr.filter(s => (now - s.timestamp) < STATUS_TTL_MS);
     }, [myStories, now]);
+
+    // ── LIFO Back Navigation Handler: Sub-modales (Viewer/Creator/Live) -> Salir ──
+    useEffect(() => {
+        const unreg = BackHandlerRegistry.register(() => {
+            if (modal !== null) {
+                setModal(null);
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return unreg;
+    }, [modal, goBack]);
 
     const handleReply = useCallback((storyId: string, senderHash: string) => {
         setModal(null);
@@ -319,6 +336,9 @@ export default function StatusView() {
                                         const contact = contacts.find((c: any) => c.identity_hash === senderHash);
                                         const displayName = contact?.display_name || `${senderHash.substring(0, 10)}…`;
                                         const storyTime = latestStory ? (latestStory.timestamp > 1e10 ? latestStory.timestamp : latestStory.timestamp * 1000) : Date.now();
+                                        const isSeen = typeof window !== "undefined" && latestStory?.id
+                                            ? localStorage.getItem(`red_seen_story_${senderHash}`) === latestStory.id
+                                            : false;
 
                                         return (
                                             <div
@@ -338,9 +358,10 @@ export default function StatusView() {
                                                 {/* Story Ring Avatar */}
                                                 <div style={{
                                                     width: 52, height: 52, borderRadius: "50%",
-                                                    border: "2.5px solid #00A884",
+                                                    border: isSeen ? "2px solid #8696A0" : "2.5px solid #00A884",
                                                     padding: "2px", display: "flex", alignItems: "center", justifyContent: "center",
-                                                    flexShrink: 0
+                                                    flexShrink: 0,
+                                                    opacity: isSeen ? 0.75 : 1
                                                 }}>
                                                     <div style={{
                                                         width: "100%", height: "100%", borderRadius: "50%",
@@ -446,7 +467,10 @@ export default function StatusView() {
                 </div>
 
                 <button
-                    onClick={goBack}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        goBack();
+                    }}
                     className="btn-icon"
                     title="Cerrar vista"
                     style={{ width: 38, height: 38 }}

@@ -8,6 +8,24 @@ import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
 import { ErrorBanner } from "./ui/ErrorBanner";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+
+/** Clipboard with textarea fallback for air-gapped / tactical WebView */
+function copyToClipboard(text: string, label = 'Dato'): void {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).catch(() => legacyCopy(text, label));
+    } else {
+        legacyCopy(text, label);
+    }
+}
+function legacyCopy(text: string, label: string): void {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); toast.success(`${label} copiado`); }
+    finally { document.body.removeChild(ta); }
+}
 
 interface GuardianStatusPanelProps {
     onClose?: () => void;
@@ -57,11 +75,28 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
         refreshData();
     }, [refreshData]);
 
+    // ── LIFO Back Interception
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (activeTab !== "testing") {
+                setActiveTab("testing");
+                return true;
+            }
+            handleClose();
+            return true;
+        });
+        const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); BackHandlerRegistry.executeTop(); } };
+        document.addEventListener('keydown', onEsc);
+        return () => { unregister(); document.removeEventListener('keydown', onEsc); };
+    }, [activeTab, handleClose]);
+
     const handleRunTest = async (overrideText?: string) => {
         const textToTest = overrideText || testText;
         if (!textToTest.trim()) return;
 
         setIsEvaluating(true);
+        TacticalAudioEngine.playTap();
         try {
             const res = await GuardianEngine.evaluateTextAsync(textToTest.trim());
             setTestResult(res);
@@ -77,11 +112,14 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
             } as unknown as GuardianStatus));
 
             if (res.allowed) {
+                TacticalAudioEngine.playRogerBeep();
                 toast.info("✅ Contenido Aprobado por el Guardián");
             } else {
+                TacticalAudioEngine.playWarning();
                 toast.warning("⛔ Contenido Bloqueado por el Guardián");
             }
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al evaluar texto con el Guardián");
         } finally {
             setIsEvaluating(false);
@@ -89,11 +127,13 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
     };
 
     const handleApplyPreset = (presetText: string) => {
+        TacticalAudioEngine.playTap();
         setTestText(presetText);
         handleRunTest(presetText);
     };
 
     const handleUpdateConfig = (partial: Partial<GuardianConfig>) => {
+        TacticalAudioEngine.playTap();
         GuardianEngine.updateConfig(partial);
         const updated = GuardianEngine.getConfig();
         setConfig(updated);
@@ -101,6 +141,7 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
     };
 
     const handleExportAuditLog = () => {
+        TacticalAudioEngine.playMessageSent();
         const report = GuardianEngine.exportAuditLogText();
         const blob = new Blob([report], { type: "text/plain;charset=utf-8" });
         const url = URL.createObjectURL(blob);
@@ -117,6 +158,7 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
     };
 
     const handleClearLogs = () => {
+        TacticalAudioEngine.playTap();
         GuardianEngine.clearAuditLog();
         setAuditLogs([]);
         toast.info("Registro de auditoría vaciado");
@@ -140,7 +182,10 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
-                        onClick={handleClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            handleClose();
+                        }}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -170,7 +215,10 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <div style={{ display: "flex", gap: "4px", background: "rgba(0,0,0,0.4)", padding: "3px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.1)" }}>
                         <button
-                            onClick={() => setActiveTab("testing")}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setActiveTab("testing");
+                            }}
                             style={{
                                 padding: "4px 10px", fontSize: "0.72rem", borderRadius: "8px", fontWeight: 800,
                                 background: activeTab === "testing" ? "#00E5FF" : "transparent",
@@ -180,7 +228,10 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                             🧪 Pruebas
                         </button>
                         <button
-                            onClick={() => setActiveTab("config")}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setActiveTab("config");
+                            }}
                             style={{
                                 padding: "4px 10px", fontSize: "0.72rem", borderRadius: "8px", fontWeight: 800,
                                 background: activeTab === "config" ? "#00E5FF" : "transparent",
@@ -190,7 +241,10 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                             ⚙️ Blindaje
                         </button>
                         <button
-                            onClick={() => setActiveTab("auditLog")}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setActiveTab("auditLog");
+                            }}
                             style={{
                                 padding: "4px 10px", fontSize: "0.72rem", borderRadius: "8px", fontWeight: 800,
                                 background: activeTab === "auditLog" ? "#00E5FF" : "transparent",
@@ -202,7 +256,10 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                     </div>
 
                     <button
-                        onClick={handleClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            handleClose();
+                        }}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -214,6 +271,42 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                     </button>
                 </div>
             </header>
+
+            {/* Barra HUD de Telemetría Táctica Guardian */}
+            <div style={{
+                display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between",
+                padding: "8px 16px", background: "rgba(0,229,255,0.06)", borderBottom: "1px solid rgba(0,229,255,0.2)",
+                fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace", gap: "10px", zIndex: 5
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <span style={{ color: "#00E5FF", fontWeight: 800 }}>
+                        🛡️ RED-Guardian-Nano-v3
+                    </span>
+                    <span className="badge-tactical badge-tactical-amber" style={{ fontSize: "0.66rem", padding: "2px 8px" }}>
+                        MODO: {config.mode.toUpperCase()}
+                    </span>
+                    <span style={{ color: "var(--text-muted)" }}>
+                        {totalEvals} EVALS · <span style={{ color: "var(--accent-crimson)" }}>{totalBlocked} BLOQ ({blockRate}%)</span>
+                    </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span className="badge-tactical badge-tactical-emerald" style={{ fontSize: "0.66rem", padding: "2px 8px" }}>
+                        OFF-GRID 100%
+                    </span>
+                    <button
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            refreshData();
+                            toast.info("Telemetría actualizada");
+                        }}
+                        className="btn-ghost"
+                        style={{ padding: "2px 8px", fontSize: "0.68rem" }}
+                        title="Refrescar telemetría"
+                    >
+                        🔄
+                    </button>
+                </div>
+            </div>
 
             {/* Contenido Principal con Scroll Seguro */}
             <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -459,6 +552,17 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                                 </div>
                                 <div style={{ display: "flex", gap: "6px" }}>
                                     <button
+                                        onClick={() => {
+                                            TacticalAudioEngine.playTap();
+                                            copyToClipboard(GuardianEngine.exportAuditLogText(), 'Registro de Auditoría');
+                                        }}
+                                        className="btn-ghost"
+                                        style={{ padding: "6px 10px", fontSize: "0.74rem" }}
+                                        title="Copiar texto de auditoría al portapapeles"
+                                    >
+                                        📋 Copiar
+                                    </button>
+                                    <button
                                         onClick={handleExportAuditLog}
                                         className="btn-tactical-primary"
                                         style={{ padding: "6px 12px", fontSize: "0.74rem" }}
@@ -511,8 +615,21 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                                                 <div style={{ fontSize: "0.78rem", color: "var(--text-primary)", fontFamily: "JetBrains Mono, monospace", background: "rgba(0,0,0,0.3)", padding: "4px 8px", borderRadius: "4px" }}>
                                                     {log.textSample}
                                                 </div>
-                                                <div style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>
-                                                    {log.reason}
+                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "2px" }}>
+                                                    <div style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>
+                                                        {log.reason}
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            TacticalAudioEngine.playTap();
+                                                            copyToClipboard(log.textSample, 'Muestra de Texto');
+                                                        }}
+                                                        className="btn-ghost"
+                                                        style={{ padding: "2px 6px", fontSize: "0.65rem" }}
+                                                        title="Copiar muestra"
+                                                    >
+                                                        📋 Copiar
+                                                    </button>
                                                 </div>
                                             </div>
                                         );

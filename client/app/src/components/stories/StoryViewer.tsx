@@ -5,6 +5,9 @@ import { RedAPI, MessageItem } from "../../lib/api";
 import { STORY_THEMES } from "./StoryCreator";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { useRedStore } from "../../store/useRedStore";
 
 const STORY_DURATION_MS = 5500;
 const QUICK_REACTIONS = ["❤️", "🔥", "👏", "⚡", "😂", "👍"];
@@ -19,6 +22,7 @@ interface StoryViewerProps {
 
 export default function StoryViewer({ stories, senderName, senderHash, onClose, onReply }: StoryViewerProps) {
     const { t } = useTranslation();
+    const { identity, deleteMyStory } = useRedStore();
     const [idx, setIdx] = useState(0);
     const [progress, setProgress] = useState(0);
     const [isHolding, setIsHolding] = useState(false);
@@ -58,6 +62,31 @@ export default function StoryViewer({ stories, senderName, senderHash, onClose, 
             currentSegmentStartRef.current = Date.now();
         }
     }, [idx]);
+
+    // Persistir estado de historia vista en localStorage para marcarla leída
+    useEffect(() => {
+        if (currentStory?.id && senderHash) {
+            try {
+                localStorage.setItem(`red_seen_story_${senderHash}`, currentStory.id);
+            } catch {}
+        }
+    }, [currentStory?.id, senderHash]);
+
+    // Intercepción LIFO de hardware Android / Escape
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (isInputFocused || replyText.trim()) {
+                TacticalAudioEngine.playTap();
+                setIsInputFocused(false);
+                setReplyText("");
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            onClose?.();
+            return true;
+        });
+        return unregister;
+    }, [isInputFocused, replyText, onClose]);
 
     // Timer loop with resume from exact accumulated milliseconds
     useEffect(() => {
@@ -236,17 +265,45 @@ export default function StoryViewer({ stories, senderName, senderHash, onClose, 
                     </div>
                 </div>
 
-                <button
-                    onClick={onClose}
-                    style={{
-                        background: "rgba(0, 0, 0, 0.5)", border: "1px solid rgba(255,255,255,0.2)",
-                        color: "#FFFFFF", width: 36, height: 36, borderRadius: "50%",
-                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                        fontWeight: 900, fontSize: "1rem"
-                    }}
-                >
-                    ✕
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {(currentStory.is_mine || senderHash === identity?.identity_hash) && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                TacticalAudioEngine.playWarning();
+                                if (currentStory.id) {
+                                    deleteMyStory(currentStory.id);
+                                    toast.info("Estado eliminado");
+                                    onClose?.();
+                                }
+                            }}
+                            style={{
+                                background: "rgba(232, 33, 58, 0.35)", border: "1px solid #E8213A",
+                                color: "#FFFFFF", width: 36, height: 36, borderRadius: "50%",
+                                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                                fontWeight: 900, fontSize: "0.95rem"
+                            }}
+                            title="Eliminar mi estado"
+                        >
+                            🗑️
+                        </button>
+                    )}
+
+                    <button
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose?.();
+                        }}
+                        style={{
+                            background: "rgba(0, 0, 0, 0.5)", border: "1px solid rgba(255,255,255,0.2)",
+                            color: "#FFFFFF", width: 36, height: 36, borderRadius: "50%",
+                            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                            fontWeight: 900, fontSize: "1rem"
+                        }}
+                    >
+                        ✕
+                    </button>
+                </div>
             </div>
 
             {/* Story Content Canvas */}

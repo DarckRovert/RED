@@ -98,7 +98,7 @@ impl SocialStore {
             media_data: req.media_data,
             timestamp,
             reactions: HashMap::new(),
-            reply_to: None,
+            reply_to: req.reply_to.clone(),
             signature: String::new(),
         };
 
@@ -127,7 +127,7 @@ impl SocialStore {
             media_data: req.media_data,
             timestamp,
             reactions: HashMap::new(),
-            reply_to: None,
+            reply_to: req.reply_to,
             signature,
         };
 
@@ -213,5 +213,20 @@ impl SocialStore {
         } else {
             None
         }
+    }
+
+    pub fn delete_post(&self, post_id: &str) -> bool {
+        let mut feed_list = self.feed.write().unwrap_or_else(|e| e.into_inner());
+        let initial_len = feed_list.len();
+        feed_list.retain(|p| p.id != post_id);
+        let removed = feed_list.len() < initial_len;
+        if removed {
+            if let Some(db) = &self.db {
+                if let Ok(tree) = db.open_tree("social_feed") {
+                    let _ = tree.remove(post_id.as_bytes());
+                }
+            }
+        }
+        removed
     }
 }

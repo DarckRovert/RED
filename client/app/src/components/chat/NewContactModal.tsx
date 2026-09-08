@@ -1,9 +1,9 @@
-"use client";
-
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useRedStore } from "../../store/useRedStore";
 import { toast } from "../Toast";
 import { ContactQrModal } from "./ContactQrModal";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 
 interface NewContactModalProps {
     isOpen: boolean;
@@ -32,7 +32,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
     const [showQr, setShowQr] = useState(false);
 
     // Reset form when modal opens
-    React.useEffect(() => {
+    useEffect(() => {
         if (isOpen) {
             setName("");
             setDid("");
@@ -40,6 +40,22 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
             setIsSaving(false);
         }
     }, [isOpen]);
+
+    // Intercepción LIFO (retroceso físico / Esc)
+    useEffect(() => {
+        if (!isOpen) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            if (isSaving) return false;
+            TacticalAudioEngine.playTap();
+            if (showQr) {
+                setShowQr(false);
+                return true;
+            }
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [isOpen, isSaving, showQr, onClose]);
 
     const validateDid = useCallback((value: string): string | null => {
         const v = value.trim();
@@ -58,6 +74,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
     };
 
     const handlePaste = async () => {
+        TacticalAudioEngine.playTap();
         try {
             if (navigator?.clipboard) {
                 const text = await navigator.clipboard.readText();
@@ -75,6 +92,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
         const cleanDid = did.trim();
         const cleanName = name.trim();
         if (!cleanDid) {
+            TacticalAudioEngine.playWarning();
             setDidError("El identificador RED es obligatorio.");
             return;
         }
@@ -86,6 +104,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
             cleanDid.startsWith("RED_PAIR:") ||
             cleanDid.startsWith("RED_VAULT:1:")
         ) {
+            TacticalAudioEngine.playTap();
             window.dispatchEvent(new CustomEvent("red:pair_web_companion", { detail: cleanDid }));
             toast.info("💻 Código de RED Web detectado. Abriendo vinculación...");
             onClose();
@@ -94,6 +113,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
 
         const err = validateDid(cleanDid);
         if (err) {
+            TacticalAudioEngine.playWarning();
             setDidError(err);
             return;
         }
@@ -101,11 +121,13 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
         setIsSaving(true);
         try {
             const resultHash = await addContact(cleanDid, cleanName || undefined!);
+            TacticalAudioEngine.playRogerBeep();
             toast.success(`✅ Contacto guardado. Abriendo chat...`);
             onClose();
             const target = (typeof resultHash === "string" && resultHash) ? resultHash : cleanDid;
             navigate("chat", target);
         } catch (e: any) {
+            TacticalAudioEngine.playWarning();
             toast.error(`❌ Error: ${e?.message || e}`);
         } finally {
             setIsSaving(false);
@@ -144,7 +166,10 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                     padding: "16px",
                     animation: "fadeIn 0.15s ease-out"
                 }}
-                onClick={onClose}
+                onClick={() => {
+                    TacticalAudioEngine.playTap();
+                    onClose();
+                }}
             >
                 <div
                     className="animate-fade-scale"
@@ -189,7 +214,10 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                             </div>
                         </div>
                         <button
-                            onClick={onClose}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                onClose();
+                            }}
                             style={{ background: "transparent", border: "none", color: "#8696A0", fontSize: "1.3rem", cursor: "pointer", padding: "4px 8px" }}
                         >✕</button>
                     </div>
@@ -266,7 +294,10 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                                 </button>
                                 {/* QR */}
                                 <button
-                                    onClick={() => setShowQr(true)}
+                                    onClick={() => {
+                                        TacticalAudioEngine.playTap();
+                                        setShowQr(true);
+                                    }}
                                     title="Escanear código QR"
                                     style={{
                                         flexShrink: 0,

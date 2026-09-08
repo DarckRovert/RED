@@ -3,7 +3,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { opticalGasAqiEngine, AtmosphericTelemetry } from "../lib/sensors/OpticalGasAqiEngine";
+import {
+    getNativeBarometerReading,
+    getNativeThermometerReading,
+    getNativeHygrometerReading
+} from "../lib/api";
+import {
+    recordBaroSample,
+    calculateDewPoint,
+    analyzeAtmosphere
+} from "../lib/weatherBarometerEngine";
 import { toast } from "./Toast";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 export function AtmosphericSafetyModal() {
     const { navigate, identity, goBack } = useRedStore();
@@ -16,19 +28,88 @@ export function AtmosphericSafetyModal() {
         opticalGasAqiEngine.analyzeOpticalFrame(120, 48, { r: 100, g: 100, b: 100 }, 0)
     );
 
+    // Telemetría de Sensores Físicos Ambientales (Barómetro, Altitud Hipsométrica, Termo-Higrómetro)
+    const [baroPressure, setBaroPressure] = useState<number | null>(null);
+    const [baroAltitudeMeters, setBaroAltitudeMeters] = useState<number | null>(null);
+    const [ambientTempC, setAmbientTempC] = useState<number | null>(null);
+    const [ambientHumidityRh, setAmbientHumidityRh] = useState<number | null>(null);
+    const [dewPointC, setDewPointC] = useState<number | null>(null);
+    const [pressureTrendLabel, setPressureTrendLabel] = useState<string>("Buscando sensor...");
+
+    // Adquisición periódica de sensores de hardware del dispositivo
     useEffect(() => {
+        let active = true;
+        const fetchPhysicalSensors = async () => {
+            try {
+                const baro = await getNativeBarometerReading();
+                const thermo = await getNativeThermometerReading();
+                const hygro = await getNativeHygrometerReading();
+
+                if (!active) return;
+
+                let p: number | null = null;
+                if (baro && baro.available && typeof baro.pressure_hpa === "number" && baro.pressure_hpa >= 600 && baro.pressure_hpa <= 1150) {
+                    p = Math.round(baro.pressure_hpa * 10) / 10;
+                    setBaroPressure(p);
+                    // Fórmula hipsométrica estándar de la OACI para altitud barométrica
+                    const alt = 44330 * (1 - Math.pow(p / 1013.25, 1 / 5.255));
+                    if (isFinite(alt)) setBaroAltitudeMeters(Math.round(alt));
+                    recordBaroSample({ timestamp: Date.now(), pressureHpa: p });
+                }
+
+                let tVal: number | null = null;
+                if (thermo && thermo.available && typeof thermo.value === "number") {
+                    tVal = Math.round(thermo.value * 10) / 10;
+                    setAmbientTempC(tVal);
+                }
+
+                let hVal: number | null = null;
+                if (hygro && hygro.available && typeof hygro.value === "number") {
+                    hVal = Math.round(hygro.value * 10) / 10;
+                    setAmbientHumidityRh(hVal);
+                }
+
+                if (tVal !== null && hVal !== null) {
+                    const dp = calculateDewPoint(tVal, hVal);
+                    setDewPointC(dp);
+                }
+
+                if (p !== null) {
+                    const analysis = analyzeAtmosphere(p, tVal ?? undefined, hVal ?? undefined);
+                    setPressureTrendLabel(`${analysis.trendLabel} (${analysis.deltaP3h > 0 ? '+' : ''}${analysis.deltaP3h.toFixed(1)} hPa/3h)`);
+                } else {
+                    setPressureTrendLabel("Barómetro de hardware no detectado");
+                }
+            } catch {}
+        };
+
+        fetchPhysicalSensors();
+        const interval = setInterval(fetchPhysicalSensors, 5000);
+        return () => {
+            active = false;
+            clearInterval(interval);
+        };
+    }, []);
+
+    useEffect(() => {
+        let isActive = true;
         let stream: MediaStream | null = null;
         let animationFrame: number | null = null;
 
         const startCamera = async () => {
             try {
                 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                    stream = await navigator.mediaDevices.getUserMedia({
+                    const camStream = await navigator.mediaDevices.getUserMedia({
                         video: { facingMode: "environment", width: { ideal: 480 }, height: { ideal: 360 } }
                     });
+                    if (!isActive) {
+                        camStream.getTracks().forEach(t => t.stop());
+                        return;
+                    }
+                    stream = camStream;
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;
-                        videoRef.current.play();
+                        videoRef.current.play().catch(() => {});
                         setIsCameraActive(true);
                     }
                 }
@@ -39,7 +120,6 @@ export function AtmosphericSafetyModal() {
 
         startCamera();
 
-        let isActive = true;
         let lastProcessTime = 0;
 
         const loop = (timestamp: number) => {
@@ -111,6 +191,16 @@ export function AtmosphericSafetyModal() {
         };
     }, []);
 
+    // ── LIFO Back Navigation Handler ──────────────────────────────────────────────
+    useEffect(() => {
+        const unreg = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return unreg;
+    }, [goBack]);
+
     const getSeverityColor = (sev: string) => {
         switch (sev) {
             case "GOOD": return "#00E676";
@@ -136,12 +226,21 @@ export function AtmosphericSafetyModal() {
         }
         const callerId = identity?.identity_hash ? `did:red:${identity.identity_hash.slice(0, 8)}` : "LOCAL_HAZMAT";
         const callerName = identity?.nickname || "Sensor Óptico AQI";
+
+        const baroDetail = baroPressure !== null
+            ? ` Presión: ${baroPressure} hPa (Altitud Barométrica: ${baroAltitudeMeters !== null ? `${baroAltitudeMeters}m` : 'N/D'}).`
+            : '';
+        const tempDetail = ambientTempC !== null
+            ? ` Temp: ${ambientTempC}°C, HR: ${ambientHumidityRh ?? '--'}% (Pto Rocío: ${dewPointC ?? '--'}°C).`
+            : '';
+
         await meshSosBeacon.activateSosBeacon({
             distressType: "NATURAL_DISASTER",
             triageColor: telemetry.aqiIndex > 200 ? "RED" : "YELLOW",
-            note: `ALERTA TOXICIDAD ATMOSFÉRICA: AQI ${telemetry.aqiIndex} (${telemetry.severity}), PM2.5 ${telemetry.pm25Ugm3} ug/m3, CO ${telemetry.estimatedCoPpm} ppm. ${telemetry.recommendedMask}`,
+            note: `ALERTA TOXICIDAD ATMOSFÉRICA: AQI ${telemetry.aqiIndex} (${telemetry.severity}), PM2.5 ${telemetry.pm25Ugm3} ug/m3, CO ${telemetry.estimatedCoPpm} ppm.${baroDetail}${tempDetail} ${telemetry.recommendedMask}`,
             batteryLevel: batt
         }, callerId, callerName);
+        TacticalAudioEngine.playEmergencyAlarm();
         toast.success("🚨 Alerta de Toxicidad Atmosférica transmitida por Malla SOS");
     };
 
@@ -168,9 +267,11 @@ export function AtmosphericSafetyModal() {
                     </div>
                 </div>
                 <button
-                    onClick={goBack}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        goBack();
+                    }}
                     style={{
-
                         background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)",
                         color: "#FFF", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "0.8rem"
                     }}
@@ -205,6 +306,66 @@ export function AtmosphericSafetyModal() {
                             <span>EXTINCIÓN BEER-LAMBERT</span>
                             <span>DISPERSIÓN MIE: PM2.5/PM10</span>
                         </div>
+                    </div>
+                </div>
+
+                {/* Cinta de Telemetría Física de Hardware (Barómetro / Termómetro / Higrómetro) */}
+                <div style={{
+                    background: "rgba(0, 0, 0, 0.45)",
+                    border: "1px solid rgba(0, 229, 255, 0.25)",
+                    borderRadius: "14px",
+                    padding: "12px 14px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px"
+                }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: "0.7rem", color: "#00E5FF", fontWeight: 900 }}>
+                            🧭 TELEMETRÍA AMBIENTAL & PRESIÓN FÍSICA (HARDWARE)
+                        </span>
+                        <span style={{
+                            fontSize: "0.6rem", fontWeight: 800, padding: "2px 6px", borderRadius: "5px",
+                            background: baroPressure !== null ? "rgba(0, 230, 118, 0.15)" : "rgba(255, 179, 0, 0.15)",
+                            color: baroPressure !== null ? "#00E676" : "#FFB300",
+                            border: `1px solid ${baroPressure !== null ? '#00E676' : '#FFB300'}50`
+                        }}>
+                            {baroPressure !== null ? "● SENSOR BAROMÉTRICO NATIVO" : "○ GPS / ESTIMADO"}
+                        </span>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "8px" }}>
+                        <div style={{ padding: "8px", background: "rgba(255, 255, 255, 0.03)", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                            <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>PRESIÓN hPa</div>
+                            <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#00E5FF", marginTop: "2px" }}>
+                                {baroPressure !== null ? `${baroPressure}` : "--"} <span style={{ fontSize: "0.65rem" }}>hPa</span>
+                            </div>
+                        </div>
+
+                        <div style={{ padding: "8px", background: "rgba(255, 255, 255, 0.03)", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                            <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>ALTITUD HIPSOMÉTRICA</div>
+                            <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#38BDF8", marginTop: "2px" }}>
+                                {baroAltitudeMeters !== null ? `${baroAltitudeMeters}` : "--"} <span style={{ fontSize: "0.65rem" }}>m snm</span>
+                            </div>
+                        </div>
+
+                        <div style={{ padding: "8px", background: "rgba(255, 255, 255, 0.03)", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                            <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>TEMPERATURA</div>
+                            <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#FFB300", marginTop: "2px" }}>
+                                {ambientTempC !== null ? `${ambientTempC}` : "--"} <span style={{ fontSize: "0.65rem" }}>°C</span>
+                            </div>
+                        </div>
+
+                        <div style={{ padding: "8px", background: "rgba(255, 255, 255, 0.03)", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                            <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>HUMEDAD / ROCÍO</div>
+                            <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#00E676", marginTop: "2px" }}>
+                                {ambientHumidityRh !== null ? `${ambientHumidityRh}%` : "--"} {dewPointC !== null ? `(${dewPointC}°C)` : ""}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ fontSize: "0.65rem", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
+                        <span>Tendencia: <strong style={{ color: "#FFFFFF" }}>{pressureTrendLabel}</strong></span>
+                        <span>{baroPressure && baroPressure < 980 ? "⚠️ ALERTA: BAJA PRESIÓN / ESPACIO CONFINADO" : "Presión Atmosférica Nominal"}</span>
                     </div>
                 </div>
 

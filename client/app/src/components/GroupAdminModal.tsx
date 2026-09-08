@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { copyToClipboard } from "../lib/clipboard";
+import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
 
 type GroupRole = "Admin" | "Moderator" | "Member" | "ReadOnly";
 
@@ -62,10 +66,36 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
     const [selectedNewContact, setSelectedNewContact] = useState("");
     const [isUpdating, setIsUpdating] = useState(false);
     const [activeAction, setActiveAction] = useState<string | null>(null);
+    const [searchMember, setSearchMember] = useState("");
+    const [showQr, setShowQr] = useState(false);
+    const [qrDataUrl, setQrDataUrl] = useState("");
+
+    // Autonomous LIFO Back Interceptor for Android hardware back / Esc
+    useEffect(() => {
+        return BackHandlerRegistry.register(() => {
+            if (showQr) {
+                setShowQr(false);
+                return true;
+            }
+            onClose?.();
+            return true;
+        });
+    }, [onClose, showQr]);
 
     const myHash = identity?.identity_hash || (typeof window !== "undefined" ? localStorage.getItem("red_identity_hash") : "") || "";
     const myMember = members.find((m) => m.identity_hash?.toLowerCase() === myHash?.toLowerCase());
     const effectiveRole: GroupRole = myMember?.role || myRole || (members.length > 0 && members[0].identity_hash?.toLowerCase() === myHash?.toLowerCase() ? "Admin" : "Member");
+
+    // Generate Tactical QR invite payload using sovereign offline engine
+    useEffect(() => {
+        if (!showQr) return;
+        const squadPayload = `red://squad/join?id=${groupId}&name=${encodeURIComponent(groupName)}`;
+        OfflineQrEngine.generateDataUrl(squadPayload, {
+            width: 240,
+            darkColor: "#00E5FF",
+            lightColor: "#080C16"
+        }).then(setQrDataUrl).catch(() => {});
+    }, [showQr, groupId, groupName]);
 
     const isAdmin = effectiveRole === "Admin";
     const isModerator = effectiveRole === "Admin" || effectiveRole === "Moderator";
@@ -76,6 +106,27 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
     const availableContacts = contacts.filter(
         (c) => !members.some((m) => m.identity_hash === c.identity_hash)
     );
+
+    const filteredMembers = useMemo(() => {
+        if (!searchMember.trim()) return members;
+        const q = searchMember.toLowerCase();
+        return members.filter((m) => {
+            const name = (m.display_name || getContactName(m.identity_hash)).toLowerCase();
+            return name.includes(q) || m.identity_hash.toLowerCase().includes(q);
+        });
+    }, [members, searchMember, contacts]);
+
+    const copySquadLink = () => {
+        const link = `red://squad/join?id=${groupId}&name=${encodeURIComponent(groupName)}`;
+        TacticalAudioEngine.playTap();
+        copyToClipboard(link).then((ok) => {
+            if (ok) {
+                toast.success("Enlace táctico de escuadrón copiado");
+            } else {
+                toast.error("Error al copiar enlace de escuadrón");
+            }
+        });
+    };
 
     const handleLeaveGroup = async () => {
         if (!window.confirm("¿Seguro que deseas abandonar este escuadrón?")) return;
@@ -205,11 +256,67 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
                     <div>
                         <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 800 }}>⚙️ Admin de Grupo</h2>
                         <div style={{ fontSize: "0.7rem", color: "var(--accent-cyan)", fontWeight: 700, fontFamily: "JetBrains Mono, monospace" }}>
-                            {groupName} · {ROLE_LABELS[myRole]}
+                            {groupName} · {ROLE_LABELS[effectiveRole] || effectiveRole}
                         </div>
                     </div>
                     <button onClick={onClose} className="btn-icon" style={{ width: 32, height: 32, flexShrink: 0 }}>✕</button>
                 </div>
+
+                {/* Tactical Tools Bar: QR Invite & DTN Sync */}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button
+                        onClick={() => setShowQr(!showQr)}
+                        className="btn-tactical-secondary"
+                        style={{ flex: 1, minWidth: "140px", padding: "8px 12px", fontSize: "0.78rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                    >
+                        📲 {showQr ? "Ocultar QR" : "Invitación QR"}
+                    </button>
+                    <button
+                        onClick={copySquadLink}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "8px 12px", fontSize: "0.78rem", display: "flex", alignItems: "center", gap: "6px" }}
+                        title="Copiar enlace de escuadrón"
+                    >
+                        📋 Enlace
+                    </button>
+                    {isModerator && (
+                        <button
+                            className="btn-tactical-primary"
+                            onClick={handleRequestHistory}
+                            disabled={activeAction === "dtn_sync"}
+                            style={{ flex: 1, minWidth: "140px", fontSize: "0.78rem", padding: "8px 12px", display: "flex", alignItems: "center", gap: "6px", justifyContent: "center" }}
+                        >
+                            {activeAction === "dtn_sync" ? "📡 Sincronizando…" : "📡 Historial DTN"}
+                        </button>
+                    )}
+                </div>
+
+                {/* QR Code Tactical Viewer Card */}
+                {showQr && (
+                    <div className="card-tactical animate-enter" style={{
+                        padding: "16px",
+                        display: "flex", flexDirection: "column", alignItems: "center", gap: "10px",
+                        background: "rgba(0, 229, 255, 0.04)", borderColor: "rgba(0, 229, 255, 0.35)"
+                    }}>
+                        <div style={{ fontSize: "0.72rem", color: "var(--accent-cyan)", fontWeight: 800, letterSpacing: "0.5px" }}>
+                            CÓDIGO QR TÁCTICO DE ESCUADRÓN (OFF-GRID)
+                        </div>
+                        {qrDataUrl ? (
+                            <img
+                                src={qrDataUrl}
+                                alt="QR Escuadrón"
+                                style={{ width: 180, height: 180, borderRadius: "8px", border: "1px solid rgba(0,229,255,0.4)" }}
+                            />
+                        ) : (
+                            <div style={{ width: 180, height: 180, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: "0.78rem" }}>
+                                Generando QR soberano...
+                            </div>
+                        )}
+                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", textAlign: "center", maxWidth: "300px" }}>
+                            Los operadores pueden escanear este código desde la sección Escuadrones o pegar el enlace para unirse directamente.
+                        </div>
+                    </div>
+                )}
 
                 {/* Broadcast channel toggle */}
                 {isAdmin && (
@@ -246,18 +353,6 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
                             }} />
                         </div>
                     </div>
-                )}
-
-                {/* DTN History Sync */}
-                {isModerator && (
-                    <button
-                        className="btn-tactical-primary"
-                        onClick={handleRequestHistory}
-                        disabled={activeAction === "dtn_sync"}
-                        style={{ fontSize: "0.8rem", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}
-                    >
-                        {activeAction === "dtn_sync" ? "📡 Sincronizando…" : "📡 Sincronizar Historial DTN (7d)"}
-                    </button>
                 )}
 
                 {/* Add member */}
@@ -301,15 +396,31 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
 
                 {/* Members list */}
                 <div>
-                    <label style={{
-                        fontSize: "0.65rem", color: "var(--text-muted)",
-                        textTransform: "uppercase", fontWeight: 800, letterSpacing: "0.5px",
-                        display: "block", marginBottom: "8px"
-                    }}>
-                        Integrantes ({members.length})
-                    </label>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "260px", overflowY: "auto" }}>
-                        {members.map((m) => {
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <label style={{
+                            fontSize: "0.65rem", color: "var(--text-muted)",
+                            textTransform: "uppercase", fontWeight: 800, letterSpacing: "0.5px",
+                        }}>
+                            Integrantes ({filteredMembers.length}/{members.length})
+                        </label>
+                    </div>
+
+                    {members.length > 3 && (
+                        <input
+                            type="text"
+                            placeholder="Filtrar integrantes por nombre o DID..."
+                            value={searchMember}
+                            onChange={(e) => setSearchMember(e.target.value)}
+                            style={{
+                                width: "100%", padding: "7px 10px", borderRadius: "var(--radius-sm)",
+                                background: "rgba(255,255,255,0.03)", border: "1px solid var(--glass-border)",
+                                color: "#fff", fontSize: "0.78rem", marginBottom: "8px", outline: "none"
+                            }}
+                        />
+                    )}
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "240px", overflowY: "auto" }}>
+                        {filteredMembers.map((m) => {
                             const name = m.display_name || getContactName(m.identity_hash);
                             const role = m.role || "Member";
                             const isBusy = activeAction === `role_${m.identity_hash}` ||

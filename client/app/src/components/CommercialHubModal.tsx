@@ -4,6 +4,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from '../lib/i18n/i18nEngine';
 import { MonetizationEngine, ProPerkStatus, TacticalProduct, TacticalTransaction } from '../lib/network/MonetizationEngine';
 import { bazaarSync } from '../lib/storage/BazaarSyncEngine';
+import { BackHandlerRegistry } from '../lib/navigation/BackHandlerRegistry';
+import { TacticalAudioEngine } from '../lib/audio/TacticalAudioEngine';
+import { meshRouter } from '../lib/mesh/meshRouter';
+import { getP2PWallet } from '../api/economy';
 import { toast } from './Toast';
 
 import { useRedStore } from '../store/useRedStore';
@@ -20,6 +24,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
     const { identity } = useRedStore();
     const [activeTab, setActiveTab] = useState<HubTab>('catalog');
     const [proStatus, setProStatus] = useState<ProPerkStatus>(MonetizationEngine.getProStatus());
+    const [p2pWalletBalance, setP2pWalletBalance] = useState<number | null>(null);
     const [catalog, setCatalog] = useState<TacticalProduct[]>([]);
     const [transactions, setTransactions] = useState<TacticalTransaction[]>([]);
     const [isLoadingAd, setIsLoadingAd] = useState(false);
@@ -41,25 +46,77 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
     const [p2pQrUrl, setP2pQrUrl] = useState<string | null>(null);
     const [isIssuingVoucher, setIsIssuingVoucher] = useState(false);
 
-    const refreshData = () => {
+    const refreshData = async () => {
         setProStatus(MonetizationEngine.getProStatus());
         const crdtCatalog = bazaarSync.getActiveListings();
         setCatalog(crdtCatalog.length > 0 ? crdtCatalog : MonetizationEngine.getCatalog());
         setTransactions(MonetizationEngine.getTransactions());
+        try {
+            const wallet = await getP2PWallet();
+            if (wallet && wallet.ok && typeof wallet.balance === 'number') {
+                setP2pWalletBalance(wallet.balance);
+            }
+        } catch {}
     };
+
+    // ─── Intercepción Jerárquica LIFO de Hardware (Android Back / Esc) ───
+    useEffect(() => {
+        if (!isOpen) return;
+        return BackHandlerRegistry.register(() => {
+            if (p2pModalItem) {
+                setP2pModalItem(null);
+                setP2pQrData(null);
+                setP2pQrUrl(null);
+                return true;
+            }
+            if (activeTab !== 'catalog') {
+                setActiveTab('catalog');
+                return true;
+            }
+            onClose();
+            return true;
+        });
+    }, [isOpen, p2pModalItem, activeTab, onClose]);
 
     useEffect(() => {
         if (!isOpen) return;
         refreshData();
 
-        const handleUpdate = () => refreshData();
+        const handleUpdate = () => { refreshData(); };
         window.addEventListener('red_pro_status_updated', handleUpdate);
+        window.addEventListener('red:wallet_updated', handleUpdate);
         const unsubBazaar = bazaarSync.subscribe(handleUpdate);
         return () => {
             window.removeEventListener('red_pro_status_updated', handleUpdate);
+            window.removeEventListener('red:wallet_updated', handleUpdate);
             unsubBazaar();
         };
     }, [isOpen]);
+
+    const copyToClipboard = async (text: string) => {
+        TacticalAudioEngine.playMessageSent();
+        try {
+            if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+                toast.success("Copiado al portapapeles");
+                return;
+            }
+        } catch {}
+        try {
+            const el = document.createElement("textarea");
+            el.value = text;
+            el.setAttribute("readonly", "");
+            el.style.position = "absolute";
+            el.style.left = "-9999px";
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand("copy");
+            document.body.removeChild(el);
+            toast.success("Copiado al portapapeles");
+        } catch {
+            toast.error("No se pudo copiar automáticamente");
+        }
+    };
 
     if (!isOpen) return null;
 
@@ -71,6 +128,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
             const res = await MonetizationEngine.showRewardedVideo(() => {
                 setStatusMessage(`¡Recompensa acreditada! +24 Horas de Modo Pro y 100 Créditos.`);
                 toast.success("🎬 Recompensa acreditada: +24h Pro & +100 RED");
+                TacticalAudioEngine.playRogerBeep();
                 refreshData();
             });
 
@@ -93,10 +151,31 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
     const handleRedeemPro = (hours: number, cost: number) => {
         const res = MonetizationEngine.redeemCreditsForPro(hours, cost);
         if (res.success) {
+            TacticalAudioEngine.playMessageSent();
             toast.success(res.message);
             refreshData();
         } else {
+            TacticalAudioEngine.playWarning();
             toast.error(res.message);
+        }
+    };
+
+    const handleBroadcastBazaarSync = async () => {
+        TacticalAudioEngine.playTap();
+        try {
+            const envelope = bazaarSync.exportCrdtEnvelope();
+            const payloadBytes = new TextEncoder().encode(JSON.stringify({
+                type: 'BAZAAR_CRDT_SYNC',
+                envelope,
+                sender: identity?.nickname || 'OPERADOR_RED',
+                timestamp: Date.now()
+            }));
+            await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", payloadBytes);
+            TacticalAudioEngine.playMessageSent();
+            toast.success("📡 Catálogo Bazaar difundido por la malla P2P");
+        } catch (e: any) {
+            TacticalAudioEngine.playWarning();
+            toast.error("Error al difundir catálogo por la malla");
         }
     };
 
@@ -122,8 +201,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
 
         MonetizationEngine.addProduct(product);
         bazaarSync.publishListing(product, identity?.identity_hash || 'ANON_OPERATOR');
+        handleBroadcastBazaarSync().catch(() => {});
 
         toast.success(`✅ Producto "${newTitle}" publicado en la malla Bazaar`);
+        TacticalAudioEngine.playMessageSent();
         setNewTitle('');
         setNewDesc('');
         setNewPrice('');
@@ -135,6 +216,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
     const handleDeleteProduct = (id: string, name: string) => {
         MonetizationEngine.removeProduct(id);
         bazaarSync.retireListing(id, identity?.identity_hash || 'ANON_OPERATOR');
+        handleBroadcastBazaarSync().catch(() => {});
         toast.info(`Producto "${name}" retirado de la malla`);
         refreshData();
     };
@@ -261,7 +343,12 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                         </div>
                     </div>
                     <button
-                        onClick={onClose}
+                        onClick={() => {
+                            if (!BackHandlerRegistry.executeTop()) {
+                                TacticalAudioEngine.playTap();
+                                onClose();
+                            }
+                        }}
                         className="btn-icon"
                         style={{ width: '36px', height: '36px' }}
                     >
@@ -297,18 +384,57 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                         </span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                            Billetera Local:
-                        </span>
-                        <span style={{
-                            fontSize: '13px',
-                            fontWeight: 800,
-                            color: 'var(--accent-amber)',
-                            fontFamily: 'JetBrains Mono, monospace'
-                        }}>
-                            🪙 {proStatus.credits} RED
-                        </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                Bóveda P2P:
+                            </span>
+                            <span style={{
+                                fontSize: '12px',
+                                fontWeight: 800,
+                                color: '#00E676',
+                                fontFamily: 'JetBrains Mono, monospace'
+                            }}>
+                                💳 {p2pWalletBalance !== null ? p2pWalletBalance : proStatus.credits} RED
+                            </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                Billetera Local:
+                            </span>
+                            <span style={{
+                                fontSize: '12px',
+                                fontWeight: 800,
+                                color: 'var(--accent-amber)',
+                                fontFamily: 'JetBrains Mono, monospace'
+                            }}>
+                                🪙 {proStatus.credits} RED
+                            </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                                onClick={handleBroadcastBazaarSync}
+                                style={{
+                                    fontSize: '10px',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    background: 'rgba(0, 229, 255, 0.15)',
+                                    color: 'var(--accent-cyan)',
+                                    fontFamily: 'JetBrains Mono, monospace',
+                                    border: '1px solid rgba(0, 229, 255, 0.35)',
+                                    cursor: 'pointer',
+                                    fontWeight: 800,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                }}
+                                title="Difundir catálogo CRDT a todos los nodos en la malla P2P"
+                            >
+                                📡 BAZAAR CRDT ({catalog.length})
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -322,28 +448,40 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                     overflowX: 'auto'
                 }}>
                     <button
-                        onClick={() => setActiveTab('catalog')}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setActiveTab('catalog');
+                        }}
                         className={activeTab === 'catalog' ? 'glow-pill-active' : 'btn-ghost'}
                         style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0' }}
                     >
                         📦 Catálogo Homologado ({catalog.length})
                     </button>
                     <button
-                        onClick={() => setActiveTab('redeem')}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setActiveTab('redeem');
+                        }}
                         className={activeTab === 'redeem' ? 'glow-pill-active' : 'btn-ghost'}
                         style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0' }}
                     >
                         ⚡ Canjear Modo Pro
                     </button>
                     <button
-                        onClick={() => setActiveTab('transactions')}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setActiveTab('transactions');
+                        }}
                         className={activeTab === 'transactions' ? 'glow-pill-active' : 'btn-ghost'}
                         style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0' }}
                     >
                         📑 Transacciones ({transactions.length})
                     </button>
                     <button
-                        onClick={() => setActiveTab('create')}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setActiveTab('create');
+                        }}
                         className={activeTab === 'create' ? 'glow-pill-active' : 'btn-ghost'}
                         style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0' }}
                     >
@@ -755,7 +893,11 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                             background: 'rgba(4, 6, 14, 0.92)', backdropFilter: 'blur(20px)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
                         }}
-                        onClick={() => setP2pModalItem(null)}
+                        onClick={() => {
+                            setP2pModalItem(null);
+                            setP2pQrData(null);
+                            setP2pQrUrl(null);
+                        }}
                     >
                         <div
                             className="card-tactical animate-enter"
@@ -763,7 +905,8 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                 width: '100%', maxWidth: '420px', padding: '24px',
                                 background: 'linear-gradient(180deg, #0e1222 0%, #080a14 100%)',
                                 border: '1px solid rgba(0, 230, 118, 0.4)',
-                                textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px'
+                                textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px',
+                                boxShadow: '0 20px 60px rgba(0,0,0,0.8), 0 0 30px rgba(0,230,118,0.15)'
                             }}
                             onClick={e => e.stopPropagation()}
                         >
@@ -772,31 +915,89 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                 Vale P2P de Pago Generado
                             </h3>
                             <div style={{ fontSize: '0.80rem', color: 'var(--text-muted)' }}>
-                                {p2pModalItem.title}
+                                {p2pModalItem.title} · <span style={{ color: '#00E676', fontWeight: 800 }}>{p2pModalItem.priceEst}</span>
                             </div>
 
                             {p2pQrUrl && (
-                                <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
-                                    <div style={{ padding: '12px', background: '#04060A', borderRadius: '14px', border: '1px solid rgba(0,230,118,0.3)' }}>
-                                        <img src={p2pQrUrl} alt="QR de Pago P2P" style={{ width: '200px', height: '200px', display: 'block' }} />
+                                <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0' }}>
+                                    <div style={{ padding: '12px', background: '#04060A', borderRadius: '14px', border: '2px solid rgba(0,230,118,0.4)', boxShadow: '0 0 20px rgba(0,230,118,0.25)' }}>
+                                        <img src={p2pQrUrl} alt="QR de Pago P2P" style={{ width: '200px', height: '200px', display: 'block', borderRadius: '8px' }} />
                                     </div>
                                 </div>
                             )}
 
-                            <div style={{
-                                padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.5)',
-                                border: '1px solid var(--glass-border)', fontSize: '0.72rem',
-                                fontFamily: 'JetBrains Mono, monospace', color: 'var(--accent-emerald)', wordBreak: 'break-all'
-                            }}>
-                                {p2pQrData}
+                            {p2pQrData && (
+                                <div style={{
+                                    padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.5)',
+                                    border: '1px solid var(--glass-border)', fontSize: '0.70rem',
+                                    fontFamily: 'JetBrains Mono, monospace', color: 'var(--accent-emerald)', wordBreak: 'break-all',
+                                    maxHeight: '70px', overflowY: 'auto'
+                                }}>
+                                    {p2pQrData}
+                                </div>
+                            )}
+
+                            <div style={{ fontSize: '0.72rem', color: 'rgba(255, 255, 255, 0.65)', lineHeight: 1.4 }}>
+                                Muestra este código QR al vendedor o nodo receptor para transferir los créditos de forma 100% off-grid. También puedes descargarlo como imagen PNG o compartirlo.
                             </div>
 
-                            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                                Muestra este código QR al vendedor o nodo receptor para transferir los créditos de forma 100% off-grid.
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                {p2pQrData && (
+                                    <button
+                                        onClick={() => copyToClipboard(p2pQrData)}
+                                        style={{
+                                            padding: '8px 12px', background: 'rgba(0, 230, 118, 0.15)',
+                                            border: '1px solid rgba(0, 230, 118, 0.4)', borderRadius: '8px',
+                                            color: '#00E676', fontSize: '0.72rem', fontWeight: 900, cursor: 'pointer',
+                                            display: 'inline-flex', alignItems: 'center', gap: '6px'
+                                        }}
+                                    >
+                                        📋 COPIAR CADENA
+                                    </button>
+                                )}
+                                {p2pQrUrl && (
+                                    <a
+                                        href={p2pQrUrl}
+                                        download={`vale_p2p_${p2pModalItem.id}.png`}
+                                        style={{
+                                            textDecoration: 'none',
+                                            padding: '8px 12px', background: 'rgba(0, 229, 255, 0.15)',
+                                            border: '1px solid rgba(0, 229, 255, 0.4)', borderRadius: '8px',
+                                            color: '#00E5FF', fontSize: '0.72rem', fontWeight: 900, cursor: 'pointer',
+                                            display: 'inline-flex', alignItems: 'center', gap: '6px'
+                                        }}
+                                    >
+                                        💾 DESCARGAR QR PNG
+                                    </a>
+                                )}
+                                {typeof navigator !== "undefined" && typeof (navigator as any).share === "function" && p2pQrData && (
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                await navigator.share({
+                                                    title: `Vale P2P RED - ${p2pModalItem.title}`,
+                                                    text: p2pQrData,
+                                                });
+                                            } catch {}
+                                        }}
+                                        style={{
+                                            padding: '8px 12px', background: 'rgba(255, 255, 255, 0.08)',
+                                            border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: '8px',
+                                            color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 900, cursor: 'pointer',
+                                            display: 'inline-flex', alignItems: 'center', gap: '6px'
+                                        }}
+                                    >
+                                        📤 COMPARTIR
+                                    </button>
+                                )}
                             </div>
 
                             <button
-                                onClick={() => setP2pModalItem(null)}
+                                onClick={() => {
+                                    setP2pModalItem(null);
+                                    setP2pQrData(null);
+                                    setP2pQrUrl(null);
+                                }}
                                 className="btn-tactical-primary"
                                 style={{ padding: '12px', width: '100%', marginTop: '4px' }}
                             >

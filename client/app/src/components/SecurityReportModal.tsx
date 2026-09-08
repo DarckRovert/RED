@@ -7,6 +7,8 @@ import { LocalAIEngine } from "../lib/localAiEngine";
 import { hasSecurePin } from "../lib/crypto/BiometricLockEngine";
 import { RED_VERSION_NAME } from "../lib/version";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 interface SecurityReportModalProps {
     onClose?: () => void;
@@ -31,6 +33,19 @@ export const SecurityReportModal: React.FC<SecurityReportModalProps> = ({ onClos
     const { t } = useTranslation();
     const { identity, goBack } = useRedStore();
     const handleClose = onClose || goBack;
+
+    // ── LIFO Back interception
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            handleClose();
+            return true;
+        });
+        const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); BackHandlerRegistry.executeTop(); } };
+        document.addEventListener('keydown', onEsc);
+        return () => { unregister(); document.removeEventListener('keydown', onEsc); };
+    }, [handleClose]);
+
     const [copied, setCopied] = useState(false);
     const [aiAudit, setAiAudit] = useState<{
         rating: string;
@@ -118,8 +133,10 @@ export const SecurityReportModal: React.FC<SecurityReportModalProps> = ({ onClos
                 hasDecoyPin: auditData.hasDecoyPin
             });
             setAiAudit(posture);
+            TacticalAudioEngine.playRogerBeep();
             toast.success(`Evaluación completada: ${posture.score}/100`);
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al ejecutar análisis de postura");
         } finally {
             setAiLoading(false);
@@ -150,13 +167,21 @@ ${aiAudit ? `\n[ DICTAMEN DE INTELIGENCIA LOCAL ]\nNivel: ${aiAudit.rating}\nÍn
     };
 
     const handleCopyReport = async () => {
+        TacticalAudioEngine.playMessageSent();
         try {
             await navigator.clipboard.writeText(getReportPlainText());
             setCopied(true);
             toast.success("✅ Informe de auditoría copiado al portapapeles");
             setTimeout(() => setCopied(false), 2500);
         } catch {
-            toast.error("Error al copiar informe");
+            // fallback
+            const ta = document.createElement('textarea');
+            ta.value = getReportPlainText();
+            ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+            document.body.appendChild(ta); ta.focus(); ta.select();
+            try { document.execCommand('copy'); setCopied(true); toast.success("✅ Informe copiado"); setTimeout(() => setCopied(false), 2500); }
+            catch { TacticalAudioEngine.playWarning(); toast.error("Error al copiar informe"); }
+            finally { document.body.removeChild(ta); }
         }
     };
 
@@ -173,6 +198,7 @@ ${aiAudit ? `\n[ DICTAMEN DE INTELIGENCIA LOCAL ]\nNivel: ${aiAudit.rating}\nÍn
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         toast.success("📥 Archivo de auditoría descargado");
+        TacticalAudioEngine.playMessageSent();
     };
 
     return (

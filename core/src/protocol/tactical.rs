@@ -260,6 +260,8 @@ pub struct PostRequest {
     pub author_name: String,
     pub content: String,
     pub media_data: Option<String>,
+    #[serde(default)]
+    pub reply_to: Option<String>,
 }
 
 // ─── 6. GUARDIAN SECURITY FIREWALL ──────────────────────────────────────────

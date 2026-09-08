@@ -19,7 +19,8 @@ import { ContactProfileModal } from "./ContactProfileModal";
 import { GroupAdminModal } from "./GroupAdminModal";
 import { toast } from "./Toast";
 import { meshRouter } from "../lib/mesh/meshRouter";
-import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { copyToClipboard } from "../lib/clipboard";
 import { SettingsManager } from "../lib/settingsManager";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { TacticalVoiceAnalyzer } from "../lib/audio/TacticalVoiceAnalyzer";
@@ -306,9 +307,15 @@ export default function ChatWindow() {
     const copySelected = useCallback(() => {
         const selected = convMessagesRef.current.filter(m => selectedMsgIds.has(m.id));
         const text = selected.map(m => m.content).filter(Boolean).join("\n");
-        if (text && typeof navigator !== "undefined" && navigator.clipboard) {
-            navigator.clipboard.writeText(text);
-            toast.success(`${selected.length} mensaje(s) copiado(s)`);
+        if (text) {
+            TacticalAudioEngine.playTap();
+            copyToClipboard(text).then((ok) => {
+                if (ok) {
+                    toast.success(`${selected.length} mensaje(s) copiado(s)`);
+                } else {
+                    toast.error("Error al copiar mensajes");
+                }
+            });
         }
         exitSelectionMode();
     }, [selectedMsgIds, exitSelectionMode]);
@@ -1242,9 +1249,15 @@ export default function ChatWindow() {
     };
 
     const handleLongPress = (e: any, msg: MessageItem) => {
-        if (msg.content && typeof navigator !== "undefined" && navigator.clipboard) {
-            navigator.clipboard.writeText(msg.content);
-            toast.info("Mensaje copiado");
+        if (msg.content) {
+            TacticalAudioEngine.playTap();
+            copyToClipboard(msg.content).then((ok) => {
+                if (ok) {
+                    toast.info("Mensaje copiado");
+                } else {
+                    toast.error("Error al copiar mensaje");
+                }
+            });
         }
     };
 

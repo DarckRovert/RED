@@ -1,6 +1,37 @@
 # Changelog
 
-## [93.0.0-tactical-primitives-and-hardened-sync-edition] - 2026-09-06
+## [95.0.0-hardened-tactical-mesh-and-sovereign-resilience-edition] - 2026-09-08
+
+### 🚀 Hardened Tactical Mesh & Sovereign Resilience Edition (Release Oficial v95.0.0)
+
+- **Pila de Navegación LIFO & Registro Canónico de Overlays:**
+  - Exportación e integración del registro canónico `OVERLAY_SCREENS` (42 pantallas modales) en `uiSlice`, garantizando que abrir o cerrar capas superpuestas (radares, búnkeres, sensores, terminales de radio) no purgue el identificador de conversación activa (`activeConversationId`).
+- **Erradicación de Fugas Asíncronas en Modales Tácticos:**
+  - Implementación de banderas de montaje atómico (`isMounted = false`) y desuscripción de flujos cinemáticos y sensoriales en desmontaje rápido para `ExtremeSurvivalHudModal`, `VitalScanModal`, `TacticalFoxhuntModal`, `CelestialPdrModal` y `AirGapStegoModal`.
+- **Gestión Estricta de AudioContext:**
+  - Cierre explícito de hardware de audio (`audioCtx.close()`) en `LoraTransceiverModal` para prevenir bloqueos de códec de hardware en dispositivos Android de recursos ajustados.
+- **Renders Puros React 19:**
+  - Corrección de callbacks impuros y estado perezoso en `CallsHistoryView` y `CallScreen`.
+- **Paridad Lingüística Absoluta (12 Idiomas):**
+  - Sincronización al 100% (737/737 claves idénticas) a través de todos los esquemas de traducción: español, inglés, alemán, francés, italiano, portugués, ruso, árabe, japonés, coreano, chino y quechua.
+- **Suite de Validación de Resiliencia Táctica (87/87 Pruebas Aprobadas):**
+  - 100% de éxito en la suite integral de pruebas de resiliencia automatizadas.
+- **Certificación Dual en Hardware Móvil Real:**
+  - Motorola Moto G22 (`ZT322B386P`) y Lenovo Tablet (`HA2CHKZ2`) validados al 100% en tiempo real vía `adb logcat`: carga de librería JNI `libred_mobile.so`, enjambre libp2p PQC Noise, servidor Axum loopback y 60 FPS sostenidos.
+- **Versión Oficial:** `95.0.0` / `versionCode 95000`.
+
+## [94.0.0-resilient-multi-layer-tactical-engines-and-p2p-production-edition] - 2026-09-07
+
+### 🚀 Resilient Multi-Layer Tactical Engines & P2P Production Edition (Release Oficial v94.0.0)
+
+- **Motores Tácticos y Arbitraje Cognitivo:**
+  - Cognitive Arbiter & Compact CoT-PLI para inferencia local adaptativa en redes de ultra-bajo ancho de banda.
+  - EMP Chaos Orchestrator para contingencia ante guerra electrónica y pulsos electromagnéticos.
+  - LEO Satellite Mesh Gateway con retransmisión bent-pipe y store-and-forward.
+  - Almacenamiento DTN con 310,000 iteraciones PBKDF2-SHA256.
+  - Máquina de estados DEFCON calibrada en DEFCON 5 (Peacetime).
+- **Suite de Validación de Resiliencia Táctica (86 Pruebas Automatizadas 100% Passing).**
+- **Versión Oficial:** `94.0.0` / `versionCode 94000`.
 
 ### 🚀 Tactical UI Primitives, Dynamic Portals & Hardened Mesh Sync Edition (Release Oficial v93.0.0)
 

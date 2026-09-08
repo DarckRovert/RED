@@ -316,7 +316,7 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
 }
 
 export default function AppRouter() {
-  const { currentScreen, activeConversationId, identity, activeLiveStreamId, liveStreams, goBack, navigate, activeMiniAppBundle, launchMiniApp, preferences } = useRedStore();
+  const { currentScreen, activeConversationId, identity, activeLiveStreamId, liveStreams, goBack, navigate, activeMiniAppBundle, launchMiniApp, preferences, isCallPipMinimized } = useRedStore();
   const [mounted, setMounted] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
   const [needsProfile, setNeedsProfile] = useState<boolean | null>(null);
@@ -623,7 +623,11 @@ export default function AppRouter() {
                 {currentScreen === "commercialHub" || currentScreen === "hub" ? <CommercialHubModal isOpen={true} onClose={goBack} /> : null}
                 {currentScreen === "nodemap" && <NodeMap />}
                 {currentScreen === "radar" && <RadarWindow />}
-                {currentScreen === "call" && <CallScreen />}
+                {(currentScreen === "call" || isCallPipMinimized) && (
+                  <div style={{ display: currentScreen === "call" ? "block" : "none", width: "100%", height: "100%" }}>
+                    <CallScreen />
+                  </div>
+                )}
                 {currentScreen === "hyperBrowser" && (
                   <RedHyperBrowserModal
                     userDid={identity?.identity_hash || 'did:red:guest'}
@@ -662,7 +666,11 @@ export default function AppRouter() {
               {currentScreen === "chat" && <ChatWindow />}
               {currentScreen === "security" && <SecurityPanel />}
               {currentScreen === "radar" && <RadarWindow />}
-              {currentScreen === "call" && <CallScreen />}
+              {(currentScreen === "call" || isCallPipMinimized) && (
+                <div style={{ display: currentScreen === "call" ? "block" : "none", width: "100%", height: "100%" }}>
+                  <CallScreen />
+                </div>
+              )}
               {currentScreen === "broadcast" && <BroadcastPanel />}
               {currentScreen === "crypto" && <CryptoPanel />}
               {(currentScreen === "groups" || currentScreen === "squads") && <GroupsPanel />}

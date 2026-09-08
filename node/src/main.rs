@@ -389,7 +389,7 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         let sos_store = std::sync::Arc::new(sos::SosStore::new(Some(shared_sled.clone())));
         let channel_store = std::sync::Arc::new(channels::ChannelStore::new(Some(shared_sled.clone())));
         let chunker = std::sync::Arc::new(chunker::ChunkerEngine::new());
-        let voice_store = std::sync::Arc::new(voice::VoiceStore::new());
+        let voice_store = std::sync::Arc::new(voice::VoiceStore::new(Some(shared_sled.clone())));
 
         let discovery = std::sync::Arc::new(discovery::DiscoveryEngine::new(Some((*shared_sled).clone())));
         let ephemeral = std::sync::Arc::new(ephemeral::EphemeralPurgeEngine::new());
@@ -440,42 +440,88 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         let mut msg_rx = state.msg_tx.subscribe();
         let social_store_clone = state.social_store.clone();
         let weather_store_clone = state.weather_store.clone();
+        let voice_store_clone = state.voice_store.clone();
         let state_for_loop = state.clone();
         tokio::spawn(async move {
             while let Ok(msg) = msg_rx.recv().await {
                 if let red_core::protocol::MessageType::SocialPost(payload) = &msg.content {
-                    if let Ok(post) = serde_json::from_slice::<social::SocialPost>(payload) {
-                        // FIX: Remove 'is_following' restriction to allow global mesh discovery
-                        social_store_clone.insert_post(post);
+                    if let Ok(val) = serde_json::from_slice::<serde_json::Value>(payload) {
+                        if val.get("msg_type").and_then(|v| v.as_str()) == Some("social_delete") {
+                            if let Some(post_id) = val.get("post_id").and_then(|v| v.as_str()) {
+                                social_store_clone.delete_post(post_id);
+                            }
+                        } else if let Ok(post) = serde_json::from_value::<social::SocialPost>(val) {
+                            // FIX: Remove 'is_following' restriction to allow global mesh discovery
+                            social_store_clone.insert_post(post);
+                        }
                     }
                 } else if let red_core::protocol::MessageType::WeatherReport(payload) = &msg.content {
                     if let Ok(report) = serde_json::from_slice::<weather::WeatherReport>(payload) {
                         weather_store_clone.add_report_raw(report);
                     }
                 } else if let red_core::protocol::MessageType::Text(text) = &msg.content {
-                    // Escaneo asíncrono con Guardian IA para no congelar el event loop
-                    let state_async = state_for_loop.clone();
-                    let sender = msg.sender.clone();
-                    let recipient = msg.recipient.clone();
-                    let msg_id = msg.id.clone();
-                    let text_clone = text.clone();
-                    
-                    tokio::spawn(async move {
-                        let verdict = state_async.guardian.analyze_text(&text_clone).await;
-                        if let guardian::GuardianVerdict::Block { reason, .. } = verdict {
-                            // Find conversation ID and obfuscate
-                            let mut n = state_async.node.lock().await;
-                            let conv_id = red_core::protocol::ConversationId::from_participants(&sender, &recipient);
-                            // Se asume 1 a 1 por ahora, o el frontend lo verá igual si mutamos.
-                            let new_content = format!("[Bloqueado por Guardian IA: {}]", reason);
-                            let _ = n.edit_message(&conv_id.to_hex(), &msg_id.to_hex(), new_content).await;
-                            
-                            // Re-emitir evento para que la UI re-renderice
-                            let mut dummy_msg = msg.clone();
-                            dummy_msg.content = red_core::protocol::MessageType::Text(format!("[Bloqueado por Guardian IA: {}]", reason));
-                            let _ = state_async.msg_tx.send(dummy_msg);
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(text) {
+                        if val.get("msg_type").and_then(|v| v.as_str()) == Some("voice_burst_delete") {
+                            let burst_id = val.get("burst_id")
+                                .or_else(|| val.get("id"))
+                                .and_then(|v| v.as_str());
+                            if let Some(id) = burst_id {
+                                voice_store_clone.delete_burst(id);
+                            }
+                        } else if val.get("msg_type").and_then(|v| v.as_str()) == Some("voice_burst") || val.get("event_type").and_then(|v| v.as_str()) == Some("voice_burst") {
+                            if let Some(burst_val) = val.get("voice_burst") {
+                                if let Ok(burst) = serde_json::from_value::<voice::VoiceBurst>(burst_val.clone()) {
+                                    voice_store_clone.insert_raw_burst(burst);
+                                }
+                            } else if let Some(content_str) = val.get("content").and_then(|c| c.as_str()) {
+                                if let Ok(burst) = serde_json::from_str::<voice::VoiceBurst>(content_str) {
+                                    voice_store_clone.insert_raw_burst(burst);
+                                }
+                            } else if let Ok(burst) = serde_json::from_value::<voice::VoiceBurst>(val.clone()) {
+                                voice_store_clone.insert_raw_burst(burst);
+                            }
                         }
-                    });
+                    }
+
+                    // Omitir análisis NLP de Guardian IA en tramas binarias/vectoriales de alta frecuencia
+                    let is_control_or_vector = if let Ok(ref val) = serde_json::from_str::<serde_json::Value>(text) {
+                        val.get("msg_type").and_then(|v| v.as_str()).is_some_and(|t| {
+                            t == "voice_burst"
+                                || t == "voice_burst_delete"
+                                || t == "canvas_stroke"
+                                || t == "canvas_stroke_batch"
+                                || t == "canvas_clear"
+                                || t == "live_frame"
+                        })
+                    } else {
+                        false
+                    };
+
+                    if !is_control_or_vector {
+                        // Escaneo asíncrono con Guardian IA para no congelar el event loop
+                        let state_async = state_for_loop.clone();
+                        let sender = msg.sender.clone();
+                        let recipient = msg.recipient.clone();
+                        let msg_id = msg.id.clone();
+                        let text_clone = text.clone();
+                        
+                        tokio::spawn(async move {
+                            let verdict = state_async.guardian.analyze_text(&text_clone).await;
+                            if let guardian::GuardianVerdict::Block { reason, .. } = verdict {
+                                // Find conversation ID and obfuscate
+                                let mut n = state_async.node.lock().await;
+                                let conv_id = red_core::protocol::ConversationId::from_participants(&sender, &recipient);
+                                // Se asume 1 a 1 por ahora, o el frontend lo verá igual si mutamos.
+                                let new_content = format!("[Bloqueado por Guardian IA: {}]", reason);
+                                let _ = n.edit_message(&conv_id.to_hex(), &msg_id.to_hex(), new_content).await;
+                                
+                                // Re-emitir evento para que la UI re-renderice
+                                let mut dummy_msg = msg.clone();
+                                dummy_msg.content = red_core::protocol::MessageType::Text(format!("[Bloqueado por Guardian IA: {}]", reason));
+                                let _ = state_async.msg_tx.send(dummy_msg);
+                            }
+                        });
+                    }
                 } else if let red_core::protocol::MessageType::ReadReceipt { ref message_ids } = msg.content {
                     // ── ReadReceipt entrante: actualizar status → Read en la BD ────────
                     let state_async = state_for_loop.clone();

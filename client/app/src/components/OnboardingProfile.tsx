@@ -5,6 +5,8 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 interface OnboardingProfileProps {
     onDone?: () => void;
@@ -73,6 +75,51 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
         }
     }, []);
 
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (currentStep > 1) {
+                setCurrentStep((prev) => (prev - 1) as any);
+                return true;
+            }
+            return false;
+        });
+        return unregister;
+    }, [currentStep]);
+
+    const handleCopyDid = (didText: string) => {
+        TacticalAudioEngine.playTap();
+        const copyWithTextarea = (text: string) => {
+            try {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+                TacticalAudioEngine.playMessageSent();
+                toast.success("DID copiado al portapapeles");
+            } catch {
+                TacticalAudioEngine.playWarning();
+                toast.error("Error al copiar DID");
+            }
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(didText)
+                .then(() => {
+                    TacticalAudioEngine.playMessageSent();
+                    toast.success("DID copiado al portapapeles");
+                })
+                .catch(() => copyWithTextarea(didText));
+        } else {
+            copyWithTextarea(didText);
+        }
+    };
+
     // Generar QR real cuando el usuario llega al Step 4
     const generateQr = useCallback(async () => {
         const pk = identity?.public_key || identity?.identity_hash || myHash;
@@ -86,11 +133,13 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
             lightColor: '#FFFFFF'
         });
         setQrDataUrl(url);
+        TacticalAudioEngine.playRogerBeep();
     }, [myHash, identity, displayName, shortId]);
 
     const AVATAR_PALETTE = ["#FF3355", "#00F0FF", "#00E676", "#FFB300", "#7C4DFF", "#FF4081"];
 
     const handleSaveProfile = async () => {
+        TacticalAudioEngine.playTap();
         const cleanName = displayName.trim() || `Operador ${shortId}`;
         setSaving(true);
         try {
@@ -114,6 +163,7 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
         } catch {}
 
         setSaving(false);
+        TacticalAudioEngine.playRogerBeep();
         toast.success(`🚀 Nodo configurado: ${cleanName}`);
         handleFinish();
     };
@@ -136,6 +186,7 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                         key={stepNum}
                         onClick={() => {
                             if (stepNum < currentStep || (stepNum === 2 && currentStep === 1)) {
+                                TacticalAudioEngine.playTap();
                                 setCurrentStep(stepNum as any);
                             }
                         }}
@@ -187,7 +238,10 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                     </div>
 
                     <button
-                        onClick={() => setCurrentStep(2)}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setCurrentStep(2);
+                        }}
                         className="btn-tactical-primary"
                         style={{ width: "100%", padding: "12px", fontSize: "0.88rem", fontWeight: 900 }}
                     >
@@ -240,7 +294,10 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                         {AVATAR_PALETTE.map((col) => (
                             <div
                                 key={col}
-                                onClick={() => setAvatarColor(col)}
+                                onClick={() => {
+                                    TacticalAudioEngine.playTap();
+                                    setAvatarColor(col);
+                                }}
                                 style={{
                                     width: "28px", height: "28px", borderRadius: "50%", background: col,
                                     cursor: "pointer", border: avatarColor === col ? "3px solid #FFFFFF" : "2px solid transparent",
@@ -261,15 +318,24 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                     </div>
 
                     <div style={{ display: "flex", gap: "10px", width: "100%" }}>
-                        <button onClick={() => setCurrentStep(1)} className="btn-secondary" style={{ padding: "12px 16px" }}>
+                        <button
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setCurrentStep(1);
+                            }}
+                            className="btn-secondary"
+                            style={{ padding: "12px 16px" }}
+                        >
                             ←
                         </button>
                         <button
                             onClick={() => {
                                 if (!displayName.trim()) {
+                                    TacticalAudioEngine.playWarning();
                                     toast.warning("Ingresa un alias para continuar");
                                     return;
                                 }
+                                TacticalAudioEngine.playTap();
                                 setCurrentStep(3);
                             }}
                             className="btn-tactical-primary"
@@ -303,7 +369,10 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                         ].map((perm, idx) => (
                             <div
                                 key={idx}
-                                onClick={() => !perm.state && requestPermission(perm.type)}
+                                onClick={() => {
+                                    TacticalAudioEngine.playTap();
+                                    if (!perm.state) requestPermission(perm.type);
+                                }}
                                 style={{
                                     display: "flex", alignItems: "center", justifyContent: "space-between",
                                     padding: "10px 12px", borderRadius: "10px", cursor: perm.state ? "default" : "pointer",
@@ -326,11 +395,22 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                     </div>
 
                     <div style={{ display: "flex", gap: "10px", width: "100%" }}>
-                        <button onClick={() => setCurrentStep(2)} className="btn-secondary" style={{ padding: "12px 16px" }}>
+                        <button
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setCurrentStep(2);
+                            }}
+                            className="btn-secondary"
+                            style={{ padding: "12px 16px" }}
+                        >
                             ←
                         </button>
                         <button
-                            onClick={() => { setCurrentStep(4); generateQr(); }}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setCurrentStep(4);
+                                generateQr();
+                            }}
                             className="btn-tactical-primary"
                             style={{ flex: 1, padding: "12px", fontSize: "0.85rem", fontWeight: 800 }}
                         >
@@ -353,10 +433,19 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                     </div>
 
                     {/* QR Code Container — generado por librería qrcode, no es placeholder */}
-                    <div style={{
-                        padding: "16px", background: "#FFFFFF", borderRadius: "18px",
-                        boxShadow: "0 10px 40px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px"
-                    }}>
+                    <div
+                        onClick={() => {
+                            const pk = identity?.public_key || identity?.identity_hash || myHash;
+                            const nameParam = encodeURIComponent(displayName.trim() || `Operador ${shortId}`);
+                            handleCopyDid(`did:red:${myHash}:${pk}:${nameParam}`);
+                        }}
+                        title="Click para copiar DID al portapapeles"
+                        style={{
+                            padding: "16px", background: "#FFFFFF", borderRadius: "18px",
+                            boxShadow: "0 10px 40px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
+                            cursor: "pointer"
+                        }}
+                    >
                         {qrDataUrl ? (
                             <img
                                 src={qrDataUrl}
@@ -369,12 +458,12 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                             </div>
                         )}
                         <div style={{ color: "#000000", fontFamily: "JetBrains Mono, monospace", fontSize: "0.65rem", fontWeight: 800, wordBreak: "break-all", maxWidth: "180px", textAlign: "center" }}>
-                            did:red:{myHash.slice(0, 20)}…
+                            did:red:{myHash.slice(0, 20)}… 📋
                         </div>
                     </div>
 
                     <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>
-                        Comparte este código o usa el radar para enlazar con tu primer compañero de escuadrón.
+                        Toca el código QR para copiar tu DID o usa el radar para enlazar con tu primer compañero de escuadrón.
                     </div>
 
                     <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>

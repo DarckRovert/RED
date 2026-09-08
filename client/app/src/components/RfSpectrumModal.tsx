@@ -7,11 +7,14 @@ import {
     RfSpectrumMetrics, 
     RfBandMode, 
     ChannelSignalData 
-} from "../lib/RfSpectrumAnalyzerEngine";
+} from "../lib/sensors/RfSpectrumAnalyzerEngine";
 import { bluetoothTransport, RedDevice } from "../lib/mesh/bluetoothTransport";
 import { getRfMetrics, triggerChannelHop, setRfFecMode, RfMetricsResponse } from "../lib/api";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { meshRouter } from "../lib/mesh/meshRouter";
 
 type RfTab = "spectrum" | "jamming" | "devices";
 
@@ -36,7 +39,22 @@ export function RfSpectrumModal() {
     const analyserRef = useRef<AnalyserNode | null>(null);
     const micStreamRef = useRef<MediaStream | null>(null);
 
-    // Carga de Telemetría Real de Radiofrecuencia desde Rust
+    // 1. Intercepción LIFO de Hardware Android y Escape (BackHandlerRegistry)
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (activeTab !== "spectrum") {
+                TacticalAudioEngine.playTap();
+                setActiveTab("spectrum");
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return () => unregister();
+    }, [activeTab, goBack]);
+
+    // 2. Carga de Telemetría Real de Radiofrecuencia desde Rust
     const loadRfMetrics = useCallback(async () => {
         try {
             const data = await getRfMetrics();
@@ -52,7 +70,7 @@ export function RfSpectrumModal() {
         return () => clearInterval(interval);
     }, [loadRfMetrics]);
 
-    // Captura Real BLE & Telemetría Red P2P
+    // 3. Captura Real BLE & Telemetría Red P2P
     useEffect(() => {
         if (!isScanning) return;
 
@@ -63,7 +81,8 @@ export function RfSpectrumModal() {
                 if (!active) return;
                 setScannedBleDevices(prev => {
                     const updated = new Map(prev);
-                    updated.set(device.id, device);
+                    const devKey = device.id || device.deviceId || device.name;
+                    if (devKey) updated.set(devKey, device);
                     return updated;
                 });
             }, 60000).catch(() => {});
@@ -72,7 +91,7 @@ export function RfSpectrumModal() {
         }
     }, [bandMode, isScanning]);
 
-    // Captura Real de Micrófono Web Audio API FFT
+    // 4. Captura Real de Micrófono Web Audio API FFT
     const cleanupAudio = () => {
         if (audioCtxRef.current) {
             try { audioCtxRef.current.close(); } catch {}
@@ -83,6 +102,13 @@ export function RfSpectrumModal() {
             micStreamRef.current = null;
         }
     };
+
+    // Limpieza estricta de recursos de audio en unmount (evita drenaje de batería)
+    useEffect(() => {
+        return () => {
+            cleanupAudio();
+        };
+    }, []);
 
     useEffect(() => {
         if (bandMode !== "ACOUSTIC_FFT" || !isScanning) {
@@ -162,7 +188,7 @@ export function RfSpectrumModal() {
         };
     }, [bandMode, isScanning]);
 
-    // Motor de Análisis de Espectro Continuo
+    // 5. Motor de Análisis de Espectro Continuo
     useEffect(() => {
         if (!isScanning) return;
 
@@ -179,7 +205,7 @@ export function RfSpectrumModal() {
         return () => clearInterval(interval);
     }, [bandMode, isScanning, scannedBleDevices, acousticChannels]);
 
-    // Waterfall Canvas Renderer
+    // 6. Waterfall Canvas Renderer
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -235,13 +261,27 @@ export function RfSpectrumModal() {
 
     const handleTriggerHop = async () => {
         setIsHopping(true);
+        TacticalAudioEngine.playTap();
         try {
             const res = await triggerChannelHop();
             if (res && res.ok) {
+                TacticalAudioEngine.playRogerBeep();
                 toast.success(`⚡ Salto forzado a canal: ${res.new_channel}`);
                 await loadRfMetrics();
+
+                // Notificar cambio de canal FHSS por la malla táctica para sincronizar nodos
+                try {
+                    const hopPayload = new TextEncoder().encode(JSON.stringify({
+                        type: "RF_FHSS_CHANNEL_HOP",
+                        new_channel: res.new_channel,
+                        fec_mode: rfState?.fec_mode || "MEDIUM",
+                        timestamp: Date.now()
+                    }));
+                    await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", hopPayload);
+                } catch {}
             }
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al forzar salto FHSS");
         } finally {
             setIsHopping(false);
@@ -250,13 +290,16 @@ export function RfSpectrumModal() {
 
     const handleSetFec = async (fec: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME') => {
         setIsUpdatingFec(true);
+        TacticalAudioEngine.playTap();
         try {
             const res = await setRfFecMode(fec);
             if (res && res.ok) {
+                TacticalAudioEngine.playRogerBeep();
                 toast.success(`🛡️ FEC actualizado a: ${res.fec_mode}`);
                 await loadRfMetrics();
             }
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al configurar FEC");
         } finally {
             setIsUpdatingFec(false);
@@ -280,7 +323,12 @@ export function RfSpectrumModal() {
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
-                        onClick={goBack}
+                        onClick={() => {
+                            if (!BackHandlerRegistry.executeTop()) {
+                                TacticalAudioEngine.playTap();
+                                goBack();
+                            }
+                        }}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -329,7 +377,10 @@ export function RfSpectrumModal() {
                 flexShrink: 0
             }}>
                 <button
-                    onClick={() => setActiveTab("spectrum")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("spectrum");
+                    }}
                     style={{
                         flex: 1, padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "spectrum" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(10, 35, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
@@ -341,7 +392,10 @@ export function RfSpectrumModal() {
                     <span>📊</span> CASCADA ESPECTRAL
                 </button>
                 <button
-                    onClick={() => setActiveTab("jamming")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("jamming");
+                    }}
                     style={{
                         flex: 1, padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "jamming" ? "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(180, 20, 40, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
@@ -351,6 +405,21 @@ export function RfSpectrumModal() {
                     }}
                 >
                     <span>🛡️</span> JAMMING & FEC {metrics.isJammingSuspected && "🚨"}
+                </button>
+                <button
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("devices");
+                    }}
+                    style={{
+                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        background: activeTab === "devices" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(10, 35, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "devices" ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "devices" ? "#00E5FF" : "var(--text-secondary)",
+                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                    }}
+                >
+                    <span>📡</span> DISPOSITIVOS ({scannedBleDevices.size})
                 </button>
             </div>
 
@@ -461,6 +530,103 @@ export function RfSpectrumModal() {
                             </div>
                         </div>
                     )}
+
+                    {/* TAB 3: SCANNED DEVICES */}
+                    {activeTab === "devices" && (
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 229, 255, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px",
+                            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8)"
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                        DISPOSITIVOS INTERCEPTADOS EN EL ÉTER
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                        Balizas BLE 2.4 GHz y nodos de proximidad activos en el espectro.
+                                    </div>
+                                </div>
+                                <span style={{
+                                    fontSize: "0.72rem", padding: "3px 8px", borderRadius: "6px",
+                                    background: "rgba(0, 229, 255, 0.15)", color: "#00E5FF",
+                                    border: "1px solid rgba(0, 229, 255, 0.3)", fontWeight: 800
+                                }}>
+                                    {scannedBleDevices.size} DETECTADOS
+                                </span>
+                            </div>
+
+                            {scannedBleDevices.size === 0 ? (
+                                <div style={{
+                                    padding: "36px 16px", textAlign: "center",
+                                    background: "rgba(0,0,0,0.3)", borderRadius: "12px", border: "1px dashed rgba(255,255,255,0.1)"
+                                }}>
+                                    <div style={{ fontSize: "2rem" }}>📡</div>
+                                    <div style={{ fontSize: "0.85rem", fontWeight: 800, marginTop: "8px", color: "var(--text-secondary)" }}>
+                                        Escaneando balizas BLE 2.4 GHz...
+                                    </div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                                        Asegúrate de que el hardware Bluetooth esté activo para capturar señales de dispositivos cercanos.
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                    {Array.from(scannedBleDevices.values()).map(dev => {
+                                        const cleanId = dev.id || dev.deviceId || dev.name || "ID_DESCONOCIDO";
+                                        const rssi = dev.rssi ?? -90;
+                                        const isStrong = rssi > -70;
+                                        const isMedium = rssi > -85 && rssi <= -70;
+                                        const rssiColor = isStrong ? "var(--accent-green, #00E676)" : isMedium ? "var(--accent-orange, #FF9100)" : "var(--accent-crimson, #FF3355)";
+                                        const signalQualityPct = Math.max(0, Math.min(100, Math.round(((rssi + 100) / 60) * 100)));
+
+                                        return (
+                                            <div
+                                                key={cleanId}
+                                                style={{
+                                                    padding: "12px 14px", borderRadius: "10px",
+                                                    background: "rgba(255,255,255,0.02)",
+                                                    border: "1px solid rgba(255,255,255,0.08)",
+                                                    display: "flex", justifyContent: "space-between", alignItems: "center"
+                                                }}
+                                            >
+                                                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                                    <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "#FFFFFF" }}>
+                                                        {dev.name || "Dispositivo BLE Anónimo"}
+                                                    </div>
+                                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                        MAC / ID: {cleanId.length > 24 ? `${cleanId.slice(0, 16)}...` : cleanId}
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                                    <div style={{ textAlign: "right" }}>
+                                                        <div style={{ fontSize: "0.85rem", fontWeight: 900, color: rssiColor }}>
+                                                            {rssi} dBm
+                                                        </div>
+                                                        <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>
+                                                            LQS: {signalQualityPct}%
+                                                        </div>
+                                                    </div>
+                                                    <div style={{
+                                                        width: "6px", height: "32px", borderRadius: "3px",
+                                                        background: "rgba(255,255,255,0.1)", overflow: "hidden",
+                                                        display: "flex", flexDirection: "column", justifyContent: "flex-end"
+                                                    }}>
+                                                        <div style={{
+                                                            width: "100%", height: `${signalQualityPct}%`,
+                                                            background: rssiColor, transition: "height 0.3s ease"
+                                                        }} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                 </div>
             </div>
         </div>

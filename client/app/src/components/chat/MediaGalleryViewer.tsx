@@ -5,6 +5,9 @@ import { MessageItem } from "../../lib/api";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
 import { indexedMediaVault } from "../../lib/storage/indexedMediaVault";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { copyToClipboard } from "../../lib/clipboard";
 
 interface MediaGalleryViewerProps {
     activeMedia: MessageItem | null;
@@ -87,12 +90,30 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
         return () => { isMounted = false; };
     }, [currentItem]);
 
+    // Intercepción LIFO de hardware Android / Esc
+    useEffect(() => {
+        if (!currentItem) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            if (zoomScale > 1) {
+                TacticalAudioEngine.playTap();
+                setZoomScale(1);
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [currentItem, zoomScale, onClose]);
+
     const handlePrev = useCallback(() => {
+        TacticalAudioEngine.playTap();
         setZoomScale(1);
         setCurrentIndex((prev) => (prev > 0 ? prev - 1 : mediaItems.length - 1));
     }, [mediaItems.length]);
 
     const handleNext = useCallback(() => {
+        TacticalAudioEngine.playTap();
         setZoomScale(1);
         setCurrentIndex((prev) => (prev < mediaItems.length - 1 ? prev + 1 : 0));
     }, [mediaItems.length]);
@@ -100,7 +121,10 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
     // Keyboard navigation
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape") onClose();
+            if (e.key === "Escape") {
+                TacticalAudioEngine.playTap();
+                onClose();
+            }
             if (e.key === "ArrowLeft") handlePrev();
             if (e.key === "ArrowRight") handleNext();
         };
@@ -109,10 +133,12 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
     }, [onClose, handlePrev, handleNext]);
 
     const handleDoubleTap = () => {
+        TacticalAudioEngine.playTap();
         setZoomScale((prev) => (prev > 1 ? 1 : 2.5));
     };
 
     const handleSaveMedia = async () => {
+        TacticalAudioEngine.playTap();
         if (!resolvedSrc && !currentItem?.media_data && !currentItem?.content) return;
         const dataUrl = resolvedSrc || currentItem?.media_data || currentItem?.content || "";
         if (!isValidMediaSource(dataUrl)) {
@@ -147,6 +173,7 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
     };
 
     const handleShareMedia = async () => {
+        TacticalAudioEngine.playTap();
         const dataUrl = resolvedSrc || currentItem?.media_data || currentItem?.content || "";
         if (!dataUrl) return;
         try {
@@ -161,8 +188,13 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
             if (navigator.share) {
                 navigator.share({ title: "RED Media", url: window.location.href }).catch(() => {});
             } else {
-                navigator.clipboard.writeText(dataUrl);
-                toast.success("📋 Enlace copiado al portapapeles");
+                copyToClipboard(dataUrl).then((ok) => {
+                    if (ok) {
+                        toast.success("📋 Enlace copiado al portapapeles");
+                    } else {
+                        toast.error("Error al copiar enlace");
+                    }
+                });
             }
         }
     };
@@ -217,7 +249,10 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
             >
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                     <button
-                        onClick={onClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
                         className="btn-icon"
                         style={{ width: 38, height: 38, fontSize: "1.2rem", background: "rgba(255,255,255,0.1)" }}
                     >

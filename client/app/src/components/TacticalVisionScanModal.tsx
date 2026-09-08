@@ -9,6 +9,11 @@ import {
 } from "../lib/ai/TacticalEdgeVisionEngine";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { RedAPI } from "../lib/api";
+import { TacticalSpeechEngine } from "../lib/ai/TacticalSpeechEngine";
+import { meshRouter } from "../lib/mesh/meshRouter";
 
 export function TacticalVisionScanModal() {
     const { goBack } = useRedStore();
@@ -20,6 +25,7 @@ export function TacticalVisionScanModal() {
     const [torchOn, setTorchOn] = useState<boolean>(false);
     const [hasTorch, setHasTorch] = useState<boolean>(false);
     const [capturedFlash, setCapturedFlash] = useState<boolean>(false);
+    const [isBroadcastingAlert, setIsBroadcastingAlert] = useState<boolean>(false);
 
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -30,6 +36,19 @@ export function TacticalVisionScanModal() {
     const filterRef = useRef<TacticalVisionFilter>(filter);
     const envModeRef = useRef<TacticalEnvironmentMode>(envMode);
     const lastUiUpdateRef = useRef<number>(0);
+    const lastThreatAlertTsRef = useRef<number>(0);
+    const isMountedRef = useRef<boolean>(true);
+
+    // ── Intercepción Jerárquica LIFO de navegación Atrás ───────────────────
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            stopCamera();
+            goBack();
+            return true;
+        });
+        return unregister;
+    }, [goBack]);
 
     useEffect(() => {
         filterRef.current = filter;
@@ -40,8 +59,10 @@ export function TacticalVisionScanModal() {
     }, [envMode]);
 
     useEffect(() => {
+        isMountedRef.current = true;
         startCamera();
         return () => {
+            isMountedRef.current = false;
             stopCamera();
         };
     }, []);
@@ -56,6 +77,12 @@ export function TacticalVisionScanModal() {
                 },
                 audio: false
             });
+
+            if (!isMountedRef.current) {
+                stream.getTracks().forEach(t => t.stop());
+                return;
+            }
+
             streamRef.current = stream;
 
             // Verificar si el sensor soporta linterna / flash táctico
@@ -69,17 +96,22 @@ export function TacticalVisionScanModal() {
 
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
-                await videoRef.current.play();
-                setCameraActive(true);
-                startProcessingLoop();
+                await videoRef.current.play().catch(() => {});
+                if (isMountedRef.current) {
+                    setCameraActive(true);
+                    startProcessingLoop();
+                }
             }
         } catch (e) {
-            console.error("[TacticalVisionScanModal] Error starting camera:", e);
-            toast.error("No se pudo acceder a la cámara trasera");
+            if (isMountedRef.current) {
+                console.error("[TacticalVisionScanModal] Error starting camera:", e);
+                toast.error("No se pudo acceder a la cámara trasera");
+            }
         }
     };
 
     const toggleTorch = async () => {
+        TacticalAudioEngine.playTap();
         if (!streamRef.current) return;
         const track = streamRef.current.getVideoTracks()[0];
         if (!track) return;
@@ -135,6 +167,12 @@ export function TacticalVisionScanModal() {
                 if (now - lastUiUpdateRef.current > 160) {
                     lastUiUpdateRef.current = now;
                     setDetections(detected);
+
+                    // Alerta acústica en detección de amenazas (limitada para no saturar audio)
+                    if (detected.length > 0 && now - lastThreatAlertTsRef.current > 4000) {
+                        lastThreatAlertTsRef.current = now;
+                        TacticalAudioEngine.playWarning();
+                    }
                 }
             }
             animFrameRef.current = requestAnimationFrame(loop);
@@ -143,11 +181,13 @@ export function TacticalVisionScanModal() {
     };
 
     const handleFilterChange = (newFilter: TacticalVisionFilter) => {
+        TacticalAudioEngine.playTap();
         filterRef.current = newFilter;
         setFilter(newFilter);
     };
 
     const handleEnvChange = (newEnv: TacticalEnvironmentMode) => {
+        TacticalAudioEngine.playTap();
         envModeRef.current = newEnv;
         setEnvMode(newEnv);
         toast.info(
@@ -160,6 +200,7 @@ export function TacticalVisionScanModal() {
     };
 
     const captureForensicSnapshot = () => {
+        TacticalAudioEngine.playRogerBeep();
         if (!canvasRef.current) return;
         setCapturedFlash(true);
         setTimeout(() => setCapturedFlash(false), 200);
@@ -174,6 +215,59 @@ export function TacticalVisionScanModal() {
         } catch (e) {
             console.error("Error capturing snapshot:", e);
             toast.error("Error al capturar fotograma");
+        }
+    };
+
+    const handleBroadcastThreat = async () => {
+        if (detections.length === 0 || isBroadcastingAlert) return;
+        setIsBroadcastingAlert(true);
+        TacticalAudioEngine.playEmergencyAlarm();
+        const threat = detections[0];
+        const alertBody = `🚨 [ALERTA ÓPTICA EDGE AI] ${threat.label} detectado (${threat.confidencePct}% certeza). ${threat.details || ''}`;
+
+        try {
+            // 1. Difusión P2P primaria por malla (off-grid, sin servidor)
+            const alertPayload = new TextEncoder().encode(JSON.stringify({
+                id: `vision_threat_${Date.now()}`,
+                msg_type: 'VISION_THREAT_DETECTION',
+                threat_type: threat.type,
+                label: threat.label,
+                confidence_pct: threat.confidencePct,
+                details: threat.details || '',
+                alert_body: alertBody,
+                timestamp: Date.now()
+            }));
+            await meshRouter.send(
+                'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+                alertPayload
+            ).catch(() => {});
+
+            // 2. Fallback HTTP a contactos verificados (solo si hay servidor activo)
+            const state = useRedStore.getState();
+            const contacts = state.contacts || [];
+            const recipients = contacts
+                .filter((c: any) => c?.identity_hash && c.verified !== false)
+                .map((c: any) => c.identity_hash);
+
+            await Promise.allSettled(
+                recipients.slice(0, 15).map(async (peerHash: string) => {
+                    try {
+                        await RedAPI.sendMessage(peerHash, alertBody, {
+                            msg_type: 'tactical_threat_alert',
+                            threat_type: threat.type,
+                            confidence: threat.confidencePct,
+                            timestamp: Date.now()
+                        });
+                    } catch {}
+                })
+            );
+
+            TacticalSpeechEngine.speak(`Alerta táctica de ${threat.label} transmitida a la escuadra`, { lang: 'es-ES' });
+            toast.success('Alerta táctica propagada por malla P2P');
+        } catch {
+            toast.error('Error al propagar alerta visual en la malla');
+        } finally {
+            setIsBroadcastingAlert(false);
         }
     };
 
@@ -238,7 +332,7 @@ export function TacticalVisionScanModal() {
                     </button>
 
                     <button
-                        onClick={goBack}
+                        onClick={() => { TacticalAudioEngine.playTap(); stopCamera(); goBack(); }}
                         style={{
                             background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
                             color: "#FFF", padding: "6px 12px", borderRadius: "8px",
@@ -280,23 +374,47 @@ export function TacticalVisionScanModal() {
                     }} />
                 )}
 
-                {/* Badge flotante de Alerta de Amenaza */}
+                {/* Badge flotante de Alerta de Amenaza con Broadcast a la Malla */}
                 {detections.length > 0 && (
                     <div style={{
-                        position: "absolute", top: "14px", left: "14px",
-                        background: "rgba(232, 33, 58, 0.9)", border: "1.5px solid #FFF",
-                        borderRadius: "10px", padding: "8px 14px", fontSize: "0.74rem", fontWeight: 900,
-                        boxShadow: "0 0 20px rgba(232, 33, 58, 0.6)",
-                        display: "flex", alignItems: "center", gap: "8px",
-                        zIndex: 5
+                        position: "absolute", top: "14px", left: "14px", right: "14px",
+                        background: "rgba(232, 33, 58, 0.94)", border: "1.5px solid #FFF",
+                        borderRadius: "12px", padding: "10px 14px", fontSize: "0.74rem", fontWeight: 900,
+                        boxShadow: "0 0 25px rgba(232, 33, 58, 0.7)",
+                        display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
+                        zIndex: 25
                     }}>
-                        <span style={{ fontSize: "1rem" }}>⚠️</span>
-                        <div>
-                            <div>{detections.length} AMENAZA(S) IDENTIFICADA(S)</div>
-                            <div style={{ fontSize: "0.65rem", fontWeight: 700, color: "#FFD2D2" }}>
-                                {detections[0].label} ({detections[0].confidencePct}%)
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ fontSize: "1.2rem" }}>⚠️</span>
+                            <div>
+                                <div style={{ letterSpacing: "0.5px" }}>{detections.length} AMENAZA(S) IDENTIFICADA(S)</div>
+                                <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#FFD2D2" }}>
+                                    {detections[0].label} ({detections[0].confidencePct}%) {detections[0].details ? `· ${detections[0].details}` : ""}
+                                </div>
                             </div>
                         </div>
+
+                        <button
+                            onClick={handleBroadcastThreat}
+                            disabled={isBroadcastingAlert}
+                            style={{
+                                background: "#FFFFFF",
+                                color: "#E8213A",
+                                border: "none",
+                                borderRadius: "8px",
+                                padding: "6px 12px",
+                                fontSize: "0.72rem",
+                                fontWeight: 900,
+                                cursor: isBroadcastingAlert ? "default" : "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                whiteSpace: "nowrap",
+                                boxShadow: "0 2px 8px rgba(0,0,0,0.4)"
+                            }}
+                        >
+                            {isBroadcastingAlert ? "📡 ENVIANDO..." : "🚨 ALERTAR MALLA"}
+                        </button>
                     </div>
                 )}
             </div>

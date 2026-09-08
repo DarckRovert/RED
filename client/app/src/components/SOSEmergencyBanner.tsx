@@ -6,6 +6,8 @@ import { emitSos, getActiveSos, resolveSos, SosBeacon } from '../lib/api';
 import { toast } from './Toast';
 import { useTranslation } from '../lib/i18n/i18nEngine';
 import { TacticalLocationEngine } from '../lib/sensors/TacticalLocationEngine';
+import { BackHandlerRegistry } from '../lib/navigation/BackHandlerRegistry';
+import { TacticalAudioEngine } from '../lib/audio/TacticalAudioEngine';
 
 export const SOSEmergencyBanner: React.FC = () => {
     const { navigate, identity, isAuthenticated, currentScreen, activeSosBeacons, setSosBeacons } = useRedStore();
@@ -16,6 +18,25 @@ export const SOSEmergencyBanner: React.FC = () => {
     const [gpsStatus, setGpsStatus] = useState<'idle' | 'locating' | 'ok' | 'error'>('idle');
     const [gpsCoords, setGpsCoords] = useState<{ lat: number; lon: number }>({ lat: 0, lon: 0 });
     const [loadError, setLoadError] = useState<string | null>(null);
+
+    const lastBeaconsCountRef = React.useRef(0);
+    useEffect(() => {
+        if (beacons.length > lastBeaconsCountRef.current) {
+            TacticalAudioEngine.playEmergencyAlarm();
+        }
+        lastBeaconsCountRef.current = beacons.length;
+    }, [beacons.length]);
+
+    // Registro LIFO de retroceso físico / Esc para cerrar el modal de disparo SOS si está abierto
+    useEffect(() => {
+        if (!isTriggering) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            setIsTriggering(false);
+            return true;
+        });
+        return unregister;
+    }, [isTriggering]);
 
     const loadBeacons = useCallback(async () => {
         try {
@@ -77,10 +98,12 @@ export const SOSEmergencyBanner: React.FC = () => {
 
             if (res && res.ok && res.sos) {
                 setSosBeacons([res.sos, ...beacons]);
+                TacticalAudioEngine.playEmergencyAlarm();
                 toast.error('🚨 ¡BALIZA SOS DIFUNDIDA A TODA LA MALLA P2P!');
                 setIsTriggering(false);
             }
         } catch (err: any) {
+            TacticalAudioEngine.playWarning();
             toast.error(`Error al emitir SOS: ${err.message}`);
         }
     };
@@ -89,8 +112,10 @@ export const SOSEmergencyBanner: React.FC = () => {
         try {
             await resolveSos(beaconId);
             setSosBeacons(beacons.filter(b => b.beacon_id !== beaconId));
+            TacticalAudioEngine.playRogerBeep();
             toast.success('Baliza SOS resuelta y desactivada');
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error('Error al resolver SOS');
         }
     };
@@ -123,7 +148,7 @@ export const SOSEmergencyBanner: React.FC = () => {
 
                     <div style={{ display: 'flex', gap: '6px' }}>
                         <button
-                            onClick={() => navigate('survivalBeacon')}
+                            onClick={() => { TacticalAudioEngine.playTap(); navigate('survivalBeacon'); }}
                             style={{
                                 padding: '6px 12px', borderRadius: '8px', background: '#FFFFFF',
                                 color: '#E8213A', fontWeight: 900, fontSize: '0.74rem', border: 'none', cursor: 'pointer'
@@ -133,7 +158,7 @@ export const SOSEmergencyBanner: React.FC = () => {
                         </button>
                         {beacons[0].is_mine && (
                             <button
-                                onClick={() => handleResolve(beacons[0].beacon_id)}
+                                onClick={() => { TacticalAudioEngine.playTap(); handleResolve(beacons[0].beacon_id); }}
                                 style={{
                                     padding: '6px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.4)',
                                     color: '#FFFFFF', fontWeight: 800, fontSize: '0.74rem', border: '1px solid rgba(255,255,255,0.3)', cursor: 'pointer'
@@ -213,7 +238,7 @@ export const SOSEmergencyBanner: React.FC = () => {
                                 🚨 EMITIR SOS AHORA
                             </button>
                             <button
-                                onClick={() => setIsTriggering(false)}
+                                onClick={() => { TacticalAudioEngine.playTap(); setIsTriggering(false); }}
                                 style={{
                                     flex: 1, padding: '14px', borderRadius: '12px',
                                     background: 'rgba(255, 255, 255, 0.08)',

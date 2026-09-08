@@ -5,6 +5,8 @@ import {
 } from "../../lib/settingsManager";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
+import { copyToClipboard } from "../../lib/clipboard";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 
 export const IdentityTab: React.FC = () => {
     const { identity, navigate } = useRedStore();
@@ -38,16 +40,22 @@ export const IdentityTab: React.FC = () => {
 
                             <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
                                 <button
-                                    onClick={() => {
-                                        if (identity?.identity_hash) {
-                                            navigator.clipboard.writeText(`did:red:${identity.identity_hash}`);
-                                            SettingsManager.triggerHaptic("light");
-                                            toast.success("📋 DID copiado al portapapeles");
-                                        }
-                                    }}
-                                    className="btn-tactical-secondary"
-                                    style={{ padding: "8px 12px", fontSize: "0.75rem" }}
-                                >
+                                     onClick={() => {
+                                         if (identity?.identity_hash) {
+                                             TacticalAudioEngine.playTap();
+                                             copyToClipboard(`did:red:${identity.identity_hash}`).then((ok) => {
+                                                 if (ok) {
+                                                     SettingsManager.triggerHaptic("light");
+                                                     toast.success("📋 DID copiado al portapapeles");
+                                                 } else {
+                                                     toast.error("Error al copiar DID");
+                                                 }
+                                             });
+                                         }
+                                     }}
+                                     className="btn-tactical-secondary"
+                                     style={{ padding: "8px 12px", fontSize: "0.75rem" }}
+                                 >
                                     Copiar DID Completo
                                 </button>
                                 <button

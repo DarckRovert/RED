@@ -8,6 +8,8 @@ import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
 import { ErrorBanner } from "./ui/ErrorBanner";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 export const EcoMeshPanel: React.FC = () => {
     const { goBack } = useRedStore();
@@ -31,6 +33,15 @@ export const EcoMeshPanel: React.FC = () => {
     };
 
     useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return unregister;
+    }, [goBack]);
+
+    useEffect(() => {
         loadStatus();
         const unsubscribe = KineticDutyGovernor.getInstance().subscribe((data) => {
             setTelemetry(data);
@@ -41,17 +52,21 @@ export const EcoMeshPanel: React.FC = () => {
     }, []);
 
     const handleUpdate = async (val: number) => {
+        TacticalAudioEngine.playTap();
         KineticDutyGovernor.getInstance().setManualBattery(val);
         try {
             const res = await updateBatteryOptimize(val);
             setStatus(res.battery_status);
+            TacticalAudioEngine.playRogerBeep();
             toast.success(`Nivel de batería ajustado a ${val}%`);
         } catch {
+            TacticalAudioEngine.playTap();
             toast.info(`Simulación de nivel: ${val}%`);
         }
     };
 
     const handleShakeBoost = () => {
+        TacticalAudioEngine.playRogerBeep();
         KineticDutyGovernor.getInstance().triggerShakeBoost();
         toast.info("⚡ ¡RÁFAGA BOOST ACTIVADA! Escaneo BLE acelerado a 800ms por 20 segundos.");
     };
@@ -106,7 +121,10 @@ export const EcoMeshPanel: React.FC = () => {
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
-                        onClick={goBack}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            goBack();
+                        }}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -134,7 +152,10 @@ export const EcoMeshPanel: React.FC = () => {
                 </div>
 
                 <button
-                    onClick={goBack}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        goBack();
+                    }}
                     style={{
                         width: 34, height: 34, borderRadius: "9px",
                         background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",

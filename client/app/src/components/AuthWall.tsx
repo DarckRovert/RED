@@ -16,6 +16,8 @@ import {
 } from "../lib/crypto/BiometricLockEngine";
 import { companionSyncEngine, PairingSession, CompanionSyncPayload } from "../lib/mesh/companionSyncEngine";
 import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 
 /**
  * Authentication Wall — RED Unified Tactical Lockscreen & Biometric Sentinel
@@ -198,6 +200,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
     const doLogin = useCallback(async (pwd: string) => {
         if (lockoutRemaining > 0) {
             setError(`⛔ Bloqueado temporalmente. Espera ${lockoutRemaining}s.`);
+            TacticalAudioEngine.playWarning();
             return;
         }
 
@@ -209,6 +212,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
         // 1. PANIC WIPE
         if (panicPin && pwd === panicPin) {
+            TacticalAudioEngine.playEmergencyAlarm();
             try {
                 const { Capacitor, registerPlugin } = await import("@capacitor/core");
                 if (Capacitor.isNativePlatform()) {
@@ -229,6 +233,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
         // 2. DECOY VAULT
         if (decoyPin && pwd === decoyPin) {
+            TacticalAudioEngine.playRogerBeep();
             useRedStore.getState().enableDecoyVault();
             setLoading(false);
             return;
@@ -237,6 +242,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
         // 3. REAL LOGIN
         const success = await login(pwd);
         if (!success) {
+            TacticalAudioEngine.playWarning();
             const nextAttempts = failedAttempts + 1;
             setFailedAttempts(nextAttempts);
             if (nextAttempts >= 5) {
@@ -248,6 +254,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             setLoading(false);
             setPin("");
         } else {
+            TacticalAudioEngine.playRogerBeep();
             setFailedAttempts(0);
             BiometricLockEngine.unlock();
         }
@@ -255,6 +262,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
     const handleBiometricUnlock = useCallback(async () => {
         if (lockoutRemaining > 0 || loading) return;
+        TacticalAudioEngine.playTap();
         setError("");
 
         try {
@@ -269,6 +277,40 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             console.warn("[AuthWall] Biometric error:", e);
         }
     }, [doLogin, lockoutRemaining, loading]);
+
+    // ── Intercepción Jerárquica LIFO de navegación Atrás ───────────────────
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (showRestoreModal) {
+                setShowRestoreModal(false);
+                return true;
+            }
+            if (showCompanionQR) {
+                setShowCompanionQR(false);
+                return true;
+            }
+            if (showOnboardingBioPrompt) {
+                setShowOnboardingBioPrompt(false);
+                return true;
+            }
+            if (desktopAirGapOpen) {
+                setDesktopAirGapOpen(false);
+                return true;
+            }
+            if (mode === "onboarding" && step === "confirm") {
+                setStep("enter");
+                setConfirmPin("");
+                return true;
+            }
+            if (mode === "onboarding" && webOnboardingTab === "independent_pin") {
+                setWebOnboardingTab("qr_link");
+                return true;
+            }
+            return false;
+        });
+        return unregister;
+    }, [showRestoreModal, showCompanionQR, showOnboardingBioPrompt, desktopAirGapOpen, mode, step, webOnboardingTab]);
 
     useEffect(() => {
         let isMounted = true;
@@ -327,6 +369,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
     // Digit press handler for the tactical keypad
     const handleDigitPress = (digit: string) => {
         if (loading || lockoutRemaining > 0) return;
+        TacticalAudioEngine.playTap();
         setError("");
 
         if (mode === "onboarding") {
@@ -349,6 +392,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
     const handleBackspace = () => {
         if (loading || lockoutRemaining > 0) return;
+        TacticalAudioEngine.playTap();
         setError("");
         if (mode === "onboarding") {
             if (step === "enter") setPin(prev => prev.slice(0, -1));

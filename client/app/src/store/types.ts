@@ -157,6 +157,7 @@ export interface RedStore {
     clearCallSignals: () => void;
 
     publishStatus: (content: string, media?: string | null, theme?: number) => Promise<void>;
+    deleteMyStory: (storyId: string) => void;
     openLiveStream: (streamId: string) => void;
     closeLiveStream: () => void;
     addLiveFrame: (streamId: string, frame: string, seq: number) => void;
@@ -165,14 +166,16 @@ export interface RedStore {
     evaluateLocalDMS: () => Promise<void>;
 
     // Social Feed State
-    socialPosts: any[];
-    bookmarkedPosts: any[];
+    socialPosts: SocialPost[];
+    bookmarkedPosts: SocialPost[];
     followingList: string[];
     loadSocialFeed: () => Promise<void>;
     addOptimisticReaction: (postId: string, emoji: string, reactorHash: string) => void;
     deleteOptimisticPost: (postId: string) => void;
-    toggleBookmark: (post: any) => void;
+    toggleBookmark: (post: SocialPost) => void;
     hydrateBookmarks: () => void;
+    toggleFollow: (authorHash: string) => Promise<void>;
+    hydrateFollowing: () => void;
     // Real-time Mesh SSE Events State
     activeSosBeacons: any[];
     activeWeatherReports: any[];
@@ -183,6 +186,8 @@ export interface RedStore {
     addWeatherReport: (report: any) => void;
     addChannelMessage: (msg: any) => void;
     addVoiceBurst: (burst: any) => void;
+    removeVoiceBurst: (id: string) => void;
+    setVoiceBursts: (bursts: any[]) => void;
     setSosBeacons: (beacons: any[]) => void;
     pendingChatNavigation: string | null;
     setPendingChatNavigation: (target: string | null) => void;
@@ -200,11 +205,20 @@ export interface RedStore {
 }
 
 /** Screens that act as overlays and must NOT clear activeConversationId */
-const OVERLAY_SCREENS = new Set<ScreenView>([
-    'sos', 'aiCopilot', 'proximity', 'canvas', 'walkie', 'weather',
-    'proximitySettings', 'radar', 'contacts', 'settings', 'updater', 'nodemap',
-    'compass', 'idVault', 'amber', 'guardian', 'channels', 'crypto',
-    'network', 'explorer', 'nearby', 'liveStream', 'status', 'broadcast', 'call',
-    'security', 'groups', 'p2pCompass', 'socialFeed', 'shakePair', 'p2pPay', 'blackout', 'health', 'nodeLogs', 'calculator', 'secReport', 'backup', 'commercialHub', 'hub', 'webCompanionLink', 'companionLink'
+export const OVERLAY_SCREENS = new Set<ScreenView>([
+    'sos', 'aiCopilot', 'copilot', 'proximity', 'proximityWave', 'canvas', 'liveCanvas',
+    'walkie', 'weather', 'weatherAlert', 'proximitySettings', 'proximity_settings',
+    'radar', 'contacts', 'settings', 'updater', 'nodemap', 'compass', 'p2pCompass',
+    'offGridCompass', 'idVault', 'identityVault', 'amber', 'amberAdmin', 'guardian',
+    'channels', 'publicChannels', 'crypto', 'network', 'explorer', 'nearby', 'liveStream',
+    'status', 'broadcast', 'call', 'security', 'groups', 'squads', 'socialFeed',
+    'shakePair', 'p2pPay', 'redP2PPay', 'blackout', 'health', 'systemHealth', 'nodeLogs',
+    'logs', 'calculator', 'secReport', 'backup', 'commercialHub', 'hub', 'globalShield',
+    'web3Vault', 'webCompanionLink', 'companionLink', 'hyperBrowser', 'appStore', 'miniApp',
+    'tacticalVisionScan', 'shamirRecovery', 'cbrnSatellite', 'zkBarterSubsurface',
+    'tcccBallistics', 'c4isrEmpDrill', 'airGapStego', 'celestialPdr', 'acousticWarfare',
+    'vitalResources', 'sonarSeismic', 'tacticalFoxhunt', 'atmosphericSafety',
+    'loraTransceiver', 'extremeSurvival', 'survivalHud', 'dms', 'ecoMesh', 'vitalScan',
+    'survivalBeacon', 'rfSpectrum', 'stegoVault'
 ]);
 

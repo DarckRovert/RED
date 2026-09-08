@@ -11,6 +11,25 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AmberAlert, getAmberAlerts, reportSighting, RedAPI } from '@/lib/api';
 import { useTranslation } from '@/lib/i18n/i18nEngine';
+import { BackHandlerRegistry } from '@/lib/navigation/BackHandlerRegistry';
+import { TacticalAudioEngine } from '@/lib/audio/TacticalAudioEngine';
+import { toast } from './Toast';
+
+/** Clipboard with textarea fallback for air-gapped / tactical WebView */
+function copyToClipboard(text: string, label = 'Dato'): void {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).catch(() => legacyCopy(text, label));
+  } else {
+    legacyCopy(text, label);
+  }
+}
+function legacyCopy(text: string, label: string): void {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy'); toast.success(`${label} copiado`); }
+  finally { document.body.removeChild(ta); }
+}
 
 interface AmberAlertBannerProps {
   /** Callback cuando el usuario minimiza el banner */
@@ -46,7 +65,11 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
       if (data?.content) {
         try {
           const parsed = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
-          if (parsed?.event_type === 'amber_alert' || parsed?.event_type === 'amber_resolved') {
+          if (parsed?.event_type === 'amber_alert') {
+            TacticalAudioEngine.playEmergencyAlarm();
+            fetchAlerts();
+          } else if (parsed?.event_type === 'amber_resolved') {
+            TacticalAudioEngine.playRogerBeep();
             fetchAlerts();
           }
         } catch {
@@ -61,18 +84,37 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
     };
   }, [fetchAlerts]);
 
+  // ── LIFO Back Interception
+  useEffect(() => {
+    if (minimized || alerts.length === 0) return;
+    const unregister = BackHandlerRegistry.register(() => {
+      TacticalAudioEngine.playTap();
+      if (showSightingForm) {
+        setShowSightingForm(false);
+        return true;
+      }
+      handleMinimize();
+      return true;
+    });
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); BackHandlerRegistry.executeTop(); } };
+    document.addEventListener('keydown', onEsc);
+    return () => { unregister(); document.removeEventListener('keydown', onEsc); };
+  }, [minimized, alerts.length, showSightingForm]);
+
   if (alerts.length === 0) return null;
 
   const currentAlert = alerts[currentIndex];
   if (!currentAlert) return null;
 
   const handleMinimize = () => {
+    TacticalAudioEngine.playTap();
     setMinimized(true);
     onMinimize?.();
   };
 
   const handleSightingSubmit = async () => {
     setSubmitting(true);
+    TacticalAudioEngine.playTap();
     let lat: number | undefined;
     let lon: number | undefined;
 
@@ -91,29 +133,47 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
         lon,
         notes: sightingNotes || undefined,
       });
+      TacticalAudioEngine.playRogerBeep();
       setSubmitted(true);
+      toast.success("✅ Avistamiento reportado a la red");
       setTimeout(() => {
         setShowSightingForm(false);
         setSubmitted(false);
         setSightingNotes('');
       }, 2000);
     } catch (e) {
+      TacticalAudioEngine.playWarning();
+      toast.error("Error al reportar avistamiento");
       console.error('Error al reportar avistamiento:', e);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleShare = () => {
-    // Copiar info de la alerta al portapapeles
-    const text = `🟠 ALERTA AMBER-RED\n👤 ${currentAlert.name} | ${currentAlert.age} años\n📝 ${currentAlert.description}`;
-    navigator.clipboard?.writeText(text).catch(() => {});
+  const handleShare = async () => {
+    TacticalAudioEngine.playTap();
+    const text = `🟠 ALERTA AMBER-RED\n👤 ${currentAlert.name} | ${currentAlert.age} años\n📝 ${currentAlert.description}${currentAlert.last_seen_location ? `\n📍 ${currentAlert.last_seen_location}` : ''}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Alerta AMBER: ${currentAlert.name}`,
+          text,
+        });
+        TacticalAudioEngine.playMessageSent();
+        return;
+      } catch {}
+    }
+    copyToClipboard(text, 'Alerta AMBER');
+    TacticalAudioEngine.playMessageSent();
   };
 
   if (minimized) {
     return (
       <button
-        onClick={() => setMinimized(false)}
+        onClick={() => {
+          TacticalAudioEngine.playTap();
+          setMinimized(false);
+        }}
         className="amber-minimized-pill"
         title="Ver Alerta AMBER activa"
         aria-label={`Alerta AMBER activa: ${currentAlert.name}`}
@@ -140,7 +200,10 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
             {alerts.length > 1 && (
               <div className="amber-counter">
                 <button
-                  onClick={() => setCurrentIndex(i => (i - 1 + alerts.length) % alerts.length)}
+                  onClick={() => {
+                    TacticalAudioEngine.playTap();
+                    setCurrentIndex(i => (i - 1 + alerts.length) % alerts.length);
+                  }}
                   className="amber-nav-btn"
                   aria-label="Alerta anterior"
                 >
@@ -148,7 +211,10 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
                 </button>
                 <span>{currentIndex + 1} / {alerts.length}</span>
                 <button
-                  onClick={() => setCurrentIndex(i => (i + 1) % alerts.length)}
+                  onClick={() => {
+                    TacticalAudioEngine.playTap();
+                    setCurrentIndex(i => (i + 1) % alerts.length);
+                  }}
                   className="amber-nav-btn"
                   aria-label="Siguiente alerta"
                 >
@@ -222,7 +288,10 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
                 />
                 <div className="amber-form-actions">
                   <button
-                    onClick={() => setShowSightingForm(false)}
+                    onClick={() => {
+                      TacticalAudioEngine.playTap();
+                      setShowSightingForm(false);
+                    }}
                     className="amber-btn amber-btn--cancel"
                     disabled={submitting}
                   >
@@ -245,7 +314,10 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
         {!showSightingForm && (
           <div className="amber-banner-actions">
             <button
-              onClick={() => setShowSightingForm(true)}
+              onClick={() => {
+                TacticalAudioEngine.playTap();
+                setShowSightingForm(true);
+              }}
               className="amber-action-btn amber-action-btn--sighting"
             >
               👁 {t.amber_module?.report_sighting || "Reportar Avistamiento"}

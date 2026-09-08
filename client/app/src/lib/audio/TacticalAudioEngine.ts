@@ -238,6 +238,34 @@ export class TacticalAudioEngine {
         } catch {}
     }
 
+    /** Ping de sonar acústico / detección de proximidad ultrasónica (2048Hz -> 1024Hz, 120ms) */
+    public static playSonarPing(): void {
+        const prefs = SettingsManager.getPreferences();
+        if (!prefs.soundsEnabled) return;
+
+        const ctx = this.getContext();
+        if (!ctx) return;
+
+        try {
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(2048, now);
+            osc.frequency.exponentialRampToValueAtTime(1024, now + 0.12);
+
+            gain.gain.setValueAtTime(0.09, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(now);
+            osc.stop(now + 0.125);
+        } catch {}
+    }
+
     /**
      * Cierra el AudioContext y libera los recursos de audio de la interfaz táctica.
      */

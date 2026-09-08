@@ -40,13 +40,32 @@ impl VoiceStore {
             sample_rate: req.sample_rate.unwrap_or(16000),
         };
 
+        self.insert_raw_burst(burst.clone());
+        burst
+    }
+
+    pub fn insert_raw_burst(&self, burst: VoiceBurst) {
+        let sender_did = burst.sender_did.clone();
         let mut map = self.bursts.write().unwrap_or_else(|e| e.into_inner());
         let list = map.entry(sender_did).or_default();
-        list.push(burst.clone());
-        if list.len() > 100 {
-            list.drain(0..list.len() - 100);
+        if !list.iter().any(|b| b.id == burst.id) {
+            list.push(burst);
+            if list.len() > 100 {
+                list.drain(0..list.len() - 100);
+            }
         }
-        burst
+    }
+
+    pub fn delete_burst(&self, id: &str) -> bool {
+        let mut map = self.bursts.write().unwrap_or_else(|e| e.into_inner());
+        let mut found = false;
+        for list in map.values_mut() {
+            if let Some(pos) = list.iter().position(|b| b.id == id) {
+                list.remove(pos);
+                found = true;
+            }
+        }
+        found
     }
 
     pub fn get_recent_bursts(&self, limit: usize) -> Vec<VoiceBurst> {

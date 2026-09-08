@@ -5,6 +5,7 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 
 interface ResolutionConfig {
     label: string;
@@ -39,8 +40,13 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
     const [camError, setCamError] = useState<string | null>(null);
     const [elapsed, setElapsed] = useState(0);
     const [framesSent, setFramesSent] = useState(0);
+    const [droppedFrames, setDroppedFrames] = useState(0);
     const [totalBytesSent, setTotalBytesSent] = useState(0);
+    const [peerCount, setPeerCount] = useState(0);
+    const [torchAvailable, setTorchAvailable] = useState(false);
+    const [torchActive, setTorchActive] = useState(false);
     const [comments, setComments] = useState<{ sender: string; text: string }[]>([]);
+    
     const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const isSendingRef = useRef(false);
 
@@ -50,15 +56,91 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
         if (stream) setComments(stream.comments.slice(-20));
     }, [liveStreams, streamId]);
 
-    // Unconditional unmount cleanup to prevent leaking stream timers or tracks
+    // ─── 1. Telemetría de Pares Malla ──────────────────────────────────────────
+    useEffect(() => {
+        let isMounted = true;
+        const updatePeers = async () => {
+            try {
+                const { meshRouter } = await import("../lib/mesh/meshRouter");
+                if (isMounted) {
+                    setPeerCount(meshRouter.getAllPeers().length);
+                }
+            } catch {}
+        };
+        updatePeers();
+        const interval = setInterval(updatePeers, 2500);
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
+    }, []);
+
+    // ─── 2. Detención Segura de Transmisión ─────────────────────────────────────
+    const stopLive = useCallback(async () => {
+        if (!isLive) return;
+        setIsLive(false);
+
+        if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
+        if (elapsedRef.current) clearInterval(elapsedRef.current);
+
+        await RedAPI.sendLiveEnd(contacts, streamId).catch(console.error);
+
+        useRedStore.setState(s => ({
+            liveStreams: {
+                ...s.liveStreams,
+                [streamId]: {
+                    ...(s.liveStreams[streamId] || {}),
+                    is_active: false,
+                },
+            },
+            isStreaming: false,
+            streamId: null,
+        }));
+        toast.info("Transmisión finalizada");
+    }, [isLive, contacts, streamId]);
+
+    const handleClose = useCallback(() => {
+        if (isLive) stopLive();
+        onClose?.();
+    }, [isLive, stopLive, onClose]);
+
+    // ─── 3. Interceptor de Hardware Android (BackHandlerRegistry) ─────────────
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            handleClose();
+            return true;
+        });
+        return unregister;
+    }, [handleClose]);
+
+    const isLiveRef = useRef(isLive);
+    isLiveRef.current = isLive;
+    const contactsRef = useRef(contacts);
+    contactsRef.current = contacts;
+
+    // ─── 4. Liberación de Recursos al Desmontar ───────────────────────────────
     useEffect(() => {
         return () => {
             if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
             if (elapsedRef.current) clearInterval(elapsedRef.current);
-            useRedStore.setState({ isStreaming: false, streamId: null });
+            if (isLiveRef.current) {
+                RedAPI.sendLiveEnd(contactsRef.current, streamId).catch(() => {});
+            }
+            useRedStore.setState(s => ({
+                liveStreams: {
+                    ...s.liveStreams,
+                    [streamId]: {
+                        ...(s.liveStreams[streamId] || {}),
+                        is_active: false,
+                    },
+                },
+                isStreaming: false,
+                streamId: null,
+            }));
         };
-    }, []);
+    }, [streamId]);
 
+    // ─── 5. Inicialización y Gestión de Cámara ─────────────────────────────────
     useEffect(() => {
         let cancelled = false;
         const resConfig = RESOLUTIONS[selectedRes] || RESOLUTIONS["240p"];
@@ -75,6 +157,17 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
                 videoRef.current.srcObject = stream;
                 videoRef.current.play().catch(() => {});
             }
+
+            // Detección de linterna táctica (torch)
+            const track = stream.getVideoTracks()[0];
+            if (track && typeof (track as any).getCapabilities === "function") {
+                const capabilities = (track as any).getCapabilities() || {};
+                setTorchAvailable(Boolean(capabilities.torch));
+            } else {
+                setTorchAvailable(false);
+            }
+            setTorchActive(false);
+
             setCamReady(true);
             setCamError(null);
         }).catch(err => {
@@ -88,8 +181,28 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
         };
     }, [facingMode]);
 
+    // ─── 6. Alternar Linterna Táctica (Torch) ──────────────────────────────────
+    const toggleTorch = async () => {
+        const stream = streamRef.current;
+        if (!stream) return;
+        const track = stream.getVideoTracks()[0];
+        if (!track) return;
+        try {
+            const next = !torchActive;
+            await (track as any).applyConstraints({ advanced: [{ torch: next }] });
+            setTorchActive(next);
+            toast.info(next ? "🔦 Linterna táctica encendida" : "🔦 Linterna táctica apagada");
+        } catch {
+            toast.warning("No se pudo alternar la linterna táctica");
+        }
+    };
+
+    // ─── 7. Captura y Despacho Multicast Anti-Contrapresión ───────────────────
     const captureAndSendFrame = useCallback(async () => {
-        if (isSendingRef.current) return; // Backpressure guard: drop frame if previous frame is still in-flight
+        if (isSendingRef.current) {
+            setDroppedFrames(d => d + 1);
+            return; // Protección de contrapresión: descarta fotograma si el enlace está saturado
+        }
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (!video || !canvas || video.readyState < 2) return;
@@ -120,6 +233,7 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
         setIsLive(true);
         frameSeqRef.current = 0;
         setFramesSent(0);
+        setDroppedFrames(0);
         setTotalBytesSent(0);
         setElapsed(0);
 
@@ -149,39 +263,14 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
         toast.info(`🔴 Transmisión iniciada (${config.label})`);
     }, [camReady, isLive, contacts, streamId, identity, captureAndSendFrame, selectedRes]);
 
-    const stopLive = useCallback(async () => {
-        if (!isLive) return;
-        setIsLive(false);
-
-        if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
-        if (elapsedRef.current) clearInterval(elapsedRef.current);
-
-        await RedAPI.sendLiveEnd(contacts, streamId).catch(console.error);
-
-        useRedStore.setState(s => ({
-            liveStreams: {
-                ...s.liveStreams,
-                [streamId]: {
-                    ...(s.liveStreams[streamId] || {}),
-                    is_active: false,
-                },
-            },
-            isStreaming: false,
-            streamId: null,
-        }));
-        toast.info("Transmisión finalizada");
-    }, [isLive, contacts, streamId]);
-
-    const handleClose = () => {
-        if (isLive) stopLive();
-        onClose?.();
-    };
-
     const formatElapsed = (s: number) => {
         const m = Math.floor(s / 60);
         const sec = s % 60;
         return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
     };
+
+    const currentRateKbps = elapsed > 0 ? (totalBytesSent / 1024 / elapsed).toFixed(1) : "0.0";
+    const currentFps = elapsed > 0 ? (framesSent / elapsed).toFixed(1) : "0.0";
 
     return (
         <div style={{
@@ -190,7 +279,7 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
             display: "flex", flexDirection: "column",
             overflow: "hidden",
         }}>
-            {/* Video Canvas Container */}
+            {/* Contenedor de Video Canvas */}
             <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
                 <video
                     ref={videoRef}
@@ -211,15 +300,15 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
                 )}
             </div>
 
-            {/* Top HUD Controls */}
+            {/* Top HUD Controls & Telemetry */}
             <div style={{
                 position: "absolute", top: 0, left: 0, right: 0,
                 padding: "calc(16px + var(--safe-top, 0px)) 16px 16px 16px",
                 display: "flex", justifyContent: "space-between", alignItems: "center",
-                background: "linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%)",
+                background: "linear-gradient(180deg, rgba(0,0,0,0.85) 0%, transparent 100%)",
                 zIndex: 10
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                     <div style={{
                         padding: "4px 10px", borderRadius: "var(--radius-full)",
                         background: isLive ? "var(--accent-crimson)" : "rgba(255,255,255,0.2)",
@@ -230,25 +319,40 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
                         {isLive ? `EN VIVO · ${formatElapsed(elapsed)}` : "VISTA PREVIA"}
                     </div>
 
+                    <div style={{
+                        padding: "4px 8px", borderRadius: "10px",
+                        background: peerCount > 0 ? "rgba(0, 230, 118, 0.2)" : "rgba(255, 179, 0, 0.2)",
+                        color: peerCount > 0 ? "var(--accent-emerald)" : "var(--accent-amber)",
+                        border: `1px solid ${peerCount > 0 ? "var(--accent-emerald)" : "var(--accent-amber)"}`,
+                        fontSize: "0.70rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace"
+                    }}>
+                        {peerCount > 0 ? `🟢 ${peerCount} PARES` : "🟡 MODO LOCAL"}
+                    </div>
+
                     {isLive && (
-                        <div style={{ display: "flex", gap: "6px" }}>
-                            <div style={{ padding: "4px 8px", borderRadius: "var(--radius-full)", background: "rgba(0,0,0,0.5)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)" }}>
-                                {(framesSent / Math.max(1, elapsed)).toFixed(1)} FPS
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                            <div style={{ padding: "4px 8px", borderRadius: "var(--radius-full)", background: "rgba(0,0,0,0.6)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)", border: "1px solid var(--glass-border)" }}>
+                                {currentFps} FPS
                             </div>
-                            <div style={{ padding: "4px 8px", borderRadius: "var(--radius-full)", background: "rgba(0,0,0,0.5)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "#00E676" }}>
-                                {(totalBytesSent / 1024).toFixed(0)} KB
+                            <div style={{ padding: "4px 8px", borderRadius: "var(--radius-full)", background: "rgba(0,0,0,0.6)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "#00E676", border: "1px solid var(--glass-border)" }}>
+                                {currentRateKbps} KB/s
                             </div>
+                            {droppedFrames > 0 && (
+                                <div style={{ padding: "4px 8px", borderRadius: "var(--radius-full)", background: "rgba(255,23,68,0.3)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-crimson)", border: "1px solid var(--accent-crimson)" }}>
+                                    ⚠️ {droppedFrames} OMITIDOS
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
 
-                <div style={{ display: "flex", gap: "8px" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                     {!isLive && (
                         <select
                             value={selectedRes}
                             onChange={(e) => setSelectedRes(e.target.value)}
                             style={{
-                                background: "rgba(0,0,0,0.6)",
+                                background: "rgba(0,0,0,0.7)",
                                 border: "1px solid var(--glass-border)",
                                 color: "var(--accent-cyan)",
                                 borderRadius: "8px",
@@ -267,6 +371,21 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
                         </select>
                     )}
 
+                    {torchAvailable && (
+                        <button
+                            onClick={toggleTorch}
+                            className="btn-icon"
+                            style={{
+                                background: torchActive ? "rgba(255, 179, 0, 0.3)" : "rgba(0,0,0,0.5)",
+                                border: torchActive ? "1px solid var(--accent-amber)" : "1px solid transparent",
+                                width: 38, height: 38
+                            }}
+                            title="Linterna táctica"
+                        >
+                            🔦
+                        </button>
+                    )}
+
                     <button
                         onClick={() => setFacingMode(f => f === "user" ? "environment" : "user")}
                         className="btn-icon"
@@ -280,7 +399,7 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
                         onClick={handleClose}
                         className="btn-icon"
                         style={{ background: "rgba(0,0,0,0.5)", width: 38, height: 38 }}
-                        title="Cerrar"
+                        title="Cerrar transmisión"
                     >
                         ✕
                     </button>
@@ -314,7 +433,11 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
                         onClick={startLive}
                         disabled={!camReady}
                         className="btn-tactical-primary"
-                        style={{ padding: "14px 28px", fontSize: "1rem", borderRadius: "var(--radius-full)", background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)", boxShadow: "0 4px 20px rgba(255,51,85,0.4)" }}
+                        style={{
+                            padding: "14px 28px", fontSize: "1rem", borderRadius: "var(--radius-full)",
+                            background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                            boxShadow: "0 4px 20px rgba(255,51,85,0.4)"
+                        }}
                     >
                         🔴 INICIAR TRANSMISIÓN EN VIVO
                     </button>

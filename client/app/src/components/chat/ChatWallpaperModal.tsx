@@ -1,8 +1,8 @@
-"use client";
-
-import React from "react";
+import React, { useEffect } from "react";
 import { useRedStore } from "../../store/useRedStore";
 import { toast } from "../Toast";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 
 interface ChatWallpaperModalProps {
     isOpen: boolean;
@@ -55,9 +55,20 @@ export const ChatWallpaperModal: React.FC<ChatWallpaperModalProps> = ({
     const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
     const currentWp = preferences?.chatWallpaper || "doodle_dark";
 
+    useEffect(() => {
+        if (!isOpen) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     const handleSelect = (id: string, name: string) => {
+        TacticalAudioEngine.playTap();
         updatePreferences({ chatWallpaper: id as any });
         toast.success(`🎨 Fondo "${name}" aplicado`);
         onClose();
@@ -78,7 +89,10 @@ export const ChatWallpaperModal: React.FC<ChatWallpaperModalProps> = ({
                 padding: "16px",
                 animation: "fadeIn 0.15s ease-out"
             }}
-            onClick={onClose}
+            onClick={() => {
+                TacticalAudioEngine.playTap();
+                onClose();
+            }}
         >
             <div
                 className="animate-enter modal-card-scrollable"
@@ -117,7 +131,10 @@ export const ChatWallpaperModal: React.FC<ChatWallpaperModalProps> = ({
                         </div>
                     </div>
                     <button
-                        onClick={onClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
                         style={{
                             background: "transparent",
                             border: "none",

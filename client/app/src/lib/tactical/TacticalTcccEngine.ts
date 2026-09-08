@@ -33,6 +33,9 @@ export interface TcccCasualtyCard {
     antibioticsGiven: boolean;
     splintApplied: boolean;
     createdTimestamp: number;
+    bloodType?: string;
+    allergies?: string;
+    emergencyContact?: string;
 }
 
 export class TacticalTcccEngine {
@@ -135,6 +138,8 @@ export class TacticalTcccEngine {
 FECHA/HORA : ${timeIso}
 ROSTER ID  : ${card.rosterNumber || 'DESCONOCIDO'} · NOMBRE: ${card.casualtyName || 'DESCONOCIDO'}
 PRIORIDAD  : [ ${card.evacPriority || 'ROUTINE'} ]
+DATOS CLÍN.: SANGRE: ${card.bloodType || 'DESCONOCIDO'} | ALERGIAS: ${card.allergies || 'NINGUNA'}
+CONTACTO EM: ${card.emergencyContact || 'N/A'}
 
 [M] HEMORRAGIA MASIVA: ${card.massiveBleedingControlled ? 'CONTROLADA' : 'ACTIVA'}
     TORNIQUETES : ${tqStr}

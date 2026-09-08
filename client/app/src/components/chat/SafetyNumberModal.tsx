@@ -1,10 +1,10 @@
-"use client";
-
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRedStore } from "../../store/useRedStore";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { RedAPI } from "../../lib/api";
 import { toast } from "../Toast";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 
 interface SafetyNumberModalProps {
     peerHash: string;
@@ -77,6 +77,20 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
     const [scanInput, setScanInput] = useState("");
     const [isProcessing, setIsProcessing] = useState(false);
 
+    // Intercepción LIFO (retroceso físico / Esc)
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (isScanning) {
+                setIsScanning(false);
+                return true;
+            }
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [isScanning, onClose]);
+
     const myKey = identity?.public_key || identity?.identity_hash || "my_local_identity";
     const targetPeerKey = peerPublicKey || peerHash;
 
@@ -92,25 +106,48 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
             const next = !isVerified;
             if (next) {
                 await RedAPI.verifyContact(peerHash);
+                TacticalAudioEngine.playRogerBeep();
                 toast.success(`🛡️ Identidad de ${peerName} verificada`);
             } else {
                 await RedAPI.unverifyContact(peerHash);
+                TacticalAudioEngine.playTap();
                 toast.info(`Identidad de ${peerName} desmarcada`);
             }
             setIsVerified(next);
             if (onVerifiedChange) onVerifiedChange(next);
             await fetchData();
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al actualizar estado de verificación");
         } finally {
             setIsProcessing(false);
         }
     };
 
-    const handleCopySafetyNumber = () => {
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(fullSafetyString);
+    const fallbackCopy = (text: string) => {
+        try {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
             toast.success("📋 Safety Number copiado al portapapeles");
+        } catch {
+            toast.error("Error al copiar al portapapeles");
+        }
+    };
+
+    const handleCopySafetyNumber = () => {
+        TacticalAudioEngine.playTap();
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(fullSafetyString)
+                .then(() => toast.success("📋 Safety Number copiado al portapapeles"))
+                .catch(() => fallbackCopy(fullSafetyString));
+        } else {
+            fallbackCopy(fullSafetyString);
         }
     };
 
@@ -118,11 +155,13 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
         const clean = inputVal.replace(/\s+/g, "").trim();
         const expected = blocks.join("");
         if (clean.includes(expected) || expected.includes(clean) || clean === expected) {
+            TacticalAudioEngine.playRogerBeep();
             handleToggleVerify();
             setIsScanning(false);
             setScanInput("");
             toast.success("✅ ¡Safety Number coincide al 100%! Identidad autenticada.");
         } else {
+            TacticalAudioEngine.playWarning();
             toast.error("❌ Los números de seguridad NO coinciden. Podría haber un intermediario.");
         }
     };

@@ -11,6 +11,24 @@ import { web3Bridge, Web3WalletState } from "../lib/Web3BridgeEngine";
 import { tokenomicsEngine, TokenomicsMetrics } from "../lib/TokenomicsEngine";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+
+/** Clipboard with textarea fallback */
+function copyToClipboard(text: string, label = 'Dato'): void {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).catch(() => legacyCopy(text, label));
+    } else {
+        legacyCopy(text, label);
+    }
+}
+function legacyCopy(text: string, label: string): void {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); toast.success(`${label} copiado`); }
+    finally { document.body.removeChild(ta); }
+}
 
 export default function CryptoPanel() {
     const { identity, status, goBack, navigate } = useRedStore();
@@ -67,6 +85,31 @@ export default function CryptoPanel() {
         };
     }, []);
 
+    // ── LIFO Back interception
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (backupModalOpen) {
+                TacticalAudioEngine.playTap();
+                setBackupModalOpen(false);
+                return true;
+            }
+            if (logsModalOpen) {
+                TacticalAudioEngine.playTap();
+                setLogsModalOpen(false);
+                return true;
+            }
+            if (aiCryptoAudit) {
+                TacticalAudioEngine.playTap();
+                setAiCryptoAudit(null);
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return () => unregister();
+    }, [backupModalOpen, logsModalOpen, aiCryptoAudit, goBack]);
+
     const handleRunAiCryptoAudit = async () => {
         setAuditLoading(true);
         setAiCryptoAudit(null);
@@ -84,6 +127,7 @@ export default function CryptoPanel() {
 
     const togglePowerMode = () => {
         const next = powerMode === "high" ? "stealth" : "high";
+        TacticalAudioEngine.playTap();
         setPowerMode(next);
         if (typeof window !== "undefined") {
             localStorage.setItem("red_power_mode", next);
@@ -132,28 +176,42 @@ export default function CryptoPanel() {
 
                 <div style={{ display: "flex", gap: "8px" }}>
                     <button
-                        onClick={() => navigate("web3Vault")}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            navigate("web3Vault");
+                        }}
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 12px", fontSize: "0.78rem", color: "var(--accent-amber)" }}
                     >
                         🦊 Web3
                     </button>
                     <button
-                        onClick={() => navigate("globalShield")}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            navigate("globalShield");
+                        }}
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 12px", fontSize: "0.78rem", color: "var(--accent-cyan)" }}
                     >
                         🛡️ Escudo
                     </button>
                     <button
-                        onClick={() => navigate("explorer")}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            navigate("explorer");
+                        }}
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 12px", fontSize: "0.78rem" }}
                     >
                         ⛓️ Explorer
                     </button>
                     <button
-                        onClick={goBack}
+                        onClick={() => {
+                            if (!BackHandlerRegistry.executeTop()) {
+                                TacticalAudioEngine.playTap();
+                                goBack();
+                            }
+                        }}
                         className="btn-icon"
                         title={t.common?.close || "Cerrar panel"}
                         style={{ width: 38, height: 38 }}

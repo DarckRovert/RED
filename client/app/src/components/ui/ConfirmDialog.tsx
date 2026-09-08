@@ -3,6 +3,8 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { LoadingSpinner } from './LoadingSpinner';
+import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
+import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
 
 interface ConfirmDialogProps {
     isOpen: boolean;
@@ -44,6 +46,18 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         setMounted(true);
     }, []);
 
+    // Intercepción LIFO con BackHandlerRegistry (Hardware back / Esc)
+    useEffect(() => {
+        if (!isOpen) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            if (loading) return false;
+            TacticalAudioEngine.playTap();
+            onCancel();
+            return true;
+        });
+        return unregister;
+    }, [isOpen, loading, onCancel]);
+
     // Prevent background scrolling while modal is active
     useEffect(() => {
         if (!isOpen) return;
@@ -54,7 +68,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         };
     }, [isOpen]);
 
-    // Trap focus inside dialog & close on Escape
+    // Trap focus inside dialog
     useEffect(() => {
         if (!isOpen) return;
 
@@ -70,11 +84,6 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         }
 
         const handleKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                onCancel();
-                return;
-            }
             if (e.key === 'Tab' && dialog) {
                 const focusable = dialog.querySelectorAll<HTMLElement>(
                     'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -98,10 +107,13 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
         document.addEventListener('keydown', handleKey);
         return () => document.removeEventListener('keydown', handleKey);
-    }, [isOpen, onCancel]);
+    }, [isOpen]);
 
     const handleOverlayClick = useCallback((e: React.MouseEvent) => {
-        if (e.target === e.currentTarget && !loading) onCancel();
+        if (e.target === e.currentTarget && !loading) {
+            TacticalAudioEngine.playTap();
+            onCancel();
+        }
     }, [onCancel, loading]);
 
     if (!isOpen || !mounted || typeof document === 'undefined') return null;
@@ -191,7 +203,10 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                 <div style={{ display: 'flex', gap: '10px', width: '100%', marginTop: '4px' }}>
                     {/* Cancel */}
                     <button
-                        onClick={onCancel}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onCancel();
+                        }}
                         disabled={loading}
                         style={{
                             flex: 1,
@@ -213,7 +228,10 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
                     {/* Confirm */}
                     <button
-                        onClick={onConfirm}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onConfirm();
+                        }}
                         disabled={loading}
                         style={{
                             flex: 1,

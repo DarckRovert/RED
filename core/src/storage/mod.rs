@@ -74,9 +74,11 @@ pub struct P2PVoucherRecord {
     pub creator_name: String,
     pub recipient: String,
     pub amount: f64,
+    #[serde(default, alias = "created_at")]
     pub timestamp: u64,
     pub signature: String,
     pub is_outgoing: bool,
+    #[serde(default, alias = "is_redeemed")]
     pub redeemed: bool,
 }
 
@@ -124,8 +126,10 @@ pub struct EmergencyBeaconRecord {
 pub struct StegoCapsuleRecord {
     pub id: String,
     pub title: String,
+    #[serde(default, alias = "image_data_url")]
     pub image_data: String,
     pub has_password: bool,
+    #[serde(default)]
     pub notes: String,
     pub timestamp: u64,
 }
@@ -713,6 +717,10 @@ impl Storage {
 
     pub fn follow_user(&mut self, target_hash: &str) -> StorageResult<()> {
         self.store("social_following", target_hash.as_bytes(), &true)
+    }
+
+    pub fn unfollow_user(&mut self, target_hash: &str) -> StorageResult<()> {
+        self.delete("social_following", target_hash.as_bytes())
     }
 
     pub fn get_following_list(&self) -> StorageResult<Vec<String>> {

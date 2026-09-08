@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { MessageItem } from "../../lib/api";
 import { useRedStore } from "../../store/useRedStore";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 
 interface StarredMessagesModalProps {
     isOpen: boolean;
@@ -27,6 +29,22 @@ export const StarredMessagesModal: React.FC<StarredMessagesModalProps> = ({
     const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
     const [searchQuery, setSearchQuery] = useState("");
 
+    // Intercepción LIFO (Retroceso físico Android / Escape) con desbobinado de búsqueda
+    useEffect(() => {
+        if (!isOpen) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            if (searchQuery.trim()) {
+                TacticalAudioEngine.playTap();
+                setSearchQuery("");
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [isOpen, onClose, searchQuery]);
+
     const starredList = useMemo(() => {
         const starSet = new Set(starredMessages);
         const list = messages.filter(m => starSet.has(m.id));
@@ -36,6 +54,11 @@ export const StarredMessagesModal: React.FC<StarredMessagesModalProps> = ({
     }, [messages, starredMessages, searchQuery]);
 
     if (!isOpen) return null;
+
+    const handleClose = () => {
+        TacticalAudioEngine.playTap();
+        onClose();
+    };
 
     return (
         <div
@@ -52,7 +75,7 @@ export const StarredMessagesModal: React.FC<StarredMessagesModalProps> = ({
                 padding: "16px",
                 animation: "fadeIn 0.15s ease-out"
             }}
-            onClick={onClose}
+            onClick={handleClose}
         >
             <div
                 className="animate-enter modal-card-scrollable"
@@ -91,7 +114,7 @@ export const StarredMessagesModal: React.FC<StarredMessagesModalProps> = ({
                         </div>
                     </div>
                     <button
-                        onClick={onClose}
+                        onClick={handleClose}
                         style={{
                             background: "transparent",
                             border: "none",
@@ -133,7 +156,10 @@ export const StarredMessagesModal: React.FC<StarredMessagesModalProps> = ({
                         />
                         {searchQuery && (
                             <button
-                                onClick={() => setSearchQuery("")}
+                                onClick={() => {
+                                    TacticalAudioEngine.playTap();
+                                    setSearchQuery("");
+                                }}
                                 style={{ background: "none", border: "none", color: "#8696A0", cursor: "pointer", fontSize: "0.8rem" }}
                             >
                                 ✕
@@ -190,6 +216,7 @@ export const StarredMessagesModal: React.FC<StarredMessagesModalProps> = ({
                                     <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "10px", marginTop: "4px", borderTop: "1px solid rgba(255, 255, 255, 0.05)", paddingTop: "6px" }}>
                                         <button
                                             onClick={() => {
+                                                TacticalAudioEngine.playTap();
                                                 onUnstar(m.id);
                                             }}
                                             style={{
@@ -208,6 +235,7 @@ export const StarredMessagesModal: React.FC<StarredMessagesModalProps> = ({
                                         </button>
                                         <button
                                             onClick={() => {
+                                                TacticalAudioEngine.playTap();
                                                 onClose();
                                                 onJumpToMessage(m.id);
                                             }}

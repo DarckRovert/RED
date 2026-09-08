@@ -8,7 +8,7 @@ use axum::{
     extract::{Path, State, Query, ws::{WebSocket, Message as WsMessage, WebSocketUpgrade}},
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response, Sse, sse::{Event, KeepAlive}},
-    routing::{get, post, delete},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -509,10 +509,20 @@ pub struct ContactItem {
 }
 
 #[derive(Serialize)]
+pub struct GroupMemberResponse {
+    pub identity_hash: String,
+    pub role: String,
+    pub joined_at: u64,
+    pub muted: bool,
+}
+
+#[derive(Serialize)]
 pub struct GroupItem {
     pub id: String,
     pub name: String,
     pub member_count: usize,
+    pub broadcast_only: bool,
+    pub members: Vec<GroupMemberResponse>,
 }
 
 #[derive(Serialize)]
@@ -615,6 +625,40 @@ pub struct CreateGroupRequest {
 }
 
 #[derive(Deserialize)]
+pub struct AddGroupMemberRequest {
+    pub identity_hash: String,
+    #[serde(default)]
+    pub public_key: Option<String>,
+    #[serde(default)]
+    pub role: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct SetGroupMemberRoleRequest {
+    pub role: String,
+}
+
+#[derive(Deserialize)]
+pub struct MuteGroupMemberRequest {
+    pub muted: bool,
+}
+
+#[derive(Deserialize)]
+pub struct SetGroupBroadcastRequest {
+    pub broadcast_only: bool,
+}
+
+#[derive(Deserialize)]
+pub struct GroupHistoryRequestPayload {
+    pub group_id: String,
+    pub requester_hash: String,
+    #[serde(default)]
+    pub since_timestamp: Option<f64>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+#[derive(Deserialize)]
 pub struct StakeRequest {
     pub amount: u64,
 }
@@ -675,6 +719,12 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/contacts",        get(handle_list_contacts).post(handle_add_contact))
         .route("/api/groups",          get(handle_list_groups).post(handle_create_group))
         .route("/api/groups/:id/send", post(handle_send_group_message))
+        .route("/api/groups/:id/members", post(handle_add_group_member))
+        .route("/api/groups/:id/members/:hash", delete(handle_remove_group_member))
+        .route("/api/groups/:id/members/:hash/role", put(handle_set_group_member_role))
+        .route("/api/groups/:id/members/:hash/mute", put(handle_mute_group_member))
+        .route("/api/groups/:id/broadcast", put(handle_set_group_broadcast))
+        .route("/api/groups/history/request", post(handle_group_history_request))
         .route("/api/peers",              get(handle_get_peers))
         .route("/api/network/connect",     post(handle_connect_peer))
         .route("/api/network/blackout",    get(handle_get_blackout).post(handle_set_blackout))
@@ -689,6 +739,8 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/beacon/soundmesh/inject", post(handle_inject_soundmesh))
         .route("/api/stego/vault",           get(handle_get_stego_vault).post(handle_save_stego_vault))
         .route("/api/stego/vault/:id",       delete(handle_delete_stego_vault))
+        .route("/api/stego/capsules",        get(handle_get_stego_vault).post(handle_save_stego_vault))
+        .route("/api/stego/capsules/:id",    delete(handle_delete_stego_vault))
         .route("/api/settings/dms",          get(handle_get_dms_config).post(handle_save_dms_config))
         .route("/api/settings/dms/ping",     post(handle_ping_dms))
         .route("/api/settings/dms/panic_wipe", post(handle_panic_wipe))
@@ -708,6 +760,15 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/p2p/wallet",                         get(handle_get_p2p_wallet))
         .route("/api/p2p/voucher",                        post(handle_create_p2p_voucher))
         .route("/api/p2p/redeem",                         post(handle_redeem_p2p_voucher))
+        // --- Social Network ---
+        .route("/api/social/feed",                        get(handle_social_feed))
+        .route("/api/social/post",                        post(handle_social_post))
+        .route("/api/social/posts",                       get(handle_social_feed).post(handle_social_post))
+        .route("/api/social/posts/:id",                   delete(handle_social_post_delete))
+        .route("/api/social/react",                       post(handle_social_react))
+        .route("/api/social/follow",                      post(handle_social_follow))
+        .route("/api/social/unfollow",                    post(handle_social_unfollow))
+        .route("/api/social/following",                   get(handle_social_following))
         .route("/api/profile",                         axum::routing::put(handle_update_profile))
         .route("/api/settings/burner",                   post(handle_set_burner_mode))
         .route("/api/settings/lora",                      post(handle_set_lora_config))
@@ -1330,6 +1391,13 @@ async fn handle_list_groups(State(state): State<ApiState>) -> impl IntoResponse 
                 id: hex::encode(g.id.0),
                 name: g.name.clone(),
                 member_count: g.member_count(),
+                broadcast_only: g.broadcast_only,
+                members: g.members().map(|m| GroupMemberResponse {
+                    identity_hash: m.identity_hash.to_hex(),
+                    role: format!("{:?}", m.role),
+                    joined_at: m.joined_at,
+                    muted: m.muted,
+                }).collect(),
             }).collect();
             Json(items).into_response()
         }
@@ -1407,6 +1475,210 @@ async fn handle_send_group_message(
         Ok(_) => Json(serde_json::json!({"status": "sent"})).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("Network error: {}", e)}))).into_response(),
     }
+}
+
+async fn handle_add_group_member(
+    State(state): State<ApiState>,
+    Path(group_id): Path<String>,
+    Json(req): Json<AddGroupMemberRequest>,
+) -> impl IntoResponse {
+    let group_id_bytes = match hex::decode(&group_id) {
+        Ok(b) if b.len() == 32 => {
+            let mut a = [0u8; 32];
+            a.copy_from_slice(&b);
+            a
+        }
+        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+    };
+    let member_hash = match parse_identity_hash(&req.identity_hash) {
+        Ok(h) => h,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
+    let public_key_bytes = match req.public_key.as_deref() {
+        Some(pk_hex) => match hex::decode(pk_hex) {
+            Ok(b) if b.len() == 32 => {
+                let mut a = [0u8; 32];
+                a.copy_from_slice(&b);
+                a
+            }
+            _ => [0u8; 32],
+        },
+        None => [0u8; 32],
+    };
+    let role = match req.role.as_deref() {
+        Some("Admin") => red_core::protocol::MemberRole::Admin,
+        Some("Moderator") => red_core::protocol::MemberRole::Moderator,
+        Some("ReadOnly") => red_core::protocol::MemberRole::ReadOnly,
+        _ => red_core::protocol::MemberRole::Member,
+    };
+    let mut node = state.node.lock().await;
+    let new_member = red_core::protocol::GroupMember {
+        identity_hash: member_hash,
+        public_key: red_core::crypto::keys::PublicKey::from_bytes(public_key_bytes),
+        joined_at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        role,
+        muted: false,
+    };
+    match node
+        .add_group_member(red_core::protocol::GroupId(group_id_bytes), new_member)
+        .await
+    {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        ).into_response(),
+    }
+}
+
+async fn handle_remove_group_member(
+    State(state): State<ApiState>,
+    Path((group_id, member_hash_hex)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let group_id_bytes = match hex::decode(&group_id) {
+        Ok(b) if b.len() == 32 => {
+            let mut a = [0u8; 32];
+            a.copy_from_slice(&b);
+            a
+        }
+        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+    };
+    let member_hash = match parse_identity_hash(&member_hash_hex) {
+        Ok(h) => h,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
+    let mut node = state.node.lock().await;
+    match node
+        .remove_group_member(red_core::protocol::GroupId(group_id_bytes), member_hash)
+        .await
+    {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        ).into_response(),
+    }
+}
+
+async fn handle_set_group_member_role(
+    State(state): State<ApiState>,
+    Path((group_id, member_hash_hex)): Path<(String, String)>,
+    Json(req): Json<SetGroupMemberRoleRequest>,
+) -> impl IntoResponse {
+    let group_id_bytes = match hex::decode(&group_id) {
+        Ok(b) if b.len() == 32 => {
+            let mut a = [0u8; 32];
+            a.copy_from_slice(&b);
+            a
+        }
+        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+    };
+    let member_hash = match parse_identity_hash(&member_hash_hex) {
+        Ok(h) => h,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
+    let new_role = match req.role.as_str() {
+        "Admin" => red_core::protocol::MemberRole::Admin,
+        "Moderator" => red_core::protocol::MemberRole::Moderator,
+        "ReadOnly" => red_core::protocol::MemberRole::ReadOnly,
+        _ => red_core::protocol::MemberRole::Member,
+    };
+
+    let node = state.node.lock().await;
+    let storage_arc = node.get_storage();
+    let mut s = storage_arc.lock().await;
+    if let Some(mut group) = s.get_group(&red_core::protocol::GroupId(group_id_bytes)) {
+        match group.set_member_role(&member_hash, new_role) {
+            Ok(_) => {
+                let _ = s.add_group(group);
+                (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
+            }
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("{}", e)})),
+            ).into_response(),
+        }
+    } else {
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Group not found"}))).into_response()
+    }
+}
+
+async fn handle_mute_group_member(
+    State(state): State<ApiState>,
+    Path((group_id, member_hash_hex)): Path<(String, String)>,
+    Json(req): Json<MuteGroupMemberRequest>,
+) -> impl IntoResponse {
+    let group_id_bytes = match hex::decode(&group_id) {
+        Ok(b) if b.len() == 32 => {
+            let mut a = [0u8; 32];
+            a.copy_from_slice(&b);
+            a
+        }
+        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+    };
+    let member_hash = match parse_identity_hash(&member_hash_hex) {
+        Ok(h) => h,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
+
+    let node = state.node.lock().await;
+    let storage_arc = node.get_storage();
+    let mut s = storage_arc.lock().await;
+    if let Some(mut group) = s.get_group(&red_core::protocol::GroupId(group_id_bytes)) {
+        match group.set_member_muted(&member_hash, req.muted) {
+            Ok(_) => {
+                let _ = s.add_group(group);
+                (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
+            }
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("{}", e)})),
+            ).into_response(),
+        }
+    } else {
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Group not found"}))).into_response()
+    }
+}
+
+async fn handle_set_group_broadcast(
+    State(state): State<ApiState>,
+    Path(group_id): Path<String>,
+    Json(req): Json<SetGroupBroadcastRequest>,
+) -> impl IntoResponse {
+    let group_id_bytes = match hex::decode(&group_id) {
+        Ok(b) if b.len() == 32 => {
+            let mut a = [0u8; 32];
+            a.copy_from_slice(&b);
+            a
+        }
+        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+    };
+
+    let node = state.node.lock().await;
+    let storage_arc = node.get_storage();
+    let mut s = storage_arc.lock().await;
+    if let Some(mut group) = s.get_group(&red_core::protocol::GroupId(group_id_bytes)) {
+        group.set_broadcast_only(req.broadcast_only);
+        let _ = s.add_group(group);
+        (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
+    } else {
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Group not found"}))).into_response()
+    }
+}
+
+async fn handle_group_history_request(
+    State(_state): State<ApiState>,
+    Json(req): Json<GroupHistoryRequestPayload>,
+) -> impl IntoResponse {
+    tracing::info!(
+        "[DTN] Received Group History Request for group {} from peer {}",
+        req.group_id,
+        req.requester_hash
+    );
+    (StatusCode::OK, Json(serde_json::json!({"ok": true, "status": "DTN sync request queued"}))).into_response()
 }
 
 async fn handle_get_blocks(State(state): State<ApiState>) -> impl IntoResponse {
@@ -1710,7 +1982,12 @@ pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>
         // --- Social Network ---
         .route("/api/social/feed",                        get(handle_social_feed_async))
         .route("/api/social/post",                        post(handle_social_post_async))
-        .route("/api/social/posts",                       post(handle_social_post_async))
+        .route("/api/social/posts",                       get(handle_social_feed_async).post(handle_social_post_async))
+        .route("/api/social/posts/:id",                   delete(handle_social_post_delete_async))
+        .route("/api/social/react",                       post(handle_social_react_async))
+        .route("/api/social/follow",                      post(handle_social_follow_async))
+        .route("/api/social/unfollow",                    post(handle_social_unfollow_async))
+        .route("/api/social/following",                   get(handle_social_following_async))
         .route("/api/channels/messages", get(handle_get_channel_messages_async))
         .route("/api/channels/post",     post(handle_post_channel_message_async))
         // Voice & Weather
@@ -2050,9 +2327,38 @@ async fn handle_post_channel_message(
             }))
         ).into_response();
     }
-    let node = state.node.lock().await;
-    let sender_did = node.identity_hash().to_hex();
-    let msg = state.channel_store.post_message(sender_did, req);
+    let (msg, sys_msg) = {
+        let node = state.node.lock().await;
+        let sender_did = node.identity_hash().to_hex();
+        let msg = state.channel_store.post_message(sender_did, req);
+
+        let sys_msg = red_core::protocol::Message {
+            id: red_core::protocol::MessageId::generate(),
+            sender: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+            recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+            content: red_core::protocol::MessageType::Text(
+                serde_json::json!({
+                    "event_type": "channel_message",
+                    "channel_message": msg
+                })
+                .to_string(),
+            ),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            status: red_core::protocol::MessageStatus::Sent,
+            reply_to: None,
+            edited: false,
+        };
+        (msg, sys_msg)
+    };
+
+    let _ = state.msg_tx.send(sys_msg.clone());
+    {
+        let mut node = state.node.lock().await;
+        let _ = node.broadcast_public_message(sys_msg).await;
+    }
     Json(serde_json::json!({ "ok": true, "message": msg })).into_response()
 }
 
@@ -2063,7 +2369,44 @@ async fn handle_send_voice_burst(
 ) -> impl IntoResponse {
     let node = state.node.lock().await;
     let sender_did = node.identity_hash().to_hex();
-    let burst = state.voice_store.add_burst(sender_did, req);
+    let burst = state.voice_store.add_burst(sender_did.clone(), req);
+
+    let storage = node.get_storage();
+    let s = storage.lock().await;
+    let burst_record = red_core::storage::VoiceBurstRecord {
+        id: burst.id.clone(),
+        sender_hash: sender_did,
+        sender_name: burst.sender_name.clone(),
+        duration_seconds: (burst.duration_seconds.round() as u32).max(1),
+        audio_opus_b64: burst.audio_opus_b64.clone(),
+        is_mine: true,
+        timestamp: burst.timestamp as u64,
+    };
+    let _ = s.store_voice_burst(&burst_record);
+    drop(s);
+    drop(node);
+
+    let sys_msg = red_core::protocol::Message {
+        id: red_core::protocol::MessageId::generate(),
+        sender: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+        recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+        content: red_core::protocol::MessageType::Text(
+            serde_json::json!({
+                "event_type": "voice_burst",
+                "voice_burst": burst
+            })
+            .to_string(),
+        ),
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        status: red_core::protocol::MessageStatus::Sent,
+        reply_to: None,
+        edited: false,
+    };
+    let _ = state.msg_tx.send(sys_msg);
+
     Json(serde_json::json!({ "ok": true, "burst": burst })).into_response()
 }
 
@@ -2072,7 +2415,27 @@ async fn handle_get_voice_bursts(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     let limit = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(20);
-    let bursts = state.voice_store.get_recent_bursts(limit);
+    let mut bursts = state.voice_store.get_recent_bursts(limit);
+    if bursts.is_empty() {
+        let node = state.node.lock().await;
+        let storage = node.get_storage();
+        let s = storage.lock().await;
+        if let Ok(records) = s.get_voice_bursts() {
+            for r in records {
+                let b = red_core::protocol::tactical::VoiceBurst {
+                    id: r.id,
+                    sender_did: r.sender_hash,
+                    sender_name: r.sender_name,
+                    duration_seconds: r.duration_seconds as f32,
+                    audio_opus_b64: r.audio_opus_b64,
+                    timestamp: r.timestamp as i64,
+                    sample_rate: 16000,
+                };
+                state.voice_store.insert_raw_burst(b);
+            }
+            bursts = state.voice_store.get_recent_bursts(limit);
+        }
+    }
     Json(serde_json::json!({ "ok": true, "bursts": bursts })).into_response()
 }
 
@@ -2081,6 +2444,7 @@ async fn handle_delete_voice_burst(
     State(state): State<ApiState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
+    let _ = state.voice_store.delete_burst(&id);
     let node = state.node.lock().await;
     let storage = node.get_storage();
     let s = storage.lock().await;
@@ -2609,12 +2973,16 @@ pub struct InjectSoundMeshRequest {
 
 // ─── Tactical Stego Vault Handlers (v37.0) ────────────────────────────────
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SaveStegoCapsuleRequest {
+    #[serde(default)]
     pub id: Option<String>,
     pub title: String,
-    pub image_data: String,
+    #[serde(default, alias = "image_data_url")]
+    pub image_data: Option<String>,
+    #[serde(default)]
     pub has_password: Option<bool>,
+    #[serde(default, alias = "author")]
     pub notes: Option<String>,
 }
 
@@ -2897,10 +3265,12 @@ async fn handle_save_stego_vault(
     let id = req.id.unwrap_or_else(|| red_core::protocol::MessageId::generate().to_hex());
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
 
+    let image_data = req.image_data.unwrap_or_default();
+
     let record = red_core::storage::StegoCapsuleRecord {
         id: id.clone(),
         title: req.title.clone(),
-        image_data: req.image_data,
+        image_data,
         has_password: req.has_password.unwrap_or(false),
         notes: req.notes.unwrap_or_default(),
         timestamp: now,
@@ -4131,8 +4501,25 @@ async fn handle_report_sighting_async(State(state): State<AsyncState>, path: Pat
 #[derive(Deserialize)]
 pub struct CreateSocialPostRequest {
     pub content: String,
+    #[serde(default)]
     pub media_data: Option<String>,
+    #[serde(default)]
     pub reply_to: Option<String>,
+    #[serde(default)]
+    pub author_name: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct SocialPostItem {
+    pub id: String,
+    pub author_hash: String,
+    pub author_name: String,
+    pub content: String,
+    pub media_data: Option<String>,
+    pub timestamp: u64,
+    pub reply_to: Option<String>,
+    pub signature: String,
+    pub reactions: std::collections::HashMap<String, Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -4151,7 +4538,20 @@ async fn handle_social_feed(State(state): State<ApiState>) -> impl IntoResponse 
     let storage = node.get_storage();
     let s = storage.lock().await;
     match s.get_social_feed(50) {
-        Ok(posts) => (StatusCode::OK, Json(posts)).into_response(),
+        Ok(posts) => {
+            let mapped: Vec<SocialPostItem> = posts.into_iter().map(|p| SocialPostItem {
+                id: p.id,
+                author_hash: p.author_hash.to_hex(),
+                author_name: p.author_name,
+                content: p.content,
+                media_data: p.media_data,
+                timestamp: p.timestamp,
+                reply_to: p.reply_to,
+                signature: p.signature,
+                reactions: p.reactions,
+            }).collect();
+            (StatusCode::OK, Json(mapped)).into_response()
+        },
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
     }
 }
@@ -4159,10 +4559,13 @@ async fn handle_social_feed(State(state): State<ApiState>) -> impl IntoResponse 
 async fn handle_social_post(State(state): State<ApiState>, Json(req): Json<CreateSocialPostRequest>) -> impl IntoResponse {
     let mut node = state.node.lock().await;
     let sender_hash = node.identity_hash().clone();
-    let sender_name = { 
-        let storage = node.get_storage();
-        let s = storage.lock().await; 
-        s.get_profile().map(|p| p.display_name).unwrap_or_else(|| "Unknown".to_string()) 
+    let sender_name = match req.author_name {
+        Some(name) => name,
+        None => {
+            let storage = node.get_storage();
+            let s = storage.lock().await; 
+            s.get_profile().map(|p| p.display_name).unwrap_or_else(|| "Operador RED".to_string()) 
+        }
     };
     let payload = red_core::protocol::SocialPostPayload {
         id: red_core::protocol::MessageId::generate().to_hex(),
@@ -4239,6 +4642,16 @@ async fn handle_social_follow(State(state): State<ApiState>, Json(req): Json<Fol
     }
 }
 
+async fn handle_social_unfollow(State(state): State<ApiState>, Json(req): Json<FollowUserRequest>) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let storage = node.get_storage();
+    let mut s = storage.lock().await;
+    match s.unfollow_user(&req.target_hash) {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to unfollow"}))).into_response(),
+    }
+}
+
 async fn handle_social_following(State(state): State<ApiState>) -> impl IntoResponse {
     let node = state.node.lock().await;
     let storage = node.get_storage();
@@ -4273,6 +4686,7 @@ async fn handle_social_post_delete_async(
 }
 async_wrap_post!(handle_social_react_async, handle_social_react, ReactSocialPostRequest);
 async_wrap_post!(handle_social_follow_async, handle_social_follow, FollowUserRequest);
+async_wrap_post!(handle_social_unfollow_async, handle_social_unfollow, FollowUserRequest);
 async_wrap_get!(handle_social_following_async, handle_social_following);
 
 
@@ -4319,6 +4733,7 @@ pub struct CreateP2PVoucherRequest {
 
 #[derive(Deserialize)]
 pub struct RedeemP2PVoucherRequest {
+    #[serde(alias = "id", alias = "payload")]
     pub qr_payload: String,
 }
 

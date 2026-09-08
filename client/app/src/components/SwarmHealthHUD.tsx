@@ -6,11 +6,23 @@ import { frequencyHopping, HoppingChannel } from "../lib/mesh/FrequencyHoppingEn
 import { dtnStorage } from "../lib/mesh/dtnStorage";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { toast } from "./Toast";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
     const [telemetry, setTelemetry] = useState<SwarmHealthTelemetry>(() => dynamicBearerGovernor.getTelemetry());
     const [currentHop, setCurrentHop] = useState<HoppingChannel>(() => frequencyHopping.getCurrentChannel());
     const [dtnCount, setDtnCount] = useState<number>(() => dtnStorage.count);
+
+    useEffect(() => {
+        if (!onClose) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [onClose]);
 
     useEffect(() => {
         const unsub = dynamicBearerGovernor.subscribe(setTelemetry);
@@ -29,20 +41,25 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
     }, []);
 
     const handleForceBearer = (b: TacticalBearerType) => {
+        TacticalAudioEngine.playTap();
         if (b === 'LORA_RF' && !currentHop.hasHardwareTransceiver) {
+            TacticalAudioEngine.playWarning();
             toast.info("Para activar LoRa Sub-GHz, conecta un transceptor USB o actívalo en Ajustes");
             return;
         }
         if (b === 'SOUNDMESH' || b === 'LIFI_OPTICAL') {
+            TacticalAudioEngine.playRogerBeep();
             toast.info(`Portador ${b} listo para transmisión táctica`);
             return;
         }
         if (b === 'SATELLITE_LEO') {
             dynamicBearerGovernor.forceSwitchBearer(b);
+            TacticalAudioEngine.playRogerBeep();
             toast.success("🛰️ Portador primario conmutado a: Pasarela Satelital LEO");
             return;
         }
         dynamicBearerGovernor.forceSwitchBearer(b);
+        TacticalAudioEngine.playRogerBeep();
         toast.success(`Portador de enjambre conmutado a: ${b}`);
     };
 
@@ -117,7 +134,10 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                     </span>
                     {onClose && (
                         <button
-                            onClick={onClose}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                onClose();
+                            }}
                             style={{
                                 background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", color: "#FFFFFF",
                                 width: "28px", height: "28px", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem",
@@ -252,8 +272,10 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                 <button
                     type="button"
                     onClick={async () => {
+                        TacticalAudioEngine.playTap();
                         await meshRouter.flushPendingQueue();
                         setDtnCount(dtnStorage.count);
+                        TacticalAudioEngine.playRogerBeep();
                         toast.success(`⚡ Búfer DTN transmitido (${dtnStorage.count} en cola)`);
                     }}
                     style={{

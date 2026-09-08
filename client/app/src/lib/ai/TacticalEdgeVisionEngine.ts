@@ -403,7 +403,7 @@ export class TacticalEdgeVisionEngine {
         }
 
         // =========================================================================
-        // 6. DETECCIÓN DE MOVIMIENTO ANÓMALO (Solo si la cámara está estática)
+        // 6. DETECCIÓN DE MOVIMIENTO ANÓMALO Y CLASIFICACIÓN MORFOMÉTRICA
         // =========================================================================
         if (!isCameraPanning && movePixels >= 35 && currentDetections.length === 0) {
             const spanW = maxMoveX - minMoveX;
@@ -411,21 +411,56 @@ export class TacticalEdgeVisionEngine {
             const relW = spanW / 320;
             const relH = spanH / 240;
 
-            if (relW >= 0.08 && relH >= 0.08 && relW <= 0.70 && relH <= 0.70) {
-                currentDetections.push({
-                    id: 'THREAT-MOV',
-                    type: 'MOVEMENT_ANOMALY',
-                    confidencePct: Math.min(90, Math.round(58 + Math.min(30, movePixels / 2))),
-                    bbox: {
-                        x: minMoveX / 320,
-                        y: minMoveY / 240,
-                        width: relW,
-                        height: relH,
-                    },
-                    label: 'MOVIMIENTO ANÓMALO DETECTADO',
-                    timestamp: Date.now(),
-                    details: `Píxeles en delta cinemático: ${movePixels}`
-                });
+            if (relW >= 0.08 && relH >= 0.08 && relW <= 0.75 && relH <= 0.75) {
+                const verticalAspectRatio = spanH / Math.max(1, spanW);
+                const horizontalAspectRatio = spanW / Math.max(1, spanH);
+
+                if (verticalAspectRatio >= 1.7 && verticalAspectRatio <= 4.0 && relH >= 0.18) {
+                    currentDetections.push({
+                        id: 'THREAT-HUMAN',
+                        type: 'HUMAN_TARGET',
+                        confidencePct: Math.min(92, Math.round(64 + Math.min(24, movePixels / 2))),
+                        bbox: {
+                            x: minMoveX / 320,
+                            y: minMoveY / 240,
+                            width: relW,
+                            height: relH,
+                        },
+                        label: 'OBJETIVO HUMANO / SILUETA BÍPEDA',
+                        timestamp: Date.now(),
+                        details: `Aspect Ratio: 1:${verticalAspectRatio.toFixed(1)} • Cinemática: ${movePixels}px`
+                    });
+                } else if (horizontalAspectRatio >= 1.6 && horizontalAspectRatio <= 4.2 && relW >= 0.22 && minMoveY > 40) {
+                    currentDetections.push({
+                        id: 'THREAT-VEHICLE',
+                        type: 'VEHICLE_ARMOR',
+                        confidencePct: Math.min(89, Math.round(60 + Math.min(25, movePixels / 2))),
+                        bbox: {
+                            x: minMoveX / 320,
+                            y: minMoveY / 240,
+                            width: relW,
+                            height: relH,
+                        },
+                        label: 'VEHÍCULO / MASA HORIZONTAL EN RUTA',
+                        timestamp: Date.now(),
+                        details: `Aspect Ratio: ${horizontalAspectRatio.toFixed(1)}:1 • Masa: ${movePixels}px`
+                    });
+                } else {
+                    currentDetections.push({
+                        id: 'THREAT-MOV',
+                        type: 'MOVEMENT_ANOMALY',
+                        confidencePct: Math.min(90, Math.round(58 + Math.min(30, movePixels / 2))),
+                        bbox: {
+                            x: minMoveX / 320,
+                            y: minMoveY / 240,
+                            width: relW,
+                            height: relH,
+                        },
+                        label: 'MOVIMIENTO ANÓMALO DETECTADO',
+                        timestamp: Date.now(),
+                        details: `Píxeles en delta cinemático: ${movePixels}`
+                    });
+                }
             }
         }
 

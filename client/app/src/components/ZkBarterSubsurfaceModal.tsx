@@ -6,6 +6,25 @@ import { subsurfaceAcoustic, SubsurfaceTelemetry } from "../lib/sensors/Subsurfa
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { meshRouter } from "../lib/mesh/meshRouter";
+
+/** Clipboard with textarea fallback for air-gapped / WebView environments */
+function copyToClipboard(text: string, label: string): void {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).catch(() => legacyCopy(text, label));
+    } else {
+        legacyCopy(text, label);
+    }
+}
+function legacyCopy(text: string, label: string): void {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); toast.info(`${label} copiado`); }
+    finally { document.body.removeChild(ta); }
+}
 
 export function ZkBarterSubsurfaceModal() {
     const { navigate, identity, goBack } = useRedStore();
@@ -34,6 +53,55 @@ export function ZkBarterSubsurfaceModal() {
             subsurfaceAcoustic.stopBeacon();
         };
     }, []);
+
+    // ── LIFO Back interception
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (isScanningZk) {
+                stopZkCamera();
+                return true;
+            }
+            if (proofQrUrl) {
+                setProofQrUrl(null);
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            if (verifyResult) {
+                setVerifyResult(null);
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            if (activeTab !== "zkBarter") {
+                setActiveTab("zkBarter");
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return () => unregister();
+    }, [isScanningZk, proofQrUrl, verifyResult, activeTab, goBack]);
+
+    const handleBroadcastProof = async () => {
+        if (!generatedProof) return;
+        try {
+            const payload = JSON.stringify({
+                type: "ZK_BARTER_PROOF_BROADCAST",
+                proof: generatedProof,
+                sender: identity?.nickname || "OPERADOR_RED",
+                timestamp: Date.now()
+            });
+            const payloadBytes = new TextEncoder().encode(payload);
+            await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", payloadBytes);
+            TacticalAudioEngine.playMessageSent();
+            toast.success("📡 Prueba ZK transmitida a la red de malla");
+        } catch (err) {
+            console.warn("[ZkBarter] Error al transmitir prueba por malla:", err);
+            TacticalAudioEngine.playWarning();
+            toast.error("Error al transmitir prueba por malla");
+        }
+    };
 
     const handleGenerateProof = async () => {
         // Derivar hojas reales del árbol de Merkle desde contexto operacional local.
@@ -68,6 +136,7 @@ export function ZkBarterSubsurfaceModal() {
             lightColor: "#04060A"
         });
         setProofQrUrl(url);
+        TacticalAudioEngine.playMessageSent();
         toast.success("🪙 Prueba de Conocimiento Cero generada con éxito");
     };
 
@@ -162,9 +231,11 @@ export function ZkBarterSubsurfaceModal() {
             const isValid = zkBarter.verifyProof(parsedFromQr);
             if (isValid) {
                 setVerifyResult(`✓ VÁLIDA: Propietario verificado contra Merkle Root. Recurso: ${parsedFromQr.amount}x ${parsedFromQr.resourceType}`);
+                TacticalAudioEngine.playRogerBeep();
                 toast.success("Prueba ZK verificada con éxito");
             } else {
                 setVerifyResult("✗ INVÁLIDA: La prueba no coincide con el Merkle Root o el Nullifier ya fue gastado");
+                TacticalAudioEngine.playWarning();
                 toast.error("Prueba ZK inválida");
             }
             return;
@@ -175,13 +246,16 @@ export function ZkBarterSubsurfaceModal() {
             const isValid = zkBarter.verifyProof(parsed);
             if (isValid) {
                 setVerifyResult(`✓ VÁLIDA: Propietario verificado contra Merkle Root. Recurso: ${parsed.amount}x ${parsed.resourceType}`);
+                TacticalAudioEngine.playRogerBeep();
                 toast.success("Prueba ZK verificada con éxito");
             } else {
                 setVerifyResult("✗ INVÁLIDA: La prueba no coincide con el Merkle Root o el Nullifier ya fue gastado");
+                TacticalAudioEngine.playWarning();
                 toast.error("Prueba ZK inválida");
             }
         } catch {
             setVerifyResult("✗ ERROR: Formato JSON o QR inválido");
+            TacticalAudioEngine.playWarning();
             toast.error("Error al parsear la prueba");
         }
     };
@@ -189,12 +263,14 @@ export function ZkBarterSubsurfaceModal() {
     const handleToggleSubsurface = () => {
         if (subsurface.isTransmitting) {
             subsurfaceAcoustic.stopBeacon();
+            TacticalAudioEngine.playSquelchTail();
             toast.info("Baliza sub-estructural detenida");
         } else {
             subsurfaceAcoustic.startBeacon({
                 mediumType: medium,
                 frequencyHz: freqHz,
             });
+            TacticalAudioEngine.playEmergencyAlarm();
             toast.success("🚨 Emitiendo pulsos sísmicos y acústicos de penetración");
         }
     };
@@ -281,7 +357,12 @@ export function ZkBarterSubsurfaceModal() {
                     </div>
                 </div>
                 <button
-                    onClick={goBack}
+                    onClick={() => {
+                        if (!BackHandlerRegistry.executeTop()) {
+                            TacticalAudioEngine.playTap();
+                            goBack();
+                        }
+                    }}
                     style={{
 
                         background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
@@ -296,7 +377,10 @@ export function ZkBarterSubsurfaceModal() {
             {/* Tab Selector */}
             <div style={{ display: "flex", background: "rgba(15, 23, 42, 0.8)", padding: "6px 16px", gap: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                 <button
-                    onClick={() => setActiveTab("zkBarter")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("zkBarter");
+                    }}
                     style={{
                         flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.76rem", fontWeight: 800,
                         background: activeTab === "zkBarter" ? "#00E5FF" : "transparent",
@@ -306,7 +390,10 @@ export function ZkBarterSubsurfaceModal() {
                     🪙 Bóveda zk-Barter
                 </button>
                 <button
-                    onClick={() => setActiveTab("subsurface")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("subsurface");
+                    }}
                     style={{
                         flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.76rem", fontWeight: 800,
                         background: activeTab === "subsurface" ? "#FFB300" : "transparent",
@@ -373,8 +460,8 @@ export function ZkBarterSubsurfaceModal() {
                                     <div style={{ display: "flex", gap: "8px", width: "100%" }}>
                                         <button
                                             onClick={() => {
-                                                navigator.clipboard.writeText(JSON.stringify(generatedProof, null, 2));
-                                                toast.info("JSON copiado al portapapeles");
+                                                TacticalAudioEngine.playMessageSent();
+                                                copyToClipboard(JSON.stringify(generatedProof, null, 2), 'JSON');
                                             }}
                                             style={{ flex: 1, padding: "8px", borderRadius: "6px", background: "rgba(255,255,255,0.1)", color: "#FFF", border: "none", fontSize: "0.68rem", cursor: "pointer" }}
                                         >
@@ -383,14 +470,26 @@ export function ZkBarterSubsurfaceModal() {
                                         <button
                                             onClick={() => {
                                                 const qrStr = zkBarter.exportProofToQrString(generatedProof);
-                                                navigator.clipboard.writeText(qrStr);
-                                                toast.info("Cadena QR copiada al portapapeles");
+                                                TacticalAudioEngine.playMessageSent();
+                                                copyToClipboard(qrStr, 'Cadena QR');
                                             }}
                                             style={{ flex: 1, padding: "8px", borderRadius: "6px", background: "rgba(0,229,255,0.2)", color: "#00E5FF", border: "1px solid rgba(0,229,255,0.4)", fontSize: "0.68rem", cursor: "pointer" }}
                                         >
                                             ⚡ COPIAR QR
                                         </button>
                                     </div>
+                                    <button
+                                        onClick={handleBroadcastProof}
+                                        style={{
+                                            width: "100%", padding: "9px", borderRadius: "6px",
+                                            background: "rgba(0, 229, 255, 0.15)", border: "1px solid #00E5FF",
+                                            color: "#00E5FF", fontWeight: 800, fontSize: "0.72rem",
+                                            cursor: "pointer", display: "flex", alignItems: "center",
+                                            justifyContent: "center", gap: "6px"
+                                        }}
+                                    >
+                                        📡 TRANSMITIR PRUEBA ZK POR MALLA
+                                    </button>
                                 </div>
                             )}
                         </div>

@@ -6,6 +6,8 @@ import { RedAPI } from "../lib/api";
 import { BlockDetailsModal } from "./BlockDetailsModal";
 import { LocalAIEngine } from "../lib/localAiEngine";
 import { queryAICopilot } from "../api/ai";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 
@@ -49,8 +51,13 @@ function timeAgo(ts: number, isGenesis = false): string {
     return `${Math.floor(secs / 86400)}d`;
 }
 
-export default function BlockchainExplorer() {
+interface BlockchainExplorerProps {
+    onClose?: () => void;
+}
+
+export default function BlockchainExplorer({ onClose }: BlockchainExplorerProps = {}) {
     const { identity, status, goBack } = useRedStore();
+    const handleClose = onClose || goBack;
     const { t } = useTranslation();
     const [blocks, setBlocks] = useState<BlockItem[]>([]);
     const [validators, setValidators] = useState<ValidatorItem[]>([]);
@@ -58,6 +65,46 @@ export default function BlockchainExplorer() {
     const [tab, setTab] = useState<TabType>("blocks");
     const [loading, setLoading] = useState(true);
     const [selectedBlock, setSelectedBlock] = useState<BlockItem | null>(null);
+
+    // ─── Intercepción Jerárquica LIFO de Hardware (Android Back / Esc) ───
+    useEffect(() => {
+        return BackHandlerRegistry.register(() => {
+            if (selectedBlock) {
+                setSelectedBlock(null);
+                return true;
+            }
+            if (tab !== "blocks") {
+                setTab("blocks");
+                return true;
+            }
+            handleClose();
+            return true;
+        });
+    }, [selectedBlock, tab, handleClose]);
+
+    const copyToClipboard = async (text: string, label = "Hash") => {
+        try {
+            if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+                toast.success(`${label} copiado`);
+                return;
+            }
+        } catch {}
+        try {
+            const el = document.createElement("textarea");
+            el.value = text;
+            el.setAttribute("readonly", "");
+            el.style.position = "absolute";
+            el.style.left = "-9999px";
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand("copy");
+            document.body.removeChild(el);
+            toast.success(`${label} copiado`);
+        } catch {
+            toast.error("No se pudo copiar automáticamente");
+        }
+    };
 
     // AI Audit state
     const [aiAudit, setAiAudit] = useState<string | null>(null);
@@ -151,9 +198,10 @@ export default function BlockchainExplorer() {
 
     const handleStake = async (e: React.FormEvent) => {
         e.preventDefault();
-        const amt = parseInt(stakeAmount);
-        if (isNaN(amt) || amt <= 0) {
-            setStakingError("Ingresa un monto válido mayor a 0");
+        TacticalAudioEngine.playTap();
+        const amt = parseFloat(stakeAmount);
+        if (!isFinite(amt) || amt <= 0 || amt > 1000000) {
+            setStakingError("Ingresa un monto válido mayor a 0 y hasta 1,000,000 RED");
             return;
         }
 
@@ -162,10 +210,10 @@ export default function BlockchainExplorer() {
 
         try {
             const { localChainLedger } = await import("../lib/blockchain/LocalChainLedger");
-            const ok = await localChainLedger.stake(amt);
+            const ok = await localChainLedger.stake(Math.round(amt));
             if (ok) {
                 setStakingStatus("success");
-                toast.success(`✅ Has delegado ${amt} RED como validador PoS`);
+                toast.success(`✅ Has delegado ${Math.round(amt)} RED como validador PoS`);
                 setStakeAmount("");
                 await fetchChainData();
             } else {
@@ -179,6 +227,7 @@ export default function BlockchainExplorer() {
     };
 
     const handleForceSync = async () => {
+        TacticalAudioEngine.playTap();
         setLoading(true);
         toast.info("⚡ Sincronizando árbol de consenso con pares mesh...");
         try {
@@ -192,13 +241,17 @@ export default function BlockchainExplorer() {
     };
 
     const handleForgeLocalBlock = async () => {
+        TacticalAudioEngine.playTap();
         toast.info("⛏️ Forjando bloque real con Merkle Tree y PoS...");
         try {
             const { localChainLedger } = await import("../lib/blockchain/LocalChainLedger");
+            // forgeNextBlock() ya llama broadcastBlockToMesh() internamente
             const newBlock = await localChainLedger.forgeNextBlock();
             await fetchChainData();
-            toast.success(`🎉 ¡Bloque #${newBlock.height} minado y validado (Hash: ${newBlock.hash.slice(0, 10)}…)!`);
+            TacticalAudioEngine.playMessageSent(); // chirp ascendente = confirmación de bloque minado
+            toast.success(`🎉 ¡Bloque #${newBlock.height} minado y difundido a la malla (Hash: ${newBlock.hash.slice(0, 10)}…)!`);
         } catch (e: any) {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al forjar bloque: " + (e?.message || ""));
         }
     };
@@ -249,7 +302,7 @@ export default function BlockchainExplorer() {
                 </div>
 
                 <button
-                    onClick={goBack}
+                    onClick={handleClose}
                     className="btn-icon"
                     title={t.common?.close || "Cerrar explorador"}
                     style={{ width: 38, height: 38 }}
@@ -257,6 +310,62 @@ export default function BlockchainExplorer() {
                     ✕
                 </button>
             </header>
+
+            {/* Status Bar / Telemetry HUD */}
+            <div style={{
+                padding: "10px 20px",
+                background: "rgba(0, 0, 0, 0.45)",
+                borderBottom: "1px solid var(--glass-border)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "10px",
+                fontSize: "11px",
+                fontFamily: "JetBrains Mono, monospace"
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ color: "var(--text-muted)", textTransform: "uppercase" }}>ALTURA CADENA:</span>
+                    <span style={{
+                        padding: "2px 8px", borderRadius: "6px", fontWeight: 900,
+                        background: "rgba(0, 229, 255, 0.15)", color: "var(--accent-cyan)",
+                        border: "1px solid rgba(0, 229, 255, 0.35)"
+                    }}>
+                        ⛓️ #{chainHeight}
+                    </span>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ color: "var(--text-muted)" }}>CONSENSO:</span>
+                        <span style={{ color: "var(--text-primary)", fontWeight: 800 }}>
+                            Época #{consensus?.epoch ?? 1} · Slot #{consensus?.current_slot ?? 0}
+                        </span>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ color: "var(--text-muted)" }}>STAKE TOTAL:</span>
+                        <span style={{ color: "var(--accent-amber, #FFB300)", fontWeight: 900 }}>
+                            🥩 {consensus?.total_stake ?? 0} RED
+                        </span>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ color: "var(--text-muted)" }}>VALIDADORES:</span>
+                        <span style={{ color: "var(--accent-emerald)", fontWeight: 800 }}>
+                            🛡️ {consensus?.active_validators ?? validators.length} ACTIVOS
+                        </span>
+                    </div>
+
+                    <span style={{
+                        padding: "2px 8px", borderRadius: "6px", fontWeight: 800, fontSize: "10px",
+                        background: "rgba(0, 230, 118, 0.12)", color: "#00E676",
+                        border: "1px solid rgba(0, 230, 118, 0.3)"
+                    }}>
+                        🟢 MALLA SINCRONIZADA
+                    </span>
+                </div>
+            </div>
 
             {/* Selector de Pestañas Segmentadas Tácticas */}
             <div style={{
@@ -375,19 +484,35 @@ export default function BlockchainExplorer() {
                                             key={b.height}
                                             onClick={() => setSelectedBlock(b)}
                                             className="card-tactical-interactive"
-                                            style={{ padding: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                                            style={{ padding: "14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}
                                         >
-                                            <div>
-                                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                                                     <strong style={{ fontSize: "0.95rem", color: "var(--accent-cyan)" }}>Bloque #{b.height}</strong>
                                                     <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>({b.tx_count} txs)</span>
                                                 </div>
-                                                <div style={{ fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)", marginTop: "2px" }}>
-                                                    Hash: {b.hash.substring(0, 24)}…
+                                                <div style={{ fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                    Hash: {b.hash}
                                                 </div>
                                             </div>
-                                            <div style={{ textAlign: "right", fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                                {timeAgo(b.timestamp)}
+                                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        copyToClipboard(b.hash, `Hash bloque #${b.height}`);
+                                                    }}
+                                                    title="Copiar Hash del Bloque"
+                                                    style={{
+                                                        padding: "4px 8px", background: "rgba(255, 255, 255, 0.08)",
+                                                        border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "6px",
+                                                        color: "#FFFFFF", fontSize: "0.7rem", cursor: "pointer"
+                                                    }}
+                                                >
+                                                    📋
+                                                </button>
+                                                <div style={{ textAlign: "right", fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                                    {timeAgo(b.timestamp)}
+                                                </div>
                                             </div>
                                         </div>
                                     ))

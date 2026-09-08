@@ -1,12 +1,31 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { MessageItem, ConversationItem } from "../lib/api";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { MediaGalleryViewer } from "./chat/MediaGalleryViewer";
 import { toast } from "./Toast";
 import { SettingsManager } from "../lib/settingsManager";
 import { useRedStore } from "../store/useRedStore";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
+
+/** Clipboard with textarea fallback for air-gapped / tactical WebView */
+function copyToClipboard(text: string, label = 'Dato'): void {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).catch(() => legacyCopy(text, label));
+    } else {
+        legacyCopy(text, label);
+    }
+}
+function legacyCopy(text: string, label: string): void {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); toast.success(`${label} copiado`); }
+    finally { document.body.removeChild(ta); }
+}
 
 interface ContactProfileModalProps {
     contact: any;
@@ -38,9 +57,32 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
     const [selectedViewerMedia, setSelectedViewerMedia] = useState<MessageItem | null>(null);
     const [isMuted, setIsMuted] = useState(false);
     const [burnTimer, setBurnTimer] = useState<number>(0);
+    const [qrContactOpen, setQrContactOpen] = useState(false);
+    const [qrContactDataUrl, setQrContactDataUrl] = useState<string | null>(null);
 
     const peerHash = contact?.identity_hash || conversation?.peer || "";
     const displayName = contact?.display_name || (peerHash ? `Operador ${peerHash.substring(0, 8)}` : "Contacto");
+
+    // ── LIFO Back Interception
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (selectedViewerMedia) {
+                setSelectedViewerMedia(null);
+                return true;
+            }
+            if (qrContactOpen) {
+                setQrContactOpen(false);
+                setQrContactDataUrl(null);
+                return true;
+            }
+            onClose();
+            return true;
+        });
+        const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); BackHandlerRegistry.executeTop(); } };
+        document.addEventListener('keydown', onEsc);
+        return () => { unregister(); document.removeEventListener('keydown', onEsc); };
+    }, [selectedViewerMedia, qrContactOpen, onClose]);
 
     // Categorized shared media
     const photosAndVideos = useMemo(() => {
@@ -80,16 +122,42 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
 
     const handleCopyDid = () => {
         if (!peerHash) return;
-        navigator.clipboard.writeText(`did:red:${peerHash}`);
+        TacticalAudioEngine.playTap();
+        copyToClipboard(`did:red:${peerHash}`, "DID");
         SettingsManager.triggerHaptic("light");
-        toast.success("📋 DID copiado al portapapeles");
+    };
+
+    const handleOpenContactQr = async () => {
+        TacticalAudioEngine.playTap();
+        setQrContactOpen(true);
+        try {
+            const vcard = JSON.stringify({
+                type: "red_contact_card",
+                did: `did:red:${peerHash}`,
+                name: displayName,
+                pubkey: contact?.public_key || peerHash,
+                transport: contact?.transport || "p2p_mesh"
+            });
+            const url = await OfflineQrEngine.generateDataUrl(vcard, {
+                width: 280,
+                darkColor: isFamiliar ? "#00A884" : "#00E5FF",
+                lightColor: "#04060A"
+            });
+            setQrContactDataUrl(url);
+            TacticalAudioEngine.playRogerBeep();
+        } catch {
+            TacticalAudioEngine.playWarning();
+            toast.error("Error al generar QR del contacto");
+        }
     };
 
     const handleExportChatText = () => {
         if (!messages.length) {
+            TacticalAudioEngine.playWarning();
             toast.info("No hay mensajes para exportar");
             return;
         }
+        TacticalAudioEngine.playMessageSent();
         const textLines = messages.map((m) => {
             const time = new Date((m.timestamp > 1e11 ? m.timestamp : m.timestamp * 1000)).toLocaleString();
             const sender = m.is_mine ? "Tú" : displayName;
@@ -135,7 +203,10 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                     zIndex: 10,
                 }}
             >
-                <button onClick={onClose} style={{ background: "none", border: "none", color: "#AEBAC1", fontSize: "1.25rem", cursor: "pointer" }}>
+                <button
+                    onClick={() => { TacticalAudioEngine.playTap(); onClose(); }}
+                    style={{ background: "none", border: "none", color: "#AEBAC1", fontSize: "1.25rem", cursor: "pointer" }}
+                >
                     ←
                 </button>
                 <span style={{ fontSize: "1rem", fontWeight: 700, color: "#E9EDEF" }}>Info del contacto</span>
@@ -206,29 +277,41 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                     </div>
 
                     {/* Quick Call Action Buttons */}
-                    <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+                    <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap", justifyContent: "center" }}>
                         <button
-                            onClick={() => { onClose(); onStartCall?.("audio"); }}
+                            onClick={() => { TacticalAudioEngine.playTap(); onClose(); onStartCall?.("audio"); }}
                             style={{
-                                padding: "10px 20px", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.84rem",
+                                padding: "10px 16px", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.82rem",
                                 borderRadius: "20px", border: isFamiliar ? "1px solid rgba(0, 168, 132, 0.4)" : "none",
                                 background: isFamiliar ? "rgba(0, 168, 132, 0.15)" : "var(--glass-bg)",
                                 color: isFamiliar ? "#00A884" : "#FFFFFF", cursor: "pointer", fontWeight: 700
                             }}
                         >
-                            <span>📞</span> {t.chat?.call_btn || "Llamada de voz"}
+                            <span>📞</span> {t.chat?.call_btn || "Voz"}
                         </button>
                         <button
-                            onClick={() => { onClose(); onStartCall?.("video"); }}
+                            onClick={() => { TacticalAudioEngine.playTap(); onClose(); onStartCall?.("video"); }}
                             style={{
-                                padding: "10px 20px", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.84rem",
+                                padding: "10px 16px", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.82rem",
                                 borderRadius: "20px", border: "none",
                                 background: isFamiliar ? "#00A884" : "linear-gradient(135deg, var(--accent-cyan), #0097A7)",
                                 color: "#FFFFFF", cursor: "pointer", fontWeight: 700,
                                 boxShadow: isFamiliar ? "0 2px 10px rgba(0, 168, 132, 0.35)" : "none"
                             }}
                         >
-                            <span>📹</span> {t.chat?.video_btn || "Videollamada"}
+                            <span>📹</span> {t.chat?.video_btn || "Video"}
+                        </button>
+                        <button
+                            onClick={handleOpenContactQr}
+                            style={{
+                                padding: "10px 16px", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.82rem",
+                                borderRadius: "20px", border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.12)" : "1px solid var(--glass-border)",
+                                background: isFamiliar ? "rgba(255, 255, 255, 0.05)" : "var(--glass-bg)",
+                                color: isFamiliar ? "#E9EDEF" : "#FFFFFF", cursor: "pointer", fontWeight: 700
+                            }}
+                            title="Ficha táctica QR del contacto"
+                        >
+                            <span>📱</span> Ficha QR
                         </button>
                     </div>
                 </div>
@@ -528,6 +611,137 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                     allMessages={photosAndVideos}
                     onClose={() => setSelectedViewerMedia(null)}
                 />
+            )}
+
+            {/* Tactical Contact QR Modal */}
+            {qrContactOpen && (
+                <div
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: 100000,
+                        background: "rgba(0, 0, 0, 0.85)",
+                        backdropFilter: "blur(8px)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "20px",
+                    }}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setQrContactOpen(false);
+                    }}
+                >
+                    <div
+                        style={{
+                            background: isFamiliar ? "#182229" : "var(--bg-card, #0e121b)",
+                            border: isFamiliar ? "1px solid rgba(0, 168, 132, 0.4)" : "1px solid var(--accent-cyan, #00E5FF)",
+                            borderRadius: "16px",
+                            padding: "24px",
+                            maxWidth: "340px",
+                            width: "100%",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: "16px",
+                            boxShadow: "0 10px 30px rgba(0,0,0,0.6)",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: "1rem", fontWeight: 800, color: isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)" }}>
+                                FICHA DE CONTACTO P2P
+                            </div>
+                            <div style={{ fontSize: "0.85rem", color: "#E9EDEF", marginTop: "4px", fontWeight: 700 }}>
+                                {displayName}
+                            </div>
+                        </div>
+
+                        {qrContactDataUrl ? (
+                            <img
+                                src={qrContactDataUrl}
+                                alt={`QR ${displayName}`}
+                                style={{
+                                    width: "240px",
+                                    height: "240px",
+                                    borderRadius: "12px",
+                                    background: "#000",
+                                    padding: "8px",
+                                    border: "1px solid rgba(255,255,255,0.1)",
+                                }}
+                            />
+                        ) : (
+                            <div style={{ width: "240px", height: "240px", display: "flex", alignItems: "center", justifyContent: "center", color: "#8696A0" }}>
+                                Generando QR táctico...
+                            </div>
+                        )}
+
+                        <div style={{ display: "flex", gap: "8px", width: "100%" }}>
+                            <button
+                                onClick={handleCopyDid}
+                                style={{
+                                    flex: 1,
+                                    padding: "10px",
+                                    borderRadius: "8px",
+                                    background: "rgba(255,255,255,0.06)",
+                                    border: "1px solid rgba(255,255,255,0.12)",
+                                    color: "#E9EDEF",
+                                    fontSize: "0.78rem",
+                                    fontWeight: 700,
+                                    cursor: "pointer",
+                                }}
+                            >
+                                📋 Copiar DID
+                            </button>
+                            {qrContactDataUrl && (
+                                <a
+                                    href={qrContactDataUrl}
+                                    download={`contacto_${displayName.replace(/\s+/g, "_")}.png`}
+                                    onClick={() => {
+                                        TacticalAudioEngine.playRogerBeep();
+                                        toast.success("QR guardado");
+                                    }}
+                                    style={{
+                                        flex: 1,
+                                        padding: "10px",
+                                        borderRadius: "8px",
+                                        background: isFamiliar ? "#00A884" : "var(--primary, #E8213A)",
+                                        border: "none",
+                                        color: "#FFF",
+                                        fontSize: "0.78rem",
+                                        fontWeight: 700,
+                                        cursor: "pointer",
+                                        textDecoration: "none",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                    }}
+                                >
+                                    💾 Guardar PNG
+                                </a>
+                            )}
+                        </div>
+
+                        <button
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setQrContactOpen(false);
+                            }}
+                            style={{
+                                width: "100%",
+                                padding: "8px",
+                                borderRadius: "8px",
+                                background: "transparent",
+                                border: "none",
+                                color: "#8696A0",
+                                fontSize: "0.78rem",
+                                cursor: "pointer",
+                            }}
+                        >
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );

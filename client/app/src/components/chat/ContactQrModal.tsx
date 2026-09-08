@@ -7,6 +7,9 @@ import { meshRouter } from "../../lib/mesh/meshRouter";
 import { toast } from "../Toast";
 import { avatarStyle } from "../sidebar/types";
 import { WebCompanionPairConfirmationModal } from "../WebCompanionPairConfirmationModal";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { copyToClipboard } from "../../lib/clipboard";
 
 interface ContactQrModalProps {
     isOpen?: boolean;
@@ -99,6 +102,35 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
             }
         } catch {}
     };
+
+    // Registro LIFO de retroceso físico / Esc
+    useEffect(() => {
+        if (!isOpen) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (pendingWebPairingCode) {
+                setPendingWebPairingCode(null);
+                return true;
+            }
+            if (detectedContact) {
+                setDetectedContact(null);
+                return true;
+            }
+            if (isWebCamActive) {
+                stopWebCam();
+                return true;
+            }
+            if (activeTab === "scan" && initialTab === "my_qr") {
+                stopCamera();
+                setActiveTab("my_qr");
+                return true;
+            }
+            stopCamera();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [isOpen, pendingWebPairingCode, detectedContact, isWebCamActive, activeTab, initialTab, stopWebCam, onClose]);
 
     // Cleanup camera when closing or switching tabs
     useEffect(() => {
@@ -407,9 +439,12 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                 return;
             } catch {}
         }
-        if (typeof navigator !== "undefined" && navigator.clipboard) {
-            await navigator.clipboard.writeText(shareText);
+        TacticalAudioEngine.playTap();
+        const ok = await copyToClipboard(shareText);
+        if (ok) {
             toast.success("📋 Código copiado al portapapeles");
+        } else {
+            toast.warning("No se pudo copiar. Usa el botón de compartir.");
         }
     };
 
@@ -509,6 +544,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                     <button
                         onClick={() => {
+                            TacticalAudioEngine.playTap();
                             stopCamera();
                             onClose();
                         }}
@@ -531,7 +567,10 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
 
                 {activeTab === "scan" && isScanningNative && (
                     <button
-                        onClick={toggleTorch}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            toggleTorch();
+                        }}
                         style={{
                             background: isTorchOn ? "#00A884" : "rgba(255, 255, 255, 0.15)",
                             border: "none",
@@ -563,6 +602,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
             }}>
                 <button
                     onClick={() => {
+                        TacticalAudioEngine.playTap();
                         stopCamera();
                         setActiveTab("my_qr");
                     }}
@@ -582,6 +622,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                 </button>
                 <button
                     onClick={() => {
+                        TacticalAudioEngine.playTap();
                         setActiveTab("scan");
                     }}
                     style={{
@@ -719,11 +760,12 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                         <button
                             onClick={async () => {
                                 if (!identity?.identity_hash) return;
+                                TacticalAudioEngine.playTap();
                                 const did = `did:red:${identity.identity_hash}`;
-                                try {
-                                    await navigator.clipboard.writeText(did);
+                                const ok = await copyToClipboard(did);
+                                if (ok) {
                                     toast.success("📋 DID copiado al portapapeles");
-                                } catch {
+                                } else {
                                     toast.warning("No se pudo copiar. Usa el botón de compartir.");
                                 }
                             }}

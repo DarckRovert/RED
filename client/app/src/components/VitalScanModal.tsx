@@ -7,11 +7,13 @@ import { VitalScanEngine, PPGScanResult, StartTriageResult } from "../lib/VitalS
 import { manDownDetector, ManDownTelemetry } from "../lib/sensors/ManDownDetectorEngine";
 import { RedAPI, TriageReportRecord } from "../lib/api";
 import { toast } from "./Toast";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 type MedicalTab = "ppg" | "triage" | "records" | "water" | "mandown";
 
 export function VitalScanModal() {
-    const { navigate, identity } = useRedStore();
+    const { navigate, goBack, identity } = useRedStore();
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<MedicalTab>("ppg");
 
@@ -69,11 +71,13 @@ export function VitalScanModal() {
     }, []);
 
     useEffect(() => {
+        let isMounted = true;
         loadTriageReports();
 
         // Read real altitude and GPS from TacticalLocationEngine
         let unsubGps: (() => void) | null = null;
         import("../lib/sensors/TacticalLocationEngine").then(({ TacticalLocationEngine }) => {
+            if (!isMounted) return;
             unsubGps = TacticalLocationEngine.watchLocation((loc) => {
                 if (loc.alt !== undefined) {
                     setAltitudeMeters(loc.alt.toString());
@@ -90,10 +94,69 @@ export function VitalScanModal() {
         drawMedicalGrid();
 
         return () => {
+            isMounted = false;
             if (unsubGps) (unsubGps as any)();
             VitalScanEngine.stopPPGScan();
         };
     }, [loadTriageReports]);
+
+    // ── LIFO Back Navigation Handler: Escanear -> Pestaña PPG -> Salir ───────────
+    useEffect(() => {
+        const unreg = BackHandlerRegistry.register(() => {
+            if (isScanning) {
+                VitalScanEngine.stopPPGScan();
+                setIsScanning(false);
+                TacticalAudioEngine.playWarning();
+                return true;
+            }
+            if (activeTab !== "ppg") {
+                setActiveTab("ppg");
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return unreg;
+    }, [isScanning, activeTab, goBack]);
+
+    // Fallback resiliente para copia de coordenadas al portapapeles
+    const copyCoordinates = (lat?: number, lon?: number) => {
+        if (lat === undefined || lon === undefined) return;
+        const text = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                TacticalAudioEngine.playMessageSent();
+                toast.success(`Coordenadas copiadas: ${text}`);
+            }).catch(() => fallbackCopyCoords(text));
+        } else {
+            fallbackCopyCoords(text);
+        }
+    };
+
+    const fallbackCopyCoords = (text: string) => {
+        try {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-999999px";
+            textArea.style.top = "-999999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            const successful = document.execCommand("copy");
+            document.body.removeChild(textArea);
+            if (successful) {
+                TacticalAudioEngine.playMessageSent();
+                toast.success(`Coordenadas copiadas: ${text}`);
+            } else {
+                toast.error("No se pudo copiar al portapapeles");
+            }
+        } catch {
+            toast.error("Error al copiar coordenadas");
+        }
+    };
 
     useEffect(() => {
         if (activeTab === "ppg") {
@@ -254,11 +317,13 @@ export function VitalScanModal() {
                 setIsScanning(false);
                 setScanResult(result);
                 drawResultWaveform(result);
+                TacticalAudioEngine.playRogerBeep();
             }
         );
 
         if (!ok) {
             setIsScanning(false);
+            TacticalAudioEngine.playWarning();
             toast.error("No se pudo acceder a la cámara o activar el destello LED.");
         }
     };
@@ -273,6 +338,11 @@ export function VitalScanModal() {
             canFollowCommands
         );
         setTriageResult(res);
+        if (res.category === "ROJO" || res.category === "NEGRO") {
+            TacticalAudioEngine.playWarning();
+        } else {
+            TacticalAudioEngine.playRogerBeep();
+        }
         toast.info(`Evaluación START completada: ${res.category} (${res.label})`);
     };
 
@@ -386,7 +456,10 @@ export function VitalScanModal() {
                 </div>
 
                 <button
-                    onClick={() => navigate("sidebar")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        goBack();
+                    }}
                     className="btn-icon"
                     title={t.common?.close || "Cerrar"}
                     style={{ width: 38, height: 38 }}
@@ -404,35 +477,50 @@ export function VitalScanModal() {
                 overflowX: "auto", flexShrink: 0
             }}>
                 <button
-                    onClick={() => setActiveTab("ppg")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("ppg");
+                    }}
                     className={activeTab === "ppg" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
                     🫀 Monitor PPG
                 </button>
                 <button
-                    onClick={() => setActiveTab("triage")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("triage");
+                    }}
                     className={activeTab === "triage" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
                     🚑 Triaje START
                 </button>
                 <button
-                    onClick={() => setActiveTab("records")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("records");
+                    }}
                     className={activeTab === "records" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
                     📊 Víctimas ({triageRecords.length})
                 </button>
                 <button
-                    onClick={() => setActiveTab("water")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("water");
+                    }}
                     className={activeTab === "water" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
                     💧 Agua & Altitud
                 </button>
                 <button
-                    onClick={() => setActiveTab("mandown")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("mandown");
+                    }}
                     className={activeTab === "mandown" ? "glow-pill-active" : "btn-ghost"}
                     style={{
                         padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap",
@@ -866,9 +954,27 @@ export function VitalScanModal() {
                                                     <div style={{ fontSize: "0.74rem", color: "var(--text-secondary)", marginTop: "4px" }}>
                                                         {rec.notes}
                                                         {rec.latitude && rec.longitude && (
-                                                            <span style={{ marginLeft: "8px", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                                📍 GPS: {rec.latitude.toFixed(4)}, {rec.longitude.toFixed(4)}
-                                                            </span>
+                                                            <button
+                                                                onClick={() => copyCoordinates(rec.latitude, rec.longitude)}
+                                                                style={{
+                                                                    marginLeft: "8px",
+                                                                    background: "rgba(0, 229, 255, 0.1)",
+                                                                    border: "1px solid rgba(0, 229, 255, 0.3)",
+                                                                    borderRadius: "6px",
+                                                                    padding: "2px 6px",
+                                                                    color: "var(--accent-cyan)",
+                                                                    cursor: "pointer",
+                                                                    display: "inline-flex",
+                                                                    alignItems: "center",
+                                                                    gap: "4px",
+                                                                    fontFamily: "JetBrains Mono, monospace",
+                                                                    fontSize: "0.70rem"
+                                                                }}
+                                                                title="Clic para copiar coordenadas GPS"
+                                                            >
+                                                                <span>📍 GPS: {rec.latitude.toFixed(4)}, {rec.longitude.toFixed(4)}</span>
+                                                                <span style={{ fontSize: "0.60rem", opacity: 0.8 }}>📋</span>
+                                                            </button>
                                                         )}
                                                     </div>
                                                 </div>
@@ -998,6 +1104,7 @@ export function VitalScanModal() {
                                     <button
                                         onClick={() => {
                                             manDownDetector.cancelPreAlarm();
+                                            TacticalAudioEngine.playRogerBeep();
                                             toast.success("Pre-alarma cancelada. Operador activo.");
                                         }}
                                         className="btn-tactical-primary"
@@ -1035,9 +1142,11 @@ export function VitalScanModal() {
                                 onClick={() => {
                                     if (manDownTelemetry.isArmed) {
                                         manDownDetector.disarmSentry();
+                                        TacticalAudioEngine.playRogerBeep();
                                         toast.info("Centinela de Hombre Caído desarmado");
                                     } else {
                                         manDownDetector.armSentry();
+                                        TacticalAudioEngine.playEmergencyAlarm();
                                         toast.error("🚨 Centinela de Hombre Caído ARMADO");
                                     }
                                 }}

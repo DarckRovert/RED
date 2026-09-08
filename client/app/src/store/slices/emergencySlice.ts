@@ -49,7 +49,18 @@ export const createEmergencySlice: StateCreator<RedStore, [], [], Partial<RedSto
 
     addVoiceBurst: (burst: any) => {
         const current = get().activeVoiceBursts || [];
-        set({ activeVoiceBursts: [burst, ...current].slice(0, 50) });
+        if (!current.some((b: any) => b.id === burst.id)) {
+            set({ activeVoiceBursts: [burst, ...current].slice(0, 50) });
+        }
+    },
+
+    removeVoiceBurst: (id: string) => {
+        const current = get().activeVoiceBursts || [];
+        set({ activeVoiceBursts: current.filter((b: any) => b.id !== id) });
+    },
+
+    setVoiceBursts: (bursts: any[]) => {
+        set({ activeVoiceBursts: Array.isArray(bursts) ? bursts.slice(0, 50) : [] });
     },
 
     // Social Feed,

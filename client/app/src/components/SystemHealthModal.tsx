@@ -9,6 +9,22 @@ import { useTranslation } from "../lib/i18n/i18nEngine";
 import { tacticalOnionRouter } from "../lib/crypto/TacticalOnionRouter";
 import { TacticalVoiceCompressor } from "../lib/audio/TacticalVoiceCompressor";
 import { survivalTelemetryEngine } from "../lib/telemetry/SurvivalTelemetryEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+
+/** Clipboard with textarea fallback */
+function copyToClipboard(text: string, label = 'Dato'): void {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).catch(() => legacyCopy(text, label));
+    } else { legacyCopy(text, label); }
+}
+function legacyCopy(text: string, label: string): void {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); toast.success(`${label} copiado`); }
+    finally { document.body.removeChild(ta); }
+}
 
 // Utility to safely fill buffers of arbitrary size using WebCrypto (respecting 64 KiB W3C quota limit)
 function fillCryptoRandom<T extends Uint8Array>(buffer: T): T {
@@ -53,6 +69,19 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({ onClose })
     const { goBack, status: nodeStatus, contacts, activeSosBeacons, messages } = useRedStore();
     const { t } = useTranslation();
     const handleClose = onClose || goBack;
+
+    // ── LIFO Back interception
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            handleClose();
+            return true;
+        });
+        const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); BackHandlerRegistry.executeTop(); } };
+        document.addEventListener('keydown', onEsc);
+        return () => { unregister(); document.removeEventListener('keydown', onEsc); };
+    }, [handleClose]);
+
     const [isRunningAll, setIsRunningAll] = useState(false);
     const [overallScore, setOverallScore] = useState<number>(0);
     const [telemetry, setTelemetry] = useState<HardwareTelemetry>({
@@ -488,6 +517,7 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({ onClose })
         setOverallScore(score);
 
         setIsRunningAll(false);
+        TacticalAudioEngine.playRogerBeep();
         toast.success(`✅ Diagnóstico completado. Índice de Salud: ${score}/100`);
     };
 

@@ -1,9 +1,8 @@
-"use client";
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { toast } from "../Toast";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
-import { TacticalAudioEngine } from "../../lib/TacticalAudioEngine";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { useRedStore } from "../../store/useRedStore";
 
 interface PollCreationModalProps {
@@ -24,9 +23,21 @@ export const PollCreationModal: React.FC<PollCreationModalProps> = ({
     const [options, setOptions] = useState<string[]>(["", ""]);
     const [allowMultiple, setAllowMultiple] = useState(false);
 
+    // Intercepción LIFO (retroceso físico / Esc)
+    useEffect(() => {
+        if (!isOpen) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     const handleAddOption = () => {
+        TacticalAudioEngine.playTap();
         if (options.length >= 8) {
             toast.info("Máximo 8 opciones permitidas");
             return;
@@ -35,6 +46,7 @@ export const PollCreationModal: React.FC<PollCreationModalProps> = ({
     };
 
     const handleRemoveOption = (index: number) => {
+        TacticalAudioEngine.playTap();
         if (options.length <= 2) {
             toast.info("Se requieren al menos 2 opciones");
             return;
@@ -91,7 +103,10 @@ export const PollCreationModal: React.FC<PollCreationModalProps> = ({
                 padding: "16px",
                 animation: "fadeIn 0.2s ease-out",
             }}
-            onClick={onClose}
+            onClick={() => {
+                TacticalAudioEngine.playTap();
+                onClose();
+            }}
         >
             <div
                 className="animate-enter"
@@ -125,7 +140,10 @@ export const PollCreationModal: React.FC<PollCreationModalProps> = ({
                         </div>
                     </div>
                     <button
-                        onClick={onClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
                         className="btn-icon"
                         style={{ width: 32, height: 32, fontSize: "0.9rem", color: "#8696A0" }}
                     >
@@ -239,7 +257,10 @@ export const PollCreationModal: React.FC<PollCreationModalProps> = ({
                     <input
                         type="checkbox"
                         checked={allowMultiple}
-                        onChange={(e) => setAllowMultiple(e.target.checked)}
+                        onChange={(e) => {
+                            TacticalAudioEngine.playTap();
+                            setAllowMultiple(e.target.checked);
+                        }}
                         style={{ width: 18, height: 18, cursor: "pointer", accentColor: "var(--accent-cyan)" }}
                     />
                 </div>
@@ -247,7 +268,10 @@ export const PollCreationModal: React.FC<PollCreationModalProps> = ({
                 {/* Acciones */}
                 <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
                     <button
-                        onClick={onClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
                         className="btn-tactical-secondary"
                         style={{ flex: 1, padding: "12px", borderRadius: "12px", fontSize: "0.85rem" }}
                     >

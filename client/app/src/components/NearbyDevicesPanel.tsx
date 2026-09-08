@@ -7,6 +7,8 @@ import { meshRouter, MeshPeer, normalizeIdentity, isNameSimilar } from "../lib/m
 import { RedAPI, getProximityNodes } from "../lib/api";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 function RssiBar({ rssi }: { rssi?: number | null }) {
     if (rssi == null) return null;
@@ -207,7 +209,50 @@ export default function NearbyDevicesPanel() {
         return () => clearInterval(t);
     }, []);
 
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return unregister;
+    }, [goBack]);
+
+    const handleCopyDid = (id: string) => {
+        TacticalAudioEngine.playTap();
+        const copyWithTextarea = (text: string) => {
+            try {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+                TacticalAudioEngine.playMessageSent();
+                toast.success("DID copiado al portapapeles");
+            } catch {
+                TacticalAudioEngine.playWarning();
+                toast.error("Error al copiar DID");
+            }
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(id)
+                .then(() => {
+                    TacticalAudioEngine.playMessageSent();
+                    toast.success("DID copiado al portapapeles");
+                })
+                .catch(() => copyWithTextarea(id));
+        } else {
+            copyWithTextarea(id);
+        }
+    };
+
     const handleConnect = async (dev: UnifiedDevice) => {
+        TacticalAudioEngine.playTap();
         setConnecting(dev.id);
         try {
             if (dev.rawBleId) {
@@ -216,8 +261,10 @@ export default function NearbyDevicesPanel() {
             const resolvedCanonical = meshRouter.getCanonicalId(dev.canonicalId) || dev.canonicalId;
             const store = useRedStore.getState();
             await store.addContact(resolvedCanonical, dev.name);
+            TacticalAudioEngine.playRogerBeep();
             toast.success(`✅ Enlace con ${dev.name} establecido`);
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al conectar dispositivo");
         } finally {
             setConnecting(null);
@@ -225,6 +272,7 @@ export default function NearbyDevicesPanel() {
     };
 
     const handleOpenChat = (dev: UnifiedDevice) => {
+        TacticalAudioEngine.playTap();
         const resolvedCanonical = meshRouter.getCanonicalId(dev.canonicalId) || dev.canonicalId;
         navigate("chat", resolvedCanonical);
     };
@@ -265,14 +313,20 @@ export default function NearbyDevicesPanel() {
 
                 <div style={{ display: "flex", gap: "8px" }}>
                     <button
-                        onClick={() => navigate("proximity_settings")}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            navigate("proximity_settings");
+                        }}
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 12px", fontSize: "0.78rem" }}
                     >
                         ⚙️ {t.nav?.settings || "Filtros"}
                     </button>
                     <button
-                        onClick={goBack}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            goBack();
+                        }}
                         className="btn-icon"
                         title={t.common?.close || "Cerrar radar"}
                         style={{ width: 38, height: 38 }}
@@ -381,9 +435,26 @@ export default function NearbyDevicesPanel() {
                                                 </div>
                                             </div>
                                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                                <span style={{ fontSize: "0.68rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)" }}>
-                                                    DID: {dev.canonicalId.slice(0, 16)}…
-                                                </span>
+                                                <button
+                                                    onClick={() => handleCopyDid(dev.canonicalId)}
+                                                    title="Copiar DID completo"
+                                                    style={{
+                                                        background: "rgba(255,255,255,0.04)",
+                                                        border: "1px solid rgba(255,255,255,0.08)",
+                                                        borderRadius: "4px",
+                                                        padding: "2px 6px",
+                                                        cursor: "pointer",
+                                                        display: "inline-flex",
+                                                        alignItems: "center",
+                                                        gap: "4px",
+                                                        color: "var(--text-muted)",
+                                                        fontSize: "0.68rem",
+                                                        fontFamily: "JetBrains Mono, monospace"
+                                                    }}
+                                                >
+                                                    <span>DID: {dev.canonicalId.slice(0, 14)}…</span>
+                                                    <span style={{ fontSize: "0.65rem", opacity: 0.7 }}>📋</span>
+                                                </button>
                                                 {dev.rssi != null && <RssiBar rssi={dev.rssi} />}
                                             </div>
                                         </div>

@@ -8,6 +8,10 @@ import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { tacticalGeofence } from "../lib/sensors/TacticalGeofenceEngine";
+import { meshRouter } from "../lib/mesh/meshRouter";
 
 export function CbrnSatelliteModal() {
     const { navigate, identity, goBack } = useRedStore();
@@ -99,17 +103,40 @@ export function CbrnSatelliteModal() {
         setPlumeZone(calculated);
     }, [incidentSource, operatorPos]);
 
+    // ── LIFO Back Navigation Handler: Sensor CMOS -> Pestaña CBRN -> Salir ────────
+    useEffect(() => {
+        const unreg = BackHandlerRegistry.register(() => {
+            if (cbrn.isCameraCmosActive) {
+                cbrnRadiation.stopCmosCameraCapture();
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            if (activeTab !== "cbrn") {
+                setActiveTab("cbrn");
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return unreg;
+    }, [cbrn.isCameraCmosActive, activeTab, goBack]);
+
     // Handlers para Cámara CMOS
     const handleToggleCmosCamera = async () => {
         if (cbrn.isCameraCmosActive) {
             cbrnRadiation.stopCmosCameraCapture();
+            TacticalAudioEngine.playTap();
             toast.info("Sensor fotónico CMOS apagado");
         } else {
             toast.info("Iniciando cámara CMOS... Cubra el lente para medir radiación");
             const success = await cbrnRadiation.startCmosCameraCapture();
             if (success) {
+                TacticalAudioEngine.playRogerBeep();
                 toast.success("📷 Sensor CMOS activo. Cubra el lente contra una mesa o con cinta negra");
             } else {
+                TacticalAudioEngine.playWarning();
                 toast.error("No se pudo acceder a la cámara trasera. Verifique permisos");
             }
         }
@@ -118,8 +145,10 @@ export function CbrnSatelliteModal() {
     const handleSelectSimulationScenario = (sc: CbrnSimulationScenario) => {
         cbrnRadiation.setSimulationScenario(sc);
         if (sc === 'NONE') {
+            TacticalAudioEngine.playTap();
             toast.info("Simulación desactivada. Modo sensor real restaurado");
         } else {
+            TacticalAudioEngine.playWarning();
             toast.warning(`Escenario táctico aplicado: ${sc}`);
         }
     };
@@ -128,6 +157,7 @@ export function CbrnSatelliteModal() {
     const handleEnqueueSbdMessage = () => {
         if (!satMessageText.trim()) return;
         const res = satelliteMeshGateway.composeAndEnqueueSbd(satMessageText, 9);
+        TacticalAudioEngine.playMessageSent();
         toast.success(`🛰️ Paquete SBD encolado: ${res.id}`);
     };
 
@@ -140,15 +170,72 @@ export function CbrnSatelliteModal() {
             satelliteRelayMode,
             9
         );
+        TacticalAudioEngine.playMessageSent();
         toast.success(`🛰️ Retransmisión [${satelliteRelayMode}] encolada para ${targetMeshId}: ${res.relayId}`);
     };
 
     const handleTriggerSatBurst = () => {
         const success = satelliteMeshGateway.triggerSatelliteBurst();
         if (success) {
+            TacticalAudioEngine.playRogerBeep();
             toast.success("🛰️ Ráfaga SBD transmitida con éxito a la constelación LEO");
         } else {
+            TacticalAudioEngine.playWarning();
             toast.error("Sin satélites en rango cenital (Elevación < 25°)");
+        }
+    };
+
+    const handleExportPlumeToMap = () => {
+        try {
+            const radius = Math.round(plumeZone.warmZoneLengthMeters || plumeZone.hotZoneRadiusMeters || 1000);
+            tacticalGeofence.createZone({
+                name: `PELIGRO CBRN: ${incidentSource.hazardType}`,
+                category: 'EXCLUSION_ZONE',
+                geometryType: 'CIRCULAR',
+                centerLat: incidentSource.lat,
+                centerLon: incidentSource.lon,
+                radiusMeters: radius,
+                active: true,
+                triggerRfSilence: false,
+                triggerSilentAlarm: true
+            });
+
+            // Sincronizar también con waypoints para la brújula y mapa off-grid
+            const rawWps = localStorage.getItem("red_offgrid_waypoints");
+            const wps = rawWps ? JSON.parse(rawWps) : [];
+            wps.unshift({
+                id: `cbrn_${Date.now()}`,
+                name: `☣️ CBRN: ${incidentSource.hazardType}`,
+                lat: incidentSource.lat,
+                lon: incidentSource.lon,
+                createdAt: Date.now()
+            });
+            localStorage.setItem("red_offgrid_waypoints", JSON.stringify(wps.slice(0, 30)));
+
+            TacticalAudioEngine.playRogerBeep();
+            toast.success(`🛡️ Zona de exclusión CBRN creada en el mapa (${radius}m) y añadida a waypoints`);
+        } catch (e: any) {
+            toast.error("Error al exportar zona al mapa: " + e.message);
+        }
+    };
+
+    const handleBroadcastCbrnAlert = async () => {
+        try {
+            const alertPayload = new TextEncoder().encode(JSON.stringify({
+                type: "CBRN_HAZARD_ALERT",
+                hazardType: incidentSource.hazardType,
+                radiationRateUsVh: cbrn.doseRateUsVh,
+                threatLevel: cbrn.threatLevel,
+                incidentLocation: { lat: incidentSource.lat, lon: incidentSource.lon },
+                operatorLocation: operatorPos,
+                downwindMeters: plumeZone.warmZoneLengthMeters,
+                timestamp: Date.now()
+            }));
+            await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", alertPayload);
+            TacticalAudioEngine.playEmergencyAlarm();
+            toast.success("📡 Alerta crítica CBRN transmitida a toda la malla táctica");
+        } catch (e: any) {
+            toast.error("Fallo al emitir alerta CBRN: " + e.message);
         }
     };
 
@@ -179,7 +266,10 @@ export function CbrnSatelliteModal() {
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
-                        onClick={goBack}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            goBack();
+                        }}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -215,7 +305,7 @@ export function CbrnSatelliteModal() {
                     </div>
                 </div>
 
-                <div style={{ display: "flex", gap: "6px" }}>
+                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                     <span style={{
                         fontSize: "0.62rem", fontWeight: 900, padding: "4px 8px", borderRadius: "6px",
                         background: sat.isUplinkAvailable ? "rgba(0, 229, 255, 0.2)" : "rgba(255, 255, 255, 0.05)",
@@ -224,6 +314,20 @@ export function CbrnSatelliteModal() {
                     }}>
                         {sat.isUplinkAvailable ? `🛰️ AOS LEO (${sat.activePasses.filter(s => s.isInAos).length})` : "🛰️ BUSCANDO PASO"}
                     </span>
+                    <button
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            goBack();
+                        }}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "0.9rem", fontWeight: 800,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ✕
+                    </button>
                 </div>
             </header>
 
@@ -234,7 +338,10 @@ export function CbrnSatelliteModal() {
                 flexShrink: 0
             }}>
                 <button
-                    onClick={() => setActiveTab("cbrn")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("cbrn");
+                    }}
                     style={{
                         flex: 1, padding: "8px 10px", borderRadius: "10px",
                         background: activeTab === "cbrn" ? "linear-gradient(135deg, rgba(255, 179, 0, 0.25) 0%, rgba(180, 120, 0, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
@@ -246,7 +353,10 @@ export function CbrnSatelliteModal() {
                     <span>☢️</span> DOSIMETRÍA {cbrn.threatLevel !== "SAFE_BACKGROUND" && "⚠️"}
                 </button>
                 <button
-                    onClick={() => setActiveTab("plume")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("plume");
+                    }}
                     style={{
                         flex: 1, padding: "8px 10px", borderRadius: "10px",
                         background: activeTab === "plume" ? "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(180, 20, 40, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
@@ -258,7 +368,10 @@ export function CbrnSatelliteModal() {
                     <span>☣️</span> PLUMA & ESCAPE
                 </button>
                 <button
-                    onClick={() => setActiveTab("satellite")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setActiveTab("satellite");
+                    }}
                     style={{
                         flex: 1, padding: "8px 10px", borderRadius: "10px",
                         background: activeTab === "satellite" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(10, 35, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
@@ -688,6 +801,36 @@ export function CbrnSatelliteModal() {
                                 <div style={{ fontSize: "0.64rem", color: "var(--text-secondary)", textAlign: "center" }}>
                                     Foco: {incidentSource.lat.toFixed(5)}, {incidentSource.lon.toFixed(5)} · Operador: {operatorPos.lat.toFixed(5)}, {operatorPos.lon.toFixed(5)}
                                 </div>
+                            </div>
+
+                            {/* Controles de Acción Geotáctica y Alerta de Malla */}
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                                <button
+                                    onClick={handleExportPlumeToMap}
+                                    style={{
+                                        padding: "12px", borderRadius: "12px",
+                                        background: "linear-gradient(135deg, rgba(255, 179, 0, 0.25) 0%, rgba(230, 81, 0, 0.2) 100%)",
+                                        border: "1.5px solid #FFB300",
+                                        color: "#FFB300", fontWeight: 900, fontSize: "0.76rem", cursor: "pointer",
+                                        display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                                    }}
+                                    title="Dibuja un perímetro de exclusión circular en NodeMap y añade waypoint de peligro"
+                                >
+                                    <span>🛡️</span> EXPORTAR GEOCERCA A MAPA
+                                </button>
+                                <button
+                                    onClick={handleBroadcastCbrnAlert}
+                                    style={{
+                                        padding: "12px", borderRadius: "12px",
+                                        background: "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(2, 132, 199, 0.2) 100%)",
+                                        border: "1.5px solid #00E5FF",
+                                        color: "#00E5FF", fontWeight: 900, fontSize: "0.76rem", cursor: "pointer",
+                                        display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                                    }}
+                                    title="Transmite paquete de telemetría de radiación y contaminante a toda la malla"
+                                >
+                                    <span>📡</span> DIFUNDIR ALERTA CBRN
+                                </button>
                             </div>
 
                             {/* Botón Transmisión SOS a la Malla */}

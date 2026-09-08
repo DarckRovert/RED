@@ -7,9 +7,11 @@ import { LocalAIEngine } from "../lib/localAiEngine";
 import { ModelManager, LocalModelMetaData, DeviceMemoryBudget, SovereignEndpointConfig, SOVEREIGN_PRESETS } from "../lib/modelManager";
 import { GlossaryLanguage, GlossaryEntry, EMERGENCY_GLOSSARY } from "../lib/emergencyGlossary";
 import { toast } from "./Toast";
-import { useTranslation } from "../lib/i18n/i18nEngine";
 import { NeuralThoughtViewer, NeuralTelemetryData } from "./ai/NeuralThoughtViewer";
 import { vectorKnowledgeStore } from "../lib/ai/VectorKnowledgeStore";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 type CopilotTab = "chat" | "translator" | "summarizer" | "models";
 
@@ -74,6 +76,29 @@ export const AICopilotModal: React.FC = () => {
     const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef<any>(null);
+
+    // Registro LIFO de retroceso físico / Esc
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (isListening) {
+                if (recognitionRef.current) {
+                    try { recognitionRef.current.stop(); } catch {}
+                }
+                setIsListening(false);
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            if (activeTab !== "chat") {
+                TacticalAudioEngine.playTap();
+                setActiveTab("chat");
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return unregister;
+    }, [isListening, activeTab, goBack]);
 
     // Chat History State
     const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -245,9 +270,29 @@ export const AICopilotModal: React.FC = () => {
         toast.info(`Preset seleccionado: ${preset.label || preset.url}`);
     };
 
-    const copyToClipboard = (text: string, id: string) => {
-        if (typeof navigator !== "undefined" && navigator.clipboard) {
-            navigator.clipboard.writeText(text);
+    const copyToClipboard = async (text: string, id: string) => {
+        TacticalAudioEngine.playMessageSent();
+        let copied = false;
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                copied = true;
+            } catch {}
+        }
+        if (!copied && typeof document !== "undefined") {
+            try {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                copied = document.execCommand("copy");
+                document.body.removeChild(ta);
+            } catch {}
+        }
+        if (copied) {
             setCopiedMsgId(id);
             toast.success(t('common.copied') || "Copiado al portapapeles");
             setTimeout(() => setCopiedMsgId(null), 2000);
@@ -574,7 +619,7 @@ export const AICopilotModal: React.FC = () => {
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
-                        onClick={goBack}
+                        onClick={() => { TacticalAudioEngine.playTap(); goBack(); }}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -651,7 +696,7 @@ export const AICopilotModal: React.FC = () => {
                     return (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id as CopilotTab)}
+                            onClick={() => { TacticalAudioEngine.playTap(); setActiveTab(tab.id as CopilotTab); }}
                             style={{
                                 flex: 1, padding: "8px 10px", fontSize: "0.76rem", fontWeight: isSel ? 900 : 700,
                                 display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",

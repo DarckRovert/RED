@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { AppearanceTab } from "./settings/AppearanceTab";
@@ -12,6 +12,8 @@ import { MeshTab } from "./settings/MeshTab";
 import { IdentityTab } from "./settings/IdentityTab";
 import { BackupTab } from "./settings/BackupTab";
 import { UpdatesTab } from "./settings/UpdatesTab";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 type SettingsTab = "appearance" | "calls" | "audio" | "storage" | "privacy" | "mesh" | "identity" | "backup" | "updates";
 
@@ -25,6 +27,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const handleClose = onClose || goBack;
 
     const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
+
+    // Registro LIFO de retroceso físico / Esc
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            handleClose();
+            return true;
+        });
+        return unregister;
+    }, [handleClose]);
 
     const tabs: { id: SettingsTab; label: string; icon: string }[] = [
         { id: "appearance", label: t('settings.tab_appearance'), icon: "🎨" },
@@ -65,7 +77,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         </h2>
                     </div>
                     <button
-                        onClick={handleClose}
+                        onClick={() => { TacticalAudioEngine.playTap(); handleClose(); }}
                         className="btn-icon"
                         style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255, 255, 255, 0.06)" }}
                     >
@@ -82,7 +94,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     {tabs.map((tab) => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
+                            onClick={() => { TacticalAudioEngine.playTap(); setActiveTab(tab.id); }}
                             className={`btn-tactical-pill ${activeTab === tab.id ? "active" : ""}`}
                             style={{
                                 padding: "8px 14px", borderRadius: "12px",

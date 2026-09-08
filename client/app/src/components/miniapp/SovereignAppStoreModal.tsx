@@ -6,12 +6,22 @@ import { redAppRegistry, InstalledAppEntry } from '../../lib/miniapp/RedAppRegis
 import { RedAppBundleEngine } from '../../lib/miniapp/RedAppBundleEngine';
 import { meshRouter } from '../../lib/mesh/meshRouter';
 import { encode, createPacket } from '../../lib/mesh/meshProtocol';
+import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
+import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
 import { toast } from '../Toast';
 
 interface SovereignAppStoreModalProps {
     userDid: string;
     onClose: () => void;
     onLaunchApp: (bundle: RedAppBundle) => void;
+}
+
+export interface MeshDiscoveredApp {
+    appId: string;
+    manifest: RedAppManifest;
+    pkg?: string | null;
+    authorDid: string;
+    timestamp: number;
 }
 
 type StoreTab = 'catalog' | 'creator' | 'import' | 'mesh';
@@ -220,6 +230,8 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
     const [appsList, setAppsList] = useState<InstalledAppEntry[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState<string>('');
+    const [meshDiscoveredApps, setMeshDiscoveredApps] = useState<MeshDiscoveredApp[]>([]);
+    const [rawImportText, setRawImportText] = useState<string>('');
 
     // Creator State
     const [selectedTemplateKey, setSelectedTemplateKey] = useState<string>('bazaar');
@@ -241,6 +253,97 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
     useEffect(() => {
         reloadList();
     }, []);
+
+    // Telemetry Counts
+    const builtinCount = useMemo(() => appsList.filter(a => a.isBuiltin).length, [appsList]);
+    const sovereignCount = useMemo(() => appsList.filter(a => !a.isBuiltin).length, [appsList]);
+
+    // ─── BackHandlerRegistry LIFO & Keyboard Interception ──────────────────────
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (activeTab !== 'catalog') {
+                TacticalAudioEngine.playTap();
+                setActiveTab('catalog');
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                if (activeTab !== 'catalog') {
+                    TacticalAudioEngine.playTap();
+                    setActiveTab('catalog');
+                } else {
+                    TacticalAudioEngine.playTap();
+                    onClose();
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            unregister();
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [activeTab, onClose]);
+
+    // ─── Real-time P2P Mesh App Reception ─────────────────────────────────────
+    useEffect(() => {
+        const unsubscribe = meshRouter.onLocalDelivery((packet) => {
+            try {
+                const rawStr = new TextDecoder().decode(packet.payload);
+                if (!rawStr.startsWith('{')) return;
+                const data = JSON.parse(rawStr);
+                if ((data.type === 'MINIAPP_PACKAGE_BROADCAST' || data.type === 'MINIAPP_MANIFEST') && data.manifest && data.appId) {
+                    setMeshDiscoveredApps(prev => {
+                        if (prev.some(a => a.appId === data.appId)) return prev;
+                        TacticalAudioEngine.playMessageReceived();
+                        toast.info(`📡 dApp recibida por radio/malla: ${data.manifest.name}`);
+                        return [{
+                            appId: data.appId,
+                            manifest: data.manifest,
+                            pkg: data.pkg || null,
+                            authorDid: data.authorDid || packet.sender,
+                            timestamp: data.timestamp || Date.now()
+                        }, ...prev];
+                    });
+                }
+            } catch {}
+        });
+        return () => {
+            unsubscribe();
+        };
+    }, []);
+
+    // ─── Resilient Copy to Clipboard ──────────────────────────────────────────
+    const copyToClipboard = async (text: string, label: string = 'Texto') => {
+        TacticalAudioEngine.playTap();
+        if (typeof window !== 'undefined' && navigator?.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                toast.info(`📋 ${label} copiado al portapapeles.`);
+                return;
+            } catch {}
+        }
+        try {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            textarea.style.pointerEvents = 'none';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            toast.info(`📋 ${label} copiado al portapapeles.`);
+        } catch {
+            toast.error(`No se pudo copiar ${label.toLowerCase()}.`);
+        }
+    };
 
     // Live preview update
     useEffect(() => {
@@ -272,6 +375,7 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
     }, [activeTab, createHtml, createId, createName, createCategory, createPermissions, createIcon, userDid]);
 
     const handleSelectTemplate = (key: string) => {
+        TacticalAudioEngine.playTap();
         const tpl = TEMPLATES[key];
         if (!tpl) return;
         setSelectedTemplateKey(key);
@@ -285,6 +389,7 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
     };
 
     const togglePermission = (scope: RedPermissionScope) => {
+        TacticalAudioEngine.playTap();
         if (createPermissions.includes(scope)) {
             setCreatePermissions(createPermissions.filter(p => p !== scope));
         } else {
@@ -294,7 +399,9 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
 
     const handleCreateApp = (e: React.FormEvent) => {
         e.preventDefault();
+        TacticalAudioEngine.playTap();
         if (!createName.trim() || !createId.trim()) {
+            TacticalAudioEngine.playWarning();
             toast.error("El nombre y el App ID son obligatorios.");
             return;
         }
@@ -333,6 +440,7 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
             void meshRouter.broadcast(encode(createPacket(userDid, 'broadcast', manifestBytes)));
         } catch {}
 
+        TacticalAudioEngine.playMessageSent();
         toast.success(`🚀 Mini-App '${manifest.name}' instalada y transmitida a la malla.`);
         reloadList();
         setActiveTab('catalog');
@@ -340,6 +448,7 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
     };
 
     const handleExportApp = (bundle: RedAppBundle) => {
+        TacticalAudioEngine.playTap();
         const pkg = redAppRegistry.exportAppPackage(bundle.manifest.id);
         const content = pkg || JSON.stringify(bundle, null, 2);
         const blob = new Blob([content], { type: 'application/json' });
@@ -349,10 +458,12 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
         a.download = `${bundle.manifest.id}.redapp`;
         a.click();
         URL.revokeObjectURL(url);
+        TacticalAudioEngine.playMessageSent();
         toast.info(`📦 Paquete firmado ${bundle.manifest.name} exportado.`);
     };
 
     const handleBroadcastApp = (bundle: RedAppBundle) => {
+        TacticalAudioEngine.playTap();
         try {
             const pkg = redAppRegistry.exportAppPackage(bundle.manifest.id);
             const manifestEnvelope = { 
@@ -365,19 +476,63 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
             };
             const manifestBytes = new TextEncoder().encode(JSON.stringify(manifestEnvelope));
             void meshRouter.broadcast(encode(createPacket(userDid, 'broadcast', manifestBytes)));
+            TacticalAudioEngine.playMessageSent();
             toast.success(`📡 Mini-App '${bundle.manifest.name}' transmitida por radio/mesh.`);
         } catch (e: any) {
+            TacticalAudioEngine.playWarning();
             toast.error(`Error al transmitir: ${e.message}`);
         }
     };
 
     const handleDeleteApp = (appId: string) => {
+        TacticalAudioEngine.playTap();
         const success = redAppRegistry.uninstallApp(appId);
         if (success) {
             toast.info("Mini-App desinstalada.");
             reloadList();
         } else {
+            TacticalAudioEngine.playWarning();
             toast.error("No se pueden desinstalar aplicaciones nativas del sistema.");
+        }
+    };
+
+    const handleInstallPackageText = (text: string) => {
+        TacticalAudioEngine.playTap();
+        const clean = text.trim();
+        if (!clean) {
+            TacticalAudioEngine.playWarning();
+            toast.error("El paquete o texto está vacío.");
+            return;
+        }
+
+        try {
+            // Try signed .redapp package import first
+            if (clean.startsWith('RED_APP_V1:') || clean.includes('"format":"RED_APP_PACKAGE_V1"')) {
+                const res = redAppRegistry.importAppPackage(clean);
+                if (res.isValid && res.bundle) {
+                    redAppRegistry.installApp(res.bundle);
+                    reloadList();
+                    TacticalAudioEngine.playMessageSent();
+                    toast.success(`¡Mini-App '${res.bundle.manifest.name}' instalada exitosamente!`);
+                    setRawImportText('');
+                    setActiveTab('catalog');
+                    return;
+                } else if (res.error) {
+                    throw new Error(res.error);
+                }
+            }
+
+            // Fallback to raw JSON bundle engine
+            const bundle = RedAppBundleEngine.importBundle(clean);
+            redAppRegistry.installApp(bundle);
+            reloadList();
+            TacticalAudioEngine.playMessageSent();
+            toast.success(`¡Mini-App '${bundle.manifest.name}' instalada exitosamente!`);
+            setRawImportText('');
+            setActiveTab('catalog');
+        } catch (err: any) {
+            TacticalAudioEngine.playWarning();
+            toast.error(`Error al importar: ${err.message || 'Formato no reconocido'}`);
         }
     };
 
@@ -387,33 +542,29 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
 
         const reader = new FileReader();
         reader.onload = (event) => {
-            try {
-                const text = event.target?.result as string;
-                if (!text) return;
-
-                // Try signed .redapp package import first
-                if (text.startsWith('RED_APP_V1:') || text.includes('"format":"RED_APP_PACKAGE_V1"')) {
-                    const res = redAppRegistry.importAppPackage(text);
-                    if (res.isValid && res.bundle) {
-                        redAppRegistry.installApp(res.bundle);
-                        reloadList();
-                        toast.success(`¡Mini-App '${res.bundle.manifest.name}' instalada exitosamente!`);
-                        setActiveTab('catalog');
-                        return;
-                    }
-                }
-
-                // Fallback to legacy raw JSON bundle engine
-                const bundle = RedAppBundleEngine.importBundle(text);
-                redAppRegistry.installApp(bundle);
-                reloadList();
-                toast.success(`¡Mini-App '${bundle.manifest.name}' instalada exitosamente!`);
-                setActiveTab('catalog');
-            } catch (err: any) {
-                toast.error(`Error al importar: ${err.message}`);
+            const text = event.target?.result as string;
+            if (text) {
+                handleInstallPackageText(text);
             }
         };
         reader.readAsText(file);
+    };
+
+    const handleInstallDiscoveredApp = (item: MeshDiscoveredApp) => {
+        TacticalAudioEngine.playTap();
+        if (item.pkg) {
+            const res = redAppRegistry.importAppPackage(item.pkg);
+            if (res.isValid && res.bundle) {
+                redAppRegistry.installApp(res.bundle);
+                reloadList();
+                TacticalAudioEngine.playMessageSent();
+                toast.success(`🚀 Mini-App '${res.bundle.manifest.name}' instalada desde la malla.`);
+                onLaunchApp(res.bundle);
+                return;
+            }
+        }
+        TacticalAudioEngine.playWarning();
+        toast.error("El paquete recibido no contiene un bundle ejecutable válido.");
     };
 
     const filteredApps = useMemo(() => {
@@ -445,7 +596,7 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
             <div 
                 style={{
                     width: "100%",
-                    maxWidth: "1024px",
+                    maxWidth: "1040px",
                     height: "92vh",
                     maxHeight: "880px",
                     borderRadius: "20px",
@@ -483,13 +634,12 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
 
                     {/* Header Action Buttons */}
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <label style={{ padding: "6px 12px", background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.15)", color: "#FFFFFF", borderRadius: "10px", fontSize: "0.78rem", fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span>📥 Importar</span>
-                            <input type="file" accept=".json,.redapp" onChange={handleImportJson} style={{ display: "none" }} />
-                        </label>
                         <button
                             type="button"
-                            onClick={() => setActiveTab(activeTab === 'creator' ? 'catalog' : 'creator')}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setActiveTab(activeTab === 'creator' ? 'catalog' : 'creator');
+                            }}
                             style={{
                                 padding: "6px 14px",
                                 borderRadius: "10px",
@@ -506,7 +656,10 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
                         </button>
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                onClose();
+                            }}
                             style={{
                                 background: "rgba(255, 255, 255, 0.08)",
                                 border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -518,9 +671,55 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
                                 fontSize: "0.9rem",
                                 fontWeight: 900
                             }}
+                            title="Cerrar tienda"
                         >
                             ✕
                         </button>
+                    </div>
+                </div>
+
+                {/* ── HUD DE TELEMETRÍA TÁCTICA SUPERIOR ── */}
+                <div style={{
+                    padding: "6px 16px",
+                    background: "rgba(3, 7, 18, 0.92)",
+                    borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "10px",
+                    fontSize: "0.72rem",
+                    fontFamily: "JetBrains Mono, monospace"
+                }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                        <span style={{ color: "#E2E8F0", display: "flex", alignItems: "center", gap: "4px" }}>
+                            📦 <strong style={{ color: "var(--accent-emerald)" }}>{appsList.length}</strong> Total
+                        </span>
+                        <span style={{ color: "#94A3B8" }}>|</span>
+                        <span style={{ color: "#94A3B8", display: "flex", alignItems: "center", gap: "4px" }}>
+                            🛡️ <strong style={{ color: "var(--accent-cyan)" }}>{builtinCount}</strong> Oficiales
+                        </span>
+                        <span style={{ color: "#94A3B8" }}>|</span>
+                        <span style={{ color: "#94A3B8", display: "flex", alignItems: "center", gap: "4px" }}>
+                            ⚡ <strong style={{ color: "#FFD700" }}>{sovereignCount}</strong> Soberanas
+                        </span>
+                        {meshDiscoveredApps.length > 0 && (
+                            <>
+                                <span style={{ color: "#94A3B8" }}>|</span>
+                                <span style={{ color: "var(--accent-cyan)", display: "flex", alignItems: "center", gap: "4px", background: "rgba(0, 229, 255, 0.1)", padding: "1px 6px", borderRadius: "4px", border: "1px solid rgba(0, 229, 255, 0.3)" }}>
+                                    📡 <strong>{meshDiscoveredApps.length}</strong> en Malla
+                                </span>
+                            </>
+                        )}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", color: "var(--text-muted)" }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#00E676" }}></span>
+                            <span>Malla P2P Activa</span>
+                        </span>
+                        <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                            <span>🔒 Sandbox Iframe Aislado</span>
+                        </span>
                     </div>
                 </div>
 
@@ -530,11 +729,16 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
                         {[
                             { id: 'catalog', label: '📦 Catálogo Soberano', count: appsList.length },
                             { id: 'creator', label: '🛠️ Creador & Live Preview', count: null },
+                            { id: 'import', label: '📥 Importar Paquete', count: null },
+                            { id: 'mesh', label: '📡 Malla P2P', count: meshDiscoveredApps.length > 0 ? meshDiscoveredApps.length : null },
                         ].map(t => (
                             <button
                                 key={t.id}
                                 type="button"
-                                onClick={() => setActiveTab(t.id as StoreTab)}
+                                onClick={() => {
+                                    TacticalAudioEngine.playTap();
+                                    setActiveTab(t.id as StoreTab);
+                                }}
                                 style={{
                                     padding: "6px 12px",
                                     borderRadius: "8px",
@@ -543,7 +747,9 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
                                     cursor: "pointer",
                                     border: activeTab === t.id ? "1px solid var(--accent-emerald)" : "1px solid transparent",
                                     background: activeTab === t.id ? "rgba(0, 230, 118, 0.15)" : "transparent",
-                                    color: activeTab === t.id ? "var(--accent-emerald)" : "var(--text-secondary)"
+                                    color: activeTab === t.id ? "var(--accent-emerald)" : "var(--text-secondary)",
+                                    display: "flex",
+                                    alignItems: "center"
                                 }}
                             >
                                 <span>{t.label}</span>
@@ -585,7 +791,10 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
                                 <button
                                     key={cat.id}
                                     type="button"
-                                    onClick={() => setSelectedCategory(cat.id)}
+                                    onClick={() => {
+                                        TacticalAudioEngine.playTap();
+                                        setSelectedCategory(cat.id);
+                                    }}
                                     style={{
                                         padding: "4px 10px",
                                         borderRadius: "8px",
@@ -680,6 +889,14 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
                                             >
                                                 💾
                                             </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => copyToClipboard(entry.manifest.id, 'App ID')}
+                                                style={{ padding: "6px 8px", background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.12)", color: "#FFFFFF", borderRadius: "8px", fontSize: "0.75rem", cursor: "pointer" }}
+                                                title="Copiar App ID"
+                                            >
+                                                📋
+                                            </button>
                                             {!entry.isBuiltin && (
                                                 <button
                                                     type="button"
@@ -694,7 +911,10 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
 
                                         <button
                                             type="button"
-                                            onClick={() => onLaunchApp(entry.bundle)}
+                                            onClick={() => {
+                                                TacticalAudioEngine.playTap();
+                                                onLaunchApp(entry.bundle);
+                                            }}
                                             style={{
                                                 padding: "6px 14px",
                                                 background: "linear-gradient(135deg, #00E676 0%, #00E5FF 100%)",
@@ -895,6 +1115,189 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
                                 )}
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {/* ── VISTA 3: IMPORTAR PAQUETES SOBERANOS (.REDAPP / JSON) ── */}
+                {activeTab === 'import' && (
+                    <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div style={{ background: "rgba(10, 14, 28, 0.7)", border: "1px solid rgba(255, 255, 255, 0.12)", borderRadius: "16px", padding: "20px" }}>
+                            <h3 style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF", margin: "0 0 8px 0", display: "flex", alignItems: "center", gap: "8px" }}>
+                                📁 <span>Cargar Archivo de Aplicación</span>
+                            </h3>
+                            <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 16px 0", lineHeight: 1.4 }}>
+                                Selecciona un archivo <code>.redapp</code> firmado digitalmente o un manifiesto <code>.json</code> exportado previamente.
+                            </p>
+                            <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px", background: "linear-gradient(135deg, rgba(0,230,118,0.2) 0%, rgba(0,229,255,0.2) 100%)", border: "1px solid rgba(0, 230, 118, 0.4)", borderRadius: "10px", color: "var(--accent-emerald)", fontWeight: 900, fontSize: "0.82rem", cursor: "pointer" }}>
+                                <span>📥 Seleccionar Archivo (.redapp / .json)</span>
+                                <input type="file" accept=".json,.redapp" onChange={handleImportJson} style={{ display: "none" }} />
+                            </label>
+                        </div>
+
+                        <div style={{ background: "rgba(10, 14, 28, 0.7)", border: "1px solid rgba(255, 255, 255, 0.12)", borderRadius: "16px", padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                <h3 style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                                    📋 <span>Pegar Paquete Codificado (Air-Gap / Portapapeles)</span>
+                                </h3>
+                                <span style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>Formatos: RED_APP_V1:* o JSON Raw</span>
+                            </div>
+                            <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.4 }}>
+                                Para dispositivos tácticos aislados sin acceso al explorador de archivos del sistema, pega la cadena Base64 o el contenido del paquete directamente:
+                            </p>
+                            <textarea
+                                rows={6}
+                                value={rawImportText}
+                                onChange={e => setRawImportText(e.target.value)}
+                                placeholder="Pega aquí el paquete RED_APP_V1:... o JSON de la Mini-App..."
+                                className="tactical-input"
+                                style={{ width: "100%", fontFamily: "JetBrains Mono, monospace", fontSize: "0.75rem", color: "var(--accent-emerald)" }}
+                            />
+                            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                                {rawImportText && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            TacticalAudioEngine.playTap();
+                                            setRawImportText('');
+                                        }}
+                                        style={{ padding: "8px 14px", background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.14)", borderRadius: "8px", color: "#FFFFFF", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer" }}
+                                    >
+                                        Limpiar
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => handleInstallPackageText(rawImportText)}
+                                    disabled={!rawImportText.trim()}
+                                    style={{
+                                        padding: "8px 18px",
+                                        background: rawImportText.trim() ? "linear-gradient(135deg, #00E676 0%, #00E5FF 100%)" : "rgba(255, 255, 255, 0.1)",
+                                        border: "none",
+                                        borderRadius: "8px",
+                                        color: rawImportText.trim() ? "#000000" : "var(--text-muted)",
+                                        fontSize: "0.78rem",
+                                        fontWeight: 900,
+                                        cursor: rawImportText.trim() ? "pointer" : "not-allowed"
+                                    }}
+                                >
+                                    ⚡ Instalar Paquete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── VISTA 4: MALLA P2P EN VIVO (APPS DESCUBIERTAS POR RADIO) ── */}
+                {activeTab === 'mesh' && (
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", padding: "16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                            <div>
+                                <h3 style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                                    📡 <span>Micro-Aplicaciones en la Malla P2P</span>
+                                    <span style={{ fontSize: "0.68rem", padding: "2px 8px", background: "rgba(0, 230, 118, 0.15)", border: "1px solid rgba(0, 230, 118, 0.4)", color: "var(--accent-emerald)", borderRadius: "10px", fontFamily: "JetBrains Mono, monospace" }}>
+                                        {meshDiscoveredApps.length} Detectadas
+                                    </span>
+                                </h3>
+                                <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "4px 0 0 0" }}>
+                                    Paquetes y manifiestos de aplicaciones recibidos en vivo a través de canales de radio LoRa, Bluetooth LE y WiFi-Direct.
+                                </p>
+                            </div>
+
+                            {meshDiscoveredApps.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        TacticalAudioEngine.playTap();
+                                        setMeshDiscoveredApps([]);
+                                        toast.info("Historial de paquetes de malla limpiado.");
+                                    }}
+                                    style={{ padding: "6px 12px", background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.12)", color: "#FFFFFF", borderRadius: "8px", fontSize: "0.72rem", cursor: "pointer" }}
+                                >
+                                    Limpiar Registro
+                                </button>
+                            )}
+                        </div>
+
+                        {meshDiscoveredApps.length === 0 ? (
+                            <div style={{ flex: 1, border: "1px dashed rgba(255, 255, 255, 0.15)", borderRadius: "16px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "var(--text-muted)", textAlign: "center", padding: "24px" }}>
+                                <div style={{ fontSize: "2.5rem" }}>📡</div>
+                                <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#E2E8F0" }}>Transceptor a la Escucha en Canales de Radio</div>
+                                <p style={{ fontSize: "0.75rem", maxWidth: "420px", margin: 0, lineHeight: 1.5 }}>
+                                    Cuando los nodos de tu escuadrón o base transmitan aplicaciones soberanas mediante la red de malla descentralizada, aparecerán aquí automáticamente para su instalación con un clic.
+                                </p>
+                            </div>
+                        ) : (
+                            <div style={{ flex: 1, overflowY: "auto", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "12px" }}>
+                                {meshDiscoveredApps.map(item => (
+                                    <div
+                                        key={item.appId}
+                                        style={{
+                                            background: "linear-gradient(180deg, rgba(16, 22, 44, 0.8) 0%, rgba(8, 12, 26, 0.9) 100%)",
+                                            border: "1px solid rgba(0, 229, 255, 0.25)",
+                                            borderRadius: "14px",
+                                            padding: "14px",
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            justifyContent: "space-between",
+                                            boxShadow: "0 4px 16px rgba(0, 0, 0, 0.5)"
+                                        }}
+                                    >
+                                        <div>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                                                <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "rgba(0, 229, 255, 0.1)", border: "1px solid rgba(0, 229, 255, 0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem" }}>
+                                                    {item.manifest.icon || '📱'}
+                                                </div>
+                                                <div>
+                                                    <h4 style={{ fontSize: "0.85rem", fontWeight: 900, color: "#FFFFFF", margin: 0 }}>
+                                                        {item.manifest.name}
+                                                    </h4>
+                                                    <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                        v{item.manifest.version} • {item.manifest.category}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: "0 0 8px 0", lineHeight: 1.3 }}>
+                                                {item.manifest.description}
+                                            </p>
+                                            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", marginBottom: "10px" }}>
+                                                <div>Autor: {item.authorDid?.slice(0, 16)}...</div>
+                                                <div>Recibido: {new Date(item.timestamp).toLocaleTimeString()}</div>
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: "flex", gap: "8px", paddingTop: "10px", borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                                            {item.pkg && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => copyToClipboard(item.pkg!, 'Paquete Malla')}
+                                                    style={{ padding: "6px 10px", background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.12)", color: "#FFFFFF", borderRadius: "8px", fontSize: "0.72rem", cursor: "pointer" }}
+                                                    title="Copiar paquete firmado base64"
+                                                >
+                                                    📋 Copiar
+                                                </button>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleInstallDiscoveredApp(item)}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: "6px 12px",
+                                                    background: "linear-gradient(135deg, #00E676 0%, #00E5FF 100%)",
+                                                    border: "none",
+                                                    color: "#000000",
+                                                    fontWeight: 900,
+                                                    borderRadius: "8px",
+                                                    fontSize: "0.75rem",
+                                                    cursor: "pointer"
+                                                }}
+                                            >
+                                                ⚡ Instalar e Iniciar
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

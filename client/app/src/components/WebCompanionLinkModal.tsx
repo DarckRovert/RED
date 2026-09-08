@@ -7,6 +7,7 @@ import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { getSecurePin } from "../lib/crypto/BiometricLockEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 
 interface WebCompanionLinkModalProps {
     onClose: () => void;
@@ -326,12 +327,47 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
         }
     };
 
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (mode === "send_scan") {
+                stopCamera();
+                setMode("manual");
+                return true;
+            }
+            handleCancel();
+            return true;
+        });
+        return unregister;
+    }, [mode, pairingSession]);
+
+    const fallbackCopy = (text: string, successMsg: string) => {
+        try {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            TacticalAudioEngine.playMessageSent();
+            toast.success(successMsg);
+        } catch {
+            TacticalAudioEngine.playWarning();
+            toast.error("Error al copiar al portapapeles");
+        }
+    };
+
     const handleExportAirGapVault = async () => {
+        TacticalAudioEngine.playTap();
         setIsExportingAirGap(true);
         setStatusMessage("Generando cápsula soberana Air-Gap...");
         try {
             const masterPin = await getSecurePin("master_pin");
             if (!masterPin) {
+                TacticalAudioEngine.playWarning();
                 toast.error("Configura tu PIN maestro antes de exportar la cápsula.");
                 setIsExportingAirGap(false);
                 setStatusMessage("PIN maestro no configurado");
@@ -354,9 +390,18 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
 
             const token = await companionSyncEngine.exportAirGapVaultToken(payload, masterPin);
             setAirGapExportedToken(token);
-            navigator.clipboard.writeText(token);
-            toast.success("🛡️ Cápsula Air-Gap generada y copiada al portapapeles");
+            if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(token)
+                    .then(() => {
+                        TacticalAudioEngine.playMessageSent();
+                        toast.success("🛡️ Cápsula Air-Gap generada y copiada al portapapeles");
+                    })
+                    .catch(() => fallbackCopy(token, "🛡️ Cápsula Air-Gap copiada al portapapeles"));
+            } else {
+                fallbackCopy(token, "🛡️ Cápsula Air-Gap copiada al portapapeles");
+            }
         } catch (e: any) {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al generar cápsula: " + (e?.message || ""));
         } finally {
             setIsExportingAirGap(false);
@@ -364,13 +409,23 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
     };
 
     const handleCopyCode = () => {
+        TacticalAudioEngine.playTap();
         if (pairingSession?.qrPayload) {
-            navigator.clipboard.writeText(pairingSession.qrPayload);
-            toast.success("📋 Código copiado al portapapeles");
+            if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(pairingSession.qrPayload)
+                    .then(() => {
+                        TacticalAudioEngine.playMessageSent();
+                        toast.success("📋 Código copiado al portapapeles");
+                    })
+                    .catch(() => fallbackCopy(pairingSession.qrPayload, "📋 Código copiado al portapapeles"));
+            } else {
+                fallbackCopy(pairingSession.qrPayload, "📋 Código copiado al portapapeles");
+            }
         }
     };
 
     const handleCancel = async () => {
+        TacticalAudioEngine.playTap();
         await stopCamera();
         if (pairingSession) pairingSession.cleanup();
         onClose();
@@ -475,7 +530,10 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 {(mode === "receive_qr" || mode === "manual") && (
                     <div style={{ display: "flex", width: "100%", gap: "6px", background: "rgba(0,0,0,0.3)", padding: "4px", borderRadius: "var(--radius-full)" }}>
                         <button
-                            onClick={() => setMode("receive_qr")}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setMode("receive_qr");
+                            }}
                             style={{
                                 flex: 1, padding: "6px 10px", borderRadius: "var(--radius-full)",
                                 background: mode === "receive_qr" ? "var(--accent-cyan)" : "transparent",
@@ -487,6 +545,7 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                         </button>
                         <button
                             onClick={() => {
+                                TacticalAudioEngine.playTap();
                                 if (isNativeMobile) {
                                     setMode("send_scan");
                                 } else {
@@ -562,7 +621,10 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                                         Los tokens efímeros rotan cada 60s por seguridad militar.
                                     </div>
                                     <button
-                                        onClick={() => setSessionKey(k => k + 1)}
+                                        onClick={() => {
+                                            TacticalAudioEngine.playRogerBeep();
+                                            setSessionKey(k => k + 1);
+                                        }}
                                         style={{
                                             marginTop: "4px", padding: "8px 16px",
                                             background: "linear-gradient(135deg, #00F0FF 0%, #0077B6 100%)",

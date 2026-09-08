@@ -1,7 +1,7 @@
-"use client";
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { TacticalEmojiPicker } from "./TacticalEmojiPicker";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 
 interface MediaSendPreviewModalProps {
     file: File | null;
@@ -24,8 +24,24 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
     const [emojiOpen, setEmojiOpen] = useState(false);
     const [isSending, setIsSending] = useState(false);
 
+    // Intercepción LIFO (retroceso físico / Esc)
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (isSending) return false;
+            TacticalAudioEngine.playTap();
+            if (emojiOpen) {
+                setEmojiOpen(false);
+                return true;
+            }
+            onCancel();
+            return true;
+        });
+        return unregister;
+    }, [isSending, emojiOpen, onCancel]);
+
     const handleConfirmSend = () => {
         if (isSending) return;
+        TacticalAudioEngine.playMessageSent();
         setIsSending(true);
         onSend(caption.trim());
     };
@@ -54,7 +70,10 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
                 flexShrink: 0
             }}>
                 <button
-                    onClick={onCancel}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        onCancel();
+                    }}
                     disabled={isSending}
                     style={{
                         background: "transparent",
@@ -132,7 +151,10 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
                     minHeight: "46px"
                 }}>
                     <button
-                        onClick={() => setEmojiOpen(!emojiOpen)}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setEmojiOpen(!emojiOpen);
+                        }}
                         style={{
                             background: "transparent",
                             border: "none",

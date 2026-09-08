@@ -28,7 +28,7 @@ export async function postChannelMessage(payload: { channel_id: string; sender_n
         throw new Error(`⛔ RED Guardian: ${verdict.reason || 'Contenido bloqueado por infracción de seguridad'}`);
     }
 
-    return fetchWithFallback('/api/channels/post', {
+    const result = await fetchWithFallback<{ ok: boolean; message: ChannelMessage }>('/api/channels/post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -54,22 +54,29 @@ export async function postChannelMessage(payload: { channel_id: string; sender_n
             setStored(STORAGE_KEYS.CHANNEL_MESSAGES, msgs);
         }
 
-        // Broadcast over MeshRouter so peers receive public channel messages & canvas drawings
-        try {
-            const { meshRouter } = await import('../lib/mesh/meshRouter');
-            const payloadBytes = new TextEncoder().encode(JSON.stringify({
-                id: msg.id,
-                msg_type: 'channel_post',
-                channel_id: msg.channel_id,
-                content: JSON.stringify(msg),
-                sender: sender_did,
-                timestamp: now
-            }));
-            await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
-        } catch (e) {}
-
         return { ok: true, message: msg };
     });
+
+    // 2. Broadcast universal sobre MeshRouter (BLE, WiFi Direct, LoRa) para nodos en rango físico
+    try {
+        if (result?.message) {
+            const finalMsg = result.message;
+            const { meshRouter } = await import('../lib/mesh/meshRouter');
+            const payloadBytes = new TextEncoder().encode(JSON.stringify({
+                id: finalMsg.id,
+                msg_type: 'channel_post',
+                channel_id: finalMsg.channel_id,
+                content: JSON.stringify(finalMsg),
+                sender: finalMsg.sender_did,
+                timestamp: finalMsg.timestamp
+            }));
+            await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+        }
+    } catch (e) {
+        console.warn('[RED Channels] Error en broadcast físico mesh:', e);
+    }
+
+    return result;
 }
 
 /** Fragmentar archivo base64 en chunks Torrent-mesh con Merkle Tree real */
@@ -199,9 +206,21 @@ export async function cleanImageExif(imageB64: string): Promise<CleanImageRespon
 /** Publicar boletín climático off-grid con difusión táctica */
 
 export async function deleteVoiceBurst(id: string): Promise<{ ok: boolean; deleted: string }> {
-    return fetchWithFallback('/api/voice/bursts/' + id, { method: 'DELETE' }, () => {
+    const res = await fetchWithFallback<{ ok: boolean; deleted: string }>('/api/voice/bursts/' + id, { method: 'DELETE' }, () => {
         const bursts = getStored<any[]>(STORAGE_KEYS.VOICE_BURSTS, []);
         setStored(STORAGE_KEYS.VOICE_BURSTS, bursts.filter(b => b.id !== id));
         return { ok: true, deleted: id };
     });
+
+    try {
+        const { meshRouter } = await import('../lib/mesh/meshRouter');
+        const payloadBytes = new TextEncoder().encode(JSON.stringify({
+            msg_type: 'voice_burst_delete',
+            burst_id: id,
+            timestamp: Date.now()
+        }));
+        await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+    } catch {}
+
+    return res;
 }

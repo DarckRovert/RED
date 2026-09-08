@@ -468,6 +468,15 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
         );
     },
 
+    deleteMyStory: (storyId: string) => {
+        const current = Array.isArray(get().myStories) ? get().myStories : [];
+        const updated = current.filter(s => s.id !== storyId);
+        set({ myStories: updated });
+        if (typeof window !== 'undefined') {
+            try { localStorage.setItem('red_my_stories', JSON.stringify(updated)); } catch {}
+        }
+    },
+
     openLiveStream: (streamId: string) => {
         set({ activeLiveStreamId: streamId });
     },

@@ -14,12 +14,13 @@ import { offlineTileCacheEngine, TileDownloadProgress, TileCacheStats } from "..
 import { tacticalGeofence } from "../lib/sensors/TacticalGeofenceEngine";
 import { deadDropVault } from "../lib/storage/DeadDropVaultEngine";
 import { milStd2525 } from "../lib/tactical/MilStd2525Engine";
-import { sitrepEngine } from "../lib/tactical/SitrepEngine";
+import { sitrepEngine, SitrepReport } from "../lib/tactical/SitrepEngine";
 import { pedestrianDeadReckoning, PdrState } from "../lib/sensors/PedestrianDeadReckoningEngine";
 import { tacticalRdf } from "../lib/sensors/TacticalRdfEngine";
 import { meshUavRelayEngine } from "../lib/mesh/MeshUavRelayEngine";
-import { cbrnPlumeDispersionEngine } from "../lib/tactical/CbrnPlumeDispersionEngine";
+import { cbrnPlumeDispersionEngine, CbrnIncidentSource } from "../lib/tactical/CbrnPlumeDispersionEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { copyToClipboard } from "../lib/clipboard";
 
 function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
@@ -123,13 +124,39 @@ export default function NodeMap() {
     const [downloadProgress, setDownloadProgress] = useState<TileDownloadProgress | null>(null);
     const [isDownloadingVault, setIsDownloadingVault] = useState(false);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const osmLayerRef = useRef<any>(null);
+
+    // ── Modo de Cartografía Táctica: Oscuro Militar vs Rejilla Vectorial Pura
+    const [mapMode, setMapMode] = useState<'tactical' | 'vectorGrid'>('tactical');
+
+    // ── Menú Contextual de Marcación Táctica al tocar el mapa
+    const [contextActionPoint, setContextActionPoint] = useState<{ lat: number; lng: number } | null>(null);
+
+    // ── Reportes de Situación (SITREPs Tácticos de Escuadrón)
+    const [sitreps, setSitreps] = useState<SitrepReport[]>(() => sitrepEngine.getSitreps());
 
     // ── Navegación Inercial Pedestrian Dead Reckoning (PDR) ───────────────
     const [pdrState, setPdrState] = useState<PdrState>(() => pedestrianDeadReckoning.getState());
     const [isPdrActive, setIsPdrActive] = useState(false);
     const pdrOriginRef = useRef<{ lat: number; lng: number }>({ lat: 0, lng: 0 });
 
+    // Interceptor Base LIFO para NodeMap (Cierre ordenado al pulsar Atrás)
+    useEffect(() => {
+        return BackHandlerRegistry.register(() => {
+            goBack();
+            return true;
+        });
+    }, [goBack]);
+
     // Register Back Interceptors for Map Overlays
+    useEffect(() => {
+        if (!contextActionPoint) return;
+        return BackHandlerRegistry.register(() => {
+            setContextActionPoint(null);
+            return true;
+        });
+    }, [contextActionPoint]);
+
     useEffect(() => {
         if (!showVaultModal) return;
         return BackHandlerRegistry.register(() => {
@@ -155,10 +182,16 @@ export default function NodeMap() {
     }, [selectedPeer]);
 
     useEffect(() => {
-        const unsub = pedestrianDeadReckoning.subscribe((state) => {
+        const unsubPdr = pedestrianDeadReckoning.subscribe((state) => {
             setPdrState(state);
         });
-        return () => unsub();
+        const unsubSitrep = sitrepEngine.subscribe(() => {
+            setSitreps(sitrepEngine.getSitreps());
+        });
+        return () => {
+            unsubPdr();
+            unsubSitrep();
+        };
     }, []);
 
     const handleTogglePdr = () => {
@@ -238,21 +271,54 @@ export default function NodeMap() {
         toast.info("Bóveda de mapas offline vaciada");
     };
 
-    // Tactical Target Navigation State (Synchronized with OffGridCompassModal)
+    // Tactical Target Navigation State (Synchronized with OffGridCompassModal, Foxhunt & Sonar)
     const [target, setTarget] = useState<TacticalTarget | null>(() => {
         if (typeof window !== "undefined") {
             try {
-                const saved = localStorage.getItem("red_tactical_target_point");
+                const saved = localStorage.getItem("red_tactical_target_point") || localStorage.getItem("red_active_target");
                 if (saved) {
                     const parsed = JSON.parse(saved);
-                    if (typeof parsed.lat === "number" && typeof parsed.lon === "number") {
-                        return parsed;
+                    const targetLat = typeof parsed.lat === "number" ? parsed.lat : undefined;
+                    const targetLon = typeof parsed.lon === "number" ? parsed.lon : (typeof parsed.lng === "number" ? parsed.lng : undefined);
+                    if (targetLat !== undefined && targetLon !== undefined) {
+                        return {
+                            lat: targetLat,
+                            lon: targetLon,
+                            name: parsed.name || "Blanco Táctico Activo",
+                            createdAt: parsed.createdAt || Date.now()
+                        };
                     }
                 }
             } catch {}
         }
         return null;
     });
+
+    useEffect(() => {
+        const checkTarget = () => {
+            try {
+                const saved = localStorage.getItem("red_tactical_target_point") || localStorage.getItem("red_active_target");
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    const targetLat = typeof parsed.lat === "number" ? parsed.lat : undefined;
+                    const targetLon = typeof parsed.lon === "number" ? parsed.lon : (typeof parsed.lng === "number" ? parsed.lng : undefined);
+                    if (targetLat !== undefined && targetLon !== undefined) {
+                        setTarget({
+                            lat: targetLat,
+                            lon: targetLon,
+                            name: parsed.name || "Blanco Táctico Activo",
+                            createdAt: parsed.createdAt || Date.now()
+                        });
+                    }
+                } else {
+                    setTarget(null);
+                }
+            } catch {}
+        };
+
+        window.addEventListener("storage", checkTarget);
+        return () => window.removeEventListener("storage", checkTarget);
+    }, []);
 
     const handleSetTarget = (lat: number, lon: number, name?: string) => {
         const newTarget: TacticalTarget = {
@@ -264,6 +330,7 @@ export default function NodeMap() {
         setTarget(newTarget);
         try {
             localStorage.setItem("red_tactical_target_point", JSON.stringify(newTarget));
+            localStorage.setItem("red_active_target", JSON.stringify(newTarget));
         } catch {}
 
         if (gpsData.lat !== 0 && gpsData.lng !== 0) {
@@ -278,6 +345,7 @@ export default function NodeMap() {
         setTarget(null);
         try {
             localStorage.removeItem("red_tactical_target_point");
+            localStorage.removeItem("red_active_target");
         } catch {}
         toast.info("Objetivo táctico cancelado");
     };
@@ -296,6 +364,7 @@ export default function NodeMap() {
     useEffect(() => {
         let mounted = true;
         let watchId: string | null = null;
+        let html5WatchId: number | null = null;
 
         const handleRealCoords = (coords: any, timestamp?: number) => {
             if (!mounted || !coords) return;
@@ -326,7 +395,28 @@ export default function NodeMap() {
             meshRouter.broadcastLocation(coords.latitude, coords.longitude, coords.altitude ?? undefined, coords.accuracy ?? undefined);
         };
 
+        const startHtml5Fallback = () => {
+            if (!mounted) return;
+            if (typeof navigator !== "undefined" && navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => handleRealCoords(pos.coords, pos.timestamp),
+                    (err) => console.warn("[NodeMap] HTML5 getCurrentPosition fallback:", err.message),
+                    { enableHighAccuracy: true, timeout: 8000, maximumAge: 5000 }
+                );
+                try {
+                    html5WatchId = navigator.geolocation.watchPosition(
+                        (pos) => handleRealCoords(pos.coords, pos.timestamp),
+                        (err) => console.warn("[NodeMap] HTML5 watchPosition notice:", err.message),
+                        { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 }
+                    );
+                } catch (e) {
+                    console.warn("[NodeMap] watchPosition error:", e);
+                }
+            }
+        };
+
         const initGeoWatch = async () => {
+            let capacitorActive = false;
             try {
                 const { Geolocation } = await import("@capacitor/geolocation");
                 const permission = await Geolocation.checkPermissions().catch(() => null);
@@ -337,6 +427,7 @@ export default function NodeMap() {
                 const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true }).catch(() => null);
                 if (pos?.coords) {
                     handleRealCoords(pos.coords, pos.timestamp);
+                    capacitorActive = true;
                 }
 
                 watchId = await Geolocation.watchPosition({ enableHighAccuracy: true }, (position) => {
@@ -344,8 +435,15 @@ export default function NodeMap() {
                         handleRealCoords(position.coords, position.timestamp);
                     }
                 });
+                if (watchId) {
+                    capacitorActive = true;
+                }
             } catch {
-                // Fallback
+                capacitorActive = false;
+            }
+
+            if (!capacitorActive) {
+                startHtml5Fallback();
             }
         };
 
@@ -357,6 +455,9 @@ export default function NodeMap() {
                 import("@capacitor/geolocation").then(({ Geolocation }) => {
                     Geolocation.clearWatch({ id: watchId as string });
                 }).catch(() => {});
+            }
+            if (html5WatchId !== null && typeof navigator !== "undefined" && navigator.geolocation) {
+                navigator.geolocation.clearWatch(html5WatchId);
             }
         };
     }, []);
@@ -523,6 +624,11 @@ export default function NodeMap() {
                         tile.alt = '';
                         tile.setAttribute('role', 'presentation');
 
+                        if ((this as any).options.isVectorGrid) {
+                            tile.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' fill='%23050812'%3E%3Crect width='256' height='256'/%3E%3Cpath d='M0 0h256v256H0z' stroke='%2300E5FF' stroke-width='0.4' stroke-opacity='0.25' fill='none'/%3E%3Ccircle cx='128' cy='128' r='1.5' fill='%2300E5FF' fill-opacity='0.45'/%3E%3C/svg%3E";
+                            return tile;
+                        }
+
                         // 1. Consultar primero la bóveda IndexedDB
                         offlineTileCacheEngine.getTile(coords.z, coords.x, coords.y).then((cachedBlob) => {
                             if (cachedBlob) {
@@ -555,14 +661,16 @@ export default function NodeMap() {
                 const osmLayer = new OfflineTileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
                     maxZoom: 19,
                     className: "tactical-dark-tile",
+                    isVectorGrid: mapMode === 'vectorGrid',
                     errorTileUrl: "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' fill='%23050812'%3E%3Crect width='256' height='256'/%3E%3Cpath d='M0 0h256v256H0z' stroke='%2300E5FF' stroke-width='0.4' stroke-opacity='0.2' fill='none'/%3E%3C/svg%3E"
                 });
 
                 osmLayer.addTo(mapInstance);
+                osmLayerRef.current = osmLayer;
 
-                // Listener de fijación de Objetivo Táctico con click
+                // Listener táctico: abre menú contextual de marcación sin sobrescribir objetivo
                 mapInstance.on("click", (e: any) => {
-                    handleSetTarget(e.latlng.lat, e.latlng.lng);
+                    setContextActionPoint({ lat: e.latlng.lat, lng: e.latlng.lng });
                 });
 
                 const markersGroup = L.layerGroup().addTo(mapInstance);
@@ -810,11 +918,99 @@ export default function NodeMap() {
                         }).addTo(markersGroupRef.current);
                     }
                 } catch {}
+
+                // Marcadores de Reportes de Situación Tácticos (SITREPs)
+                try {
+                    sitreps.forEach((rep: SitrepReport) => {
+                        if (rep && rep.location && typeof rep.location.lat === 'number' && typeof rep.location.lon === 'number') {
+                            const hasCasualties = rep.casualties && (
+                                rep.casualties.t1ImmediateRed > 0 ||
+                                rep.casualties.t2DelayedYellow > 0 ||
+                                rep.casualties.t3MinimalGreen > 0 ||
+                                rep.casualties.t4ExpectantBlack > 0
+                            );
+                            const sitrepAffiliation = rep.threatStatus === 'RED_CONTACT'
+                                ? 'HOSTILE'
+                                : rep.threatStatus === 'AMBER_SUSPICIOUS'
+                                ? 'UNKNOWN'
+                                : 'FRIEND';
+                            const sitrepRole = hasCasualties ? 'MEDICAL' : 'COMMAND_HQ';
+                            const sitrepSvg = milStd2525.generateSvg({
+                                affiliation: sitrepAffiliation,
+                                role: sitrepRole,
+                                size: 28,
+                                label: rep.unitCallsign || 'SITREP'
+                            });
+                            const sitrepIcon = L.divIcon({
+                                className: "custom-sitrep-marker",
+                                html: `<div style="filter:drop-shadow(0 0 10px ${rep.threatStatus === 'RED_CONTACT' ? '#FF3355' : rep.threatStatus === 'AMBER_SUSPICIOUS' ? '#FFB300' : '#00E676'});cursor:pointer;">${sitrepSvg}</div>`,
+                                iconSize: [28, 28],
+                                iconAnchor: [14, 14]
+                            });
+                            const m = L.marker([rep.location.lat, rep.location.lon], { icon: sitrepIcon }).addTo(markersGroupRef.current);
+                            m.bindPopup(`
+                                <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#000;padding:2px;min-width:180px;">
+                                    <strong>📋 SITREP: ${rep.unitCallsign || 'Patrulla'}</strong><br/>
+                                    Operador: ${rep.operatorName || 'Desconocido'}<br/>
+                                    Amenaza: <span style="font-weight:bold;color:${rep.threatStatus === 'RED_CONTACT' ? '#D32F2F' : rep.threatStatus === 'AMBER_SUSPICIOUS' ? '#F57C00' : '#388E3C'}">${rep.threatStatus}</span><br/>
+                                    ${hasCasualties ? `🚨 Bajas TCCC: T1:${rep.casualties.t1ImmediateRed} T2:${rep.casualties.t2DelayedYellow} T3:${rep.casualties.t3MinimalGreen} T4:${rep.casualties.t4ExpectantBlack}<br/>` : '🛡️ Sin bajas registradas<br/>'}
+                                    Batería: ${rep.suppliesBatteryPct ?? 100}% · Munición: ${rep.suppliesAmmoPct ?? 100}%<br/>
+                                    <em>"${rep.remarks || 'Sin observaciones'}"</em>
+                                </div>
+                            `);
+                        }
+                    });
+                } catch {}
+
+                // Superposición de Pluma de Dispersión QBRN (CBRN Dispersion Plume)
+                try {
+                    const rawCbrn = localStorage.getItem('red_active_cbrn_incident');
+                    if (rawCbrn) {
+                        const cbrnSource: CbrnIncidentSource = JSON.parse(rawCbrn);
+                        if (cbrnSource && typeof cbrnSource.lat === 'number' && typeof cbrnSource.lon === 'number') {
+                            const plume = cbrnPlumeDispersionEngine.calculatePlumeDispersion(cbrnSource, effectiveLat, effectiveLng);
+                            
+                            // Zona Caliente (Hot Zone)
+                            L.circle([cbrnSource.lat, cbrnSource.lon], {
+                                radius: plume.hotZoneRadiusMeters,
+                                color: "#FF3355",
+                                weight: 2,
+                                fillColor: "#FF3355",
+                                fillOpacity: 0.35
+                            }).bindPopup(`<strong>☣️ ZONA CALIENTE QBRN (IDLH)</strong><br/>Agente: ${cbrnSource.hazardType}<br/>Radio: ${plume.hotZoneRadiusMeters}m`).addTo(markersGroupRef.current);
+
+                            // Zona Tibia (Warm Zone)
+                            const windDirRad = (cbrnSource.windDirectionDegrees * Math.PI) / 180;
+                            const warmEndLat = cbrnSource.lat + (plume.warmZoneLengthMeters * Math.cos(windDirRad)) / 111000;
+                            const warmEndLon = cbrnSource.lon + (plume.warmZoneLengthMeters * Math.sin(windDirRad)) / (111000 * Math.cos((cbrnSource.lat * Math.PI) / 180));
+                            
+                            L.polyline([[cbrnSource.lat, cbrnSource.lon], [warmEndLat, warmEndLon]], {
+                                color: "#FFB300",
+                                weight: 4,
+                                dashArray: "6, 6",
+                                opacity: 0.8
+                            }).addTo(markersGroupRef.current);
+
+                            // Vector de Escape Seguro en 90°
+                            if (plume.escapeVector.isInDangerZone) {
+                                const escapeRad = (plume.escapeVector.recommendedAzimuthDegrees * Math.PI) / 180;
+                                const escLat = effectiveLat + (plume.escapeVector.distanceToSafetyMeters * Math.cos(escapeRad)) / 111000;
+                                const escLon = effectiveLng + (plume.escapeVector.distanceToSafetyMeters * Math.sin(escapeRad)) / (111000 * Math.cos((effectiveLat * Math.PI) / 180));
+                                
+                                L.polyline([[effectiveLat, effectiveLng], [escLat, escLon]], {
+                                    color: "#00E676",
+                                    weight: 3.5,
+                                    dashArray: "4, 4"
+                                }).addTo(markersGroupRef.current);
+                            }
+                        }
+                    }
+                } catch {}
             }
         };
 
         initMap();
-    }, [effectiveLat, effectiveLng, peers, target, isPdrActive]);
+    }, [effectiveLat, effectiveLng, peers, target, isPdrActive, sitreps, mapMode]);
 
     const recenterMap = () => {
         if (leafletMapRef.current) {
@@ -881,19 +1077,19 @@ export default function NodeMap() {
                                 }
                                 const bftEvt = cursorOnTarget.createBftEvent(nodeId, callsign, gpsData.lat, gpsData.lng, 'COMMAND_HQ', batt);
                                 const cotXml = cursorOnTarget.serializeToXml(bftEvt);
-                                if (navigator.clipboard) {
-                                    await navigator.clipboard.writeText(cotXml);
-                                    toast.success("🎯 CoT XML (ATAK/CivTAK) copiado al portapapeles");
-                                } else {
-                                    toast.info("🎯 CoT XML generado: " + cotXml.slice(0, 40) + "...");
-                                }
+                                await copyToClipboard(cotXml);
+                                // Broadcast CoT over the mesh router
+                                try {
+                                    meshRouter.broadcastLocation(gpsData.lat, gpsData.lng, gpsData.altitude, gpsData.accuracy);
+                                } catch {}
+                                toast.success("🎯 CoT BFT emitido por la malla y copiado al portapapeles");
                             } catch (e: any) {
                                 toast.error("Error al exportar CoT: " + e.message);
                             }
                         }}
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 9px", fontSize: "0.74rem" }}
-                        title="Exportar Cursor-on-Target (ATAK/CivTAK XML)"
+                        title="Exportar y Difundir Cursor-on-Target (ATAK/CivTAK XML)"
                     >
                         🎯 CoT
                     </button>
@@ -1066,6 +1262,172 @@ export default function NodeMap() {
 
             {/* Contenedor del Mapa Leaflet */}
             <div ref={mapContainerRef} style={{ flex: 1, width: "100%", height: "100%", background: "#04060A" }} />
+
+            {/* Controles Tácticos Flotantes (Zoom In/Out & Modo Rejilla Vectorial) */}
+            <div style={{
+                position: "absolute", right: "12px", top: target ? "265px" : "125px",
+                zIndex: 950, display: "flex", flexDirection: "column", gap: "6px"
+            }}>
+                <button
+                    onClick={() => leafletMapRef.current?.zoomIn()}
+                    className="btn-tactical-secondary"
+                    style={{
+                        width: "36px", height: "36px", padding: 0,
+                        fontSize: "1.2rem", fontWeight: 900,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        borderRadius: "8px", background: "rgba(10, 14, 26, 0.92)",
+                        border: "1px solid var(--glass-border)", color: "var(--accent-cyan)"
+                    }}
+                    title="Acercar mapa"
+                >
+                    +
+                </button>
+                <button
+                    onClick={() => leafletMapRef.current?.zoomOut()}
+                    className="btn-tactical-secondary"
+                    style={{
+                        width: "36px", height: "36px", padding: 0,
+                        fontSize: "1.2rem", fontWeight: 900,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        borderRadius: "8px", background: "rgba(10, 14, 26, 0.92)",
+                        border: "1px solid var(--glass-border)", color: "var(--accent-cyan)"
+                    }}
+                    title="Alejar mapa"
+                >
+                    −
+                </button>
+                <button
+                    onClick={() => {
+                        const next = mapMode === 'tactical' ? 'vectorGrid' : 'tactical';
+                        setMapMode(next);
+                        if (osmLayerRef.current) {
+                            osmLayerRef.current.options.isVectorGrid = (next === 'vectorGrid');
+                            osmLayerRef.current.redraw();
+                        }
+                        toast.info(next === 'vectorGrid' ? "🌐 Modo Rejilla Vectorial Pura (Sin Teselas / Bajo Consumo)" : "🗺️ Modo Cartografía Táctica");
+                    }}
+                    className={mapMode === 'vectorGrid' ? "btn-tactical-primary" : "btn-tactical-secondary"}
+                    style={{
+                        width: "36px", height: "36px", padding: 0,
+                        fontSize: "0.95rem",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        borderRadius: "8px", background: mapMode === 'vectorGrid' ? "#00E5FF" : "rgba(10, 14, 26, 0.92)",
+                        color: mapMode === 'vectorGrid' ? "#000" : "var(--text-primary)",
+                        border: "1px solid var(--glass-border)"
+                    }}
+                    title={mapMode === 'vectorGrid' ? "Conmutar a Mapa Táctico" : "Conmutar a Rejilla Vectorial Pura"}
+                >
+                    {mapMode === 'vectorGrid' ? "🌐" : "🗺️"}
+                </button>
+            </div>
+
+            {/* Menú Contextual Táctico de Marcación al tocar el mapa */}
+            {contextActionPoint && (
+                <div style={{
+                    position: "absolute", bottom: showTelemetryDrawer ? "265px" : "16px", left: "10px", right: "10px",
+                    zIndex: 1050, maxWidth: "440px", margin: "0 auto"
+                }}>
+                    <div className="card-tactical animate-pop" style={{
+                        padding: "14px 16px", background: "rgba(10, 14, 26, 0.96)",
+                        backdropFilter: "blur(20px)", border: "1.5px solid var(--accent-cyan)",
+                        borderRadius: "14px", display: "flex", flexDirection: "column", gap: "10px",
+                        boxShadow: "0 12px 35px rgba(0,0,0,0.8), 0 0 20px rgba(0,229,255,0.2)"
+                    }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span style={{ fontSize: "1.1rem" }}>📍</span>
+                                <div>
+                                    <div style={{ fontSize: "0.62rem", color: "var(--accent-cyan)", fontWeight: 800 }}>PUNTO TÁCTICO SELECCIONADO</div>
+                                    <div style={{ fontSize: "0.78rem", fontWeight: 900, fontFamily: "JetBrains Mono, monospace" }}>
+                                        {contextActionPoint.lat.toFixed(5)}, {contextActionPoint.lng.toFixed(5)}
+                                    </div>
+                                </div>
+                            </div>
+                            <button onClick={() => setContextActionPoint(null)} className="btn-icon" style={{ width: 28, height: 28 }}>✕</button>
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                            <button
+                                onClick={() => {
+                                    handleSetTarget(contextActionPoint.lat, contextActionPoint.lng);
+                                    setContextActionPoint(null);
+                                }}
+                                className="btn-tactical-primary"
+                                style={{ padding: "8px", fontSize: "0.74rem" }}
+                            >
+                                🎯 Fijar Objetivo
+                            </button>
+                            <button
+                                onClick={() => {
+                                    try {
+                                        const rawWps = localStorage.getItem("red_offgrid_waypoints");
+                                        const wps = rawWps ? JSON.parse(rawWps) : [];
+                                        const newWp = {
+                                            id: `WP-${Date.now().toString(36).toUpperCase()}`,
+                                            name: `Punto Táctico #${wps.length + 1}`,
+                                            lat: contextActionPoint.lat,
+                                            lon: contextActionPoint.lng,
+                                            createdAt: Date.now()
+                                        };
+                                        wps.push(newWp);
+                                        localStorage.setItem("red_offgrid_waypoints", JSON.stringify(wps));
+                                        toast.success(`🚩 Waypoint guardado: ${newWp.name}`);
+                                        setContextActionPoint(null);
+                                        if (leafletMapRef.current) {
+                                            leafletMapRef.current.invalidateSize();
+                                        }
+                                    } catch (e: any) {
+                                        toast.error("Error al guardar waypoint: " + e.message);
+                                    }
+                                }}
+                                className="btn-tactical-secondary"
+                                style={{ padding: "8px", fontSize: "0.74rem" }}
+                            >
+                                🚩 Añadir Waypoint
+                            </button>
+                        </div>
+
+                        <div style={{ display: "flex", gap: "8px" }}>
+                            <button
+                                onClick={() => {
+                                    try {
+                                        sitrepEngine.createSitrep({
+                                            unitCallsign: identity?.nickname || 'PATRULLA-1',
+                                            operatorName: identity?.nickname || 'Operador',
+                                            location: { lat: contextActionPoint.lat, lon: contextActionPoint.lng },
+                                            threatStatus: 'GREEN_CLEAR',
+                                            friendlyTroopsCount: 1,
+                                            casualties: { t1ImmediateRed: 0, t2DelayedYellow: 0, t3MinimalGreen: 0, t4ExpectantBlack: 0 },
+                                            suppliesAmmoPct: 100,
+                                            suppliesMedicalPct: 100,
+                                            suppliesBatteryPct: 100,
+                                            remarks: 'Reporte de posición táctica segura'
+                                        });
+                                        toast.success("📋 SITREP registrado en la posición");
+                                        setContextActionPoint(null);
+                                    } catch (e: any) {
+                                        toast.error("Error al registrar SITREP: " + e.message);
+                                    }
+                                }}
+                                className="btn-tactical-secondary"
+                                style={{ flex: 1, padding: "7px", fontSize: "0.72rem", color: "var(--accent-emerald)" }}
+                            >
+                                📋 Marcar SITREP
+                            </button>
+                            <button
+                                onClick={() => setContextActionPoint(null)}
+                                style={{
+                                    padding: "7px 12px", background: "rgba(255,255,255,0.06)",
+                                    border: "1px solid rgba(255,255,255,0.15)", borderRadius: "6px",
+                                    color: "var(--text-muted)", fontSize: "0.72rem", cursor: "pointer"
+                                }}
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Ficha Flotante de Nodo Seleccionado */}
             {selectedPeer && (

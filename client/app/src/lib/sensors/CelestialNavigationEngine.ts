@@ -20,8 +20,14 @@ export interface CelestialEphemeris {
     moonIlluminationPct: number;
     moonPhaseName: string;
     solarNoonUtcHours: number;
+    sunriseUtcHours: number;
+    sunsetUtcHours: number;
     isDaylight: boolean;
     tacticalLightingState: 'FULL_DAYLIGHT' | 'CIVIL_TWILIGHT' | 'NAUTICAL_TWILIGHT' | 'ASTRONOMICAL_TWILIGHT' | 'PITCH_BLACK';
+    gnomonShadowAzimuthDeg: number;
+    gnomonShadowRatio: number;
+    polarisAltitudeDeg: number;
+    southernCrossAltitudeDeg: number;
 }
 
 export class CelestialNavigationEngine {
@@ -112,6 +118,32 @@ export class CelestialNavigationEngine {
 
         const safeSolarNoon = ((Math.round((12 - (safeLon / 15)) * 100) / 100 % 24) + 24) % 24;
 
+        // Horas estimadas de amanecer y atardecer (Semi-diurno)
+        const tanProduct = -Math.tan(latRad) * Math.tan(declinationDeg * rad);
+        let sunriseUtcHours = (safeSolarNoon - 6 + 24) % 24;
+        let sunsetUtcHours = (safeSolarNoon + 6 + 24) % 24;
+        if (tanProduct >= 1) {
+            // Noche polar
+            sunriseUtcHours = 12;
+            sunsetUtcHours = 12;
+        } else if (tanProduct <= -1) {
+            // Día polar continuo
+            sunriseUtcHours = 0;
+            sunsetUtcHours = 24;
+        } else {
+            const h0Hours = (Math.acos(tanProduct) * deg) / 15;
+            sunriseUtcHours = Math.round(((safeSolarNoon - h0Hours + 24) % 24) * 100) / 100;
+            sunsetUtcHours = Math.round(((safeSolarNoon + h0Hours + 24) % 24) * 100) / 100;
+        }
+
+        // Vector de sombra Gnomon (180° opuesto al acimut solar)
+        const gnomonShadowAzimuthDeg = ((azimuthDeg + 180) % 360 + 360) % 360;
+        const gnomonShadowRatio = altitudeDeg > 1 ? Math.round((1 / Math.tan(altitudeDeg * rad)) * 100) / 100 : 99.9;
+
+        // Estrellas de referencia polar
+        const polarisAltitudeDeg = safeLat > 0 ? Math.round(safeLat * 10) / 10 : 0;
+        const southernCrossAltitudeDeg = safeLat < 0 ? Math.round(Math.abs(safeLat) * 10) / 10 : 0;
+
         return {
             timestamp: time,
             sun: {
@@ -129,8 +161,14 @@ export class CelestialNavigationEngine {
             moonIlluminationPct: isFinite(moonIlluminationPct) ? Math.max(0, Math.min(100, moonIlluminationPct)) : 50,
             moonPhaseName,
             solarNoonUtcHours: safeSolarNoon,
+            sunriseUtcHours,
+            sunsetUtcHours,
             isDaylight: altitudeDeg > 0,
             tacticalLightingState,
+            gnomonShadowAzimuthDeg: Math.round(gnomonShadowAzimuthDeg * 10) / 10,
+            gnomonShadowRatio,
+            polarisAltitudeDeg,
+            southernCrossAltitudeDeg,
         };
     }
 

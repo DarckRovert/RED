@@ -5,6 +5,9 @@ import { companionSyncEngine, ActiveCompanionSession } from "../../lib/mesh/comp
 import { WebCompanionPairConfirmationModal } from "../WebCompanionPairConfirmationModal";
 import { toast } from "../Toast";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { copyToClipboard } from "../../lib/clipboard";
 
 interface LinkedDevicesViewProps {
     onClose?: () => void;
@@ -111,6 +114,34 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
             stopCamera();
         };
     }, [stopCamera]);
+
+    // Intercepción LIFO de Hardware Android / Escape con desbobinado de estados
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (pendingWebPairingCode) {
+                TacticalAudioEngine.playTap();
+                setPendingWebPairingCode(null);
+                return true;
+            }
+            if (isScanning || isScanningNative || isWebCamActive) {
+                TacticalAudioEngine.playTap();
+                stopCamera();
+                return true;
+            }
+            if (showAirGapSection) {
+                TacticalAudioEngine.playTap();
+                setShowAirGapSection(false);
+                return true;
+            }
+            if (onClose) {
+                TacticalAudioEngine.playTap();
+                onClose();
+                return true;
+            }
+            return false;
+        });
+        return unregister;
+    }, [pendingWebPairingCode, isScanning, isScanningNative, isWebCamActive, showAirGapSection, onClose, stopCamera]);
 
     // Procesar código QR detectado
     const handleCodeDetected = async (rawCode: string) => {
@@ -694,8 +725,14 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
                                             masterPin
                                         );
                                         setAirGapExportToken(token);
-                                        navigator.clipboard.writeText(token);
-                                        toast.success("🛡️ Cápsula Air-Gap copiada al portapapeles.");
+                                        TacticalAudioEngine.playTap();
+                                        copyToClipboard(token).then((ok) => {
+                                            if (ok) {
+                                                toast.success("🛡️ Cápsula Air-Gap copiada al portapapeles.");
+                                            } else {
+                                                toast.error("Error al copiar cápsula Air-Gap.");
+                                            }
+                                        });
                                     } catch (e: any) {
                                         toast.error("Error al exportar cápsula: " + (e?.message || ""));
                                     }

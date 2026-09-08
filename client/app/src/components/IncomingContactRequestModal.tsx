@@ -4,6 +4,9 @@ import React, { useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import type { PendingContactRequest } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { toast } from "./Toast";
 
 function AvatarInitial({ name, hash }: { name: string; hash: string }) {
     const colors = ["#7C4DFF", "#00E5FF", "#FF6D00", "#00C853", "#F50057", "#FFD600"];
@@ -46,8 +49,9 @@ export function IncomingContactRequestModal() {
 
     useEffect(() => {
         if (req) {
+            TacticalAudioEngine.playRogerBeep();
             try {
-                const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+                const AudioCtxClass = typeof window !== "undefined" ? (window.AudioContext || (window as any).webkitAudioContext) : null;
                 if (AudioCtxClass) {
                     const ctx = new AudioCtxClass();
                     const osc = ctx.createOscillator();
@@ -71,6 +75,44 @@ export function IncomingContactRequestModal() {
         }
     }, [req?.id]);
 
+    useEffect(() => {
+        if (!req) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            dismissContactRequestModal();
+            return true;
+        });
+        return unregister;
+    }, [req, dismissContactRequestModal]);
+
+    const copyToClipboard = (text: string, label: string) => {
+        if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                toast.success(`${label} copiado`);
+            }).catch(() => {
+                fallbackCopy(text, label);
+            });
+        } else {
+            fallbackCopy(text, label);
+        }
+    };
+
+    const fallbackCopy = (text: string, label: string) => {
+        try {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            toast.success(`${label} copiado`);
+        } catch {
+            toast.error(`Error al copiar ${label}`);
+        }
+    };
+
     if (!req) return null;
 
     const pendingCount = pendingContactRequests.length;
@@ -80,7 +122,10 @@ export function IncomingContactRequestModal() {
         <>
             {/* Backdrop */}
             <div
-                onClick={dismissContactRequestModal}
+                onClick={() => {
+                    TacticalAudioEngine.playTap();
+                    dismissContactRequestModal();
+                }}
                 style={{
                     position: "fixed", inset: 0,
                     background: "rgba(0,0,0,0.72)",
@@ -145,12 +190,20 @@ export function IncomingContactRequestModal() {
                         <div style={{ fontSize: "1.15rem", fontWeight: 900, color: "#fff", marginBottom: 4 }}>
                             {req.senderName}
                         </div>
-                        <div style={{
-                            fontSize: "0.68rem", color: "rgba(0,229,255,0.7)",
-                            fontFamily: "JetBrains Mono, monospace",
-                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                        }}>
-                            {shortHash}
+                        <div
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                copyToClipboard(`did:red:${req.senderHash}`, "DID");
+                            }}
+                            title="Click para copiar DID"
+                            style={{
+                                fontSize: "0.68rem", color: "rgba(0,229,255,0.7)",
+                                fontFamily: "JetBrains Mono, monospace",
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                cursor: "pointer",
+                            }}
+                        >
+                            {shortHash} 📋
                         </div>
                         <div style={{
                             marginTop: 6, fontSize: "0.7rem",
@@ -187,7 +240,10 @@ export function IncomingContactRequestModal() {
                     {/* Accept */}
                     <button
                         id="btn-accept-contact-request"
-                        onClick={() => acceptContactRequest(req)}
+                        onClick={() => {
+                            TacticalAudioEngine.playRogerBeep();
+                            acceptContactRequest(req);
+                        }}
                         style={{
                             width: "100%", padding: "16px",
                             borderRadius: 14, border: "none",
@@ -208,7 +264,10 @@ export function IncomingContactRequestModal() {
                     {/* Reject */}
                     <button
                         id="btn-reject-contact-request"
-                        onClick={() => rejectContactRequest(req)}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            rejectContactRequest(req);
+                        }}
                         style={{
                             width: "100%", padding: "14px",
                             borderRadius: 14,
@@ -229,7 +288,10 @@ export function IncomingContactRequestModal() {
                     {/* Block */}
                     <button
                         id="btn-block-contact-request"
-                        onClick={() => blockNode(req.senderHash)}
+                        onClick={() => {
+                            TacticalAudioEngine.playWarning();
+                            blockNode(req.senderHash);
+                        }}
                         style={{
                             width: "100%", padding: "14px",
                             borderRadius: 14,

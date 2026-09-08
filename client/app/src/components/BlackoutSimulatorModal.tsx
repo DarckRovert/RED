@@ -5,6 +5,8 @@ import { useRedStore } from "../store/useRedStore";
 import { getBlackoutStatus, setBlackoutMode, BlackoutStatusResponse } from "../lib/api";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 interface BlackoutSimulatorModalProps {
     onClose?: () => void;
@@ -19,6 +21,15 @@ export const BlackoutSimulatorModal: React.FC<BlackoutSimulatorModalProps> = ({ 
     const [toggling, setToggling] = useState<boolean>(false);
     const [eventLogs, setEventLogs] = useState<string[]>([]);
     const [blackoutDuration, setBlackoutDuration] = useState<number>(0);
+
+    // Registro LIFO de retroceso físico / Esc
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            handleClose();
+            return true;
+        });
+        return unregister;
+    }, [handleClose]);
 
     const isBlackout = status?.is_blackout ?? false;
 
@@ -65,6 +76,7 @@ export const BlackoutSimulatorModal: React.FC<BlackoutSimulatorModalProps> = ({ 
             setStatus(updated);
 
             if (nextMode) {
+                TacticalAudioEngine.playEmergencyAlarm();
                 setEventLogs(prev => [
                     `[${ts()}] ⚠️ PROTOCOLO DE APAGÓN ACTIVADO EN MOTOR RUST`,
                     `[${ts()}] 🛑 Sockets WAN / Internet cortados físicamente.`,
@@ -75,6 +87,7 @@ export const BlackoutSimulatorModal: React.FC<BlackoutSimulatorModalProps> = ({ 
                 ]);
                 toast.error("⚠️ MODO APAGÓN ACTIVADO: WAN AISLADO");
             } else {
+                TacticalAudioEngine.playRogerBeep();
                 setEventLogs(prev => [
                     `[${ts()}] ✅ MODO APAGÓN DESACTIVADO EN MOTOR RUST`,
                     `[${ts()}] 🌐 Sockets WAN reconectados. Restaurando relés libp2p y DHT Kademlia.`,
@@ -84,6 +97,7 @@ export const BlackoutSimulatorModal: React.FC<BlackoutSimulatorModalProps> = ({ 
                 toast.success("🌐 Modo Normal Restaurado: WAN Reconectado");
             }
         } catch {
+            TacticalAudioEngine.playWarning();
             setEventLogs(prev => [
                 `[${ts()}] ❌ Error al comunicar la instrucción de apagón al motor Rust.`,
                 ...prev
@@ -136,7 +150,7 @@ export const BlackoutSimulatorModal: React.FC<BlackoutSimulatorModalProps> = ({ 
                 </div>
 
                 <button
-                    onClick={handleClose}
+                    onClick={() => { TacticalAudioEngine.playTap(); handleClose(); }}
                     className="btn-icon"
                     title={t.common?.close || "Cerrar consola"}
                     style={{ width: 38, height: 38 }}

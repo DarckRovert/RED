@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRedStore } from "../../store/useRedStore";
 import { callHistory, CallRecord } from "../../lib/audio/CallHistoryEngine";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { avatarStyle } from "../sidebar/types";
 import { meshRouter } from "../../lib/mesh/meshRouter";
 import { toast } from "../Toast";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 
 export function CallsHistoryView() {
     const { t } = useTranslation();
@@ -17,6 +19,17 @@ export function CallsHistoryView() {
     const [isPickerOpen, setIsPickerOpen] = useState(false);
     const [pickerSearch, setPickerSearch] = useState("");
     const [manualHash, setManualHash] = useState("");
+
+    // Intercepción LIFO de hardware Android y tecla Escape para el selector de llamadas
+    useEffect(() => {
+        if (!isPickerOpen) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            setIsPickerOpen(false);
+            return true;
+        });
+        return () => unregister();
+    }, [isPickerOpen]);
 
     useEffect(() => {
         const unsub = callHistory.subscribe(setHistory);
@@ -73,7 +86,7 @@ export function CallsHistoryView() {
         return `(${m}m ${s}s)`;
     };
 
-    const startCallWithPeer = (peerHash: string, type: "audio" | "video") => {
+    const startCallWithPeer = useCallback((peerHash: string, type: "audio" | "video") => {
         if (!peerHash) return;
         const rand = typeof crypto !== 'undefined' && crypto.getRandomValues
             ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
@@ -92,7 +105,7 @@ export function CallsHistoryView() {
         });
         setIsPickerOpen(false);
         navigate("call", peerHash);
-    };
+    }, [setActiveCallType, navigate]);
 
     const filteredContacts = useMemo(() => {
         const list = Array.isArray(contacts) ? contacts : [];

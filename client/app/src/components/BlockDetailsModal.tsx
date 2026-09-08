@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { toast } from "./Toast";
 import { ChainBlock, ChainTransaction } from "../lib/blockchain/LocalChainLedger";
 
@@ -14,11 +16,41 @@ export const BlockDetailsModal: React.FC<BlockDetailsModalProps> = ({ block, onC
     const { t } = useTranslation();
     const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
 
+    // ─── Intercepción Jerárquica LIFO de Hardware (Android Back / Esc) ───
+    // Sub-estado: si hay TX expandida, Back la colapsa primero; segundo Back cierra modal.
+    useEffect(() => {
+        return BackHandlerRegistry.register(() => {
+            if (expandedTxId !== null) {
+                setExpandedTxId(null);
+                return true;
+            }
+            onClose?.();
+            return true;
+        });
+    }, [expandedTxId, onClose]);
+
     const copyToClipboard = async (text: string, label: string) => {
+        TacticalAudioEngine.playMessageSent();
         try {
-            await navigator.clipboard.writeText(text);
+            if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+                toast.success(t.common?.copied || `${label} copiado`);
+                return;
+            }
+        } catch {}
+        try {
+            const el = document.createElement("textarea");
+            el.value = text;
+            el.setAttribute("readonly", "");
+            el.style.position = "absolute";
+            el.style.left = "-9999px";
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand("copy");
+            document.body.removeChild(el);
             toast.success(t.common?.copied || `${label} copiado`);
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error(t.common?.error || "Error al copiar");
         }
     };
@@ -65,7 +97,7 @@ export const BlockDetailsModal: React.FC<BlockDetailsModalProps> = ({ block, onC
                             </div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="btn-icon" style={{ width: 34, height: 34 }}>✕</button>
+                    <button onClick={() => { TacticalAudioEngine.playTap(); onClose?.(); }} className="btn-icon" style={{ width: 34, height: 34 }}>✕</button>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -150,7 +182,7 @@ export const BlockDetailsModal: React.FC<BlockDetailsModalProps> = ({ block, onC
                                                 background: "rgba(0,0,0,0.35)", border: "1px solid var(--glass-border)",
                                                 cursor: "pointer"
                                             }}
-                                            onClick={() => setExpandedTxId(isExpanded ? null : tx.id)}
+                                            onClick={() => { TacticalAudioEngine.playTap(); setExpandedTxId(isExpanded ? null : tx.id); }}
                                         >
                                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>

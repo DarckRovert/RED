@@ -4,9 +4,12 @@ import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { ShamirSecretSharingEngine, SecretShare } from "../lib/ShamirSecretSharingEngine";
 import { PqcCryptoEngine, HybridKeyPair } from "../lib/PqcCryptoEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { meshRouter } from "../lib/mesh/meshRouter";
 
 const STORAGE_KEY = "red_identity_vault_v1";
 
@@ -28,6 +31,7 @@ export const IdentityVaultModal: React.FC = () => {
     const [bio, setBio] = useState("");
     const [phoneNumber, setPhoneNumber] = useState(identity?.phone_number || "");
     const [isProfileSaved, setIsProfileSaved] = useState(false);
+    const [showIdentityQr, setShowIdentityQr] = useState(false);
 
     // Emergency Vault State
     const [bloodType, setBloodType] = useState("");
@@ -53,6 +57,25 @@ export const IdentityVaultModal: React.FC = () => {
         success: boolean;
     } | null>(null);
     const [isBenchmarking, setIsBenchmarking] = useState(false);
+
+    // Intercepción Jerárquica LIFO de Hardware (Android Back / Esc)
+    useEffect(() => {
+        return BackHandlerRegistry.register(() => {
+            if (showIdentityQr) {
+                TacticalAudioEngine.playTap();
+                setShowIdentityQr(false);
+                return true;
+            }
+            if (activeTab !== "profile") {
+                TacticalAudioEngine.playTap();
+                setActiveTab("profile");
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+    }, [showIdentityQr, activeTab, goBack]);
 
     // Generate Identity QR code for tactical scanning
     useEffect(() => {
@@ -121,6 +144,7 @@ export const IdentityVaultModal: React.FC = () => {
 
         setIsProfileSaved(true);
         setTimeout(() => setIsProfileSaved(false), 2500);
+        TacticalAudioEngine.playRogerBeep();
         toast.success("✅ Perfil de Operador actualizado y sincronizado");
     };
 
@@ -155,28 +179,84 @@ export const IdentityVaultModal: React.FC = () => {
 
         if (typeof window !== "undefined") {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            window.dispatchEvent(new CustomEvent("red:medical_vault_updated", { detail: data }));
         }
 
+        TacticalAudioEngine.playRogerBeep();
         toast.success("🛡️ Ficha Médica Cifrada Guardada");
     };
 
+    const handleClearMedical = () => {
+        TacticalAudioEngine.playWarning();
+        setBloodType("");
+        setAllergies("");
+        setEmergencyContact("");
+        setQrCodeData(null);
+        if (typeof window !== "undefined") {
+            localStorage.removeItem(STORAGE_KEY);
+            window.dispatchEvent(new CustomEvent("red:medical_vault_updated", { detail: null }));
+        }
+        toast.info("Ficha médica purgada de la bóveda local");
+    };
+
     const handleGeneratePqcKeys = async () => {
+        TacticalAudioEngine.playTap();
         setIsPqcGenerating(true);
         try {
             const keys = await PqcCryptoEngine.generateHybridKeyPair();
             setPqcKeys(keys);
             if (typeof window !== "undefined") {
                 localStorage.setItem("red_pqc_hybrid_keys", JSON.stringify(keys));
+                localStorage.setItem("red_pqc_kyber_public_key", keys.kyberPublicKeyHex);
             }
+            TacticalAudioEngine.playRogerBeep();
             toast.success("🔑 Par de llaves híbridas FIPS-203 ML-KEM-768 generadas");
         } catch (e: any) {
+            TacticalAudioEngine.playWarning();
             toast.error(`Fallo al generar llaves PQC: ${e.message}`);
         } finally {
             setIsPqcGenerating(false);
         }
     };
 
+    const handleClearPqcKeys = () => {
+        TacticalAudioEngine.playWarning();
+        setPqcKeys(null);
+        setBenchmarkResult(null);
+        if (typeof window !== "undefined") {
+            localStorage.removeItem("red_pqc_hybrid_keys");
+            localStorage.removeItem("red_pqc_kyber_public_key");
+        }
+        toast.info("Llaves PQC eliminadas de la memoria local");
+    };
+
+    const handleAnnouncePqcKey = async () => {
+        if (!pqcKeys) {
+            toast.warning("Primero genera las llaves PQC");
+            return;
+        }
+        TacticalAudioEngine.playTap();
+        try {
+            const payload = new TextEncoder().encode(JSON.stringify({
+                type: "PQC_KEY_ANNOUNCEMENT",
+                did: myDid,
+                nickname: nickname || "Operador RED",
+                kyberPublicKeyHex: pqcKeys.kyberPublicKeyHex,
+                x25519PublicKeyHex: pqcKeys.x25519PublicKeyHex,
+                algorithm: "ML-KEM-768+X25519",
+                timestamp: Date.now()
+            }));
+            await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", payload);
+            TacticalAudioEngine.playRogerBeep();
+            toast.success("📡 Llave pública PQC ML-KEM-768 anunciada por la malla");
+        } catch (e: any) {
+            TacticalAudioEngine.playWarning();
+            toast.error("Error al anunciar llave PQC: " + e.message);
+        }
+    };
+
     const handleRunBenchmark = async () => {
+        TacticalAudioEngine.playTap();
         setIsBenchmarking(true);
         try {
             const startGen = performance.now();
@@ -195,8 +275,10 @@ export const IdentityVaultModal: React.FC = () => {
                 sharedSecretPreview: secret.substring(0, 16) + "…",
                 success: secret === encap.sharedSecretHex
             });
+            TacticalAudioEngine.playRogerBeep();
             toast.success(`⚡ Benchmark PQC: Encap ${encapTime}ms · Decap ${decapTime}ms`);
         } catch (e: any) {
+            TacticalAudioEngine.playWarning();
             toast.error(`Error en benchmark: ${e.message}`);
         } finally {
             setIsBenchmarking(false);
@@ -204,6 +286,7 @@ export const IdentityVaultModal: React.FC = () => {
     };
 
     const handleSplitSecret = () => {
+        TacticalAudioEngine.playTap();
         if (!secretToSplit.trim()) {
             toast.warning("Ingresa un secreto o semilla BIP-39 para dividir.");
             return;
@@ -213,13 +296,24 @@ export const IdentityVaultModal: React.FC = () => {
             const shares = ShamirSecretSharingEngine.splitSecret(hex, 3, 5);
             setSssShares(shares);
             setSecretToSplit("");
+            TacticalAudioEngine.playRogerBeep();
             toast.success("🔐 Secreto dividido en 5 fragmentos (Umbral: 3)");
         } catch (e: any) {
+            TacticalAudioEngine.playWarning();
             toast.error(`Error al dividir secreto: ${e.message}`);
         }
     };
 
+    const handleCopyAllShares = () => {
+        TacticalAudioEngine.playTap();
+        if (sssShares.length === 0) return;
+        const formatted = sssShares.map(s => `RED_SSS:${s.shareIndex}:${s.shareHex}`).join('\n');
+        copyToClipboard(formatted);
+        toast.success("📋 5 fragmentos SSS copiados en formato táctico");
+    };
+
     const handleReconstructSecret = () => {
+        TacticalAudioEngine.playTap();
         const rawInput = sharesToReconstruct.trim();
         if (!rawInput) {
             toast.warning("Pega al menos 3 fragmentos SSS.");
@@ -260,6 +354,7 @@ export const IdentityVaultModal: React.FC = () => {
             }
 
             if (!sharesList || sharesList.length < 3) {
+                TacticalAudioEngine.playWarning();
                 toast.error("Se requieren al menos 3 fragmentos válidos para reconstruir el secreto.");
                 return;
             }
@@ -268,13 +363,16 @@ export const IdentityVaultModal: React.FC = () => {
             const bytes = new Uint8Array(secretHex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []);
             const secret = new TextDecoder().decode(bytes);
             setReconstructedSecret(secret);
+            TacticalAudioEngine.playRogerBeep();
             toast.success("🎉 ¡Secreto reconstruido exitosamente!");
         } catch (e: any) {
+            TacticalAudioEngine.playWarning();
             toast.error(`Fallo en reconstrucción: ${e.message}`);
         }
     };
 
     const copyToClipboard = (text: string) => {
+        TacticalAudioEngine.playTap();
         if (typeof navigator !== "undefined" && navigator.clipboard) {
             navigator.clipboard.writeText(text);
             toast.success("Copiado al portapapeles");
@@ -301,7 +399,10 @@ export const IdentityVaultModal: React.FC = () => {
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
-                        onClick={goBack}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            goBack();
+                        }}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -330,7 +431,10 @@ export const IdentityVaultModal: React.FC = () => {
 
                 <div style={{ display: "flex", gap: "6px" }}>
                     <button
-                        onClick={() => navigate("web3Vault")}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            navigate("web3Vault");
+                        }}
                         style={{
                             padding: "6px 12px", borderRadius: "10px",
                             background: "rgba(245, 132, 31, 0.15)", border: "1px solid rgba(245, 132, 31, 0.4)",
@@ -359,7 +463,10 @@ export const IdentityVaultModal: React.FC = () => {
                     return (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id as IdentityTab)}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setActiveTab(tab.id as IdentityTab);
+                            }}
                             style={{
                                 flex: 1, padding: "8px 12px", borderRadius: "10px",
                                 background: isSel ? "linear-gradient(135deg, rgba(0, 229, 255, 0.22) 0%, rgba(10, 25, 45, 0.85) 100%)" : "rgba(255, 255, 255, 0.03)",
@@ -433,6 +540,47 @@ export const IdentityVaultModal: React.FC = () => {
                                         COPIAR
                                     </button>
                                 </div>
+                            </div>
+
+                            {/* Tarjeta Visual de Código QR de Identidad Táctica */}
+                            <div style={{
+                                background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(0, 229, 255, 0.25)",
+                                borderRadius: "14px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px"
+                            }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <div>
+                                        <div style={{ fontSize: "0.86rem", fontWeight: 900, color: "var(--accent-cyan)" }}>
+                                            CREDENCIAL QR DE IDENTIDAD SOBERANA
+                                        </div>
+                                        <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                            Para emparejamiento táctico pantalla-a-pantalla sin emisión de radiofrecuencia.
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowIdentityQr(prev => !prev)}
+                                        style={{
+                                            padding: "6px 12px", borderRadius: "8px",
+                                            background: showIdentityQr ? "rgba(0, 229, 255, 0.25)" : "rgba(255, 255, 255, 0.08)",
+                                            border: "1px solid rgba(0, 229, 255, 0.4)", color: "#00E5FF",
+                                            fontSize: "0.72rem", fontWeight: 800, cursor: "pointer"
+                                        }}
+                                    >
+                                        {showIdentityQr ? "✕ OCULTAR QR" : "👁️ MOSTRAR QR"}
+                                    </button>
+                                </div>
+
+                                {showIdentityQr && identityQrCodeData && (
+                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", paddingTop: "6px" }}>
+                                        <img
+                                            src={identityQrCodeData}
+                                            alt="QR Identidad DID"
+                                            style={{ width: 220, height: 220, borderRadius: "12px", border: "2px solid #00E676" }}
+                                        />
+                                        <div style={{ fontSize: "0.64rem", color: "var(--text-secondary)", textAlign: "center" }}>
+                                            Escaneable ópticamente por cualquier nodo RED Sovereign Mesh OS.
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Form Fields */}
@@ -530,6 +678,98 @@ export const IdentityVaultModal: React.FC = () => {
                                 </button>
                             </div>
 
+                            {/* Inspección de Llaves PQC Activas */}
+                            {pqcKeys && (
+                                <div style={{
+                                    padding: "14px", background: "rgba(0, 0, 0, 0.4)",
+                                    border: "1px solid rgba(179, 136, 255, 0.25)", borderRadius: "14px",
+                                    display: "flex", flexDirection: "column", gap: "10px"
+                                }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                        <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "#B388FF" }}>
+                                            LLAVES PQC ML-KEM-768 ACTIVAS
+                                        </span>
+                                        <button
+                                            onClick={handleClearPqcKeys}
+                                            style={{
+                                                padding: "4px 8px", background: "rgba(255, 51, 85, 0.15)",
+                                                border: "1px solid rgba(255, 51, 85, 0.3)", borderRadius: "6px",
+                                                color: "#FF3355", fontSize: "0.65rem", fontWeight: 800, cursor: "pointer"
+                                            }}
+                                        >
+                                            ELIMINAR LLAVES
+                                        </button>
+                                    </div>
+
+                                    <div>
+                                        <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)", marginBottom: "2px" }}>
+                                            KYBER PUBLIC KEY ({Math.round(pqcKeys.kyberPublicKeyHex.length / 2)} BYTES):
+                                        </div>
+                                        <div style={{ display: "flex", gap: "6px" }}>
+                                            <input
+                                                readOnly
+                                                value={pqcKeys.kyberPublicKeyHex}
+                                                style={{
+                                                    flex: 1, padding: "6px 8px", background: "rgba(0,0,0,0.5)",
+                                                    border: "1px solid rgba(255,255,255,0.1)", borderRadius: "6px",
+                                                    color: "#B388FF", fontSize: "0.66rem", fontFamily: "JetBrains Mono"
+                                                }}
+                                            />
+                                            <button
+                                                onClick={() => copyToClipboard(pqcKeys.kyberPublicKeyHex)}
+                                                style={{
+                                                    padding: "6px 10px", background: "rgba(179, 136, 255, 0.2)",
+                                                    border: "1px solid #B388FF", borderRadius: "6px",
+                                                    color: "#FFFFFF", fontSize: "0.66rem", fontWeight: 800, cursor: "pointer"
+                                                }}
+                                            >
+                                                COPIAR
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)", marginBottom: "2px" }}>
+                                            X25519 ECDH PUBLIC KEY:
+                                        </div>
+                                        <div style={{ display: "flex", gap: "6px" }}>
+                                            <input
+                                                readOnly
+                                                value={pqcKeys.x25519PublicKeyHex}
+                                                style={{
+                                                    flex: 1, padding: "6px 8px", background: "rgba(0,0,0,0.5)",
+                                                    border: "1px solid rgba(255,255,255,0.1)", borderRadius: "6px",
+                                                    color: "#00E5FF", fontSize: "0.66rem", fontFamily: "JetBrains Mono"
+                                                }}
+                                            />
+                                            <button
+                                                onClick={() => copyToClipboard(pqcKeys.x25519PublicKeyHex)}
+                                                style={{
+                                                    padding: "6px 10px", background: "rgba(0, 229, 255, 0.2)",
+                                                    border: "1px solid #00E5FF", borderRadius: "6px",
+                                                    color: "#FFFFFF", fontSize: "0.66rem", fontWeight: 800, cursor: "pointer"
+                                                }}
+                                            >
+                                                COPIAR
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={handleAnnouncePqcKey}
+                                        style={{
+                                            marginTop: "4px", padding: "10px",
+                                            background: "linear-gradient(135deg, rgba(179, 136, 255, 0.3) 0%, rgba(120, 80, 220, 0.2) 100%)",
+                                            border: "1px solid #B388FF", borderRadius: "8px", color: "#FFFFFF",
+                                            fontWeight: 900, fontSize: "0.75rem", cursor: "pointer",
+                                            display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                                        }}
+                                    >
+                                        📡 ANUNCIAR LLAVE PQC EN LA MALLA
+                                    </button>
+                                </div>
+                            )}
+
                             {benchmarkResult && (
                                 <div style={{
                                     padding: "14px", background: "rgba(0, 0, 0, 0.4)",
@@ -594,7 +834,21 @@ export const IdentityVaultModal: React.FC = () => {
 
                             {sssShares.length > 0 && (
                                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                    <div style={{ fontSize: "0.72rem", color: "#00E676", fontWeight: 900 }}>FRAGMENTOS GENERADOS:</div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                        <div style={{ fontSize: "0.72rem", color: "#00E676", fontWeight: 900 }}>
+                                            FRAGMENTOS GENERADOS:
+                                        </div>
+                                        <button
+                                            onClick={handleCopyAllShares}
+                                            style={{
+                                                padding: "4px 8px", background: "rgba(0, 230, 118, 0.15)",
+                                                border: "1px solid rgba(0, 230, 118, 0.4)", borderRadius: "6px",
+                                                color: "#00E676", fontSize: "0.66rem", fontWeight: 800, cursor: "pointer"
+                                            }}
+                                        >
+                                            📋 COPIAR TODOS
+                                        </button>
+                                    </div>
                                     {sssShares.map(s => (
                                         <div
                                             key={s.shareIndex}
@@ -651,13 +905,25 @@ export const IdentityVaultModal: React.FC = () => {
                             border: "1.5px solid rgba(255, 51, 85, 0.35)", borderRadius: "22px", padding: "20px",
                             display: "flex", flexDirection: "column", gap: "16px"
                         }}>
-                            <div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FF3355" }}>
-                                    FICHA MÉDICA DE RESCATE (ED25519 FIRMADA)
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FF3355" }}>
+                                        FICHA MÉDICA DE RESCATE (ED25519 FIRMADA)
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                        Información vital accesible por rescatistas en caso de inconsciencia o triaje START.
+                                    </div>
                                 </div>
-                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                                    Información vital accesible por rescatistas en caso de inconsciencia o triaje START.
-                                </div>
+                                <button
+                                    onClick={handleClearMedical}
+                                    style={{
+                                        padding: "4px 8px", background: "rgba(255, 255, 255, 0.06)",
+                                        border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "6px",
+                                        color: "var(--text-muted)", fontSize: "0.65rem", fontWeight: 800, cursor: "pointer"
+                                    }}
+                                >
+                                    LIMPIAR
+                                </button>
                             </div>
 
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "10px" }}>
@@ -703,17 +969,33 @@ export const IdentityVaultModal: React.FC = () => {
                                 />
                             </div>
 
-                            <button
-                                onClick={handleSaveMedical}
-                                style={{
-                                    width: "100%", padding: "12px", background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
-                                    border: "none", borderRadius: "12px", color: "#FFFFFF",
-                                    fontWeight: 900, fontSize: "0.85rem", cursor: "pointer",
-                                    boxShadow: "0 0 15px rgba(255, 51, 85, 0.35)"
-                                }}
-                            >
-                                🫀 GENERAR CÓDIGO QR MÉDICO
-                            </button>
+                            <div style={{ display: "flex", gap: "8px" }}>
+                                <button
+                                    onClick={handleSaveMedical}
+                                    style={{
+                                        flex: 1, padding: "12px", background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                                        border: "none", borderRadius: "12px", color: "#FFFFFF",
+                                        fontWeight: 900, fontSize: "0.85rem", cursor: "pointer",
+                                        boxShadow: "0 0 15px rgba(255, 51, 85, 0.35)"
+                                    }}
+                                >
+                                    🫀 GENERAR QR Y GUARDAR
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        TacticalAudioEngine.playTap();
+                                        navigate("tcccBallistics");
+                                    }}
+                                    style={{
+                                        padding: "12px 14px", background: "rgba(255, 51, 85, 0.15)",
+                                        border: "1.5px solid #FF3355", borderRadius: "12px", color: "#FF3355",
+                                        fontWeight: 900, fontSize: "0.82rem", cursor: "pointer",
+                                        whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "4px"
+                                    }}
+                                >
+                                    <span>🚑</span> TCCC / MEDEVAC
+                                </button>
+                            </div>
 
                             {qrCodeData && (
                                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", paddingTop: "10px" }}>

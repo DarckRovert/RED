@@ -1,5 +1,5 @@
 import { StateCreator } from 'zustand';
-import { RedStore, ScreenView, NavTab, NavigationEntry } from '../types';
+import { RedStore, ScreenView, NavTab, NavigationEntry, OVERLAY_SCREENS } from '../types';
 import { SettingsManager, DEFAULT_PREFERENCES, UserPreferences } from '../../lib/settingsManager';
 import { RedAPI } from '../../api/client';
 import { localTransport } from '../../lib/mesh/localTransport';
@@ -7,7 +7,6 @@ import { meshRouter } from '../../lib/mesh/meshRouter';
 import { ConversationItem, MessageItem } from '../../api/types';
 import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
 
-const OVERLAY_SCREENS = new Set<string>(['call', 'updater']);
 const MAX_HISTORY_LENGTH = 30;
 
 export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = (set, get) => ({

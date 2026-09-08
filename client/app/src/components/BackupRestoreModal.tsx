@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { SovereignBackupEngine, CloudUploadResult } from "../lib/SovereignBackupEngine";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 
@@ -43,6 +44,19 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
         setBackupStatus(s);
         setAutoSync(s.autoSyncEnabled);
     };
+
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (uiMode === "advanced") {
+                setUiMode("one_touch");
+                return true;
+            }
+            handleClose();
+            return true;
+        });
+        return unregister;
+    }, [uiMode, handleClose]);
 
     useEffect(() => {
         refreshStatus();
@@ -243,10 +257,32 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
     };
 
     const copyToClipboard = (text: string, msg: string) => {
-        if (typeof navigator !== "undefined" && navigator.clipboard) {
-            navigator.clipboard.writeText(text);
+        if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                toast.success(msg);
+                TacticalAudioEngine.playTap();
+            }).catch(() => {
+                fallbackCopy(text, msg);
+            });
+        } else {
+            fallbackCopy(text, msg);
+        }
+    };
+
+    const fallbackCopy = (text: string, msg: string) => {
+        try {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
             toast.success(msg);
             TacticalAudioEngine.playTap();
+        } catch {
+            toast.error("Error al copiar al portapapeles");
         }
     };
 
@@ -287,7 +323,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
                 </div>
 
                 <button
-                    onClick={handleClose}
+                    onClick={() => { TacticalAudioEngine.playTap(); handleClose(); }}
                     title={t.common?.close || "Cerrar"}
                     style={{
                         background: "rgba(255, 255, 255, 0.06)", border: "1px solid var(--border-subtle)",

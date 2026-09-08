@@ -7,6 +7,8 @@ import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
 import { ErrorBanner } from "./ui/ErrorBanner";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 export const ProximitySettingsModal: React.FC = () => {
     const { t } = useTranslation();
@@ -14,6 +16,16 @@ export const ProximitySettingsModal: React.FC = () => {
     const [config, setConfig] = useState<ProximityFilterConfig | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    // Registro LIFO de retroceso físico / Esc
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return unregister;
+    }, [goBack]);
 
     const loadConfig = async () => {
         setIsLoading(true);
@@ -42,8 +54,10 @@ export const ProximitySettingsModal: React.FC = () => {
         setConfig(updated);
         try {
             await setDiscoveryConfig(updated);
+            TacticalAudioEngine.playRogerBeep();
             toast.success("Filtros de proximidad actualizados");
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al guardar configuración");
         }
     };
@@ -85,7 +99,7 @@ export const ProximitySettingsModal: React.FC = () => {
                 </div>
 
                 <button
-                    onClick={goBack}
+                    onClick={() => { TacticalAudioEngine.playTap(); goBack(); }}
                     className="btn-icon"
                     title="Cerrar filtro"
                     style={{ width: 38, height: 38 }}
@@ -116,7 +130,7 @@ export const ProximitySettingsModal: React.FC = () => {
                             ].map(m => (
                                 <div
                                     key={m.id}
-                                    onClick={() => config && handleSave({ ...config, stealth_mode: m.id as any })}
+                                    onClick={() => { TacticalAudioEngine.playTap(); if (config) handleSave({ ...config, stealth_mode: m.id as any }); }}
                                     className="card-tactical-interactive"
                                     style={{ padding: "12px", borderColor: config?.stealth_mode === m.id ? "var(--accent-cyan)" : "var(--glass-border)" }}
                                 >
@@ -145,7 +159,7 @@ export const ProximitySettingsModal: React.FC = () => {
                             min={-95}
                             max={-50}
                             value={config?.rssi_threshold ?? -85}
-                            onChange={e => config && handleSave({ ...config, rssi_threshold: parseInt(e.target.value) })}
+                            onChange={e => { TacticalAudioEngine.playTap(); if (config) handleSave({ ...config, rssi_threshold: parseInt(e.target.value) }); }}
                             style={{ accentColor: "var(--accent-cyan)" }}
                         />
                     </div>

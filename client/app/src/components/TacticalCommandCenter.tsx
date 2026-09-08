@@ -13,6 +13,7 @@ import { SwarmHealthHUD } from './SwarmHealthHUD';
 import { GlobalSearchModal } from './GlobalSearchModal';
 import { toast } from './Toast';
 import { BackHandlerRegistry } from '../lib/navigation/BackHandlerRegistry';
+import { TacticalAudioEngine } from '../lib/audio/TacticalAudioEngine';
 
 type CommandDomain = 'favs' | 'comms' | 'nav' | 'survival' | 'security' | 'economy';
 
@@ -40,22 +41,34 @@ export const TacticalCommandCenter: React.FC = () => {
     const [dtnPacketCount, setDtnPacketCount] = useState<number>(() => dtnStorage.count);
     const [showSwarmHUD, setShowSwarmHUD] = useState<boolean>(false);
 
-    // Register Back Interceptors for Search and Swarm HUD
+    // ── Intercepción Jerárquica LIFO de navegación Atrás ───────────────────
     useEffect(() => {
-        if (!isSearchOpen) return;
-        return BackHandlerRegistry.register(() => {
-            setIsSearchOpen(false);
-            return true;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (isSearchOpen) {
+                setIsSearchOpen(false);
+                return true;
+            }
+            if (showSwarmHUD) {
+                setShowSwarmHUD(false);
+                return true;
+            }
+            if (searchQuery.trim()) {
+                setSearchQuery('');
+                return true;
+            }
+            if (activeDomain !== 'favs') {
+                setActiveDomain('favs');
+                return true;
+            }
+            if (currentScreen === 'commandCenter') {
+                goBack();
+                return true;
+            }
+            return false;
         });
-    }, [isSearchOpen]);
-
-    useEffect(() => {
-        if (!showSwarmHUD) return;
-        return BackHandlerRegistry.register(() => {
-            setShowSwarmHUD(false);
-            return true;
-        });
-    }, [showSwarmHUD]);
+        return unregister;
+    }, [isSearchOpen, showSwarmHUD, searchQuery, activeDomain, currentScreen, goBack]);
 
     useEffect(() => {
         const unsub = globalShield.subscribe(setShieldTelemetry);
@@ -101,14 +114,20 @@ export const TacticalCommandCenter: React.FC = () => {
 
     const toggleFavorite = (e: React.MouseEvent, modId: string) => {
         e.stopPropagation();
-        const next = favoriteModules.includes(modId)
+        const isFav = favoriteModules.includes(modId);
+        if (isFav) {
+            TacticalAudioEngine.playTap();
+        } else {
+            TacticalAudioEngine.playRogerBeep();
+        }
+        const next = isFav
             ? favoriteModules.filter(id => id !== modId)
             : [...favoriteModules, modId];
         setFavoriteModules(next);
         try {
             localStorage.setItem("red_fav_modules", JSON.stringify(next));
         } catch {}
-        toast.info(favoriteModules.includes(modId) ? "Módulo quitado de favoritos" : "⭐ Módulo fijado en favoritos");
+        toast.info(isFav ? "Módulo quitado de favoritos" : "⭐ Módulo fijado en favoritos");
     };
 
     const modulesByDomain: Record<Exclude<CommandDomain, 'favs'>, ModuleCardItem[]> = {
@@ -683,7 +702,7 @@ export const TacticalCommandCenter: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         {currentScreen === 'commandCenter' && (
                             <button
-                                onClick={goBack}
+                                onClick={() => { TacticalAudioEngine.playTap(); goBack(); }}
                                 className="btn-icon"
                                 style={{ width: '36px', height: '36px', color: '#00E5FF' }}
                                 title="Volver"
@@ -711,7 +730,7 @@ export const TacticalCommandCenter: React.FC = () => {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <button
-                            onClick={() => setIsSearchOpen(true)}
+                            onClick={() => { TacticalAudioEngine.playTap(); setIsSearchOpen(true); }}
                             style={{
                                 padding: '6px 12px', borderRadius: '10px',
                                 background: 'rgba(0, 229, 255, 0.12)', border: '1px solid rgba(0, 229, 255, 0.35)',
@@ -723,7 +742,7 @@ export const TacticalCommandCenter: React.FC = () => {
                         </button>
 
                         <button
-                            onClick={() => setShowSwarmHUD(true)}
+                            onClick={() => { TacticalAudioEngine.playTap(); setShowSwarmHUD(true); }}
                             style={{
                                 padding: '6px 12px', borderRadius: '10px',
                                 background: 'rgba(0, 230, 118, 0.12)', border: '1px solid rgba(0, 230, 118, 0.35)',
@@ -755,7 +774,7 @@ export const TacticalCommandCenter: React.FC = () => {
                         </div>
                     </div>
                     <div 
-                        onClick={() => navigate('globalShield')}
+                        onClick={() => { TacticalAudioEngine.playTap(); navigate('globalShield'); }}
                         style={{ textAlign: 'center', borderLeft: '1px solid rgba(255, 255, 255, 0.08)', cursor: 'pointer' }}
                         title="Abrir Escudo Global DEFCON"
                     >
@@ -782,7 +801,7 @@ export const TacticalCommandCenter: React.FC = () => {
                         return (
                             <button
                                 key={cat.id}
-                                onClick={() => { setSearchQuery(''); setActiveDomain(cat.id); }}
+                                onClick={() => { TacticalAudioEngine.playTap(); setSearchQuery(''); setActiveDomain(cat.id); }}
                                 style={{
                                     padding: '7px 12px', borderRadius: '10px',
                                     background: isSelected ? 'linear-gradient(135deg, rgba(0, 229, 255, 0.22) 0%, rgba(10, 25, 45, 0.85) 100%)' : 'rgba(255, 255, 255, 0.03)',
@@ -822,7 +841,7 @@ export const TacticalCommandCenter: React.FC = () => {
                     return (
                         <div
                             key={mod.id}
-                            onClick={() => navigate(mod.action)}
+                            onClick={() => { TacticalAudioEngine.playTap(); navigate(mod.action); }}
                             style={{
                                 background: 'linear-gradient(135deg, rgba(16, 22, 44, 0.85) 0%, rgba(8, 12, 28, 0.95) 100%)',
                                 border: '1px solid rgba(255, 255, 255, 0.1)',

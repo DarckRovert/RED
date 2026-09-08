@@ -7,6 +7,8 @@ import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from "../lib/version";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 import { SettingsManager } from "../lib/settingsManager";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 interface UpdateModalProps {
     onClose?: () => void;
@@ -23,7 +25,21 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
     const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
     const [permissionNeeded, setPermissionNeeded] = useState(false);
 
+    // Registro LIFO de retroceso físico / Esc
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (downloading) {
+                toast.info("Descarga OTA continuando en segundo plano...");
+            }
+            handleClose();
+            return true;
+        });
+        return unregister;
+    }, [downloading, handleClose]);
+
     const checkUpdates = async (force = true) => {
+        TacticalAudioEngine.playTap();
         SettingsManager.triggerHaptic("light");
         setLoading(true);
         setPermissionNeeded(false);
@@ -31,11 +47,13 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
             const info = await UpdateManager.checkForUpdates(force);
             setUpdateInfo(info);
             if (info.hasUpdate) {
+                TacticalAudioEngine.playRogerBeep();
                 toast.success(`🚀 ¡Nueva versión disponible: v${info.latestVersion}!`);
             } else if (!info.error) {
                 toast.info("✅ Tu nodo RED está ejecutando la versión más reciente.");
             }
         } catch (e: any) {
+            TacticalAudioEngine.playWarning();
             toast.error(`Error al verificar actualizaciones: ${e.message}`);
         } finally {
             setLoading(false);
@@ -51,6 +69,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
 
     const handleStartDownloadAndInstall = async () => {
         if (!updateInfo?.apkUrl) return;
+        TacticalAudioEngine.playTap();
         SettingsManager.triggerHaptic("medium");
         setDownloading(true);
         setDownloadProgress({
@@ -65,9 +84,11 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
             await UpdateManager.downloadAndInstall(updateInfo.apkUrl, (prog) => {
                 setDownloadProgress(prog);
                 if (prog.error) {
+                    TacticalAudioEngine.playWarning();
                     toast.error(`Fallo en la descarga: ${prog.error}`);
                     setDownloading(false);
                 } else if (prog.done) {
+                    TacticalAudioEngine.playRogerBeep();
                     SettingsManager.triggerHaptic("heavy");
                     toast.success("📦 Descarga completada. Abriendo instalador...");
                     setDownloading(false);
@@ -75,6 +96,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
             });
         } catch (e: any) {
             console.error("Update failed", e);
+            TacticalAudioEngine.playWarning();
             toast.error(`Error durante la actualización: ${e.message || e}`);
             setDownloading(false);
         }
@@ -97,7 +119,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
-                        onClick={handleClose}
+                        onClick={() => { TacticalAudioEngine.playTap(); handleClose(); }}
                         className="btn-icon"
                         style={{ width: 38, height: 38, fontSize: "1.1rem" }}
                         title="Volver"
@@ -115,7 +137,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
                 </div>
 
                 <button
-                    onClick={() => checkUpdates(true)}
+                    onClick={() => { TacticalAudioEngine.playTap(); checkUpdates(true); }}
                     disabled={loading || downloading}
                     className="btn-icon"
                     style={{ width: 38, height: 38, fontSize: "1.1rem" }}
@@ -195,7 +217,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
                             </div>
                         </div>
                         <button
-                            onClick={() => UpdateManager.openInstallSettings()}
+                            onClick={() => { TacticalAudioEngine.playTap(); UpdateManager.openInstallSettings(); }}
                             className="btn-tactical-secondary"
                             style={{ padding: "6px 12px", fontSize: "0.72rem", flexShrink: 0 }}
                         >
@@ -278,7 +300,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
                         </button>
                     ) : (
                         <button
-                            onClick={() => checkUpdates(true)}
+                            onClick={() => { TacticalAudioEngine.playTap(); checkUpdates(true); }}
                             disabled={loading || downloading}
                             className="btn-tactical-secondary"
                             style={{ width: "100%", padding: "12px 18px", fontSize: "0.88rem", fontWeight: 800 }}

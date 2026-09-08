@@ -1,8 +1,8 @@
-"use client";
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 
 interface ImageViewerModalProps {
     src: string;
@@ -14,7 +14,22 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, on
     const { t } = useTranslation();
     const [zoom, setZoom] = useState(1);
 
+    // Intercepción LIFO (retroceso físico / Esc)
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (zoom > 1) {
+                setZoom(1);
+                return true;
+            }
+            if (onClose) onClose();
+            return true;
+        });
+        return unregister;
+    }, [zoom, onClose]);
+
     const handleDownload = () => {
+        TacticalAudioEngine.playTap();
         const a = document.createElement("a");
         a.href = src;
         a.download = `RED_media_${Date.now()}.jpg`;
@@ -32,7 +47,10 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, on
                 display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                 userSelect: "none",
             }}
-            onClick={onClose}
+            onClick={() => {
+                TacticalAudioEngine.playTap();
+                if (onClose) onClose();
+            }}
         >
             {/* Header controls */}
             <div
@@ -42,7 +60,10 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, on
                 onClick={e => e.stopPropagation()}
             >
                 <button
-                    onClick={() => setZoom(z => (z === 1 ? 1.8 : 1))}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setZoom(z => (z === 1 ? 1.8 : 1));
+                    }}
                     className="btn-tactical-secondary"
                     style={{ padding: "8px 14px", fontSize: "0.78rem" }}
                 >
@@ -56,7 +77,10 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, on
                     📥 {t.common?.save || "Guardar"}
                 </button>
                 <button
-                    onClick={onClose}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        if (onClose) onClose();
+                    }}
                     className="btn-icon"
                     style={{ width: 36, height: 36 }}
                     title={t.common?.close || "Cerrar"}

@@ -7,6 +7,8 @@ import { RedAPI } from "../lib/api";
 import { CallRingtoneEngine } from "../lib/CallRingtoneEngine";
 import { callHistory } from "../lib/audio/CallHistoryEngine";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 
 export function IncomingCallBanner() {
@@ -30,10 +32,20 @@ export function IncomingCallBanner() {
         };
     }, [incomingCall, currentScreen, preferences]);
 
+    // ── Intercepción LIFO de botón atrás para rechazar llamada entrante ────────
+    React.useEffect(() => {
+        if (!incomingCall || currentScreen === 'call') return;
+        const unregister = BackHandlerRegistry.register(() => {
+            handleReject();
+            return true;
+        });
+        return unregister;
+    }, [incomingCall, currentScreen]);
 
     if (!incomingCall || currentScreen === 'call') return null;
 
     const handleAccept = () => {
+        TacticalAudioEngine.playRogerBeep();
         CallRingtoneEngine.stop();
         // Unlock Web Audio synchronously on user gesture to bypass browser/WebView autoplay restrictions
         try {
@@ -64,6 +76,7 @@ export function IncomingCallBanner() {
     };
 
     const handleReject = async () => {
+        TacticalAudioEngine.playTap();
         CallRingtoneEngine.stop();
         try {
             callHistory.addRecord({

@@ -1,10 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { MessageItem } from "../lib/api";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { EmptyState } from "./ui/EmptyState";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { toast } from "./Toast";
 
 export interface GlobalSearchModalProps {
     onClose?: () => void;
@@ -80,6 +83,53 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose })
     const { messages, contacts, groups, navigate } = useRedStore();
     const [query, setQuery] = useState("");
 
+    const handleClose = () => {
+        TacticalAudioEngine.playTap();
+        onClose?.();
+    };
+
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            handleClose();
+            return true;
+        });
+        return unregister;
+    }, [onClose]);
+
+    const handleCopyMessage = (e: React.MouseEvent, text: string) => {
+        e.stopPropagation();
+        TacticalAudioEngine.playTap();
+        const copyWithTextarea = (t: string) => {
+            try {
+                const ta = document.createElement("textarea");
+                ta.value = t;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+                TacticalAudioEngine.playMessageSent();
+                toast.success("Mensaje copiado");
+            } catch {
+                TacticalAudioEngine.playWarning();
+                toast.error("Error al copiar");
+            }
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text)
+                .then(() => {
+                    TacticalAudioEngine.playMessageSent();
+                    toast.success("Mensaje copiado");
+                })
+                .catch(() => copyWithTextarea(text));
+        } else {
+            copyWithTextarea(text);
+        }
+    };
+
     const resolvePeerName = (hash: string) => {
         const g = groups.find((g: any) => g.id === hash);
         if (g) return g.name || "Grupo";
@@ -110,7 +160,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose })
                 background: "rgba(4, 6, 12, 0.85)", backdropFilter: "blur(16px)",
                 display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px 20px"
             }}
-            onClick={onClose}
+            onClick={handleClose}
         >
             <div
                 className="card-tactical animate-enter modal-card-scrollable"
@@ -126,7 +176,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose })
                     <div style={{ fontSize: "1.05rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "8px" }}>
                         <span>🔍</span> {t.sidebar?.search_placeholder ? t.sidebar.search_placeholder.split("...")[0] : "Búsqueda Global C4ISR"}
                     </div>
-                    <button onClick={onClose} className="btn-icon" style={{ width: 34, height: 34 }} title={t.common?.close || "Cerrar"}>✕</button>
+                    <button onClick={handleClose} className="btn-icon" style={{ width: 34, height: 34 }} title={t.common?.close || "Cerrar"}>✕</button>
                 </div>
 
                 <input
@@ -163,6 +213,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose })
                                 <div
                                     key={tool.id}
                                     onClick={() => {
+                                        TacticalAudioEngine.playTap();
                                         navigate(tool.action);
                                         onClose?.();
                                     }}
@@ -198,17 +249,30 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose })
                                     <div
                                         key={msg.id}
                                         onClick={() => {
+                                            TacticalAudioEngine.playTap();
                                             navigate("chat", targetConvId);
                                             onClose?.();
                                         }}
                                         className="card-tactical-interactive"
                                         style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: "4px" }}
                                     >
-                                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                             <span style={{ fontWeight: 800, fontSize: "0.85rem", color: "var(--accent-cyan)" }}>{peerName}</span>
-                                            <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                {new Date((msg.timestamp > 1e10 ? msg.timestamp : msg.timestamp * 1000)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                                            </span>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                                <button
+                                                    onClick={(e) => handleCopyMessage(e, msg.content)}
+                                                    title="Copiar texto del mensaje"
+                                                    style={{
+                                                        background: "rgba(255,255,255,0.06)", border: "none", borderRadius: "4px",
+                                                        padding: "2px 6px", color: "var(--text-muted)", fontSize: "0.65rem", cursor: "pointer"
+                                                    }}
+                                                >
+                                                    📋
+                                                </button>
+                                                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    {new Date((msg.timestamp > 1e10 ? msg.timestamp : msg.timestamp * 1000)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                                </span>
+                                            </div>
                                         </div>
                                         <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>
                                             {msg.content}

@@ -1,7 +1,7 @@
-"use client";
-
-import React from "react";
+import React, { useEffect } from "react";
 import { MessageItem } from "../../lib/api";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 
 interface MessageInfoModalProps {
     message: MessageItem | null;
@@ -23,6 +23,17 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
     isMine,
     onClose,
 }) => {
+    // Intercepción LIFO (retroceso físico / Esc)
+    useEffect(() => {
+        if (!message) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [message, onClose]);
+
     if (!message) return null;
 
     const isDelivered = message.status === "Delivered" || (message as any).delivered === true;
@@ -66,7 +77,10 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                 padding: "16px",
                 animation: "fadeIn 0.18s ease-out"
             }}
-            onClick={onClose}
+            onClick={() => {
+                TacticalAudioEngine.playTap();
+                onClose();
+            }}
         >
             <div
                 className="animate-enter"
@@ -99,7 +113,10 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                         </h3>
                     </div>
                     <button
-                        onClick={onClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
                         style={{
                             background: "transparent",
                             border: "none",
@@ -246,7 +263,10 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                 {/* Footer Button */}
                 <div style={{ padding: "12px 20px 16px 20px" }}>
                     <button
-                        onClick={onClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
                         style={{
                             width: "100%",
                             padding: "12px",

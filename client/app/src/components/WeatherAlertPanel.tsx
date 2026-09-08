@@ -23,6 +23,9 @@ import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
 import { ErrorBanner } from "./ui/ErrorBanner";
 import { EmptyState } from "./ui/EmptyState";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { meshRouter } from "../lib/mesh/meshRouter";
 
 type TabView = "monitor" | "broadcast" | "feed";
 
@@ -55,6 +58,20 @@ export const WeatherAlertPanel: React.FC = () => {
     const [filterCapOnly, setFilterCapOnly] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Intercepción LIFO de hardware Android y tecla Escape
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (currentTab !== "monitor") {
+                setCurrentTab("monitor");
+                return true;
+            }
+            goBack();
+            return true;
+        });
+        return () => unregister();
+    }, [currentTab, goBack]);
 
     // Live Atmospheric State (Acquired dynamically via Hardware or GPS, or entered manually)
     const [pressure, setPressure] = useState<string>("");
@@ -350,9 +367,34 @@ export const WeatherAlertPanel: React.FC = () => {
                     : "📡 Boletín meteorológico propagado en la malla"
             );
 
+            // Difusión directa a la malla táctica P2P
+            try {
+                const meshPayload = new TextEncoder().encode(JSON.stringify({
+                    id: `wx_${Date.now()}`,
+                    msg_type: isCapAlert ? 'CAP_WEATHER_ALERT' : 'WEATHER_BULLETIN',
+                    sender_name: myNickname,
+                    pressure_hpa: pNum,
+                    temperature_c: !isNaN(tNum) ? tNum : undefined,
+                    humidity_percent: !isNaN(hNum) ? hNum : undefined,
+                    wind_speed_kmh: !isNaN(wNum) ? wNum : undefined,
+                    wind_direction_deg: !isNaN(wdNum) ? wdNum : undefined,
+                    condition_summary: headlineText,
+                    is_disaster_alert: isCapAlert,
+                    cap_event: isCapAlert ? capEvent : undefined,
+                    cap_severity: isCapAlert ? capSeverity : undefined,
+                    cap_headline: isCapAlert ? headlineText : undefined,
+                    cap_instruction: instructionText,
+                    timestamp: Date.now()
+                }));
+                await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", meshPayload).catch(() => {});
+            } catch {}
+
+            TacticalAudioEngine.playMessageSent();
+
             await fetchReports();
             setCurrentTab("feed");
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al transmitir reporte a la red P2P");
         } finally {
             setTransmitting(false);
@@ -408,7 +450,10 @@ export const WeatherAlertPanel: React.FC = () => {
 
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <button
-                        onClick={acquireAtmosphericTelemetry}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            acquireAtmosphericTelemetry();
+                        }}
                         disabled={detecting}
                         className="btn-tactical-secondary"
                         title="Re-escanear sensores"
@@ -417,7 +462,10 @@ export const WeatherAlertPanel: React.FC = () => {
                         {detecting ? "..." : "📡 Sincronizar"}
                     </button>
                     <button
-                        onClick={goBack}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            goBack();
+                        }}
                         className="btn-icon"
                         title={t.common?.close || "Cerrar"}
                         style={{ width: 34, height: 34, fontSize: "0.9rem" }}
@@ -437,7 +485,10 @@ export const WeatherAlertPanel: React.FC = () => {
                 flexShrink: 0,
             }}>
                 <button
-                    onClick={() => setCurrentTab("monitor")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setCurrentTab("monitor");
+                    }}
                     style={{
                         flex: 1,
                         padding: "8px 4px",
@@ -455,7 +506,10 @@ export const WeatherAlertPanel: React.FC = () => {
                     📊 Monitor Baro
                 </button>
                 <button
-                    onClick={() => setCurrentTab("broadcast")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setCurrentTab("broadcast");
+                    }}
                     style={{
                         flex: 1,
                         padding: "8px 4px",
@@ -473,7 +527,10 @@ export const WeatherAlertPanel: React.FC = () => {
                     🚨 Emitir Alerta CAP
                 </button>
                 <button
-                    onClick={() => setCurrentTab("feed")}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setCurrentTab("feed");
+                    }}
                     style={{
                         flex: 1,
                         padding: "8px 4px",

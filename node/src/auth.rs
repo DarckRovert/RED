@@ -16,7 +16,7 @@ use serde_json::json;
 use tracing::warn;
 
 /// Extract the token from Authorization, X-API-Key or X-Red-Session-Token header
-fn extract_token<'a>(headers: &'a HeaderMap) -> Option<&'a str> {
+fn extract_token(headers: &HeaderMap) -> Option<&str> {
     headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())

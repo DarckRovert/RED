@@ -1,11 +1,10 @@
-"use client";
-
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { MessageItem, ConversationItem } from "../../lib/api";
 import { useRedStore } from "../../store/useRedStore";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
-import { TacticalAudioEngine } from "../../lib/TacticalAudioEngine";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 
 interface MessageForwardModalProps {
     msg: MessageItem;
@@ -18,6 +17,17 @@ export const MessageForwardModal: React.FC<MessageForwardModalProps> = ({ msg, o
     const [search, setSearch] = useState("");
     const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
+
+    // Intercepción LIFO (retroceso físico / Esc)
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (isSending) return false;
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [isSending, onClose]);
 
     // Filter available destinations (direct conversations, contacts, and groups)
     const targets = useMemo(() => {
@@ -90,21 +100,30 @@ export const MessageForwardModal: React.FC<MessageForwardModalProps> = ({ msg, o
     };
 
     return (
-        <div style={{
-            position: "fixed", inset: 0, zIndex: 1100,
-            background: "rgba(0, 0, 0, 0.78)", backdropFilter: "blur(12px)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            padding: "16px", animation: "fadeIn 0.15s ease"
-        }}>
-            <div style={{
-                width: "100%", maxWidth: "420px", maxHeight: "85vh",
-                background: "var(--card-bg, #121424)",
-                border: "1px solid rgba(255, 255, 255, 0.15)",
-                borderRadius: "20px",
-                display: "flex", flexDirection: "column",
-                boxShadow: "0 16px 48px rgba(0, 0, 0, 0.8)",
-                overflow: "hidden"
-            }}>
+        <div 
+            style={{
+                position: "fixed", inset: 0, zIndex: 1100,
+                background: "rgba(0, 0, 0, 0.78)", backdropFilter: "blur(12px)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                padding: "16px", animation: "fadeIn 0.15s ease"
+            }}
+            onClick={() => {
+                TacticalAudioEngine.playTap();
+                onClose();
+            }}
+        >
+            <div 
+                style={{
+                    width: "100%", maxWidth: "420px", maxHeight: "85vh",
+                    background: "var(--card-bg, #121424)",
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    borderRadius: "20px",
+                    display: "flex", flexDirection: "column",
+                    boxShadow: "0 16px 48px rgba(0, 0, 0, 0.8)",
+                    overflow: "hidden"
+                }}
+                onClick={e => e.stopPropagation()}
+            >
                 {/* Header */}
                 <div style={{
                     padding: "16px 20px",
@@ -118,7 +137,10 @@ export const MessageForwardModal: React.FC<MessageForwardModalProps> = ({ msg, o
                         </h3>
                     </div>
                     <button
-                        onClick={onClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
                         style={{
                             background: "rgba(255, 255, 255, 0.08)", border: "none",
                             borderRadius: "50%", width: "32px", height: "32px",
@@ -189,7 +211,10 @@ export const MessageForwardModal: React.FC<MessageForwardModalProps> = ({ msg, o
                             return (
                                 <div
                                     key={t.id}
-                                    onClick={() => setSelectedTarget(t.id)}
+                                    onClick={() => {
+                                        TacticalAudioEngine.playTap();
+                                        setSelectedTarget(t.id);
+                                    }}
                                     style={{
                                         display: "flex", alignItems: "center", gap: "12px",
                                         padding: "10px 14px", borderRadius: "12px",
@@ -237,7 +262,10 @@ export const MessageForwardModal: React.FC<MessageForwardModalProps> = ({ msg, o
                     display: "flex", gap: "12px"
                 }}>
                     <button
-                        onClick={onClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
                         style={{
                             flex: 1, padding: "12px", borderRadius: "10px",
                             background: "rgba(255, 255, 255, 0.08)",

@@ -134,6 +134,14 @@ export class LoRaMeshtasticBridge {
         };
     }
 
+    public getKnownNodes(): LoRaNodeInfo[] {
+        return Array.from(this.knownNodes.values());
+    }
+
+    public registerDiscoveredNode(nodeInfo: LoRaNodeInfo): void {
+        this.knownNodes.set(nodeInfo.nodeNum, nodeInfo);
+    }
+
     /**
      * Encapsulates and broadcasts a raw RED encrypted mesh frame over physical LoRa RF
      */
@@ -272,6 +280,22 @@ export class LoRaMeshtasticBridge {
         const wantAck = dv.getUint8(15) === 1;
 
         const payload = buf.slice(20, 4 + len);
+
+        if (from && from !== 0 && from !== 0xFFFFFFFF) {
+            const existing = this.knownNodes.get(from);
+            this.knownNodes.set(from, {
+                nodeNum: from,
+                user: existing?.user || {
+                    id: `!${from.toString(16).padStart(8, '0')}`,
+                    longName: `Meshtastic-${from.toString(16).slice(-4).toUpperCase()}`,
+                    shortName: from.toString(16).slice(-4).toUpperCase(),
+                    hwModel: 'SX1262'
+                },
+                snr: 8,
+                rssi: -90,
+                channel: channel
+            });
+        }
 
         return {
             from,

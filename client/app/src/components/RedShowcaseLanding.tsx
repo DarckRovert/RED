@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRedStore } from '../store/useRedStore';
 import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from '../lib/version';
 import { useTranslation } from '../lib/i18n/i18nEngine';
+import { copyToClipboard } from '../lib/clipboard';
 import { LandingHeader } from './showcase/LandingHeader';
 import { LandingHero } from './showcase/LandingHero';
 import { LandingHowItWorksInteractive } from './showcase/LandingHowItWorksInteractive';
@@ -80,11 +81,12 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
     };
 
     const handleCopy = (text: string) => {
-        if (typeof navigator !== "undefined" && navigator.clipboard) {
-            navigator.clipboard.writeText(text);
-            setCopiedText(text);
-            setTimeout(() => setCopiedText(null), 2000);
-        }
+        copyToClipboard(text).then((ok) => {
+            if (ok) {
+                setCopiedText(text);
+                setTimeout(() => setCopiedText(null), 2000);
+            }
+        });
     };
 
     const scrollToSection = (id: string) => {

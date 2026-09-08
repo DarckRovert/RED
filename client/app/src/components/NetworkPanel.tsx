@@ -12,6 +12,8 @@ import { dtnStorage } from "../lib/mesh/dtnStorage";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 export default function NetworkPanel() {
     const { t } = useTranslation();
@@ -41,13 +43,30 @@ export default function NetworkPanel() {
     const [dtnCount, setDtnCount] = useState<number>(() => dtnStorage.count);
     const [isFlushingDtn, setIsFlushingDtn] = useState(false);
 
+    // ── LIFO Back Navigation Handler: Modal Apagón -> Salir ───────────────────────
+    useEffect(() => {
+        const unreg = BackHandlerRegistry.register(() => {
+            if (blackoutModalOpen) {
+                setBlackoutModalOpen(false);
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return unreg;
+    }, [blackoutModalOpen, goBack]);
+
     const handleFlushDtn = async () => {
         setIsFlushingDtn(true);
         try {
             await meshRouter.flushPendingQueue();
             setDtnCount(dtnStorage.count);
+            TacticalAudioEngine.playRogerBeep();
             toast.success(`⚡ Búfer DTN procesado (${dtnStorage.count} paquetes en espera)`);
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al forzar transmisión DTN");
         } finally {
             setIsFlushingDtn(false);
@@ -57,11 +76,13 @@ export default function NetworkPanel() {
     const handlePurgeExpiredDtn = () => {
         dtnStorage.purgeExpired();
         setDtnCount(dtnStorage.count);
+        TacticalAudioEngine.playTap();
         toast.info("🧹 Barrido de paquetes DTN expirados completado");
     };
 
     const handleResetDtnTimers = () => {
         dtnStorage.forceResetRetryTimers();
+        TacticalAudioEngine.playTap();
         toast.info("🔄 Temporizadores de reintento DTN reiniciados a 0ms");
     };
 
@@ -70,10 +91,12 @@ export default function NetworkPanel() {
         try {
             const nextCh = ((rfMetrics?.current_channel || 1) % 8) + 1;
             await RedAPI.triggerChannelHop(nextCh);
+            TacticalAudioEngine.playRogerBeep();
             toast.success(`⚡ Salto ejecutado a Canal ${nextCh}`);
             const rf = await RedAPI.getRfMetrics();
             if (rf) setRfMetrics(rf);
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al ejecutar salto de canal");
         } finally {
             setHoppingChannel(false);
@@ -91,13 +114,16 @@ export default function NetworkPanel() {
             
             if (res.success || sniRes.success) {
                 setTestResult(`✅ Trama Base32 enviada | DNS: ${res.latencyMs}ms | SNI Fronting: ${sniRes.latencyMs}ms`);
+                TacticalAudioEngine.playRogerBeep();
                 toast.success("Prueba de canal encubierto exitosa");
             } else {
                 setTestResult(`❌ Fallo de Túnel: DoH bloqueado | SNI: ${sniRes.reason || "Bloqueado"}`);
+                TacticalAudioEngine.playWarning();
                 toast.error("Canales encubiertos bloqueados");
             }
         } catch {
             setTestResult("⚠️ Error crítico al simular canal encubierto");
+            TacticalAudioEngine.playWarning();
         } finally {
             setTunnelTesting(false);
         }
@@ -112,12 +138,15 @@ export default function NetworkPanel() {
         try {
             const ok = await connectPeer(manualAddress.trim());
             if (ok) {
+                TacticalAudioEngine.playRogerBeep();
                 toast.success("✅ Conectado al par con éxito");
                 setManualAddress("");
             } else {
+                TacticalAudioEngine.playWarning();
                 toast.error("No se pudo conectar al par");
             }
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error de conexión");
         } finally {
             setConnectingManual(false);
@@ -231,14 +260,20 @@ export default function NetworkPanel() {
 
                 <div style={{ display: "flex", gap: "8px" }}>
                     <button
-                        onClick={() => setBlackoutModalOpen(true)}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setBlackoutModalOpen(true);
+                        }}
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 12px", fontSize: "0.78rem" }}
                     >
                         ⚡ Apagón
                     </button>
                     <button
-                        onClick={goBack}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            goBack();
+                        }}
                         className="btn-icon"
                         title="Cerrar panel"
                         style={{ width: 38, height: 38 }}

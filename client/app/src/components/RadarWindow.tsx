@@ -5,6 +5,8 @@ import { useRedStore } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { localTransport } from "../lib/mesh/localTransport";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { getProximityNodes } from "../lib/api";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { WebCompanionPairConfirmationModal } from "./WebCompanionPairConfirmationModal";
 import { toast } from "./Toast";
 
@@ -18,6 +20,27 @@ export default function RadarWindow() {
     const [nearbyPeers, setNearbyPeers] = useState<any[]>([]);
     const [selectedPeer, setSelectedPeer] = useState<any | null>(null);
     const [webPairingCode, setWebPairingCode] = useState<string | null>(null);
+
+    // Intercepción LIFO de hardware Android y tecla Escape
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (scanning) {
+                stopScan();
+                return true;
+            }
+            if (selectedPeer) {
+                setSelectedPeer(null);
+                return true;
+            }
+            if (activeTab !== "radar") {
+                setActiveTab("radar");
+                return true;
+            }
+            goBack();
+            return true;
+        });
+        return () => unregister();
+    }, [scanning, selectedPeer, activeTab, goBack]);
 
     // Manual Entry State
     const [manualHash, setManualHash] = useState("");
@@ -46,12 +69,42 @@ export default function RadarWindow() {
         }
     }, [identity]);
 
-    // BLE Peers Discovery Poll & Scanner Cleanup
+    // BLE & Mesh Proximity Discovery Poll & Scanner Cleanup
     useEffect(() => {
-        const updatePeers = () => {
+        const updatePeers = async () => {
             if (typeof document !== 'undefined' && document.hidden) return;
-            const peers = localTransport.discoveredBluetoothPeers || [];
-            setNearbyPeers(peers);
+            const blePeers = localTransport.discoveredBluetoothPeers || [];
+            try {
+                const apiNodes = await getProximityNodes().catch(() => []);
+                const peerMap = new Map<string, any>();
+                for (const node of apiNodes) {
+                    const id = node.id || node.address || "";
+                    if (!id) continue;
+                    peerMap.set(id, {
+                        id,
+                        name: node.name || `Nodo ${id.substring(0, 6)}`,
+                        rssi: typeof node.rssi === "number" ? node.rssi : -70,
+                        address: node.address || id,
+                        transport: node.transport || "mesh",
+                        distance: node.distance
+                    });
+                }
+                for (const peer of blePeers) {
+                    const id = peer.id || (peer as any).address || "";
+                    if (!id) continue;
+                    const existing = peerMap.get(id);
+                    peerMap.set(id, {
+                        ...existing,
+                        ...peer,
+                        id,
+                        name: peer.name || existing?.name || `Nodo ${id.substring(0, 6)}`,
+                        rssi: typeof peer.rssi === "number" ? peer.rssi : (existing?.rssi ?? -70)
+                    });
+                }
+                setNearbyPeers(Array.from(peerMap.values()));
+            } catch {
+                setNearbyPeers(blePeers);
+            }
         };
         updatePeers();
 
@@ -67,10 +120,42 @@ export default function RadarWindow() {
         };
     }, []);
 
-    const handleRefreshNearby = () => {
-        const peers = localTransport.discoveredBluetoothPeers || [];
-        setNearbyPeers(peers);
-        toast.info("Escaneando espectro BLE & Wi-Fi Direct...");
+    const handleRefreshNearby = async () => {
+        toast.info("Escaneando espectro BLE & Malla...");
+        const blePeers = localTransport.discoveredBluetoothPeers || [];
+        try {
+            const apiNodes = await getProximityNodes().catch(() => []);
+            const peerMap = new Map<string, any>();
+            for (const node of apiNodes) {
+                const id = node.id || node.address || "";
+                if (!id) continue;
+                peerMap.set(id, {
+                    id,
+                    name: node.name || `Nodo ${id.substring(0, 6)}`,
+                    rssi: typeof node.rssi === "number" ? node.rssi : -70,
+                    address: node.address || id,
+                    transport: node.transport || "mesh",
+                    distance: node.distance,
+                    latitude: (node as any).latitude ?? (node as any).lat,
+                    longitude: (node as any).longitude ?? (node as any).lon ?? (node as any).lng
+                });
+            }
+            for (const peer of blePeers) {
+                const id = peer.id || (peer as any).address || "";
+                if (!id) continue;
+                const existing = peerMap.get(id);
+                peerMap.set(id, {
+                    ...existing,
+                    ...peer,
+                    id,
+                    name: peer.name || existing?.name || `Nodo ${id.substring(0, 6)}`,
+                    rssi: typeof peer.rssi === "number" ? peer.rssi : (existing?.rssi ?? -70)
+                });
+            }
+            setNearbyPeers(Array.from(peerMap.values()));
+        } catch {
+            setNearbyPeers(blePeers);
+        }
     };
 
     const handleAddPeer = async (peer: any) => {
@@ -86,6 +171,58 @@ export default function RadarWindow() {
             navigate("chat", resolvedHash || resolvedId);
         } catch (e: any) {
             toast.error(e?.message || "Error al conectar con el par");
+        }
+    };
+
+    const handleTrackInP2PCompass = (peer: any) => {
+        const id = peer.id || peer.address;
+        if (id) {
+            const targetPayload = {
+                name: peer.name || `Nodo ${id.substring(0, 6)}`,
+                peerId: id,
+                rssi: peer.rssi,
+                lat: peer.latitude ?? peer.lat,
+                lon: peer.longitude ?? peer.lon ?? peer.lng,
+                type: "P2P_PEER",
+                createdAt: Date.now()
+            };
+            try {
+                localStorage.setItem("red_active_target", JSON.stringify(targetPayload));
+                localStorage.setItem("red_tactical_target_point", JSON.stringify(targetPayload));
+            } catch {}
+            toast.success(`🧭 Rastreando a ${peer.name} en Brújula P2P`);
+            navigate("p2pCompass");
+        }
+    };
+
+    const handleTrackInFoxhunt = (peer: any) => {
+        const id = peer.id || peer.address;
+        if (id) {
+            const targetPayload = {
+                name: `RADAR: ${peer.name || id.substring(0, 6)}`,
+                deviceId: id,
+                rssi: peer.rssi,
+                lat: peer.latitude ?? peer.lat,
+                lon: peer.longitude ?? peer.lon ?? peer.lng,
+                type: "RADAR_SIGINT",
+                createdAt: Date.now()
+            };
+            try {
+                localStorage.setItem("red_active_target", JSON.stringify(targetPayload));
+                localStorage.setItem("red_tactical_target_point", JSON.stringify(targetPayload));
+            } catch {}
+            toast.success(`🦊 Blanco fijado para Foxhunt: ${peer.name}`);
+            navigate("tacticalFoxhunt");
+        }
+    };
+
+    const handleOpenChatWithPeer = (peer: any) => {
+        const rawId = peer.id || peer.address || "";
+        const targetId = meshRouter.getCanonicalId(rawId) || rawId;
+        if (targetId) {
+            navigate("chat", targetId);
+        } else {
+            toast.warning("Identificador de nodo no disponible");
         }
     };
 
@@ -785,6 +922,75 @@ export default function RadarWindow() {
                                 </button>
                             </div>
 
+                            {/* Panel Táctico de Nodo Seleccionado */}
+                            {selectedPeer && (
+                                <div style={{
+                                    background: "linear-gradient(135deg, rgba(0, 229, 255, 0.1) 0%, rgba(0, 150, 255, 0.05) 100%)",
+                                    border: "1.5px solid #00E5FF",
+                                    borderRadius: "14px",
+                                    padding: "14px",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "10px",
+                                    boxShadow: "0 0 20px rgba(0, 229, 255, 0.2)"
+                                }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                        <div>
+                                            <span style={{ fontSize: "0.62rem", color: "#00E5FF", fontWeight: 800, textTransform: "uppercase" }}>🎯 NODO SELECCIONADO EN RADAR</span>
+                                            <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#FFFFFF" }}>{selectedPeer.name}</div>
+                                            <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                ID: {selectedPeer.id} · RSSI: {selectedPeer.rssi} dBm · ~{selectedPeer.estimatedMeters || 50}m
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => setSelectedPeer(null)}
+                                            style={{
+                                                background: "rgba(255,255,255,0.08)", border: "none", color: "#AAA",
+                                                width: "28px", height: "28px", borderRadius: "8px", cursor: "pointer", fontWeight: 900
+                                            }}
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+
+                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleTrackInP2PCompass(selectedPeer); }}
+                                            style={{
+                                                padding: "8px 6px", borderRadius: "8px",
+                                                background: "rgba(0, 229, 255, 0.18)", border: "1px solid #00E5FF",
+                                                color: "#00E5FF", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer",
+                                                display: "flex", alignItems: "center", justifyContent: "center", gap: "4px"
+                                            }}
+                                        >
+                                            🧭 Brújula P2P
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleTrackInFoxhunt(selectedPeer); }}
+                                            style={{
+                                                padding: "8px 6px", borderRadius: "8px",
+                                                background: "rgba(255, 179, 0, 0.18)", border: "1px solid #FFB300",
+                                                color: "#FFB300", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer",
+                                                display: "flex", alignItems: "center", justifyContent: "center", gap: "4px"
+                                            }}
+                                        >
+                                            🦊 Foxhunt
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleOpenChatWithPeer(selectedPeer); }}
+                                            style={{
+                                                padding: "8px 6px", borderRadius: "8px",
+                                                background: "rgba(0, 230, 118, 0.18)", border: "1px solid #00E676",
+                                                color: "#00E676", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer",
+                                                display: "flex", alignItems: "center", justifyContent: "center", gap: "4px"
+                                            }}
+                                        >
+                                            💬 Chat Cifrado
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Lista de Nodos */}
                             {nearbyPeers.length === 0 ? (
                                 <div style={{
@@ -805,11 +1011,13 @@ export default function RadarWindow() {
                                     {polarPeers.map(p => (
                                         <div
                                             key={p.id}
+                                            onClick={() => setSelectedPeer(selectedPeer?.id === p.id ? null : p)}
                                             style={{
                                                 padding: "12px 14px", borderRadius: "12px",
                                                 background: selectedPeer?.id === p.id ? "rgba(0, 229, 255, 0.12)" : "rgba(255, 255, 255, 0.03)",
                                                 border: selectedPeer?.id === p.id ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
                                                 display: "flex", justifyContent: "space-between", alignItems: "center",
+                                                cursor: "pointer",
                                                 boxShadow: selectedPeer?.id === p.id ? "0 0 15px rgba(0, 229, 255, 0.2)" : "none"
                                             }}
                                         >

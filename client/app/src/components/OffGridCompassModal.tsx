@@ -9,12 +9,30 @@ import { useTranslation } from "../lib/i18n/i18nEngine";
 import { offlineTileCacheEngine } from "../lib/storage/OfflineTileCacheEngine";
 import { magneticDetector, MagneticTelemetry } from "../lib/sensors/MagneticAnomalyDetectorEngine";
 import { CelestialNavigationEngine, CelestialEphemeris } from "../lib/sensors/CelestialNavigationEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { pedestrianDeadReckoning, PdrState } from "../lib/sensors/PedestrianDeadReckoningEngine";
+import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
+import { meshRouter } from "../lib/mesh/meshRouter";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 export function OffGridCompassModal() {
-    const { navigate } = useRedStore();
+    const { navigate, identity } = useRedStore();
     const { t } = useTranslation();
 
     const [activeTab, setActiveTab] = useState<"radar" | "map" | "resection" | "waypoints">("radar");
+
+    // Intercepción LIFO de hardware Android y tecla Escape
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (activeTab !== "radar") {
+                setActiveTab("radar");
+                return true;
+            }
+            navigate('sidebar');
+            return true;
+        });
+        return () => unregister();
+    }, [activeTab, navigate]);
 
     // Magnetic Anomaly State
     const [magTelemetry, setMagTelemetry] = useState<MagneticTelemetry>(() => magneticDetector.getTelemetry());
@@ -26,6 +44,31 @@ export function OffGridCompassModal() {
             unsub();
             magneticDetector.stopListening();
         };
+    }, []);
+
+    // Odometría y Navegación Inercial PDR
+    const [pdrState, setPdrState] = useState<PdrState>(() => pedestrianDeadReckoning.getState());
+
+    useEffect(() => {
+        const unsub = pedestrianDeadReckoning.subscribe((state) => {
+            setPdrState(state);
+        });
+        return () => unsub();
+    }, []);
+
+    const togglePdrTracking = useCallback(() => {
+        if (pdrState.isTracking) {
+            pedestrianDeadReckoning.stopTracking();
+            toast.info("Rastreo inercial PDR detenido");
+        } else {
+            pedestrianDeadReckoning.startTracking();
+            toast.success("Rastreo inercial PDR iniciado (Acelerómetro & Giroscopio activos)");
+        }
+    }, [pdrState.isTracking]);
+
+    const handleResetPdr = useCallback(() => {
+        pedestrianDeadReckoning.resetPdr();
+        toast.info("Odometría inercial puesta a cero");
     }, []);
 
     const [heading, setHeading] = useState<number>(0);
@@ -69,11 +112,18 @@ export function OffGridCompassModal() {
         let hasStoredLm2 = false;
 
         try {
-            const savedTarget = localStorage.getItem("red_tactical_target_point");
+            const savedTarget = localStorage.getItem("red_tactical_target_point") || localStorage.getItem("red_active_target");
             if (savedTarget) {
                 const parsed = JSON.parse(savedTarget);
-                if (typeof parsed.lat === "number" && typeof parsed.lon === "number") {
-                    setTarget(parsed);
+                const targetLat = typeof parsed.lat === "number" ? parsed.lat : undefined;
+                const targetLon = typeof parsed.lon === "number" ? parsed.lon : (typeof parsed.lng === "number" ? parsed.lng : undefined);
+                if (targetLat !== undefined && targetLon !== undefined) {
+                    setTarget({
+                        lat: targetLat,
+                        lon: targetLon,
+                        name: parsed.name || "Blanco Táctico Activo",
+                        createdAt: parsed.createdAt || Date.now()
+                    });
                 }
             }
 
@@ -133,61 +183,58 @@ export function OffGridCompassModal() {
         const eventName = ("ondeviceorientationabsolute" in window) ? "deviceorientationabsolute" : "deviceorientation";
         window.addEventListener(eventName, handleOrientation, true);
 
-        // Restore last known GPS coordinates if available
-        try {
-            const cachedGps = localStorage.getItem("red_last_known_gps");
-            if (cachedGps) {
-                const parsed = JSON.parse(cachedGps);
-                const coords = { lat: parsed.lat, lon: parsed.lon ?? parsed.lng };
-                setUserCoords(coords);
-                setUtmString(OffGridNavigationEngine.gpsToUtm(coords.lat, coords.lon));
-                setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(coords.lat, coords.lon));
-            }
-        } catch {}
-
-        // Continuous real-time GPS tracking via watchPosition
-        let watchId: number | null = null;
-        if (navigator.geolocation) {
-            watchId = navigator.geolocation.watchPosition(
-                (pos) => {
-                    const lat = pos.coords.latitude;
-                    const lon = pos.coords.longitude;
-                    if (!isFinite(lat) || !isFinite(lon) || (Math.abs(lat) < 0.0001 && Math.abs(lon) < 0.0001)) return;
-                    const coords = { lat, lon };
+        // Restore last known GPS coordinates via TacticalLocationEngine & cache
+        const lastKnown = TacticalLocationEngine.getLastKnownLocation();
+        if (lastKnown && TacticalLocationEngine.isValidCoordinates(lastKnown.lat, lastKnown.lon)) {
+            const coords = { lat: lastKnown.lat!, lon: lastKnown.lon! };
+            setUserCoords(coords);
+            setUtmString(OffGridNavigationEngine.gpsToUtm(coords.lat, coords.lon));
+            setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(coords.lat, coords.lon));
+        } else {
+            try {
+                const cachedGps = localStorage.getItem("red_last_known_gps");
+                if (cachedGps) {
+                    const parsed = JSON.parse(cachedGps);
+                    const coords = { lat: parsed.lat, lon: parsed.lon ?? parsed.lng };
                     setUserCoords(coords);
-                    setUtmString(OffGridNavigationEngine.gpsToUtm(lat, lon));
-                    setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(lat, lon));
-                    try { localStorage.setItem("red_last_known_gps", JSON.stringify({ lat, lng: lon, lon, timestamp: Date.now() })); } catch {}
-
-                    // Dynamically set landmark defaults ONCE on first GPS fix to avoid overwriting user typing input
-                    if (!hasInitializedLandmarks.current) {
-                        hasInitializedLandmarks.current = true;
-                        setLandmark1(prev => {
-                            if (prev.lat === 0 && prev.lon === 0 && !hasStoredLm1) {
-                                return { ...prev, lat: Math.round((lat + 0.003) * 100000) / 100000, lon: Math.round((lon + 0.003) * 100000) / 100000 };
-                            }
-                            return prev;
-                        });
-                        setLandmark2(prev => {
-                            if (prev.lat === 0 && prev.lon === 0 && !hasStoredLm2) {
-                                return { ...prev, lat: Math.round((lat - 0.003) * 100000) / 100000, lon: Math.round((lon + 0.005) * 100000) / 100000 };
-                            }
-                            return prev;
-                        });
-                    }
-                },
-                (err) => {
-                    console.warn("[OffGridCompass] GPS watch warning:", err.message);
-                },
-                { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
-            );
+                    setUtmString(OffGridNavigationEngine.gpsToUtm(coords.lat, coords.lon));
+                    setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(coords.lat, coords.lon));
+                }
+            } catch {}
         }
+
+        // Continuous real-time GPS tracking via TacticalLocationEngine
+        const unsubGps = TacticalLocationEngine.watchLocation((loc) => {
+            if (!TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) return;
+            const lat = loc.lat!;
+            const lon = loc.lon!;
+            const coords = { lat, lon };
+            setUserCoords(coords);
+            setUtmString(OffGridNavigationEngine.gpsToUtm(lat, lon));
+            setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(lat, lon));
+            try { localStorage.setItem("red_last_known_gps", JSON.stringify({ lat, lng: lon, lon, timestamp: Date.now() })); } catch {}
+
+            // Dynamically set landmark defaults ONCE on first GPS fix to avoid overwriting user typing input
+            if (!hasInitializedLandmarks.current) {
+                hasInitializedLandmarks.current = true;
+                setLandmark1(prev => {
+                    if (prev.lat === 0 && prev.lon === 0 && !hasStoredLm1) {
+                        return { ...prev, lat: Math.round((lat + 0.003) * 100000) / 100000, lon: Math.round((lon + 0.003) * 100000) / 100000 };
+                    }
+                    return prev;
+                });
+                setLandmark2(prev => {
+                    if (prev.lat === 0 && prev.lon === 0 && !hasStoredLm2) {
+                        return { ...prev, lat: Math.round((lat - 0.003) * 100000) / 100000, lon: Math.round((lon + 0.005) * 100000) / 100000 };
+                    }
+                    return prev;
+                });
+            }
+        });
 
         return () => {
             window.removeEventListener(eventName, handleOrientation, true);
-            if (watchId !== null && navigator.geolocation) {
-                navigator.geolocation.clearWatch(watchId);
-            }
+            if (unsubGps) unsubGps();
         };
     }, []);
 
@@ -196,7 +243,7 @@ export function OffGridCompassModal() {
         ? OffGridNavigationEngine.calculateTacticalGuidance(userCoords.lat, userCoords.lon, target.lat, target.lon, heading)
         : null;
 
-    // Set or update tactical target point
+    // Set or update tactical target point (synchronized across all navigation modals)
     const handleSetTarget = useCallback((lat: number, lon: number, name?: string) => {
         const newTarget: TacticalTarget = {
             lat: Math.round(lat * 100000) / 100000,
@@ -207,6 +254,7 @@ export function OffGridCompassModal() {
         setTarget(newTarget);
         try {
             localStorage.setItem("red_tactical_target_point", JSON.stringify(newTarget));
+            localStorage.setItem("red_active_target", JSON.stringify(newTarget));
         } catch {}
 
         if (userCoords) {
@@ -222,9 +270,50 @@ export function OffGridCompassModal() {
         setTarget(null);
         try {
             localStorage.removeItem("red_tactical_target_point");
+            localStorage.removeItem("red_active_target");
         } catch {}
         toast.info("Objetivo táctico cancelado");
     }, []);
+
+    // Proyectar posición estimada PDR (Dead Reckoning) hacia el sistema de coordenadas
+    const handleAdoptPdrCoords = useCallback(() => {
+        let baseLat = userCoords?.lat;
+        let baseLon = userCoords?.lon;
+
+        if (baseLat === undefined || baseLon === undefined) {
+            try {
+                const cached = localStorage.getItem("red_last_known_gps");
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    baseLat = parsed.lat;
+                    baseLon = parsed.lon ?? parsed.lng;
+                }
+            } catch {}
+        }
+
+        if (typeof baseLat !== "number" || typeof baseLon !== "number" || !isFinite(baseLat) || !isFinite(baseLon)) {
+            toast.warning("Se requiere una posición inicial de referencia GPS para proyectar el vector inercial PDR");
+            return;
+        }
+
+        // Proyección geodésica ortogonal: 1 grado lat ~ 111139 m
+        const dLat = pdrState.displacementNorthMeters / 111139;
+        const latRad = (baseLat * Math.PI) / 180;
+        const metersPerDegLon = 111139 * Math.cos(latRad);
+        const dLon = metersPerDegLon > 0 ? (pdrState.displacementEastMeters / metersPerDegLon) : 0;
+
+        const estimatedLat = Math.round((baseLat + dLat) * 100000) / 100000;
+        const estimatedLon = Math.round((baseLon + dLon) * 100000) / 100000;
+
+        const coords = { lat: estimatedLat, lon: estimatedLon };
+        setUserCoords(coords);
+        setUtmString(OffGridNavigationEngine.gpsToUtm(coords.lat, coords.lon));
+        setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(coords.lat, coords.lon));
+        try {
+            localStorage.setItem("red_last_known_gps", JSON.stringify({ ...coords, lng: coords.lon, timestamp: Date.now(), source: "PDR_INERTIAL" }));
+        } catch {}
+        toast.success(`📍 Posición PDR inyectada al sistema: [${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}]`);
+    }, [userCoords, pdrState]);
 
     // Draw High-DPI 2D Canvas Compass Radar HUD
     useEffect(() => {
@@ -801,6 +890,25 @@ export function OffGridCompassModal() {
         toast.info("Waypoint eliminado");
     };
 
+    const handleBroadcastWaypoint = async (wp: Waypoint) => {
+        try {
+            TacticalAudioEngine.playTap();
+            const payloadBytes = new TextEncoder().encode(JSON.stringify({
+                id: `wp_${wp.id}`,
+                msg_type: 'TACTICAL_WAYPOINT_DISPATCH',
+                waypoint: wp,
+                sender: (identity?.nickname || 'Operador RED'),
+                timestamp: Date.now()
+            }));
+            await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", payloadBytes);
+            TacticalAudioEngine.playMessageSent();
+            toast.success(`📡 Waypoint "${wp.name}" transmitido a la malla P2P`);
+        } catch {
+            TacticalAudioEngine.playWarning();
+            toast.error("Error al transmitir waypoint a la malla");
+        }
+    };
+
     const handleCalculateTriangulation = () => {
         if (landmark1.lat === 0 || landmark1.lon === 0 || landmark2.lat === 0 || landmark2.lon === 0) {
             toast.warning("Ingresa las coordenadas reales del Punto 1 y Punto 2");
@@ -1147,67 +1255,101 @@ export function OffGridCompassModal() {
                             </div>
                         </div>
 
-                        {/* Detector de Anomalías Magnéticas y Metales */}
+                        {/* Navegación Inercial Táctica PDR (Pedestrian Dead Reckoning / Rumbo Muerto) */}
                         <div style={{
-                            background: 'rgba(15,23,42,0.9)', border: `1px solid ${magTelemetry.isAnomalyDetected ? 'rgba(232,33,58,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                            borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box'
+                            background: 'linear-gradient(180deg, rgba(14, 26, 38, 0.95) 0%, rgba(6, 12, 20, 0.98) 100%)',
+                            border: `1.5px solid ${pdrState.isTracking ? '#00E676' : 'rgba(56, 189, 248, 0.35)'}`,
+                            borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px',
+                            boxShadow: pdrState.isTracking ? '0 0 20px rgba(0,230,118,0.2)' : 'none',
+                            boxSizing: 'border-box'
                         }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
-                                <div style={{ fontSize: '0.88rem', fontWeight: 800, color: magTelemetry.isAnomalyDetected ? '#FF3355' : '#00E5FF' }}>
-                                    🧲 Detector de Anomalías Magnéticas / Metales
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '1.2rem' }}>🥾</span>
+                                    <div>
+                                        <div style={{ fontSize: '0.88rem', fontWeight: 900, color: '#FFF' }}>
+                                            NAVEGACIÓN INERCIAL PDR (RUMBO MUERTO)
+                                        </div>
+                                        <div style={{ fontSize: '0.68rem', color: pdrState.isTracking ? '#00E676' : '#FFB300' }}>
+                                            {pdrState.isTracking ? '● Acelerómetro & Giroscopio en línea' : '○ Navegación inercial detenida'}
+                                        </div>
+                                    </div>
                                 </div>
                                 <span style={{
                                     fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', borderRadius: '6px',
-                                    background: magTelemetry.isAnomalyDetected ? 'rgba(232,33,58,0.25)' : 'rgba(0,230,118,0.15)',
-                                    color: magTelemetry.isAnomalyDetected ? '#FF3355' : '#00E676'
+                                    background: pdrState.isTracking ? 'rgba(0,230,118,0.18)' : 'rgba(255,255,255,0.08)',
+                                    color: pdrState.isTracking ? '#00E676' : '#AAA',
+                                    border: `1px solid ${pdrState.isTracking ? '#00E676' : 'rgba(255,255,255,0.15)'}`
                                 }}>
-                                    {magTelemetry.anomalySeverity}
+                                    {pdrState.isTracking ? 'IMU ACTIVO' : 'PAUSADO'}
                                 </span>
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' }}>
                                 <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
-                                    <div style={{ fontSize: '0.65rem', color: '#AAA' }}>Campo B</div>
-                                    <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#00E5FF', fontFamily: 'monospace' }}>{magTelemetry.magnitudeMicroteslas} µT</div>
-                                </div>
-                                <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
-                                    <div style={{ fontSize: '0.65rem', color: '#AAA' }}>Delta ΔB</div>
-                                    <div style={{ fontSize: '0.95rem', fontWeight: 900, color: magTelemetry.isAnomalyDetected ? '#FF3355' : '#00E676', fontFamily: 'monospace' }}>
-                                        {magTelemetry.deltaFromBaselineMicroteslas > 0 ? `+${magTelemetry.deltaFromBaselineMicroteslas}` : magTelemetry.deltaFromBaselineMicroteslas} µT
+                                    <div style={{ fontSize: '0.62rem', color: '#AAA' }}>PASOS</div>
+                                    <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#00E5FF', fontFamily: 'monospace' }}>
+                                        {pdrState.totalSteps}
                                     </div>
                                 </div>
                                 <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
-                                    <div style={{ fontSize: '0.65rem', color: '#AAA' }}>Línea Base</div>
-                                    <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#AAA', fontFamily: 'monospace' }}>{magTelemetry.baselineMicroteslas} µT</div>
+                                    <div style={{ fontSize: '0.62rem', color: '#AAA' }}>DISTANCIA</div>
+                                    <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace' }}>
+                                        {pdrState.distanceMeters >= 1000 ? `${(pdrState.distanceMeters / 1000).toFixed(2)}km` : `${pdrState.distanceMeters}m`}
+                                    </div>
+                                </div>
+                                <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.62rem', color: '#AAA' }}>VELOCIDAD</div>
+                                    <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#FFB300', fontFamily: 'monospace' }}>
+                                        {(pdrState.averageSpeedMps * 3.6).toFixed(1)} <span style={{ fontSize: '0.65rem' }}>km/h</span>
+                                    </div>
+                                </div>
+                                <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.62rem', color: '#AAA' }}>CADENCIA</div>
+                                    <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#A855F7', fontFamily: 'monospace' }}>
+                                        {pdrState.stepFrequencyHz} <span style={{ fontSize: '0.65rem' }}>Hz</span>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '8px' }}>
+                            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '8px 12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', color: '#AAA', fontFamily: 'monospace' }}>
+                                <span>Vector Norte (ΔN): <strong style={{ color: pdrState.displacementNorthMeters >= 0 ? '#00E676' : '#FF3355' }}>{pdrState.displacementNorthMeters > 0 ? `+${pdrState.displacementNorthMeters}` : pdrState.displacementNorthMeters}m</strong></span>
+                                <span>Vector Este (ΔE): <strong style={{ color: pdrState.displacementEastMeters >= 0 ? '#00E676' : '#FF3355' }}>{pdrState.displacementEastMeters > 0 ? `+${pdrState.displacementEastMeters}` : pdrState.displacementEastMeters}m</strong></span>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 <button
-                                    onClick={() => {
-                                        magneticDetector.calibrateBaseline();
-                                        toast.success("Línea base magnética calibrada");
-                                    }}
+                                    onClick={togglePdrTracking}
                                     style={{
-                                        flex: 1, padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)',
-                                        border: '1px solid rgba(255,255,255,0.15)', color: '#FFF', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer'
+                                        flex: 1, minWidth: '120px', padding: '9px', borderRadius: '8px',
+                                        background: pdrState.isTracking ? 'rgba(232,33,58,0.2)' : 'rgba(0,230,118,0.2)',
+                                        border: `1px solid ${pdrState.isTracking ? '#E8213A' : '#00E676'}`,
+                                        color: pdrState.isTracking ? '#FF5252' : '#00E676',
+                                        fontSize: '0.76rem', fontWeight: 800, cursor: 'pointer'
                                     }}
                                 >
-                                    🎯 Calibrar Terreno
+                                    {pdrState.isTracking ? '⏹️ Detener PDR' : '▶️ Iniciar PDR Inercial'}
                                 </button>
                                 <button
-                                    onClick={() => {
-                                        const active = magneticDetector.toggleAudioBeeps();
-                                        toast.info(active ? "🔊 Tono acústico Geiger activado" : "🔇 Tono silenciado");
-                                    }}
+                                    onClick={handleResetPdr}
                                     style={{
-                                        flex: 1, padding: '8px', borderRadius: '8px',
-                                        background: magTelemetry.isAudioBeepActive ? 'rgba(0,229,255,0.25)' : 'rgba(255,255,255,0.06)',
-                                        border: `1px solid ${magTelemetry.isAudioBeepActive ? '#00E5FF' : 'rgba(255,255,255,0.15)'}`,
-                                        color: '#FFF', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer'
+                                        padding: '9px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)',
+                                        border: '1px solid rgba(255,255,255,0.15)', color: '#AAA', fontSize: '0.76rem', fontWeight: 800, cursor: 'pointer'
                                     }}
+                                    title="Poner a cero odometría inercial"
                                 >
-                                    {magTelemetry.isAudioBeepActive ? "🔊 Geiger Activo" : "🔇 Activar Geiger"}
+                                    🔄 Poner a Cero
+                                </button>
+                                <button
+                                    onClick={handleAdoptPdrCoords}
+                                    style={{
+                                        padding: '9px 12px', borderRadius: '8px',
+                                        background: 'rgba(56,189,248,0.2)', border: '1px solid #38BDF8',
+                                        color: '#38BDF8', fontSize: '0.76rem', fontWeight: 800, cursor: 'pointer'
+                                    }}
+                                    title="Proyectar coordenadas estimadas a la navegación general del sistema"
+                                >
+                                    📍 Proyectar a GPS
                                 </button>
                             </div>
                         </div>
@@ -1502,6 +1644,13 @@ export function OffGridCompassModal() {
                                                         title="Navegar hacia este waypoint"
                                                     >
                                                         🎯 Guiar
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleBroadcastWaypoint(wp)}
+                                                        style={{ background: 'rgba(0,229,255,0.2)', border: '1px solid #00E5FF', color: '#00E5FF', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer' }}
+                                                        title="Transmitir waypoint a la malla del escuadrón"
+                                                    >
+                                                        📡 Malla
                                                     </button>
                                                     <button onClick={() => handleDeleteWaypoint(wp.id)} style={{ background: 'transparent', border: 'none', color: '#E8213A', cursor: 'pointer', fontSize: '0.95rem' }}>🗑️</button>
                                                 </div>

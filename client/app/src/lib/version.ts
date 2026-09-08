@@ -1,18 +1,18 @@
 /**
  * RED Sovereign Mesh — Single Source of Truth for System Version
- * Version: 94.0.0 RED Sovereign Mesh — Resilient Multi-Layer Tactical Engines & P2P Production Edition
+ * Version: 95.0.0 RED Sovereign Mesh — \
  */
 
-export const RED_VERSION = "94.0.0";
-export const RED_VERSION_MAJOR = 94;
+export const RED_VERSION = "95.0.0";
+export const RED_VERSION_MAJOR = 95;
 export const RED_VERSION_MINOR = 0;
 export const RED_VERSION_PATCH = 0;
-export const RED_VERSION_CODE = 94000;
-export const RED_BUILD_CODE = 94000;
-export const RED_VERSION_NAME = "RED v94.0.0 Sovereign Mesh — Resilient Multi-Layer Tactical Engines & P2P Production Edition";
-export const RED_BUILD_DATE = "2026-09-07";
-export const RED_PROTOCOL_VERSION = "RED/94.0-NOISE-PQC";
+export const RED_VERSION_CODE = 95000;
+export const RED_BUILD_CODE = 95000;
+export const RED_VERSION_NAME = "RED v95.0.0 Sovereign Mesh — Hardened Tactical Mesh Edition";
+export const RED_BUILD_DATE = "2026-09-08";
+export const RED_PROTOCOL_VERSION = "RED/95.0-NOISE-PQC";
 export const RED_RELEASE_CHANNEL = "stable-p2p";
 export const RED_APK_NAME = "red-latest.apk";
 export const RED_APK_CANONICAL = "red-latest.apk";
-export const RED_APK_SHA256 = "C7AC1E2787C1BF7FA27AFD1A2C3B24BD933AE9BAD772A93BA94AE47537FACAC6";
+export const RED_APK_SHA256 = "2372556E0CE919AAE6D3DFBDF46589F7CFD2DD2731A0D9B6382B01D0D1C506FA";

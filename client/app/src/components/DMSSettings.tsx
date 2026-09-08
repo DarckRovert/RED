@@ -7,6 +7,8 @@ import { RedAPI, DmsStatusResponse, SaveDmsConfigRequest } from "../lib/api";
 import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
 import { ErrorBanner } from "./ui/ErrorBanner";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 export default function DMSSettings() {
     const { goBack } = useRedStore();
@@ -74,8 +76,22 @@ export default function DMSSettings() {
         return () => clearInterval(interval);
     }, [config.enabled, config.trigger_hours]);
 
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (showPanicModal) {
+                setShowPanicModal(false);
+                return true;
+            }
+            goBack();
+            return true;
+        });
+        return unregister;
+    }, [showPanicModal, goBack]);
+
     // ── 1. Guardar Configuración ────────────────────────────────────────────────────
     const handleSave = async () => {
+        TacticalAudioEngine.playTap();
         setSaving(true);
         try {
             const now = Math.floor(Date.now() / 1000);
@@ -83,9 +99,11 @@ export default function DMSSettings() {
                 ...config,
                 last_active_timestamp: now,
             });
+            TacticalAudioEngine.playRogerBeep();
             toast.success("✅ Configuración DMS actualizada.");
             loadDmsStatus();
         } catch (err: any) {
+            TacticalAudioEngine.playWarning();
             toast.error(`❌ Error guardando DMS: ${err.message || err}`);
         } finally {
             setSaving(false);
@@ -94,12 +112,15 @@ export default function DMSSettings() {
 
     // ── 2. Check-in de Presencia ───────────────────────────────────────────────────
     const handlePingPresence = async () => {
+        TacticalAudioEngine.playTap();
         setPinging(true);
         try {
             await RedAPI.pingDmsActivity();
+            TacticalAudioEngine.playRogerBeep();
             toast.success("🛡️ Check-in exitoso. Temporizador reiniciado.");
             loadDmsStatus();
         } catch (err: any) {
+            TacticalAudioEngine.playWarning();
             toast.error(`❌ Error en Check-In: ${err.message || err}`);
         } finally {
             setPinging(false);
@@ -108,6 +129,7 @@ export default function DMSSettings() {
 
     // ── 3. Purga Inmediata (Panic Wipe) ─────────────────────────────────────────────
     const handleImmediateWipe = async () => {
+        TacticalAudioEngine.playEmergencyAlarm();
         setIsWiping(true);
         try {
             await RedAPI.panicWipe();
@@ -115,6 +137,7 @@ export default function DMSSettings() {
             setShowPanicModal(false);
             goBack();
         } catch (err: any) {
+            TacticalAudioEngine.playWarning();
             toast.error(`❌ Error en purga: ${err.message || err}`);
         } finally {
             setIsWiping(false);
@@ -124,6 +147,7 @@ export default function DMSSettings() {
     // ── 4. Disparo Automático del Protocolo ante Agotamiento del Cronómetro ────────
     useEffect(() => {
         if (config.enabled && secondsLeft === 0 && !isWiping && !isLoading) {
+            TacticalAudioEngine.playEmergencyAlarm();
             toast.error("⚠️ INTERRUPTOR DE HOMBRE MUERTO ACTIVADO: Iniciando protocolo de contingencia.");
             void handleImmediateWipe();
         }
@@ -141,7 +165,10 @@ export default function DMSSettings() {
 
     const Toggle = ({ value, onChange, label, desc }: { value: boolean; onChange: (v: boolean) => void; label: string; desc: string }) => (
         <div
-            onClick={() => onChange(!value)}
+            onClick={() => {
+                TacticalAudioEngine.playTap();
+                onChange(!value);
+            }}
             className="card-tactical-interactive"
             style={{
                 padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -208,7 +235,10 @@ export default function DMSSettings() {
                 </div>
 
                 <button
-                    onClick={goBack}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        goBack();
+                    }}
                     className="btn-icon"
                     title={t('common.close')}
                     style={{ width: 38, height: 38 }}
@@ -293,7 +323,10 @@ export default function DMSSettings() {
                                 {[24, 48, 72, 168].map((h) => (
                                     <button
                                         key={h}
-                                        onClick={() => setConfig({ ...config, trigger_hours: h })}
+                                        onClick={() => {
+                                            TacticalAudioEngine.playTap();
+                                            setConfig({ ...config, trigger_hours: h });
+                                        }}
                                         className="btn-tactical-secondary"
                                         style={{
                                             padding: "10px",
@@ -357,7 +390,10 @@ export default function DMSSettings() {
                         </div>
 
                         <button
-                            onClick={() => setShowPanicModal(true)}
+                            onClick={() => {
+                                TacticalAudioEngine.playWarning();
+                                setShowPanicModal(true);
+                            }}
                             className="btn-tactical-primary"
                             style={{ width: "100%", padding: "14px", background: "linear-gradient(135deg, #FF3355 0%, #990000 100%)", fontSize: "0.92rem", fontWeight: 900 }}
                         >
@@ -387,7 +423,10 @@ export default function DMSSettings() {
 
                         <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
                             <button
-                                onClick={() => setShowPanicModal(false)}
+                                onClick={() => {
+                                    TacticalAudioEngine.playTap();
+                                    setShowPanicModal(false);
+                                }}
                                 disabled={isWiping}
                                 className="btn-tactical-secondary"
                                 style={{ flex: 1, padding: "12px" }}

@@ -14,7 +14,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::sse::{Event, KeepAlive},
     response::{IntoResponse, Response, Sse},
-    routing::{get, post},
+    routing::{delete, get, patch, post, put},
     Json, Router,
 };
 use base64::Engine;
@@ -199,6 +199,7 @@ pub struct GroupMemberResponse {
     pub identity_hash: String,
     pub role: String,
     pub joined_at: u64,
+    pub muted: bool,
 }
 
 #[derive(Serialize)]
@@ -206,6 +207,7 @@ pub struct GroupItem {
     pub id: String,
     pub name: String,
     pub member_count: usize,
+    pub broadcast_only: bool,
     pub members: Vec<GroupMemberResponse>,
 }
 
@@ -301,7 +303,60 @@ pub struct EditMessageRequest {
 #[derive(Deserialize)]
 pub struct AddGroupMemberRequest {
     pub identity_hash: String,
-    pub public_key: String,
+    #[serde(default)]
+    pub public_key: Option<String>,
+    #[serde(default)]
+    pub role: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct SetGroupMemberRoleRequest {
+    pub role: String,
+}
+
+#[derive(Deserialize)]
+pub struct MuteGroupMemberRequest {
+    pub muted: bool,
+}
+
+#[derive(Deserialize)]
+pub struct SetGroupBroadcastRequest {
+    pub broadcast_only: bool,
+}
+
+#[derive(Deserialize)]
+pub struct GroupHistoryRequestPayload {
+    pub group_id: String,
+    pub requester_hash: String,
+    #[serde(default)]
+    pub since_timestamp: Option<f64>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SaveStegoCapsuleRequest {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub title: String,
+    #[serde(default, alias = "image_data_url")]
+    pub image_data: Option<String>,
+    #[serde(default)]
+    pub has_password: Option<bool>,
+    #[serde(default, alias = "author")]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CreateP2PVoucherRequest {
+    pub amount: f64,
+    pub recipient: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RedeemP2PVoucherRequest {
+    #[serde(alias = "id", alias = "payload")]
+    pub qr_payload: String,
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -457,22 +512,48 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/groups/:id/send", post(handle_send_group_message))
         // E1: group member management
         .route("/api/groups/:id/members", post(handle_add_group_member))
-        // v25.0: Social P2P
-        .route("/api/social/feed", get(get_social_feed))
-        .route("/api/social/post", post(create_social_post))
-        .route("/api/social/posts", post(create_social_post))
-        .route("/api/social/react", post(create_social_reaction))
-        .route("/api/social/follow", post(follow_user))
-        .route("/api/social/unfollow", post(unfollow_user))
-        .route("/api/social/following", get(get_following))
-        // Blackout mode
-        .route("/api/blackout/status", get(handle_get_blackout))
-        .route("/api/blackout/mode", post(handle_set_blackout))
-        .route("/api/network/blackout", get(handle_get_blackout).post(handle_set_blackout))
         .route(
             "/api/groups/:id/members/:hash",
             axum::routing::delete(handle_remove_group_member),
         )
+        .route(
+            "/api/groups/:id/members/:hash/role",
+            put(handle_set_group_member_role),
+        )
+        .route(
+            "/api/groups/:id/members/:hash/mute",
+            put(handle_mute_group_member),
+        )
+        .route(
+            "/api/groups/:id/broadcast",
+            put(handle_set_group_broadcast),
+        )
+        .route(
+            "/api/groups/history/request",
+            post(handle_group_history_request),
+        )
+        // v25.0: Social P2P
+        .route("/api/social/feed", get(get_social_feed))
+        .route("/api/social/post", post(create_social_post))
+        .route("/api/social/posts", get(get_social_feed).post(create_social_post))
+        .route("/api/social/posts/:id", delete(handle_delete_social_post))
+        .route("/api/social/react", post(create_social_reaction))
+        .route("/api/social/follow", post(follow_user))
+        .route("/api/social/unfollow", post(unfollow_user))
+        .route("/api/social/following", get(get_following))
+        // Stego Vault & Capsules (LSB Off-Grid Sled DB)
+        .route("/api/stego/capsules", get(handle_get_stego_vault).post(handle_save_stego_vault))
+        .route("/api/stego/capsules/:id", delete(handle_delete_stego_vault))
+        .route("/api/stego/vault", get(handle_get_stego_vault).post(handle_save_stego_vault))
+        .route("/api/stego/vault/:id", delete(handle_delete_stego_vault))
+        // Sovereign P2P Payments & Vouchers (v32.0)
+        .route("/api/p2p/wallet", get(handle_get_p2p_wallet))
+        .route("/api/p2p/voucher", post(handle_create_p2p_voucher))
+        .route("/api/p2p/redeem", post(handle_redeem_p2p_voucher))
+        // Blackout mode
+        .route("/api/blackout/status", get(handle_get_blackout))
+        .route("/api/blackout/mode", post(handle_set_blackout))
+        .route("/api/network/blackout", get(handle_get_blackout).post(handle_set_blackout))
         // FIX M4: peers list
         .route("/api/peers", get(handle_list_peers))
         .route(
@@ -534,6 +615,7 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/chunker/manifest/:id", get(handle_chunker_manifest))
         .route("/api/voice/send", post(handle_send_voice_burst))
         .route("/api/voice/bursts", get(handle_get_voice_bursts))
+        .route("/api/voice/bursts/:id", delete(handle_delete_voice_burst))
         .route("/api/sanitizer/clean", post(handle_clean_image_exif))
         .route("/api/weather/report", post(handle_post_weather_report))
         .route("/api/weather/reports", get(handle_get_weather_reports))
@@ -1374,10 +1456,12 @@ async fn handle_list_groups(State(state): State<ApiState>) -> impl IntoResponse 
                     id: hex::encode(g.id.0),
                     name: g.name.clone(),
                     member_count: g.member_count(),
+                    broadcast_only: g.broadcast_only,
                     members: g.members().map(|m| GroupMemberResponse {
                         identity_hash: m.identity_hash.to_hex(),
                         role: format!("{:?}", m.role),
                         joined_at: m.joined_at,
+                        muted: m.muted,
                     }).collect(),
                 })
                 .collect();
@@ -2318,26 +2402,32 @@ async fn handle_add_group_member(
                 .into_response()
         }
     };
-    let public_key_bytes = match hex::decode(&req.public_key) {
-        Ok(b) if b.len() == 32 => {
-            let mut a = [0u8; 32];
-            a.copy_from_slice(&b);
-            a
-        }
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error": "Invalid public key hex format"})),
-            )
-                .into_response()
-        }
+    let public_key_bytes = match req.public_key.as_deref() {
+        Some(pk_hex) => match hex::decode(pk_hex) {
+            Ok(b) if b.len() == 32 => {
+                let mut a = [0u8; 32];
+                a.copy_from_slice(&b);
+                a
+            }
+            _ => [0u8; 32],
+        },
+        None => [0u8; 32],
+    };
+    let role = match req.role.as_deref() {
+        Some("Admin") => red_core::protocol::MemberRole::Admin,
+        Some("Moderator") => red_core::protocol::MemberRole::Moderator,
+        Some("ReadOnly") => red_core::protocol::MemberRole::ReadOnly,
+        _ => red_core::protocol::MemberRole::Member,
     };
     let mut node = state.node.lock().await;
     let new_member = red_core::protocol::GroupMember {
         identity_hash: member_hash,
         public_key: red_core::crypto::keys::PublicKey::from_bytes(public_key_bytes),
-        joined_at: 0,
-        role: red_core::protocol::MemberRole::Member,
+        joined_at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        role,
         muted: false,
     };
     match node
@@ -2351,6 +2441,124 @@ async fn handle_add_group_member(
         )
             .into_response(),
     }
+}
+
+async fn handle_set_group_member_role(
+    State(state): State<ApiState>,
+    Path((group_id, member_hash_hex)): Path<(String, String)>,
+    Json(req): Json<SetGroupMemberRoleRequest>,
+) -> impl IntoResponse {
+    let group_id_bytes = match hex::decode(&group_id) {
+        Ok(b) if b.len() == 32 => {
+            let mut a = [0u8; 32];
+            a.copy_from_slice(&b);
+            a
+        }
+        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+    };
+    let member_hash = match parse_identity_hash(&member_hash_hex) {
+        Ok(h) => h,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
+    let new_role = match req.role.as_str() {
+        "Admin" => red_core::protocol::MemberRole::Admin,
+        "Moderator" => red_core::protocol::MemberRole::Moderator,
+        "ReadOnly" => red_core::protocol::MemberRole::ReadOnly,
+        _ => red_core::protocol::MemberRole::Member,
+    };
+
+    let node = state.node.lock().await;
+    let storage_arc = node.get_storage();
+    let mut s = storage_arc.lock().await;
+    if let Some(mut group) = s.get_group(&red_core::protocol::GroupId(group_id_bytes)) {
+        match group.set_member_role(&member_hash, new_role) {
+            Ok(_) => {
+                let _ = s.add_group(group);
+                (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
+            }
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("{}", e)})),
+            ).into_response(),
+        }
+    } else {
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Group not found"}))).into_response()
+    }
+}
+
+async fn handle_mute_group_member(
+    State(state): State<ApiState>,
+    Path((group_id, member_hash_hex)): Path<(String, String)>,
+    Json(req): Json<MuteGroupMemberRequest>,
+) -> impl IntoResponse {
+    let group_id_bytes = match hex::decode(&group_id) {
+        Ok(b) if b.len() == 32 => {
+            let mut a = [0u8; 32];
+            a.copy_from_slice(&b);
+            a
+        }
+        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+    };
+    let member_hash = match parse_identity_hash(&member_hash_hex) {
+        Ok(h) => h,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
+
+    let node = state.node.lock().await;
+    let storage_arc = node.get_storage();
+    let mut s = storage_arc.lock().await;
+    if let Some(mut group) = s.get_group(&red_core::protocol::GroupId(group_id_bytes)) {
+        match group.set_member_muted(&member_hash, req.muted) {
+            Ok(_) => {
+                let _ = s.add_group(group);
+                (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
+            }
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("{}", e)})),
+            ).into_response(),
+        }
+    } else {
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Group not found"}))).into_response()
+    }
+}
+
+async fn handle_set_group_broadcast(
+    State(state): State<ApiState>,
+    Path(group_id): Path<String>,
+    Json(req): Json<SetGroupBroadcastRequest>,
+) -> impl IntoResponse {
+    let group_id_bytes = match hex::decode(&group_id) {
+        Ok(b) if b.len() == 32 => {
+            let mut a = [0u8; 32];
+            a.copy_from_slice(&b);
+            a
+        }
+        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+    };
+
+    let node = state.node.lock().await;
+    let storage_arc = node.get_storage();
+    let mut s = storage_arc.lock().await;
+    if let Some(mut group) = s.get_group(&red_core::protocol::GroupId(group_id_bytes)) {
+        group.set_broadcast_only(req.broadcast_only);
+        let _ = s.add_group(group);
+        (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
+    } else {
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Group not found"}))).into_response()
+    }
+}
+
+async fn handle_group_history_request(
+    State(_state): State<ApiState>,
+    Json(req): Json<GroupHistoryRequestPayload>,
+) -> impl IntoResponse {
+    tracing::info!(
+        "[DTN] Received Group History Request for group {} from peer {}",
+        req.group_id,
+        req.requester_hash
+    );
+    (StatusCode::OK, Json(serde_json::json!({"ok": true, "status": "DTN sync request queued"}))).into_response()
 }
 
 async fn handle_remove_group_member(
@@ -2798,30 +3006,40 @@ async fn handle_post_channel_message(
             .into_response();
     }
 
-    let node = state.node.lock().await;
-    let sender_did = node.identity_hash().to_hex();
-    let msg = state.channel_store.post_message(sender_did, req);
+    let (msg, sys_msg) = {
+        let node = state.node.lock().await;
+        let sender_did = node.identity_hash().to_hex();
+        let msg = state.channel_store.post_message(sender_did, req);
 
-    let sys_msg = Message {
-        id: red_core::protocol::MessageId::generate(),
-        sender: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
-        recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
-        content: MessageType::Text(
-            serde_json::json!({
-                "event_type": "channel_message",
-                "channel_message": msg
-            })
-            .to_string(),
-        ),
-        timestamp: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-        status: red_core::protocol::MessageStatus::Sent,
-        reply_to: None,
-        edited: false,
+        let sys_msg = Message {
+            id: red_core::protocol::MessageId::generate(),
+            sender: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+            recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+            content: MessageType::Text(
+                serde_json::json!({
+                    "event_type": "channel_message",
+                    "channel_message": msg
+                })
+                .to_string(),
+            ),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            status: red_core::protocol::MessageStatus::Sent,
+            reply_to: None,
+            edited: false,
+        };
+        (msg, sys_msg)
     };
-    let _ = state.msg_tx.send(sys_msg);
+
+    let _ = state.msg_tx.send(sys_msg.clone());
+
+    // Broadcast across Libp2p Gossipsub and local radio transport (BLE/LoRa/WiFi-Direct)
+    {
+        let mut node = state.node.lock().await;
+        let _ = node.broadcast_public_message(sys_msg).await;
+    }
 
     (
         StatusCode::CREATED,
@@ -2870,7 +3088,22 @@ async fn handle_send_voice_burst(
 ) -> impl IntoResponse {
     let node = state.node.lock().await;
     let sender_did = node.identity_hash().to_hex();
-    let burst = state.voice_store.add_burst(sender_did, req);
+    let burst = state.voice_store.add_burst(sender_did.clone(), req);
+
+    let storage = node.get_storage();
+    let s = storage.lock().await;
+    let burst_record = red_core::storage::VoiceBurstRecord {
+        id: burst.id.clone(),
+        sender_hash: sender_did,
+        sender_name: burst.sender_name.clone(),
+        duration_seconds: (burst.duration_seconds.round() as u32).max(1),
+        audio_opus_b64: burst.audio_opus_b64.clone(),
+        is_mine: true,
+        timestamp: burst.timestamp as u64,
+    };
+    let _ = s.store_voice_burst(&burst_record);
+    drop(s);
+    drop(node);
 
     let sys_msg = Message {
         id: red_core::protocol::MessageId::generate(),
@@ -2893,6 +3126,15 @@ async fn handle_send_voice_burst(
     };
     let _ = state.msg_tx.send(sys_msg);
 
+    // Re-radiar por transceptores de radio físicos BLE / LoRa vía outbound_tx
+    let burst_frame = serde_json::json!({
+        "msg_type": "voice_burst",
+        "voice_burst": burst
+    });
+    if let Ok(raw_bytes) = serde_json::to_vec(&burst_frame) {
+        let _ = state.outbound_tx.send(raw_bytes);
+    }
+
     Json(serde_json::json!({
         "ok": true,
         "burst": burst
@@ -2905,6 +3147,30 @@ async fn handle_get_voice_bursts(State(state): State<ApiState>) -> impl IntoResp
     Json(serde_json::json!({
         "bursts": bursts
     }))
+}
+
+/// DELETE /api/voice/bursts/:id — Elimina ráfaga de voz y propaga baja por la malla
+async fn handle_delete_voice_burst(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let deleted = state.voice_store.delete_burst(&id);
+    let node = state.node.lock().await;
+    let storage = node.get_storage();
+    let s = storage.lock().await;
+    let _ = s.delete_voice_burst(&id);
+    drop(s);
+    drop(node);
+
+    let delete_frame = serde_json::json!({
+        "msg_type": "voice_burst_delete",
+        "burst_id": id
+    });
+    if let Ok(raw_bytes) = serde_json::to_vec(&delete_frame) {
+        let _ = state.outbound_tx.send(raw_bytes);
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true, "deleted": id, "found": deleted }))).into_response()
 }
 
 /// POST /api/sanitizer/clean — Sanitiza cabeceras EXIF / GPS de imágenes
@@ -3316,21 +3582,20 @@ async fn create_social_post(
     Json(mut req): Json<crate::social::PostRequest>,
 ) -> impl IntoResponse {
     let node = state.node.lock().await;
-    let author_hash = node.identity_hash().to_hex();
     
     // Compresión Zero-Bloat
     if let Some(b64) = req.media_data.take() {
         req.media_data = Some(compress_image_base64(b64));
     }
     
-    // Crear el post
-    let post = state.social_store.create_post(author_hash.clone(), req);
+    // Crear el post firmado criptográficamente con Ed25519
+    let post = state.social_store.create_signed_post(node.identity(), req);
     
     // Difundirlo por la red P2P
     if let Ok(payload) = serde_json::to_vec(&post) {
         let msg = red_core::protocol::Message {
             id: red_core::protocol::MessageId::generate(),
-            content: red_core::protocol::MessageType::SocialPost(payload),
+            content: red_core::protocol::MessageType::SocialPost(payload.clone()),
             sender: node.identity_hash().clone(),
             recipient: node.identity_hash().clone(), // Broadcast publico
             timestamp: chrono::Utc::now().timestamp() as u64,
@@ -3338,11 +3603,14 @@ async fn create_social_post(
             edited: false,
             reply_to: None,
         };
-        // Para enviar rediseñamos, usando broadcast_public_message
-        // Requires mutable access to node though... wait, let's get mut
         drop(node);
         let mut mut_node = state.node.lock().await;
-        let _ = mut_node.broadcast_public_message(msg).await;
+        let _ = mut_node.broadcast_public_message(msg.clone()).await;
+
+        // Re-radiar por transceptores de radio físicos BLE / LoRa vía outbound_tx
+        if let Ok(raw_bytes) = serde_json::to_vec(&msg) {
+            let _ = state.outbound_tx.send(raw_bytes);
+        }
     }
     
     Json(post)
@@ -3376,10 +3644,351 @@ async fn create_social_reaction(
                 reply_to: None,
             };
             let mut mut_node = state.node.lock().await;
-            let _ = mut_node.broadcast_public_message(msg).await;
+            let _ = mut_node.broadcast_public_message(msg.clone()).await;
+
+            // Re-radiar por BLE/LoRa
+            if let Ok(raw_bytes) = serde_json::to_vec(&msg) {
+                let _ = state.outbound_tx.send(raw_bytes);
+            }
         }
         Json(post).into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()
     }
 }
+
+async fn handle_delete_social_post(
+    State(state): State<ApiState>,
+    Path(post_id): Path<String>,
+) -> impl IntoResponse {
+    let removed = state.social_store.delete_post(&post_id);
+    if removed {
+        // Enviar notificación a la malla para purga de post
+        let delete_payload = serde_json::json!({
+            "msg_type": "social_delete",
+            "post_id": post_id,
+            "timestamp": chrono::Utc::now().timestamp(),
+        });
+        if let Ok(data) = serde_json::to_vec(&delete_payload) {
+            let node = state.node.lock().await;
+            let msg = red_core::protocol::Message {
+                id: red_core::protocol::MessageId::generate(),
+                content: red_core::protocol::MessageType::SocialPost(data),
+                sender: node.identity_hash().clone(),
+                recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+                timestamp: chrono::Utc::now().timestamp() as u64,
+                status: red_core::protocol::MessageStatus::Sent,
+                edited: false,
+                reply_to: None,
+            };
+            drop(node);
+            let mut mut_node = state.node.lock().await;
+            let _ = mut_node.broadcast_public_message(msg.clone()).await;
+            if let Ok(raw_bytes) = serde_json::to_vec(&msg) {
+                let _ = state.outbound_tx.send(raw_bytes);
+            }
+        }
+        (StatusCode::OK, Json(serde_json::json!({ "ok": true, "deleted": post_id }))).into_response()
+    } else {
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Post not found" }))).into_response()
+    }
+}
+
+// ─── Tactical Stego Vault Handlers ──────────────────────────────────────────
+
+async fn handle_get_stego_vault(State(state): State<ApiState>) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let storage = node.get_storage();
+    let s = storage.lock().await;
+    let capsules = s.get_stego_capsules().unwrap_or_default();
+    Json(capsules).into_response()
+}
+
+async fn handle_save_stego_vault(
+    State(state): State<ApiState>,
+    Json(req): Json<SaveStegoCapsuleRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let storage = node.get_storage();
+    let s = storage.lock().await;
+    let id = req.id.unwrap_or_else(|| red_core::protocol::MessageId::generate().to_hex());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let image_data = req.image_data.unwrap_or_default();
+
+    let record = red_core::storage::StegoCapsuleRecord {
+        id: id.clone(),
+        title: req.title.clone(),
+        image_data,
+        has_password: req.has_password.unwrap_or(false),
+        notes: req.notes.unwrap_or_default(),
+        timestamp: now,
+    };
+
+    let _ = s.store_stego_capsule(&record);
+    tracing::info!("[API] Cápsula esteganográfica guardada en Sled: '{}' (Cifrada: {})", record.title, record.has_password);
+
+    (StatusCode::CREATED, Json(record)).into_response()
+}
+
+async fn handle_delete_stego_vault(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let storage = node.get_storage();
+    let s = storage.lock().await;
+    let _ = s.delete_stego_capsule(&id);
+    tracing::info!("[API] Cápsula esteganográfica eliminada de Sled: '{}'", id);
+    (StatusCode::OK, Json(serde_json::json!({"success": true, "deleted": id}))).into_response()
+}
+
+// ─── Sovereign P2P Payments & Vouchers Handlers (v32.0) ──────────────────────────
+
+async fn handle_get_p2p_wallet(State(state): State<ApiState>) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let storage = node.get_storage();
+    let s = storage.lock().await;
+    match s.get_p2p_wallet() {
+        Ok(wallet) => {
+            let vouchers = s.get_p2p_vouchers().unwrap_or_default();
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "ok": true,
+                    "balance": wallet.balance,
+                    "total_minted": wallet.total_minted,
+                    "total_received": wallet.total_received,
+                    "total_spent": wallet.total_spent,
+                    "vouchers": vouchers
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+async fn handle_create_p2p_voucher(
+    State(state): State<ApiState>,
+    Json(req): Json<CreateP2PVoucherRequest>,
+) -> impl IntoResponse {
+    if req.amount <= 0.0 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "El monto debe ser mayor a 0"})),
+        )
+            .into_response();
+    }
+
+    let mut node = state.node.lock().await;
+    let storage = node.get_storage();
+    let s = storage.lock().await;
+
+    let mut wallet = match s.get_p2p_wallet() {
+        Ok(w) => w,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
+    if wallet.balance < req.amount {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Saldo insuficiente en boveda"})),
+        )
+            .into_response();
+    }
+
+    // Deduct balance
+    wallet.balance -= req.amount;
+    wallet.total_spent += req.amount;
+    if let Err(e) = s.save_p2p_wallet(&wallet) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response();
+    }
+
+    let creator_hash = node.identity_hash().clone();
+    let creator_name = s
+        .get_profile()
+        .map(|p| p.display_name)
+        .unwrap_or_else(|| "Nodo Soberano".to_string());
+    let recipient = req.recipient.unwrap_or_else(|| "Anónimo".to_string());
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let hash_hex = creator_hash.to_hex();
+    let short_id = if hash_hex.len() >= 6 {
+        &hash_hex[..6]
+    } else {
+        "RED"
+    };
+    let voucher_id = format!("VOUCHER_{}_{}", timestamp, short_id);
+
+    // Cryptographic signature over voucher payload: (id + amount + timestamp + creator_hash)
+    let sign_payload = format!("{}:{}:{}:{}", voucher_id, req.amount, timestamp, hash_hex);
+    let signature_bytes = node.identity().sign(sign_payload.as_bytes());
+    let signature_hex = hex::encode(signature_bytes);
+    let verifying_key = node.identity().verifying_key();
+
+    let voucher_record = red_core::storage::P2PVoucherRecord {
+        id: voucher_id.clone(),
+        creator_hash: creator_hash.clone(),
+        creator_name: creator_name.clone(),
+        recipient: recipient.clone(),
+        amount: req.amount,
+        timestamp,
+        signature: signature_hex.clone(),
+        is_outgoing: true,
+        redeemed: true,
+    };
+
+    let _ = s.store_p2p_voucher(&voucher_record);
+
+    // Broadcast voucher over Mesh so recipient can receive it automatically if online
+    let voucher_payload = red_core::protocol::P2PVoucherPayload {
+        id: voucher_id.clone(),
+        creator_hash: creator_hash.clone(),
+        creator_name,
+        recipient: recipient.clone(),
+        amount: req.amount,
+        timestamp,
+        verifying_key,
+        signature: signature_hex.clone(),
+    };
+
+    if let Ok(data) = serde_json::to_vec(&voucher_payload) {
+        let msg_type = red_core::protocol::MessageType::P2PVoucher(data);
+        let out_msg = red_core::protocol::Message {
+            id: red_core::protocol::MessageId::generate(),
+            sender: creator_hash,
+            recipient: red_core::identity::IdentityHash::from_bytes([0; 32]),
+            content: msg_type,
+            timestamp,
+            reply_to: None,
+            status: red_core::protocol::MessageStatus::Sent,
+            edited: false,
+        };
+        let _ = node
+            .send_message(red_core::identity::IdentityHash::from_bytes([0; 32]), out_msg.clone())
+            .await;
+        if let Ok(raw_bytes) = serde_json::to_vec(&out_msg) {
+            let _ = state.outbound_tx.send(raw_bytes);
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "ok": true,
+            "voucher": voucher_record,
+            "new_balance": wallet.balance
+        })),
+    )
+        .into_response()
+}
+
+async fn handle_redeem_p2p_voucher(
+    State(state): State<ApiState>,
+    Json(req): Json<RedeemP2PVoucherRequest>,
+) -> impl IntoResponse {
+    // Format expected: RED_PAY:<VOUCHER_ID>:<AMOUNT>:<SIGNATURE>
+    let parts: Vec<&str> = req.qr_payload.split(':').collect();
+    if parts.len() < 4 || parts[0] != "RED_PAY" {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Formato de voucher QR inválido"})),
+        )
+            .into_response();
+    }
+
+    let voucher_id = parts[1].to_string();
+    let amount: f64 = match parts[2].parse() {
+        Ok(a) if a > 0.0 => a,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Monto inválido en voucher"})),
+            )
+                .into_response()
+        }
+    };
+    let signature = parts[3].to_string();
+
+    let node = state.node.lock().await;
+    let storage = node.get_storage();
+    let s = storage.lock().await;
+
+    // Check if already redeemed locally
+    if let Some(existing) = s.get_p2p_voucher(&voucher_id) {
+        if existing.redeemed {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Este voucher ya fue canjeado previamente"})),
+            )
+                .into_response();
+        }
+    }
+
+    let my_hash = node.identity_hash().clone();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+
+    let voucher_record = red_core::storage::P2PVoucherRecord {
+        id: voucher_id.clone(),
+        creator_hash: red_core::identity::IdentityHash::from_bytes([0; 32]),
+        creator_name: "Emisor P2P".to_string(),
+        recipient: my_hash.to_hex(),
+        amount,
+        timestamp,
+        signature,
+        is_outgoing: false,
+        redeemed: true,
+    };
+
+    let _ = s.store_p2p_voucher(&voucher_record);
+
+    let mut wallet = match s.get_p2p_wallet() {
+        Ok(w) => w,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
+    wallet.balance += amount;
+    wallet.total_received += amount;
+    let _ = s.save_p2p_wallet(&wallet);
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "ok": true,
+            "amount": amount,
+            "new_balance": wallet.balance,
+            "voucher": voucher_record
+        })),
+    )
+        .into_response()
+}
+

@@ -6,11 +6,14 @@ import { toast } from "./Toast";
 import { getP2PWallet, createP2PVoucher, redeemP2PVoucher, P2PVoucher } from "../lib/api";
 import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { meshRouter } from "../lib/mesh/meshRouter";
 
 type WalletTab = "emit" | "redeem" | "ledger";
 
 export const RedP2PPayModal: React.FC = () => {
-    const { navigate, goBack } = useRedStore();
+    const { navigate, goBack, identity } = useRedStore();
     const { t } = useTranslation();
     const [balance, setBalance] = useState<number>(0);
     const [totalSpent, setTotalSpent] = useState<number>(0);
@@ -20,18 +23,67 @@ export const RedP2PPayModal: React.FC = () => {
     const [redeemInput, setRedeemInput] = useState<string>("");
     const [activeQr, setActiveQr] = useState<string | null>(null);
     const [activeQrString, setActiveQrString] = useState<string | null>(null);
+    const [activeVoucher, setActiveVoucher] = useState<P2PVoucher | null>(null);
     const [activeTab, setActiveTab] = useState<WalletTab>("emit");
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [isScanning, setIsScanning] = useState<boolean>(false);
     const shouldScanRef = React.useRef<boolean>(false);
 
+    // ─── Intercepción Jerárquica LIFO de Hardware (Android Back / Esc) ───
+    useEffect(() => {
+        return BackHandlerRegistry.register(() => {
+            if (isScanning) {
+                stopCamera();
+                return true;
+            }
+            if (activeQr) {
+                setActiveQr(null);
+                setActiveQrString(null);
+                setActiveVoucher(null);
+                return true;
+            }
+            if (activeTab !== "emit") {
+                setActiveTab("emit");
+                return true;
+            }
+            goBack();
+            return true;
+        });
+    }, [isScanning, activeQr, activeTab, goBack]);
+
+    const handleBroadcastVoucher = async () => {
+        if (!activeVoucher) return;
+        TacticalAudioEngine.playTap();
+        try {
+            const voucherString = activeQrString || `RED_PAY:${activeVoucher.id}:${activeVoucher.amount}:${activeVoucher.signature}`;
+            const payloadBytes = new TextEncoder().encode(JSON.stringify({
+                type: 'P2P_VOUCHER_DISPATCH',
+                voucherString,
+                voucher: activeVoucher,
+                sender: identity?.nickname || 'OPERADOR_RED',
+                recipient: activeVoucher.recipient || undefined,
+                timestamp: Date.now()
+            }));
+
+            const targetHash = activeVoucher.recipient?.trim() || "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+            await meshRouter.send(targetHash, payloadBytes);
+            TacticalAudioEngine.playMessageSent();
+            toast.success("📡 Vale P2P transmitido a través de la malla");
+        } catch (err: any) {
+            TacticalAudioEngine.playWarning();
+            toast.error("Error al transmitir vale por la malla");
+        }
+    };
+
     const loadWallet = useCallback(async () => {
         try {
             const res = await getP2PWallet();
             if (res && res.ok) {
-                setBalance(res.balance);
-                if (res.wallet?.total_spent !== undefined) {
+                setBalance(res.balance ?? 0);
+                if (res.total_spent !== undefined) {
+                    setTotalSpent(res.total_spent);
+                } else if (res.wallet?.total_spent !== undefined) {
                     setTotalSpent(res.wallet.total_spent);
                 }
                 setVouchers(res.vouchers || []);
@@ -148,6 +200,7 @@ export const RedP2PPayModal: React.FC = () => {
             if (res && res.ok && res.voucher) {
                 setBalance(res.new_balance);
                 setVouchers(prev => [res.voucher, ...prev]);
+                setActiveVoucher(res.voucher);
 
                 const qrString = `RED_PAY:${res.voucher.id}:${res.voucher.amount}:${res.voucher.signature}`;
                 setActiveQrString(qrString);
@@ -163,6 +216,7 @@ export const RedP2PPayModal: React.FC = () => {
                 setAmountInput("");
                 setRecipientInput("");
                 toast.success(`💳 Vale P2P de ${val} créditos emitido y firmado por Rust.`);
+                TacticalAudioEngine.playMessageSent();
             } else {
                 toast.error(res.error || "Error al emitir vale.");
             }
@@ -205,6 +259,7 @@ export const RedP2PPayModal: React.FC = () => {
                 }
                 setRedeemInput("");
                 toast.success(`🎉 ¡Vale de ${res.voucher?.amount || "fondos"} créditos canjeado con éxito en Rust!`);
+                TacticalAudioEngine.playRogerBeep();
                 await loadWallet();
                 setActiveTab("ledger");
             } else {
@@ -217,10 +272,28 @@ export const RedP2PPayModal: React.FC = () => {
         }
     };
 
-    const copyToClipboard = (text: string) => {
-        if (typeof navigator !== "undefined" && navigator.clipboard) {
-            navigator.clipboard.writeText(text);
+    const copyToClipboard = async (text: string) => {
+        TacticalAudioEngine.playMessageSent();
+        try {
+            if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+                toast.success("Copiado al portapapeles");
+                return;
+            }
+        } catch {}
+        try {
+            const el = document.createElement("textarea");
+            el.value = text;
+            el.setAttribute("readonly", "");
+            el.style.position = "absolute";
+            el.style.left = "-9999px";
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand("copy");
+            document.body.removeChild(el);
             toast.success("Copiado al portapapeles");
+        } catch {
+            toast.error("No se pudo copiar automáticamente");
         }
     };
 
@@ -301,7 +374,12 @@ export const RedP2PPayModal: React.FC = () => {
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
-                        onClick={goBack}
+                        onClick={() => {
+                            if (!BackHandlerRegistry.executeTop()) {
+                                TacticalAudioEngine.playTap();
+                                goBack();
+                            }
+                        }}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -352,7 +430,10 @@ export const RedP2PPayModal: React.FC = () => {
                     return (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id as WalletTab)}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setActiveTab(tab.id as WalletTab);
+                            }}
                             style={{
                                 flex: 1, padding: "8px 12px", borderRadius: "10px",
                                 background: isSel ? "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(10, 35, 25, 0.85) 100%)" : "rgba(255, 255, 255, 0.03)",
@@ -366,6 +447,57 @@ export const RedP2PPayModal: React.FC = () => {
                         </button>
                     );
                 })}
+            </div>
+
+            {/* HUD de Telemetría Financiera y Criptográfica Táctica */}
+            <div style={{
+                padding: "10px 16px",
+                background: "linear-gradient(90deg, rgba(6, 12, 28, 0.95) 0%, rgba(10, 24, 38, 0.95) 100%)",
+                borderBottom: "1px solid rgba(0, 230, 118, 0.2)",
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+                gap: "10px",
+                flexShrink: 0
+            }}>
+                <div style={{
+                    padding: "8px 12px", borderRadius: "10px",
+                    background: "rgba(0, 230, 118, 0.06)", border: "1px solid rgba(0, 230, 118, 0.25)"
+                }}>
+                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)", fontWeight: 800 }}>BÓVEDA DISPONIBLE</div>
+                    <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#00E676" }}>
+                        {balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span style={{ fontSize: "0.65rem" }}>RED</span>
+                    </div>
+                </div>
+
+                <div style={{
+                    padding: "8px 12px", borderRadius: "10px",
+                    background: "rgba(0, 229, 255, 0.06)", border: "1px solid rgba(0, 229, 255, 0.25)"
+                }}>
+                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)", fontWeight: 800 }}>TOTAL GASTADO</div>
+                    <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#00E5FF" }}>
+                        {totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span style={{ fontSize: "0.65rem" }}>RED</span>
+                    </div>
+                </div>
+
+                <div style={{
+                    padding: "8px 12px", borderRadius: "10px",
+                    background: "rgba(255, 171, 0, 0.06)", border: "1px solid rgba(255, 171, 0, 0.25)"
+                }}>
+                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)", fontWeight: 800 }}>VALES EN LIBRO MAYOR</div>
+                    <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#FFAB00" }}>
+                        {vouchers.length} <span style={{ fontSize: "0.65rem" }}>REGISTROS</span>
+                    </div>
+                </div>
+
+                <div style={{
+                    padding: "8px 12px", borderRadius: "10px",
+                    background: "rgba(124, 77, 255, 0.06)", border: "1px solid rgba(124, 77, 255, 0.25)"
+                }}>
+                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)", fontWeight: 800 }}>FIRMA CRIPTOGRÁFICA</div>
+                    <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#7C4DFF", marginTop: "3px" }}>
+                        ED25519 NATIVO
+                    </div>
+                </div>
             </div>
 
             {/* Contenido Principal */}
@@ -411,7 +543,7 @@ export const RedP2PPayModal: React.FC = () => {
                                         onChange={e => setRecipientInput(e.target.value)}
                                         placeholder="DID o Hash del destinatario (dejar vacío para cheque al portador)..."
                                         style={{
-                                            width: "100%", padding: "10px 14px", background: "rgba(0, 0, 0, 0.5)",
+                                            width: "100%", padding: "10px 14px", background: "rgba(255, 255, 255, 0.15)",
                                             border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "10px",
                                             color: "#FFFFFF", fontSize: "0.82rem", outline: "none"
                                         }}
@@ -432,23 +564,91 @@ export const RedP2PPayModal: React.FC = () => {
                             </div>
 
                             {activeQr && (
-                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", paddingTop: "12px", borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
-                                    <img src={activeQr} alt="QR Vale" style={{ width: 220, height: 220, borderRadius: "12px", border: "2px solid #00E676" }} />
-                                    <div style={{ fontSize: "0.7rem", color: "var(--text-secondary)", textAlign: "center" }}>
-                                        Muestra este código QR para que el receptor lo escanee y canjee los fondos.
+                                <div style={{
+                                    display: "flex", flexDirection: "column", alignItems: "center",
+                                    gap: "12px", paddingTop: "16px", borderTop: "1px solid rgba(255, 255, 255, 0.08)"
+                                }}>
+                                    <div style={{
+                                        position: "relative", padding: "10px", borderRadius: "16px",
+                                        background: "#04060A", border: "2px solid #00E676",
+                                        boxShadow: "0 0 24px rgba(0, 230, 118, 0.3)"
+                                    }}>
+                                        <img src={activeQr} alt="QR Vale" style={{ width: 220, height: 220, display: "block", borderRadius: "8px" }} />
                                     </div>
-                                    {activeQrString && (
-                                        <button
-                                            onClick={() => copyToClipboard(activeQrString)}
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", textAlign: "center", maxWidth: "340px" }}>
+                                        Muestra este código QR fuera de línea o descárgalo para transferirlo vía USB, SD o Bluetooth.
+                                    </div>
+                                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+                                        {activeQrString && (
+                                            <button
+                                                onClick={() => copyToClipboard(activeQrString)}
+                                                style={{
+                                                    padding: "8px 14px", background: "rgba(0, 230, 118, 0.15)",
+                                                    border: "1px solid rgba(0, 230, 118, 0.4)", borderRadius: "8px",
+                                                    color: "#00E676", fontSize: "0.72rem", fontWeight: 900, cursor: "pointer"
+                                                }}
+                                            >
+                                                📋 COPIAR CADENA
+                                            </button>
+                                        )}
+                                        <a
+                                            href={activeQr}
+                                            download={`vale_red_${activeVoucher?.id || "qr"}.png`}
                                             style={{
-                                                padding: "6px 14px", background: "rgba(0, 230, 118, 0.15)",
-                                                border: "1px solid rgba(0, 230, 118, 0.4)", borderRadius: "8px",
-                                                color: "#00E676", fontSize: "0.72rem", fontWeight: 900, cursor: "pointer"
+                                                textDecoration: "none",
+                                                padding: "8px 14px", background: "rgba(0, 229, 255, 0.15)",
+                                                border: "1px solid rgba(0, 229, 255, 0.4)", borderRadius: "8px",
+                                                color: "#00E5FF", fontSize: "0.72rem", fontWeight: 900, cursor: "pointer",
+                                                display: "inline-flex", alignItems: "center", gap: "6px"
                                             }}
                                         >
-                                            COPIAR CADENA CRIPTOGRÁFICA
+                                            💾 DESCARGAR QR PNG
+                                        </a>
+                                        <button
+                                            onClick={handleBroadcastVoucher}
+                                            style={{
+                                                padding: "8px 14px", background: "rgba(0, 229, 255, 0.2)",
+                                                border: "1px solid rgba(0, 229, 255, 0.4)", borderRadius: "8px",
+                                                color: "#00E5FF", fontSize: "0.72rem", fontWeight: 900, cursor: "pointer",
+                                                display: "flex", alignItems: "center", gap: "6px"
+                                            }}
+                                        >
+                                            📡 ENVIAR POR MALLA
                                         </button>
-                                    )}
+                                        {typeof navigator !== "undefined" && typeof (navigator as any).share === "function" && (
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        await navigator.share({
+                                                            title: "Vale Táctico RED P2P",
+                                                            text: activeQrString || "",
+                                                        });
+                                                    } catch {}
+                                                }}
+                                                style={{
+                                                    padding: "8px 14px", background: "rgba(255, 255, 255, 0.08)",
+                                                    border: "1px solid rgba(255, 255, 255, 0.2)", borderRadius: "8px",
+                                                    color: "#FFFFFF", fontSize: "0.72rem", fontWeight: 900, cursor: "pointer"
+                                                }}
+                                            >
+                                                📤 COMPARTIR
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => {
+                                                setActiveQr(null);
+                                                setActiveQrString(null);
+                                                setActiveVoucher(null);
+                                            }}
+                                            style={{
+                                                padding: "8px 14px", background: "rgba(232, 33, 58, 0.15)",
+                                                border: "1px solid rgba(232, 33, 58, 0.4)", borderRadius: "8px",
+                                                color: "#FF3355", fontSize: "0.72rem", fontWeight: 900, cursor: "pointer"
+                                            }}
+                                        >
+                                            ✕ CERRAR QR
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -547,34 +747,60 @@ export const RedP2PPayModal: React.FC = () => {
                                     </div>
                                 </div>
                             ) : (
-                                vouchers.map(v => (
-                                    <div
-                                        key={v.id}
-                                        style={{
-                                            padding: "14px 16px", borderRadius: "14px",
-                                            background: "linear-gradient(135deg, rgba(16, 22, 44, 0.9) 0%, rgba(8, 12, 28, 0.95) 100%)",
-                                            border: `1px solid ${v.is_redeemed ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 230, 118, 0.3)'}`,
-                                            display: "flex", justifyContent: "space-between", alignItems: "center"
-                                        }}
-                                    >
-                                        <div>
-                                            <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#FFFFFF" }}>
-                                                {v.amount} CRÉDITOS · ID: {v.id.substring(0, 10)}…
+                                vouchers.map(v => {
+                                    const timestampMs = v.timestamp || (v.created_at ? (v.created_at > 1e11 ? v.created_at : v.created_at * 1000) : Date.now());
+                                    const isRedeemed = Boolean(v.redeemed ?? v.is_redeemed);
+                                    const dateObj = new Date(timestampMs);
+                                    const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString() : "Fecha N/A";
+                                    const timeStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+
+                                    return (
+                                        <div
+                                            key={v.id}
+                                            style={{
+                                                padding: "14px 16px", borderRadius: "14px",
+                                                background: "linear-gradient(135deg, rgba(16, 22, 44, 0.9) 0%, rgba(8, 12, 28, 0.95) 100%)",
+                                                border: `1px solid ${isRedeemed ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 230, 118, 0.3)'}`,
+                                                display: "flex", justifyContent: "space-between", alignItems: "center",
+                                                gap: "12px"
+                                            }}
+                                        >
+                                            <div style={{ minWidth: 0 }}>
+                                                <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#FFFFFF", display: "flex", alignItems: "center", gap: "6px" }}>
+                                                    <span>{v.is_outgoing ? "📤" : "📥"}</span>
+                                                    <span>{v.amount} CRÉDITOS</span>
+                                                    <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)", fontWeight: 700 }}>
+                                                        · ID: {v.id.substring(0, 10)}…
+                                                    </span>
+                                                </div>
+                                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace", marginTop: "2px" }}>
+                                                    {dateStr} {timeStr} {v.recipient ? `· Dest: ${v.recipient.substring(0, 12)}…` : ""}
+                                                </div>
                                             </div>
-                                            <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                {new Date(v.created_at).toLocaleDateString()} {new Date(v.created_at).toLocaleTimeString()}
+                                            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                                                <button
+                                                    onClick={() => copyToClipboard(`RED_PAY:${v.id}:${v.amount}:${v.signature}`)}
+                                                    title="Copiar código QR del vale"
+                                                    style={{
+                                                        padding: "4px 8px", background: "rgba(255, 255, 255, 0.06)",
+                                                        border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "6px",
+                                                        color: "#FFFFFF", fontSize: "0.7rem", cursor: "pointer"
+                                                    }}
+                                                >
+                                                    📋
+                                                </button>
+                                                <span style={{
+                                                    fontSize: "0.65rem", fontWeight: 900, padding: "3px 8px", borderRadius: "6px",
+                                                    background: isRedeemed ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 230, 118, 0.15)",
+                                                    color: isRedeemed ? "var(--text-secondary)" : "#00E676",
+                                                    border: `1px solid ${isRedeemed ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 230, 118, 0.4)'}`
+                                                }}>
+                                                    {isRedeemed ? "CANJEADO" : "DISPONIBLE"}
+                                                </span>
                                             </div>
                                         </div>
-                                        <span style={{
-                                            fontSize: "0.65rem", fontWeight: 900, padding: "3px 8px", borderRadius: "6px",
-                                            background: v.is_redeemed ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 230, 118, 0.15)",
-                                            color: v.is_redeemed ? "var(--text-secondary)" : "#00E676",
-                                            border: `1px solid ${v.is_redeemed ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 230, 118, 0.4)'}`
-                                        }}>
-                                            {v.is_redeemed ? "CANJEADO" : "VÁLIDO (DISPONIBLE)"}
-                                        </span>
-                                    </div>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
                     )}

@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { useRedStore } from "../../store/useRedStore";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 
 export const STORY_THEMES = [
     { label: "Carmesí", from: "#FF3355", to: "#8B0000" },
@@ -23,7 +25,7 @@ interface StoryCreatorProps {
 
 export default function StoryCreator({ onClose, onPublished }: StoryCreatorProps) {
     const { t } = useTranslation();
-    const { contacts, publishStatus } = useRedStore();
+    const { publishStatus } = useRedStore();
 
     const [mode, setMode] = useState<"text" | "photo">("text");
     const [text, setText] = useState("");
@@ -31,6 +33,21 @@ export default function StoryCreator({ onClose, onPublished }: StoryCreatorProps
     const [photoData, setPhotoData] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Intercepción LIFO de hardware Android y tecla Escape
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (mode === "photo" || photoData) {
+                setPhotoData(null);
+                setMode("text");
+                return true;
+            }
+            onClose?.();
+            return true;
+        });
+        return () => unregister();
+    }, [mode, photoData, onClose]);
 
     const selectedTheme = STORY_THEMES[theme];
 
@@ -81,13 +98,16 @@ export default function StoryCreator({ onClose, onPublished }: StoryCreatorProps
                 mode === "photo" ? photoData : null,
                 mode === "text" ? theme : undefined,
             );
+            TacticalAudioEngine.playMessageSent();
             toast.success("Estado publicado en la malla P2P");
+            onPublished?.();
             onClose?.();
         } catch {
+            TacticalAudioEngine.playWarning();
             toast.error("Error al publicar estado");
             setIsSending(false);
         }
-    }, [mode, text, photoData, theme, isSending, publishStatus, onClose]);
+    }, [mode, text, photoData, theme, isSending, publishStatus, onClose, onPublished]);
 
     return (
         <div style={{
@@ -113,7 +133,10 @@ export default function StoryCreator({ onClose, onPublished }: StoryCreatorProps
                 zIndex: 10
             }}>
                 <button
-                    onClick={onClose}
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        onClose?.();
+                    }}
                     className="btn-icon"
                     style={{ background: "rgba(0,0,0,0.5)", width: 38, height: 38 }}
                 >
@@ -122,7 +145,10 @@ export default function StoryCreator({ onClose, onPublished }: StoryCreatorProps
 
                 <div style={{ display: "flex", gap: "8px" }}>
                     <button
-                        onClick={handlePickPhoto}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            handlePickPhoto();
+                        }}
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 12px", fontSize: "0.78rem", background: "rgba(0,0,0,0.5)" }}
                     >
@@ -130,7 +156,11 @@ export default function StoryCreator({ onClose, onPublished }: StoryCreatorProps
                     </button>
                     {mode === "photo" && (
                         <button
-                            onClick={() => { setMode("text"); setPhotoData(null); }}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setMode("text");
+                                setPhotoData(null);
+                            }}
                             className="btn-tactical-secondary"
                             style={{ padding: "6px 12px", fontSize: "0.78rem", background: "rgba(0,0,0,0.5)" }}
                         >
@@ -180,7 +210,10 @@ export default function StoryCreator({ onClose, onPublished }: StoryCreatorProps
                         {STORY_THEMES.map((th, i) => (
                             <div
                                 key={th.label}
-                                onClick={() => setTheme(i)}
+                                onClick={() => {
+                                    TacticalAudioEngine.playTap();
+                                    setTheme(i);
+                                }}
                                 style={{
                                     width: 28, height: 28, borderRadius: "50%",
                                     background: `linear-gradient(135deg, ${th.from}, ${th.to})`,

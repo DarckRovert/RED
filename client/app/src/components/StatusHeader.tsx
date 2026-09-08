@@ -8,6 +8,8 @@ import { KineticDutyGovernor } from "../lib/sensors/KineticDutyGovernor";
 import { SwarmHealthHUD } from "./SwarmHealthHUD";
 import { satelliteMeshGateway, SatelliteGatewayTelemetry } from "../lib/mesh/SatelliteMeshGatewayEngine";
 import { globalShield, GlobalShieldTelemetry } from "../lib/network/GlobalShieldEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 export default function StatusHeader() {
     const { nodeOnline, status, navigate, preferences, updatePreferences } = useRedStore();
@@ -123,7 +125,27 @@ export default function StatusHeader() {
 
     const currentModeObj = operationalModes.find(m => m.id === currentMode) || operationalModes[0];
 
+    // ── LIFO Back Navigation Handler para Modales de Cabecera ─────────────────────
+    useEffect(() => {
+        if (!showModeModal && !showSwarmModal) return;
+        const unreg = BackHandlerRegistry.register(() => {
+            if (showModeModal) {
+                setShowModeModal(false);
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            if (showSwarmModal) {
+                setShowSwarmModal(false);
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            return false;
+        });
+        return unreg;
+    }, [showModeModal, showSwarmModal]);
+
     const handleSelectMode = (modeId: any) => {
+        TacticalAudioEngine.playRogerBeep();
         updatePreferences({ operationalMode: modeId });
         setShowModeModal(false);
     };

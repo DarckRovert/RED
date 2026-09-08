@@ -17,6 +17,7 @@ import { CallControls } from "./call/CallControls";
 import { SafetyNumberModal } from "./chat/SafetyNumberModal";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 
 export default function CallScreen() {
     const { t } = useTranslation();
@@ -77,13 +78,15 @@ export default function CallScreen() {
         targetPeerRef.current = resolvedPeerHash;
     }
 
-    const currentCallSessionId = activeCallId || incomingCall?.callId || (() => {
+    const [callSessionId] = useState<string>(() => {
+        if (activeCallId) return activeCallId;
+        if (incomingCall?.callId) return incomingCall.callId;
         const rand = typeof crypto !== 'undefined' && crypto.getRandomValues
             ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
             : Date.now().toString(36);
         return `call_${Date.now()}_${rand}`;
-    })();
-    const callIdRef = useRef<string>(currentCallSessionId);
+    });
+    const callIdRef = useRef<string>(activeCallId || callSessionId);
     if (activeCallId && callIdRef.current !== activeCallId) {
         callIdRef.current = activeCallId;
     }
@@ -819,7 +822,10 @@ export default function CallScreen() {
         return () => {
             isSubscribed = false;
             clearInterval(heartbeatInterval);
-            endCallInternal();
+            const storeState = useRedStore.getState();
+            if (!storeState.isCallPipMinimized) {
+                endCallInternal();
+            }
         };
     }, []);
 
@@ -975,6 +981,50 @@ export default function CallScreen() {
         endCallInternal();
         goBack();
     };
+
+    // ── Intercepción LIFO de Hardware Android / Escape (BackHandlerRegistry) ─
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            // 1. Si modal de verificación de seguridad está abierto, cerrarlo primero
+            if (isSafetyModalOpen) {
+                setIsSafetyModalOpen(false);
+                return true;
+            }
+            // 2. Si modal de estadísticas WebRTC está abierto, cerrarlo
+            if (showStats) {
+                setShowStats(false);
+                return true;
+            }
+            // 3. Si la llamada está activa en curso: minimizar fluidamente a Picture-in-Picture
+            if (callActive) {
+                setCallPipMinimized(true);
+                goBack();
+                return true;
+            }
+            // 4. Si está timbrando, conectando o en error: colgar / cancelar ordenadamente
+            handleUserEndCall();
+            return true;
+        });
+        return () => unregister();
+    }, [isSafetyModalOpen, showStats, callActive, setCallPipMinimized, goBack]);
+
+    // ── Sincronización de Micrófono desde FloatingCallPIP ────────────────────
+    useEffect(() => {
+        const handleRemoteToggleMic = (e: Event) => {
+            const customEvt = e as CustomEvent<{ muted?: boolean }>;
+            const targetMuted = customEvt.detail?.muted;
+            if (localStreamRef.current) {
+                const audioTrack = localStreamRef.current.getAudioTracks()[0];
+                if (audioTrack) {
+                    const nextMuted = targetMuted !== undefined ? targetMuted : !audioTrack.enabled;
+                    audioTrack.enabled = !nextMuted;
+                    setMicMuted(nextMuted);
+                }
+            }
+        };
+        window.addEventListener("red:call_toggle_mic", handleRemoteToggleMic);
+        return () => window.removeEventListener("red:call_toggle_mic", handleRemoteToggleMic);
+    }, []);
 
     // ── Controls: Toggle Microphone ──────────────────────────────────────────
     const toggleMic = () => {

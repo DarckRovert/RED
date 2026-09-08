@@ -516,8 +516,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                     transformOrigin: "top center"
                                 }}>
                                     {[
-                                        { icon: "🤖", label: "Copiloto IA", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("aiCopilot"); } } },
-                                        { icon: "🫀", label: "VitalScan", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("vitalScan"); } } },
+                                        { icon: "🤖", label: "Copiloto IA", action: () => { setIsAttachOpen(false); useRedStore.getState().navigate("aiCopilot"); } },
+                                        { icon: "🫀", label: "VitalScan", action: () => { setIsAttachOpen(false); useRedStore.getState().navigate("vitalScan"); } },
                                         { icon: "🔊", label: "SoundMesh", action: () => {
                                             setIsAttachOpen(false);
                                             if (text.trim()) {
@@ -529,8 +529,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                                 toast.info("✍️ Escribe un mensaje primero");
                                             }
                                         } },
-                                        { icon: "🎞️", label: "QR Air-Gap", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("airGapStego"); } } },
-                                        { icon: "🖼️", label: "Esteganografía", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("stegoVault"); } } },
+                                        { icon: "🎞️", label: "QR Air-Gap", action: () => { setIsAttachOpen(false); useRedStore.getState().navigate("airGapStego"); } },
+                                        { icon: "🖼️", label: "Esteganografía", action: () => { setIsAttachOpen(false); useRedStore.getState().navigate("stegoVault"); } },
                                     ].map(tt => (
                                         <button
                                             key={tt.label}

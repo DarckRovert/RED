@@ -7,11 +7,59 @@ import { opticalMorseRxEngine, MorseRxState } from "../lib/sensors/OpticalMorseR
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { meshRouter } from "../lib/mesh/meshRouter";
 
 export function AirGapStegoModal() {
     const { navigate, goBack } = useRedStore();
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<"animatedQr" | "audioStego" | "morseRx">("animatedQr");
+
+    // Registro LIFO de retroceso físico / Esc
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (activeTab !== "animatedQr") {
+                TacticalAudioEngine.playTap();
+                setActiveTab("animatedQr");
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return unregister;
+    }, [activeTab, goBack]);
+
+    // Copia resiliente con degradación a textarea
+    const copyToClipboard = async (text: string, label: string) => {
+        TacticalAudioEngine.playMessageSent();
+        let copied = false;
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                copied = true;
+            } catch {}
+        }
+        if (!copied && typeof document !== "undefined") {
+            try {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                copied = document.execCommand("copy");
+                document.body.removeChild(ta);
+            } catch {}
+        }
+        if (copied) {
+            toast.success(`📋 ${label} copiado al portapapeles`);
+        } else {
+            toast.error(`Error al copiar ${label}`);
+        }
+    };
 
     // Morse RX State
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -53,6 +101,7 @@ export function AirGapStegoModal() {
     }, [isStreaming, qrChunks]);
 
     useEffect(() => {
+        let isMounted = true;
         if (qrChunks.length === 0) return;
         const currentFrame = qrChunks[currentChunkIdx] || qrChunks[0];
 
@@ -64,14 +113,16 @@ export function AirGapStegoModal() {
                     darkColor: "#00E5FF",
                     lightColor: "#050812"
                 });
-                setQrDataUrl(url);
+                if (isMounted) setQrDataUrl(url);
             } catch (e) {
                 console.error("Error generating animated QR:", e);
             }
         });
+        return () => { isMounted = false; };
     }, [qrChunks, currentChunkIdx]);
 
     const handleSynthesizeAudio = () => {
+        TacticalAudioEngine.playTap();
         if (carrierAudioUrl) {
             try { URL.revokeObjectURL(carrierAudioUrl); } catch {}
         }
@@ -79,7 +130,52 @@ export function AirGapStegoModal() {
         const url = URL.createObjectURL(blob);
         setCarrierAudioUrl(url);
         setExtractedMessage(secretMessage);
+        TacticalAudioEngine.playRogerBeep();
         toast.success("🎵 Audio sintetizado con mensaje psicoacústico embebido");
+    };
+
+    const handleDownloadWav = () => {
+        if (!carrierAudioUrl) return;
+        TacticalAudioEngine.playMessageSent();
+        const a = document.createElement("a");
+        a.href = carrierAudioUrl;
+        a.download = `stego_audio_${Date.now()}.wav`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast.success("💾 Audio WAV descargado");
+    };
+
+    const handleBroadcastMorse = async () => {
+        if (!morseState.decodedText) return;
+        try {
+            const payload = new TextEncoder().encode(JSON.stringify({
+                type: "OPTICAL_MORSE_INTEL",
+                decodedText: morseState.decodedText,
+                timestamp: Date.now()
+            }));
+            await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", payload);
+            TacticalAudioEngine.playRogerBeep();
+            toast.success("📡 Mensaje Morse transmitido a la malla táctica");
+        } catch (e: any) {
+            toast.error("Error al transmitir Morse: " + e.message);
+        }
+    };
+
+    const handleBroadcastAudioStego = async () => {
+        if (!secretMessage.trim()) return;
+        try {
+            const payload = new TextEncoder().encode(JSON.stringify({
+                type: "AUDIO_STEGO_INTEL",
+                message: secretMessage.trim(),
+                timestamp: Date.now()
+            }));
+            await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", payload);
+            TacticalAudioEngine.playRogerBeep();
+            toast.success("📡 Carga útil de audio transmitida a la malla");
+        } catch (e: any) {
+            toast.error("Error al transmitir carga útil: " + e.message);
+        }
     };
 
     // Cleanup audio blob URL on unmount
@@ -161,6 +257,7 @@ export function AirGapStegoModal() {
             isActive = false;
             if (animationFrame !== null) cancelAnimationFrame(animationFrame);
             if (stream) stream.getTracks().forEach(t => t.stop());
+            if (videoRef.current) videoRef.current.srcObject = null;
         };
     }, [activeTab]);
 
@@ -181,7 +278,7 @@ export function AirGapStegoModal() {
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
-                        onClick={goBack}
+                        onClick={() => { TacticalAudioEngine.playTap(); goBack(); }}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -225,7 +322,7 @@ export function AirGapStegoModal() {
                 flexShrink: 0
             }}>
                 <button
-                    onClick={() => setActiveTab("animatedQr")}
+                    onClick={() => { TacticalAudioEngine.playTap(); setActiveTab("animatedQr"); }}
                     style={{
                         flex: 1, padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "animatedQr" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(10, 35, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
@@ -237,7 +334,7 @@ export function AirGapStegoModal() {
                     <span>🎞️</span> QR ANIMADO ({qrChunks.length})
                 </button>
                 <button
-                    onClick={() => setActiveTab("morseRx")}
+                    onClick={() => { TacticalAudioEngine.playTap(); setActiveTab("morseRx"); }}
                     style={{
                         flex: 1, padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "morseRx" ? "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(10, 60, 35, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
@@ -249,7 +346,7 @@ export function AirGapStegoModal() {
                     <span>💡</span> DECODIFICADOR MORSE RX {morseState.isLightOn && "●"}
                 </button>
                 <button
-                    onClick={() => setActiveTab("audioStego")}
+                    onClick={() => { TacticalAudioEngine.playTap(); setActiveTab("audioStego"); }}
                     style={{
                         flex: 1, padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "audioStego" ? "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(180, 20, 40, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
@@ -307,7 +404,7 @@ export function AirGapStegoModal() {
                                     </div>
                                 )}
                                 <button
-                                    onClick={() => setIsStreaming(!isStreaming)}
+                                    onClick={() => { TacticalAudioEngine.playTap(); setIsStreaming(!isStreaming); }}
                                     style={{
                                         padding: "8px 16px", borderRadius: "10px",
                                         background: isStreaming ? "rgba(255, 51, 85, 0.15)" : "rgba(0, 230, 118, 0.15)",
@@ -355,8 +452,63 @@ export function AirGapStegoModal() {
                                 background: "rgba(0,0,0,0.5)", border: "1px solid rgba(0,230,118,0.3)",
                                 borderRadius: "12px", padding: "14px"
                             }}>
-                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>TEXTO DECODIFICADO:</div>
-                                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#00E676", marginTop: "4px", minHeight: "28px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>TEXTO DECODIFICADO:</div>
+                                    <div style={{ display: "flex", gap: "6px" }}>
+                                        {morseState.decodedText && (
+                                            <>
+                                                <button
+                                                    onClick={() => copyToClipboard(morseState.decodedText, "Texto Morse Decodificado")}
+                                                    style={{
+                                                        background: "rgba(0, 230, 118, 0.2)", border: "1px solid #00E676",
+                                                        color: "#00E676", borderRadius: "6px", padding: "4px 8px", fontSize: "0.68rem",
+                                                        cursor: "pointer", fontWeight: 800
+                                                    }}
+                                                >
+                                                    📋 Copiar
+                                                </button>
+                                                <button
+                                                    onClick={handleBroadcastMorse}
+                                                    style={{
+                                                        background: "rgba(0, 229, 255, 0.2)", border: "1px solid #00E5FF",
+                                                        color: "#00E5FF", borderRadius: "6px", padding: "4px 8px", fontSize: "0.68rem",
+                                                        cursor: "pointer", fontWeight: 800
+                                                    }}
+                                                >
+                                                    📡 Transmitir a Malla
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        TacticalAudioEngine.playTap();
+                                                        navigate("chat");
+                                                    }}
+                                                    style={{
+                                                        background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.2)",
+                                                        color: "#FFFFFF", borderRadius: "6px", padding: "4px 8px", fontSize: "0.68rem",
+                                                        cursor: "pointer", fontWeight: 800
+                                                    }}
+                                                >
+                                                    💬 Chat
+                                                </button>
+                                            </>
+                                        )}
+                                        <button
+                                            onClick={() => {
+                                                TacticalAudioEngine.playTap();
+                                                opticalMorseRxEngine.reset();
+                                                toast.info("Búfer óptico Morse restablecido");
+                                            }}
+                                            style={{
+                                                background: "rgba(255, 51, 85, 0.15)", border: "1px solid rgba(255, 51, 85, 0.3)",
+                                                color: "#FF5252", borderRadius: "6px", padding: "4px 8px", fontSize: "0.68rem",
+                                                cursor: "pointer", fontWeight: 800
+                                            }}
+                                        >
+                                            🔄 Reiniciar
+                                        </button>
+                                    </div>
+                                </div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#00E676", marginTop: "4px", minHeight: "28px", wordBreak: "break-all" }}>
                                     {morseState.decodedText || "Esperando pulsos ópticos..."}
                                 </div>
                             </div>
@@ -410,8 +562,32 @@ export function AirGapStegoModal() {
                                     borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px"
                                 }}>
                                     <audio controls src={carrierAudioUrl} style={{ width: "100%" }} />
-                                    <div style={{ fontSize: "0.72rem", color: "#00E676" }}>
-                                        ✓ Mensaje embebido exitosamente en audio portador.
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                                        <div style={{ fontSize: "0.72rem", color: "#00E676" }}>
+                                            ✓ Mensaje embebido exitosamente en audio portador.
+                                        </div>
+                                        <div style={{ display: "flex", gap: "6px" }}>
+                                            <button
+                                                onClick={handleDownloadWav}
+                                                style={{
+                                                    background: "rgba(0, 230, 118, 0.2)", border: "1px solid #00E676",
+                                                    color: "#00E676", borderRadius: "6px", padding: "4px 8px", fontSize: "0.68rem",
+                                                    cursor: "pointer", fontWeight: 800
+                                                }}
+                                            >
+                                                💾 Descargar WAV
+                                            </button>
+                                            <button
+                                                onClick={handleBroadcastAudioStego}
+                                                style={{
+                                                    background: "rgba(0, 229, 255, 0.2)", border: "1px solid #00E5FF",
+                                                    color: "#00E5FF", borderRadius: "6px", padding: "4px 8px", fontSize: "0.68rem",
+                                                    cursor: "pointer", fontWeight: 800
+                                                }}
+                                            >
+                                                📡 Transmitir a Malla
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}

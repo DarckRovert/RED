@@ -6,6 +6,9 @@ import { RedSDKBridge, HostContext } from '../../lib/miniapp/RedSDKBridge';
 import { RedAppBundleEngine } from '../../lib/miniapp/RedAppBundleEngine';
 import { redPaymentGateway } from '../../lib/miniapp/RedPaymentGatewayEngine';
 import { redAppRegistry } from '../../lib/miniapp/RedAppRegistry';
+import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
+import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
+import { toast } from '../Toast';
 import { UniversalCheckoutModal } from './UniversalCheckoutModal';
 
 interface MiniAppContainerModalProps {
@@ -89,7 +92,85 @@ export const MiniAppContainerModal: React.FC<MiniAppContainerModalProps> = ({
         }
     };
 
+    // ─── BackHandlerRegistry LIFO & Keyboard Interception ──────────────────────
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (activeCheckoutIntent) {
+                TacticalAudioEngine.playTap();
+                activeCheckoutIntent.reject(new Error("Pago cancelado por el operador."));
+                setActiveCheckoutIntent(null);
+                return true;
+            }
+            if (showPermissionsModal) {
+                TacticalAudioEngine.playTap();
+                setShowPermissionsModal(false);
+                return true;
+            }
+            if (isFullscreen) {
+                TacticalAudioEngine.playTap();
+                setIsFullscreen(false);
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                if (activeCheckoutIntent) {
+                    TacticalAudioEngine.playTap();
+                    activeCheckoutIntent.reject(new Error("Pago cancelado por el operador."));
+                    setActiveCheckoutIntent(null);
+                } else if (showPermissionsModal) {
+                    TacticalAudioEngine.playTap();
+                    setShowPermissionsModal(false);
+                } else if (isFullscreen) {
+                    TacticalAudioEngine.playTap();
+                    setIsFullscreen(false);
+                } else {
+                    TacticalAudioEngine.playTap();
+                    onClose();
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            unregister();
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [activeCheckoutIntent, showPermissionsModal, isFullscreen, onClose]);
+
+    // ─── Resilient Copy to Clipboard ──────────────────────────────────────────
+    const copyToClipboard = async (text: string, label: string = 'Texto') => {
+        TacticalAudioEngine.playTap();
+        if (typeof window !== 'undefined' && navigator?.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                toast.info(`📋 ${label} copiado al portapapeles.`);
+                return;
+            } catch {}
+        }
+        try {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            textarea.style.pointerEvents = 'none';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            toast.info(`📋 ${label} copiado al portapapeles.`);
+        } catch {
+            toast.error(`No se pudo copiar ${label.toLowerCase()}.`);
+        }
+    };
+
     const handleReload = () => {
+        TacticalAudioEngine.playTap();
         if (blobUrl) {
             URL.revokeObjectURL(blobUrl);
         }
@@ -98,6 +179,7 @@ export const MiniAppContainerModal: React.FC<MiniAppContainerModalProps> = ({
     };
 
     const togglePermission = (scope: RedPermissionScope) => {
+        TacticalAudioEngine.playTap();
         const updated = new Set(grantedPermissions);
         if (updated.has(scope)) {
             updated.delete(scope);
@@ -158,7 +240,14 @@ export const MiniAppContainerModal: React.FC<MiniAppContainerModalProps> = ({
                                     🛡️ ARENA AISLADA
                                 </span>
                             </div>
-                            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", margin: "2px 0 0 0" }}>{bundle.manifest.id}</p>
+                            <p 
+                                onClick={() => copyToClipboard(bundle.manifest.id, 'App ID')}
+                                style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", margin: "2px 0 0 0", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                                title="Clic para copiar App ID"
+                            >
+                                <span>{bundle.manifest.id}</span>
+                                <span style={{ opacity: 0.6 }}>📋</span>
+                            </p>
                         </div>
                     </div>
 
@@ -166,7 +255,10 @@ export const MiniAppContainerModal: React.FC<MiniAppContainerModalProps> = ({
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         <button
                             type="button"
-                            onClick={() => setShowPermissionsModal(!showPermissionsModal)}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setShowPermissionsModal(!showPermissionsModal);
+                            }}
                             style={{
                                 padding: "6px 12px",
                                 borderRadius: "10px",
@@ -204,7 +296,10 @@ export const MiniAppContainerModal: React.FC<MiniAppContainerModalProps> = ({
 
                         <button
                             type="button"
-                            onClick={() => setIsFullscreen(!isFullscreen)}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setIsFullscreen(!isFullscreen);
+                            }}
                             style={{
                                 padding: "6px 10px",
                                 background: "rgba(255, 255, 255, 0.06)",
@@ -220,7 +315,10 @@ export const MiniAppContainerModal: React.FC<MiniAppContainerModalProps> = ({
 
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                onClose();
+                            }}
                             style={{
                                 padding: "6px 12px",
                                 background: "rgba(232, 33, 58, 0.2)",

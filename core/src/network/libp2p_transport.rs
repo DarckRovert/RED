@@ -109,7 +109,7 @@ impl Libp2pTransport {
             .with_relay_client(noise::Config::new, move || yamux_relay.clone()).map_err(|e| NetworkError::TransportError(e.to_string()))?;
 
         #[cfg(target_os = "android")]
-        let mut swarm_builder = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
+        let swarm_builder = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
             .with_tokio()
             .with_tcp(
                 tcp::Config::default(),

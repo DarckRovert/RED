@@ -63,7 +63,11 @@ const compassPath = path.join(__dirname, '..', 'src', 'components', 'OffGridComp
 const compassCode = fs.readFileSync(compassPath, 'utf8');
 
 runTest('6. OffGridCompassModal: Erradicación de Null Island (0,0) en watchPosition', () => {
-    assert(compassCode.includes('if (!isFinite(lat) || !isFinite(lon) || (Math.abs(lat) < 0.0001 && Math.abs(lon) < 0.0001)) return;'), 'Debe descartar coordenadas (0,0) en el seguimiento de brújula');
+    assert(
+        compassCode.includes('TacticalLocationEngine.isValidCoordinates') ||
+        compassCode.includes('if (!isFinite(lat) || !isFinite(lon) || (Math.abs(lat) < 0.0001 && Math.abs(lon) < 0.0001)) return;'),
+        'Debe descartar coordenadas (0,0) en el seguimiento de brújula'
+    );
 });
 
 runTest('7. OffGridCompassModal: Parada limpia de magneticDetector al desmontar', () => {

@@ -309,6 +309,12 @@ export async function dispatchIncomingMessage(
                             }
                         };
                     }
+
+                    // Monotonicidad de secuencia: descartar fotogramas desordenados o retrasados
+                    if (typeof currentStream.frame_seq === 'number' && currentStream.frame_seq >= 0 && seq < currentStream.frame_seq) {
+                        return s;
+                    }
+
                     const prevFrames = currentStream.frames || [];
                     const newFrames = [...prevFrames, { seq, media_data: b64 }].slice(-10);
                     return {
@@ -394,6 +400,26 @@ export async function dispatchIncomingMessage(
             return;
         }
 
+        if (item.msg_type === 'social_delete') {
+            try {
+                const rawDel = (item as any) || (typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : null);
+                const postId = rawDel?.post_id || rawDel?.id;
+                if (postId) {
+                    set((s: any) => ({
+                        socialPosts: s.socialPosts.filter((p: any) => p.id !== postId)
+                    }));
+                    if (typeof window !== 'undefined') {
+                        try {
+                            const stored = JSON.parse(localStorage.getItem('red_social_posts') || '[]');
+                            const filtered = stored.filter((p: any) => p.id !== postId);
+                            localStorage.setItem('red_social_posts', JSON.stringify(filtered));
+                        } catch {}
+                    }
+                }
+            } catch {}
+            return;
+        }
+
         // ── Public Channels Mesh Synchronization ──────────────────────────────
         if (item.msg_type === 'channel_post') {
             try {
@@ -406,6 +432,9 @@ export async function dispatchIncomingMessage(
                                 stored.push(rawChannelMsg);
                                 localStorage.setItem('red_channel_messages', JSON.stringify(stored.slice(-200)));
                                 window.dispatchEvent(new CustomEvent('red_channel_message_received', { detail: rawChannelMsg }));
+                                try {
+                                    get().addChannelMessage(rawChannelMsg);
+                                } catch {}
                             }
                         } catch {}
                     }
@@ -415,7 +444,7 @@ export async function dispatchIncomingMessage(
         }
 
         // ── Live Vectorial Canvas Real-Time Streaming ─────────────────────────
-        if (item.msg_type === 'canvas_stroke' || item.msg_type === 'canvas_clear') {
+        if (item.msg_type === 'canvas_stroke' || item.msg_type === 'canvas_stroke_batch' || item.msg_type === 'canvas_clear') {
             try {
                 if (typeof window !== 'undefined') {
                     const detail = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : (item as any).payload || item;
@@ -430,6 +459,17 @@ export async function dispatchIncomingMessage(
             try {
                 if (typeof window !== 'undefined') {
                     window.dispatchEvent(new CustomEvent('red_blockchain_remote_event', { detail: item }));
+                }
+            } catch {}
+            return;
+        }
+
+        // ── Seismic Geophone Hit Propagation ──────────────────────────────────
+        if (item.msg_type === 'seismic_geophone_hit') {
+            try {
+                if (typeof window !== 'undefined') {
+                    const detail = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : (item as any).payload || item;
+                    window.dispatchEvent(new CustomEvent('red_seismic_geophone_event', { detail }));
                 }
             } catch {}
             return;
@@ -845,10 +885,33 @@ export async function dispatchIncomingMessage(
                 if (!bursts.some((b: any) => b.id === burst.id)) {
                     bursts.unshift(burst);
                     localStorage.setItem('red_voice_bursts', JSON.stringify(bursts.slice(0, 50)));
+                    try {
+                        get().addVoiceBurst(burst);
+                        TacticalAudioEngine.playRogerBeep();
+                    } catch {}
                     toast.info(`🎙️ Ráfaga PTT de ${burst.sender_name || 'Operador RED'}`);
                 }
             } catch (e) {
                 console.warn('[Voice Burst Parse Error]', e);
+            }
+            return;
+        }
+
+        // ── Walkie-Talkie Voice Burst Delete: remove from bursts store ──
+        if (item.msg_type === 'voice_burst_delete') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const burstId = parsed.burst_id || parsed.id || item.burst_id || item.content;
+                if (burstId) {
+                    const raw = localStorage.getItem('red_voice_bursts');
+                    const bursts: any[] = raw ? JSON.parse(raw) : [];
+                    localStorage.setItem('red_voice_bursts', JSON.stringify(bursts.filter((b: any) => b.id !== burstId)));
+                    try {
+                        get().removeVoiceBurst(burstId);
+                    } catch {}
+                }
+            } catch (e) {
+                console.warn('[Voice Burst Delete Parse Error]', e);
             }
             return;
         }
@@ -862,6 +925,9 @@ export async function dispatchIncomingMessage(
                 if (!msgs.some((m: any) => m.id === chMsg.id)) {
                     msgs.push(chMsg);
                     localStorage.setItem('red_channel_messages', JSON.stringify(msgs));
+                    try {
+                        get().addChannelMessage(chMsg);
+                    } catch {}
                 }
             } catch (e) {
                 console.warn('[Channel Post Parse Error]', e);
@@ -1487,6 +1553,21 @@ export async function dispatchIncomingMessage(
                         if (!target.reactions[emoji].includes(authorHash)) {
                             target.reactions[emoji].push(authorHash);
                         }
+                        localStorage.setItem('red_social_posts', JSON.stringify(posts));
+                    }
+                }
+            } catch (e) {}
+            return;
+        }
+
+        if (item.msg_type === 'social_delete') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const postId = (parsed as any).post_id || (parsed as any).id;
+                if (postId && typeof window !== 'undefined') {
+                    const raw = localStorage.getItem('red_social_posts');
+                    if (raw) {
+                        const posts = JSON.parse(raw).filter((p: any) => p.id !== postId);
                         localStorage.setItem('red_social_posts', JSON.stringify(posts));
                     }
                 }

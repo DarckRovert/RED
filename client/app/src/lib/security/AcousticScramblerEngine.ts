@@ -12,6 +12,7 @@ export class AcousticScramblerEngine {
 
     private audioCtx: AudioContext | null = null;
     private gainNode: GainNode | null = null;
+    private analyserNode: AnalyserNode | null = null;
     private sourceNode: AudioNode | null = null;
     private lfoNode: OscillatorNode | null = null;
     private isRunning: boolean = false;
@@ -48,10 +49,29 @@ export class AcousticScramblerEngine {
             this.audioCtx = new AudioContextClass();
             this.gainNode = this.audioCtx.createGain();
             this.gainNode.gain.value = this.volume;
-            this.gainNode.connect(this.audioCtx.destination);
+            this.analyserNode = this.audioCtx.createAnalyser();
+            this.analyserNode.fftSize = 256;
+            this.gainNode.connect(this.analyserNode);
+            this.analyserNode.connect(this.audioCtx.destination);
         }
         if (this.audioCtx.state === 'suspended') {
             this.audioCtx.resume().catch(() => {});
+        }
+    }
+
+    public getFrequencyData(dataArray: Uint8Array): void {
+        if (this.analyserNode && this.isRunning) {
+            (this.analyserNode as any).getByteFrequencyData(dataArray);
+        } else {
+            dataArray.fill(0);
+        }
+    }
+
+    public getTimeDomainData(dataArray: Uint8Array): void {
+        if (this.analyserNode && this.isRunning) {
+            (this.analyserNode as any).getByteTimeDomainData(dataArray);
+        } else {
+            dataArray.fill(128);
         }
     }
 
@@ -160,6 +180,10 @@ export class AcousticScramblerEngine {
         if (this.gainNode) {
             try { this.gainNode.disconnect(); } catch {}
             this.gainNode = null;
+        }
+        if (this.analyserNode) {
+            try { this.analyserNode.disconnect(); } catch {}
+            this.analyserNode = null;
         }
         if (this.audioCtx) {
             try { this.audioCtx.close(); } catch {}

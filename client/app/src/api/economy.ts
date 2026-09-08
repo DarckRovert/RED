@@ -5,7 +5,7 @@ import { fetchWithFallback, getStored, setStored, hashStringSha256, STORAGE_KEYS
 import { RedAPI } from './client';
 
 export async function getP2PWallet(): Promise<any> {
-    return fetchWithFallback('/api/p2p/wallet', undefined, () => {
+    const res = await fetchWithFallback('/api/p2p/wallet', undefined, () => {
         let initialBalance = 150.0;
         try {
             if (typeof window !== 'undefined') {
@@ -28,8 +28,29 @@ export async function getP2PWallet(): Promise<any> {
             wallet.balance = initialBalance;
             setStored(STORAGE_KEYS.P2P_WALLET, wallet);
         }
-        return wallet;
+        const localVouchers = getStored<P2PVoucher[]>(STORAGE_KEYS.P2P_VOUCHERS, []);
+        return {
+            ok: true,
+            balance: wallet.balance,
+            wallet,
+            vouchers: localVouchers
+        };
     });
+
+    if (res && res.vouchers && Array.isArray(res.vouchers)) {
+        res.vouchers = res.vouchers.map((v: any) => {
+            const timestampMs = v.timestamp || (v.created_at ? (v.created_at > 1e11 ? v.created_at : v.created_at * 1000) : Date.now());
+            const isRedeemed = Boolean(v.redeemed ?? v.is_redeemed);
+            return {
+                ...v,
+                timestamp: timestampMs,
+                created_at: v.created_at || Math.floor(timestampMs / 1000),
+                is_redeemed: isRedeemed,
+                redeemed: isRedeemed
+            };
+        });
+    }
+    return res;
 }
 
 export async function createP2PVoucher(amount: number | { amount: number; recipient?: string; memo?: string; [key: string]: any }): Promise<any> {
@@ -40,7 +61,7 @@ export async function createP2PVoucher(amount: number | { amount: number; recipi
         return { ok: false, error: 'Monto de vale inválido. Debe ser un número positivo mayor a 0.' };
     }
 
-    return fetchWithFallback('/api/p2p/voucher', {
+    const res = await fetchWithFallback('/api/p2p/voucher', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(typeof amount === 'object' ? amount : { amount: numericAmount })
@@ -76,6 +97,8 @@ export async function createP2PVoucher(amount: number | { amount: number; recipi
             ok: true,
             new_balance: wallet.balance,
             is_outgoing: true,
+            is_redeemed: false,
+            redeemed: false,
             recipient
         };
 
@@ -108,6 +131,22 @@ export async function createP2PVoucher(amount: number | { amount: number; recipi
             voucher
         };
     });
+
+    if (res && res.voucher) {
+        const timestampMs = res.voucher.timestamp || (res.voucher.created_at ? (res.voucher.created_at > 1e11 ? res.voucher.created_at : res.voucher.created_at * 1000) : Date.now());
+        const isRedeemed = Boolean(res.voucher.redeemed ?? res.voucher.is_redeemed);
+        res.voucher = {
+            ...res.voucher,
+            timestamp: timestampMs,
+            created_at: res.voucher.created_at || Math.floor(timestampMs / 1000),
+            is_redeemed: isRedeemed,
+            redeemed: isRedeemed
+        };
+        if (res.new_balance === undefined && res.voucher.new_balance !== undefined) {
+            res.new_balance = res.voucher.new_balance;
+        }
+    }
+    return res;
 }
 
 export async function redeemP2PVoucher(idOrPayload: any): Promise<any> {
@@ -119,10 +158,10 @@ export async function redeemP2PVoucher(idOrPayload: any): Promise<any> {
         return { ok: false, error: 'Identificador o carga útil de vale vacía.' };
     }
 
-    return fetchWithFallback('/api/p2p/redeem', {
+    const res = await fetchWithFallback('/api/p2p/redeem', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: rawId })
+        body: JSON.stringify({ id: rawId, qr_payload: rawId })
     }, async () => {
         // 1. Validar formato y extraer voucherId, monto y firma
         let voucherId = rawId;
@@ -181,6 +220,8 @@ export async function redeemP2PVoucher(idOrPayload: any): Promise<any> {
             ok: true,
             new_balance: wallet.balance,
             is_outgoing: false,
+            is_redeemed: true,
+            redeemed: true,
             recipient: 'BILLETERA_LOCAL'
         };
 
@@ -199,28 +240,52 @@ export async function redeemP2PVoucher(idOrPayload: any): Promise<any> {
             timestamp: now
         };
     });
+
+    if (res && res.voucher) {
+        const timestampMs = res.voucher.timestamp || (res.voucher.created_at ? (res.voucher.created_at > 1e11 ? res.voucher.created_at : res.voucher.created_at * 1000) : Date.now());
+        const isRedeemed = Boolean(res.voucher.redeemed ?? res.voucher.is_redeemed ?? true);
+        res.voucher = {
+            ...res.voucher,
+            timestamp: timestampMs,
+            created_at: res.voucher.created_at || Math.floor(timestampMs / 1000),
+            is_redeemed: isRedeemed,
+            redeemed: isRedeemed
+        };
+    }
+    return res;
 }
 
 // --- RF Metrics & Spectrum Control ---
 
 export async function getStegoCapsules(): Promise<StegoCapsuleRecord[]> {
-    return fetchWithFallback('/api/stego/capsules', undefined, () => {
+    const list = await fetchWithFallback('/api/stego/capsules', undefined, () => {
         return getStored<StegoCapsuleRecord[]>(STORAGE_KEYS.STEGO_CAPSULES, []);
     });
+    if (!Array.isArray(list)) return [];
+    return list.map((c: any) => ({
+        ...c,
+        image_data_url: c.image_data_url || c.image_data || c.media_data || '',
+        image_data: c.image_data || c.image_data_url || ''
+    }));
 }
 
 export async function saveStegoCapsule(capsule: StegoCapsuleRecord): Promise<StegoCapsuleRecord> {
+    const normalized = {
+        ...capsule,
+        image_data: capsule.image_data || capsule.image_data_url || '',
+        image_data_url: capsule.image_data_url || capsule.image_data || ''
+    };
     return fetchWithFallback('/api/stego/capsules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(capsule)
+        body: JSON.stringify(normalized)
     }, () => {
         const capsules = getStored<StegoCapsuleRecord[]>(STORAGE_KEYS.STEGO_CAPSULES, []);
         const randStego = typeof crypto !== 'undefined' && crypto.getRandomValues
             ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
             : Date.now().toString(36);
         const id = capsule.id || `stego_${Date.now()}_${randStego}`;
-        const record: StegoCapsuleRecord = { ...capsule, id, timestamp: capsule.timestamp || Date.now() };
+        const record: StegoCapsuleRecord = { ...normalized, id, timestamp: capsule.timestamp || Date.now() };
         capsules.unshift(record);
         setStored(STORAGE_KEYS.STEGO_CAPSULES, capsules);
         return record;
@@ -330,10 +395,41 @@ export async function followUser(hash: string): Promise<any> {
     });
 }
 
+export async function unfollowUser(hash: string): Promise<any> {
+    return fetchWithFallback('/api/social/unfollow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_hash: hash })
+    }, () => {
+        const following = getStored<string[]>(STORAGE_KEYS.SOCIAL_FOLLOWING, []);
+        const next = following.filter(h => h !== hash);
+        setStored(STORAGE_KEYS.SOCIAL_FOLLOWING, next);
+        return { ok: true, unfollowed: hash };
+    });
+}
+
+export async function getFollowingList(): Promise<string[]> {
+    return fetchWithFallback('/api/social/following', undefined, () => {
+        return getStored<string[]>(STORAGE_KEYS.SOCIAL_FOLLOWING, []);
+    });
+}
+
 export async function deleteSocialPost(id: string): Promise<any> {
-    return fetchWithFallback('/api/social/posts/' + id, { method: 'DELETE' }, () => {
+    return fetchWithFallback('/api/social/posts/' + id, { method: 'DELETE' }, async () => {
         const posts = getStored<SocialPost[]>(STORAGE_KEYS.SOCIAL_POSTS, []);
         setStored(STORAGE_KEYS.SOCIAL_POSTS, posts.filter(p => p.id !== id));
+
+        try {
+            const { meshRouter } = await import('../lib/mesh/meshRouter');
+            const payloadBytes = new TextEncoder().encode(JSON.stringify({
+                id: `del_${Date.now()}`,
+                msg_type: 'social_delete',
+                post_id: id,
+                timestamp: Date.now()
+            }));
+            await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+        } catch (e) {}
+
         return { ok: true, deleted: id };
     });
 }

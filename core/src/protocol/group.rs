@@ -255,6 +255,33 @@ impl Group {
         Ok(())
     }
 
+    /// Set a member's role directly (local admin / state synchronization)
+    pub fn set_member_role(
+        &mut self,
+        target: &IdentityHash,
+        new_role: MemberRole,
+    ) -> Result<(), GroupError> {
+        let member = self.members.get_mut(target).ok_or(GroupError::MemberNotFound)?;
+        member.role = new_role;
+        Ok(())
+    }
+
+    /// Set a member's muted flag directly
+    pub fn set_member_muted(
+        &mut self,
+        target: &IdentityHash,
+        muted: bool,
+    ) -> Result<(), GroupError> {
+        let member = self.members.get_mut(target).ok_or(GroupError::MemberNotFound)?;
+        member.muted = muted;
+        Ok(())
+    }
+
+    /// Set group broadcast mode
+    pub fn set_broadcast_only(&mut self, broadcast_only: bool) {
+        self.broadcast_only = broadcast_only;
+    }
+
     /// Check if a member can currently send messages
     pub fn can_send(&self, identity_hash: &IdentityHash) -> bool {
         match self.members.get(identity_hash) {

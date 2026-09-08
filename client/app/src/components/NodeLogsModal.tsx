@@ -7,6 +7,8 @@ import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
 import { RED_VERSION_NAME } from "../lib/version";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 interface NodeLogsModalProps {
     onClose?: () => void;
@@ -191,18 +193,69 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
         return { total: logs.length, errors, warnings, p2p };
     }, [logs]);
 
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            handleClose();
+            return true;
+        });
+        return unregister;
+    }, [handleClose]);
+
+    const copyWithTextarea = (text: string, count: number) => {
+        try {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            TacticalAudioEngine.playMessageSent();
+            toast.success(`📋 ${count} logs copiados al portapapeles`);
+        } catch {
+            TacticalAudioEngine.playWarning();
+            toast.error("Error al copiar logs");
+        }
+    };
+
     const copyLogs = () => {
+        TacticalAudioEngine.playTap();
         const text = filteredLogs
             .map(l => `[${new Date(l.timestamp).toISOString()}] [${l.level}] [${l.target}] ${l.message}`)
             .join("\n");
 
-        if (typeof navigator !== "undefined" && navigator.clipboard) {
-            navigator.clipboard.writeText(text);
-            toast.success(`📋 ${filteredLogs.length} logs copiados al portapapeles`);
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text)
+                .then(() => {
+                    TacticalAudioEngine.playMessageSent();
+                    toast.success(`📋 ${filteredLogs.length} logs copiados al portapapeles`);
+                })
+                .catch(() => copyWithTextarea(text, filteredLogs.length));
+        } else {
+            copyWithTextarea(text, filteredLogs.length);
+        }
+    };
+
+    const copySingleLog = (entry: RustLogEntry) => {
+        TacticalAudioEngine.playTap();
+        const line = `[${new Date(entry.timestamp).toISOString()}] [${entry.level}] [${entry.target}] ${entry.message}`;
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(line)
+                .then(() => {
+                    TacticalAudioEngine.playMessageSent();
+                    toast.success("📋 Log individual copiado");
+                })
+                .catch(() => copyWithTextarea(line, 1));
+        } else {
+            copyWithTextarea(line, 1);
         }
     };
 
     const downloadLogs = () => {
+        TacticalAudioEngine.playTap();
         const text = filteredLogs
             .map(l => `[${new Date(l.timestamp).toISOString()}] [${l.level}] [${l.target}] ${l.message}`)
             .join("\n");
@@ -217,10 +270,12 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        TacticalAudioEngine.playMessageSent();
         toast.success("📥 Archivo de logs descargado");
     };
 
     const clearLogs = () => {
+        TacticalAudioEngine.playWarning();
         setLogs([]);
         toast.info("Buffer de logs vaciado");
     };
@@ -267,7 +322,10 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
 
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <button
-                        onClick={() => setIsStreaming(!isStreaming)}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setIsStreaming(!isStreaming);
+                        }}
                         className="btn-tactical-secondary"
                         style={{ padding: "8px 12px", fontSize: "0.76rem" }}
                         title={isStreaming ? "Pausar recepción de logs" : "Reanudar streaming"}
@@ -275,7 +333,10 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
                         {isStreaming ? "⏸️ Pausar" : "▶️ Reanudar"}
                     </button>
                     <button
-                        onClick={handleClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            handleClose();
+                        }}
                         className="btn-icon"
                         title={t.common?.close || "Cerrar terminal"}
                         style={{ width: 38, height: 38 }}
@@ -315,7 +376,10 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
                     />
                     {searchQuery && (
                         <button
-                            onClick={() => setSearchQuery("")}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setSearchQuery("");
+                            }}
                             className="btn-ghost"
                             style={{ padding: "4px 8px", fontSize: "0.70rem" }}
                         >
@@ -337,7 +401,10 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
                     {(["ALL", "INFO", "P2P", "MESH", "CRYPTO", "CONSENSUS", "WARN", "ERROR"] as LogFilter[]).map((f) => (
                         <button
                             key={f}
-                            onClick={() => setFilter(f)}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setFilter(f);
+                            }}
                             className={filter === f ? "glow-pill-active" : "btn-ghost"}
                             style={{ padding: "4px 10px", fontSize: "0.72rem", fontWeight: 700, borderRadius: "var(--radius-full)" }}
                         >
@@ -348,7 +415,10 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
 
                 <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
                     <button
-                        onClick={() => setAutoScroll(!autoScroll)}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setAutoScroll(!autoScroll);
+                        }}
                         className="btn-tactical-secondary"
                         style={{ padding: "4px 10px", fontSize: "0.72rem" }}
                         title="Auto-desplazamiento hacia el final"
@@ -395,12 +465,15 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
                         filteredLogs.map((entry, index) => (
                             <div
                                 key={index}
+                                onClick={() => copySingleLog(entry)}
+                                title="Click para copiar este log al portapapeles"
                                 style={{
                                     display: "flex", alignItems: "flex-start", gap: "8px",
                                     padding: "5px 8px", borderRadius: "4px",
                                     background: index % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent",
                                     fontFamily: "JetBrains Mono, monospace", fontSize: "0.74rem",
                                     lineHeight: 1.4,
+                                    cursor: "pointer",
                                     borderLeft: entry.level === "ERROR" ? "2px solid var(--accent-crimson)" : entry.level === "WARN" ? "2px solid var(--accent-amber)" : "none"
                                 }}
                             >

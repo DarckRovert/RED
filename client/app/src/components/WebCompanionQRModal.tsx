@@ -6,6 +6,9 @@ import { companionSyncEngine, PairingSession, CompanionSyncPayload } from "../li
 import { useRedStore } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { copyToClipboard } from "../lib/clipboard";
 
 interface WebCompanionQRModalProps {
     onClose: () => void;
@@ -24,6 +27,21 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
     const [airGapToken, setAirGapToken] = useState("");
     const [airGapPin, setAirGapPin] = useState("");
     const [isImportingAirGap, setIsImportingAirGap] = useState(false);
+
+    // Registro LIFO de retroceso físico / Esc
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (showAirGap) {
+                TacticalAudioEngine.playTap();
+                setShowAirGap(false);
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [showAirGap, onClose]);
 
     useEffect(() => {
         let currentSession: PairingSession | null = null;
@@ -102,8 +120,14 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
 
     const handleCopyToken = () => {
         if (!rawPayload) return;
-        navigator.clipboard.writeText(rawPayload);
-        toast.success("📋 Token copiado al portapapeles");
+        TacticalAudioEngine.playTap();
+        copyToClipboard(rawPayload).then((ok) => {
+            if (ok) {
+                toast.success("📋 Token copiado al portapapeles");
+            } else {
+                toast.error("Error al copiar al portapapeles");
+            }
+        });
     };
 
     const handleImportAirGap = async () => {
@@ -154,7 +178,7 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
             >
                 {/* Botón Cerrar */}
                 <button
-                    onClick={onClose}
+                    onClick={() => { TacticalAudioEngine.playTap(); onClose(); }}
                     style={{
                         position: "absolute", top: "16px", right: "16px",
                         background: "rgba(255,255,255,0.06)", border: "none",

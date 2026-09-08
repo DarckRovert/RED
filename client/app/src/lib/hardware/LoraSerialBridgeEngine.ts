@@ -66,6 +66,15 @@ export class LoraSerialBridgeEngine {
     private serialReader: any = null;
     private serialWriter: any = null;
 
+    private bleDevice: any = null;
+    private bleServer: any = null;
+    private bleCharacteristicTx: any = null;
+    private bleCharacteristicRx: any = null;
+
+    public static readonly NORDIC_UART_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+    public static readonly NORDIC_UART_RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+    public static readonly NORDIC_UART_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+
     private constructor() {}
 
     public static getInstance(): LoraSerialBridgeEngine {
@@ -242,6 +251,62 @@ export class LoraSerialBridgeEngine {
         }
     }
 
+    // ─── Conexión Web Bluetooth LE / Nordic UART Service (NUS) ──────────────────
+
+    public async connectBluetoothLE(): Promise<boolean> {
+        if (typeof navigator === 'undefined' || !(navigator as any).bluetooth) {
+            console.warn('[LoRa] Web Bluetooth no soportado en este entorno');
+            return false;
+        }
+
+        try {
+            const bluetooth = (navigator as any).bluetooth;
+            this.bleDevice = await bluetooth.requestDevice({
+                filters: [
+                    { services: [LoraSerialBridgeEngine.NORDIC_UART_SERVICE] },
+                    { namePrefix: 'Meshtastic' },
+                    { namePrefix: 'Heltec' },
+                    { namePrefix: 'T-Beam' },
+                    { namePrefix: 'RAK' },
+                    { namePrefix: 'RED' }
+                ],
+                optionalServices: [LoraSerialBridgeEngine.NORDIC_UART_SERVICE]
+            });
+
+            if (!this.bleDevice || !this.bleDevice.gatt) {
+                return false;
+            }
+
+            this.bleDevice.addEventListener('gattserverdisconnected', () => {
+                console.warn('[LoRa] Dispositivo BLE desconectado');
+                this.disconnect();
+            });
+
+            this.bleServer = await this.bleDevice.gatt.connect();
+            const service = await this.bleServer.getPrimaryService(LoraSerialBridgeEngine.NORDIC_UART_SERVICE);
+
+            this.bleCharacteristicRx = await service.getCharacteristic(LoraSerialBridgeEngine.NORDIC_UART_RX);
+            this.bleCharacteristicTx = await service.getCharacteristic(LoraSerialBridgeEngine.NORDIC_UART_TX);
+
+            await this.bleCharacteristicTx.startNotifications();
+            this.bleCharacteristicTx.addEventListener('characteristicvaluechanged', (event: any) => {
+                const value = event.target.value;
+                if (value) {
+                    this.feedRawBytes(new Uint8Array(value.buffer));
+                }
+            });
+
+            this.telemetry.connected = true;
+            this.telemetry.transportType = 'BLE_NUS';
+            console.log(`[LoRa] Conectado a transceptor LoRa inalámbrico BLE (${this.bleDevice.name || 'NUS Device'})`);
+            return true;
+        } catch (e) {
+            console.error('[LoRa] Error al conectar Bluetooth LE:', e);
+            this.telemetry.connected = false;
+            return false;
+        }
+    }
+
     public feedRawBytes(bytes: Uint8Array, rssi?: number, snr?: number) {
         if (!bytes || !(bytes instanceof Uint8Array)) return;
         this.telemetry.bytesReceived += bytes.length;
@@ -282,6 +347,27 @@ export class LoraSerialBridgeEngine {
     public async sendPacket(payload: Uint8Array): Promise<boolean> {
         const framed = LoraSerialBridgeEngine.framePacket(payload);
 
+        if (this.telemetry.transportType === 'BLE_NUS' && this.bleCharacteristicRx) {
+            try {
+                // Fragmentar en bloques de MTU BLE (128 bytes) para compatibilidad universal
+                const chunkSize = 128;
+                for (let i = 0; i < framed.length; i += chunkSize) {
+                    const chunk = framed.slice(i, i + chunkSize);
+                    if (this.bleCharacteristicRx.writeValueWithoutResponse) {
+                        await this.bleCharacteristicRx.writeValueWithoutResponse(chunk);
+                    } else {
+                        await this.bleCharacteristicRx.writeValue(chunk);
+                    }
+                }
+                this.telemetry.packetsSent++;
+                this.telemetry.bytesSent += framed.length;
+                return true;
+            } catch (e) {
+                console.error('[LoRa] Error al transmitir por BLE NUS:', e);
+                return false;
+            }
+        }
+
         if (this.serialPort && this.serialPort.writable) {
             try {
                 this.serialWriter = this.serialPort.writable.getWriter();
@@ -298,7 +384,7 @@ export class LoraSerialBridgeEngine {
             }
         }
 
-        // Si no hay transceptor hardware conectado en puerto serie, reportar false para fallback transparente a BLE/WiFi
+        // Si no hay transceptor hardware conectado en puerto serie ni BLE, reportar false para fallback transparente
         return false;
     }
 
@@ -321,6 +407,7 @@ export class LoraSerialBridgeEngine {
 
     public async disconnect() {
         this.telemetry.connected = false;
+        this.telemetry.transportType = 'NONE';
         this.rxBuffer = [];
         if (this.serialReader) {
             await this.serialReader.cancel().catch(() => {});
@@ -330,6 +417,20 @@ export class LoraSerialBridgeEngine {
             await this.serialPort.close().catch(() => {});
             this.serialPort = null;
         }
+        if (this.bleCharacteristicTx) {
+            try {
+                await this.bleCharacteristicTx.stopNotifications();
+            } catch {}
+            this.bleCharacteristicTx = null;
+        }
+        this.bleCharacteristicRx = null;
+        if (this.bleServer && this.bleServer.connected) {
+            try {
+                this.bleServer.disconnect();
+            } catch {}
+            this.bleServer = null;
+        }
+        this.bleDevice = null;
     }
 
     public async destroy(): Promise<void> {

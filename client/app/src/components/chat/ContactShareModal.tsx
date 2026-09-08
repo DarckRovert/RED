@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { useRedStore } from "../../store/useRedStore";
 import { ContactItem } from "../../api/types";
 import { avatarStyle } from "../sidebar/types";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 
 interface ContactShareModalProps {
     isOpen: boolean;
@@ -26,19 +28,25 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
         setMounted(true);
     }, []);
 
+    // Intercepción LIFO (retroceso físico / Esc)
+    useEffect(() => {
+        if (!isOpen) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [isOpen, onClose]);
+
     useEffect(() => {
         if (!isOpen) return;
         const originalOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape") onClose();
-        };
-        document.addEventListener("keydown", handleKeyDown);
         return () => {
             document.body.style.overflow = originalOverflow;
-            document.removeEventListener("keydown", handleKeyDown);
         };
-    }, [isOpen, onClose]);
+    }, [isOpen]);
 
     const filteredContacts = useMemo(() => {
         const list = Array.isArray(contacts) ? [...contacts] : [];
@@ -76,7 +84,10 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
                 padding: "16px",
                 animation: "fadeIn 0.15s ease-out"
             }}
-            onClick={onClose}
+            onClick={() => {
+                TacticalAudioEngine.playTap();
+                onClose();
+            }}
         >
             <div
                 className="animate-enter modal-card-scrollable"
@@ -115,7 +126,10 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
                         </div>
                     </div>
                     <button
-                        onClick={onClose}
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
                         style={{
                             background: "transparent",
                             border: "none",
@@ -184,6 +198,7 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
                                 <div
                                     key={c.identity_hash}
                                     onClick={() => {
+                                        TacticalAudioEngine.playTap();
                                         onSelectContact(c);
                                         onClose();
                                     }}

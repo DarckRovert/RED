@@ -1,6 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { useSquadCallMesh } from '../../lib/mesh/useSquadCallMesh';
 import { useRedStore } from '../../store/useRedStore';
+import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
+import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
 
 interface SquadVoiceRoomProps {
     groupId: string;
@@ -59,10 +61,20 @@ export const SquadVoiceRoom: React.FC<SquadVoiceRoomProps> = ({
         return `Operador ${hash.substring(0, 6)}`;
     };
 
-    const handleDisconnect = () => {
+    const handleDisconnect = useCallback(() => {
         leaveRoom();
         onClose();
-    };
+    }, [leaveRoom, onClose]);
+
+    // Intercepción LIFO de hardware Android y tecla Escape
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            handleDisconnect();
+            return true;
+        });
+        return () => unregister();
+    }, [handleDisconnect]);
 
     const peerList = Object.values(peers);
 

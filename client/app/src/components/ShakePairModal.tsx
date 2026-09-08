@@ -5,21 +5,40 @@ import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { RedAPI } from "../lib/api";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { KineticDutyGovernor } from "../lib/sensors/KineticDutyGovernor";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 export const ShakePairModal: React.FC = () => {
-    const { navigate, identity, addContact, contacts, fetchData } = useRedStore();
+    const { navigate, goBack, identity, addContact, contacts, fetchData } = useRedStore();
     const { t } = useTranslation();
     const [isListening, setIsListening] = useState(false);
     const [accMagnitude, setAccMagnitude] = useState<number>(0);
+    const [accAxes, setAccAxes] = useState<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
     const [shakeDetected, setShakeDetected] = useState<boolean>(false);
     const [statusText, setStatusText] = useState<string>("Sacude el teléfono para vincular nodos cercanos");
     const [pairedDevice, setPairedDevice] = useState<{ did: string; name: string; isAlreadyAdded: boolean } | null>(null);
 
-    const SHAKE_THRESHOLD = 7.5; // m/s^2 above 1G
+    const SHAKE_THRESHOLD = 7.5; // m/s^2 delta de aceleración sobre gravedad
     const lastShakeTimeRef = useRef<number>(0);
 
-    // Deduplication Helper: check if contact already exists in local contacts list
+    // Intercepción LIFO de hardware Android y tecla Escape
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (pairedDevice) {
+                TacticalAudioEngine.playTap();
+                setPairedDevice(null);
+                return true;
+            }
+            TacticalAudioEngine.playTap();
+            goBack();
+            return true;
+        });
+        return () => unregister();
+    }, [pairedDevice, goBack]);
+
+    // Deduplicación de contactos para evitar registros redundantes
     const checkExistingContact = useCallback((candidateHash: string, candidateName?: string) => {
         if (!candidateHash) return { exists: false, contact: null };
         let clean = candidateHash.trim();
@@ -77,6 +96,7 @@ export const ShakePairModal: React.FC = () => {
                 isAlreadyAdded: true
             });
             setStatusText(`ℹ️ Nodo cercano previamente vinculado: ${actualName}`);
+            TacticalAudioEngine.playTap();
             toast.info(`ℹ️ ${actualName} ya forma parte de tu lista de contactos.`);
         } else {
             const resolvedHash = await addContact(cleanHash, peerName, peerPk);
@@ -87,13 +107,14 @@ export const ShakePairModal: React.FC = () => {
                 isAlreadyAdded: false
             });
             setStatusText(`✅ ¡VINCULADO! Conectado con ${peerName}`);
+            TacticalAudioEngine.playRogerBeep();
             toast.success(`📳 Sacudida exitosa: Vinculado con ${peerName}`);
         }
         setShakeDetected(false);
         fetchData();
     }, [checkExistingContact, addContact, fetchData]);
 
-    // 1. Direct P2P Mesh Shake-to-Pair packet listener
+    // 1. Receptor P2P Mesh de Pulso de Emparejamiento
     useEffect(() => {
         const unsub = meshRouter.onShakePair((peer) => {
             if (!peer || !peer.identity_hash || peer.identity_hash === identity?.identity_hash) return;
@@ -111,7 +132,7 @@ export const ShakePairModal: React.FC = () => {
         };
     }, [identity, processCandidatePeer]);
 
-    // 2. Accelerometer Motion Sensor Hardware Listener
+    // 2. Listener del Sensor Acelerómetro de Hardware (MEMS)
     useEffect(() => {
         const handleMotion = (e: DeviceMotionEvent) => {
             const linearAcc = e.acceleration;
@@ -122,28 +143,40 @@ export const ShakePairModal: React.FC = () => {
             const x = acc.x || 0;
             const y = acc.y || 0;
             const z = acc.z || 0;
+            setAccAxes({
+                x: Math.round(x * 10) / 10,
+                y: Math.round(y * 10) / 10,
+                z: Math.round(z * 10) / 10
+            });
+
             const rawMag = Math.sqrt(x * x + y * y + z * z);
-            
-            // Effective delta acceleration
-            const effectiveMag = linearAcc?.x != null ? rawMag : Math.abs(rawMag - 9.8);
-            setAccMagnitude(Math.round(effectiveMag * 10) / 10);
+            // Delta efectivo respecto a 1G terrestre (9.806 m/s^2)
+            const effectiveMag = linearAcc?.x != null ? rawMag : Math.abs(rawMag - 9.806);
+            const clampedMag = Math.round(effectiveMag * 10) / 10;
+            setAccMagnitude(clampedMag);
 
             const now = Date.now();
             if (effectiveMag > SHAKE_THRESHOLD && now - lastShakeTimeRef.current > 1800) {
                 lastShakeTimeRef.current = now;
                 setShakeDetected(true);
                 setStatusText("📳 ¡SACUDIDA DETECTADA! Emitiendo pulso de malla P2P...");
+                TacticalAudioEngine.playTap();
+
+                // Activar SHAKE_BOOST en el gobernador cinético (acelera BLE a 800ms y eleva potencia a 20 dBm)
+                try {
+                    KineticDutyGovernor.getInstance().triggerShakeBoost();
+                } catch {}
 
                 if (typeof navigator !== "undefined" && navigator.vibrate) {
                     navigator.vibrate([100, 50, 100]);
                 }
 
-                // Broadcast real P2P Shake pulse over BLE, WiFi Direct, and WebRTC
+                // Difusión real de pulso de emparejamiento sobre BLE, Wi-Fi Direct y WebRTC
                 const myNick = identity?.nickname || "Operador RED";
                 const myPk = identity?.public_key || null;
                 meshRouter.broadcastShakePair(myNick, myPk).catch(() => {});
 
-                // Near-field scan check: if peer has strong signal (RSSI > -75), link immediately
+                // Verificación de proximidad inmediata con nodos de señal fuerte (RSSI >= -75 dBm)
                 const allPeers = meshRouter.getAllPeers();
                 const nearbyPeer = allPeers.find(p => p.rssi != null && p.rssi >= -75 && p.id !== identity?.identity_hash);
                 if (nearbyPeer) {
@@ -167,9 +200,33 @@ export const ShakePairModal: React.FC = () => {
         };
     }, [identity, processCandidatePeer]);
 
-    const handleManualEmit = () => {
+    // Solicitud explícita de permisos de acelerometría para iOS 13+ / Safari WebKit
+    const requestSensorPermission = async () => {
+        if (typeof window !== "undefined" && typeof (DeviceMotionEvent as any)?.requestPermission === "function") {
+            try {
+                const response = await (DeviceMotionEvent as any).requestPermission();
+                if (response === "granted") {
+                    setIsListening(true);
+                    toast.success("Sensor inercial activado");
+                } else {
+                    toast.warning("Permiso de acelerómetro denegado");
+                }
+            } catch (err) {
+                console.warn("[ShakePair] Error solicitando permiso inercial:", err);
+            }
+        }
+    };
+
+    const handleManualEmit = async () => {
+        await requestSensorPermission();
         setShakeDetected(true);
         setStatusText("📳 Emitiendo pulso manual de emparejamiento...");
+
+        // Activar SHAKE_BOOST en el gobernador cinético
+        try {
+            KineticDutyGovernor.getInstance().triggerShakeBoost();
+        } catch {}
+
         if (typeof navigator !== "undefined" && navigator.vibrate) {
             navigator.vibrate([100, 50, 100]);
         }
@@ -187,120 +244,205 @@ export const ShakePairModal: React.FC = () => {
         }
     };
 
+    const handleOpenChat = () => {
+        if (!pairedDevice) return;
+        TacticalAudioEngine.playTap();
+        const clean = pairedDevice.did.replace(/^did:red:/i, "");
+        navigate("chat", clean);
+    };
+
+    // Progreso porcentual hacia el umbral de disparo (7.5 m/s²)
+    const thresholdPct = Math.min(100, Math.round((accMagnitude / SHAKE_THRESHOLD) * 100));
+
     return (
         <div style={{
             width: "100%", height: "100%",
-            background: "var(--bg-void)", color: "var(--text-primary)",
+            background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
+            color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace",
             display: "flex", flexDirection: "column",
             overflow: "hidden", position: "relative"
         }}>
-            {/* Header Táctico */}
+            {/* Header Táctico C4ISR */}
             <header style={{
-                padding: "16px 20px",
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
                 height: "var(--header-h)",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0,
+                borderBottom: "1.5px solid rgba(0, 230, 118, 0.35)",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={() => {
+                            if (!BackHandlerRegistry.executeTop()) {
+                                TacticalAudioEngine.playTap();
+                                goBack();
+                            }
+                        }}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ‹
+                    </button>
                     <div style={{
-                        width: 40, height: 40, borderRadius: "12px",
-                        background: "linear-gradient(135deg, #00E676 0%, #00897B 100%)",
+                        width: 38, height: 38, borderRadius: "12px",
+                        background: "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(0, 150, 255, 0.15) 100%)",
+                        border: "1.5px solid rgba(0, 230, 118, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,230,118,0.35)"
+                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 230, 118, 0.25)"
                     }}>📳</div>
                     <div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            {t.modules?.shake_pair || "Shake-to-Pair (Acelerómetro)"}
+                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            SHAKE & PAIR INERCIAL
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: isListening ? "var(--accent-emerald)" : "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {isListening ? "● SENSOR INERCIAL ACTIVO" : "SENSOR EN ESPERA"}
+                        <div style={{ fontSize: "0.68rem", color: isListening ? "var(--accent-emerald, #00E676)" : "#FFB300", fontWeight: 800 }}>
+                            {isListening ? "● ACELERÓMETRO ACTIVO" : "○ SENSOR EN ESPERA"}
                         </div>
                     </div>
                 </div>
 
-                <button
-                    onClick={() => navigate("sidebar")}
-                    className="btn-icon"
-                    title={t.common?.close || "Cerrar"}
-                    style={{ width: 38, height: 38 }}
-                >
-                    ✕
-                </button>
+                <div style={{ display: "flex", gap: "6px" }}>
+                    <span style={{
+                        fontSize: "0.62rem", fontWeight: 900, padding: "3px 8px", borderRadius: "6px",
+                        background: shakeDetected ? "rgba(0, 230, 118, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                        color: shakeDetected ? "#00E676" : "var(--text-secondary)",
+                        border: `1px solid ${shakeDetected ? '#00E676' : 'rgba(255,255,255,0.1)'}`
+                    }}>
+                        {shakeDetected ? "⚡ PULSO MALLA ACTIVO" : "MODO ESCUCHA"}
+                    </span>
+                </div>
             </header>
 
             {/* Contenido Principal */}
-            <div className="scroll-container" style={{ flex: 1, padding: "24px 20px 80px 20px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "24px" }}>
-                <div style={{ maxWidth: "480px", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: "20px" }}>
+            <div className="scroll-container" style={{ flex: 1, padding: "20px 16px 80px 16px", overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "20px" }}>
+                <div style={{ maxWidth: "480px", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: "18px" }}>
 
-                    {/* Sensor Visual Feedback Ring */}
-                    <div style={{ position: "relative", width: "200px", height: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        {shakeDetected && (
-                            <div style={{
-                                position: "absolute", inset: -16, borderRadius: "50%",
-                                border: "2px solid var(--accent-emerald)",
-                                animation: "pulseGlowEmerald 1s infinite"
-                            }} />
-                        )}
+                    {/* Disco Sensor Inercial Visual */}
+                    <div style={{ position: "relative", width: "220px", height: "220px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {/* Anillo de pulso fosforescente */}
+                        <div style={{
+                            position: "absolute", inset: -10, borderRadius: "50%",
+                            border: `2px ${shakeDetected ? 'solid #00E676' : 'dashed rgba(0, 230, 118, 0.25)'}`,
+                            animation: shakeDetected ? "pulse 1s infinite" : "none",
+                            boxShadow: shakeDetected ? "0 0 25px rgba(0, 230, 118, 0.4)" : "none"
+                        }} />
 
                         <div 
                             onClick={handleManualEmit}
-                            className="card-tactical-interactive"
                             style={{
-                                width: "160px", height: "160px", borderRadius: "50%",
-                                background: "radial-gradient(circle, rgba(14,30,24,0.9) 0%, rgba(8,16,12,0.98) 70%)",
-                                border: `2px solid ${shakeDetected ? "var(--accent-emerald)" : "rgba(0,230,118,0.3)"}`,
-                                boxShadow: "0 0 35px rgba(0,230,118,0.15)",
+                                width: "180px", height: "180px", borderRadius: "50%",
+                                background: "radial-gradient(circle, rgba(14, 30, 24, 0.95) 0%, rgba(6, 14, 10, 0.98) 75%)",
+                                border: `2.5px solid ${shakeDetected ? "#00E676" : "rgba(0, 230, 118, 0.4)"}`,
+                                boxShadow: "0 0 35px rgba(0, 230, 118, 0.2), inset 0 0 20px rgba(0, 230, 118, 0.1)",
                                 display: "flex", flexDirection: "column",
                                 alignItems: "center", justifyContent: "center", gap: "4px",
-                                cursor: "pointer"
+                                cursor: "pointer", transition: "transform 0.15s ease"
                             }}
                         >
-                            <span style={{ fontSize: "2.5rem" }}>📳</span>
-                            <span style={{ fontSize: "1.2rem", fontWeight: 900, fontFamily: "JetBrains Mono, monospace", color: "var(--accent-emerald)" }}>
-                                {accMagnitude} m/s²
+                            <span style={{ fontSize: "2.8rem" }}>📳</span>
+                            <span style={{ fontSize: "1.4rem", fontWeight: 900, color: "#00E676" }}>
+                                {accMagnitude} <span style={{ fontSize: "0.75rem" }}>m/s²</span>
                             </span>
-                            <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
-                                Toca o Sacude
+                            <span style={{ fontSize: "0.62rem", color: "var(--text-secondary)", textTransform: "uppercase", fontWeight: 800 }}>
+                                TOCA O SACUDE
                             </span>
                         </div>
                     </div>
 
-                    {/* Estado y Guía */}
+                    {/* Barra de Progreso hacia Umbral de Disparo (7.5 m/s²) */}
+                    <div style={{
+                        width: "100%", background: "rgba(14, 18, 38, 0.9)",
+                        border: "1px solid rgba(0, 230, 118, 0.2)", borderRadius: "14px",
+                        padding: "12px 16px", display: "flex", flexDirection: "column", gap: "8px"
+                    }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", fontWeight: 900 }}>
+                            <span style={{ color: "var(--text-secondary)" }}>UMBRAL DE DISPARO INERCIAL:</span>
+                            <span style={{ color: thresholdPct >= 100 ? "#00E676" : "#00E5FF" }}>
+                                {accMagnitude} / {SHAKE_THRESHOLD} m/s² ({thresholdPct}%)
+                            </span>
+                        </div>
+                        <div style={{ width: "100%", height: "8px", background: "rgba(255, 255, 255, 0.08)", borderRadius: "4px", overflow: "hidden" }}>
+                            <div style={{
+                                width: `${thresholdPct}%`, height: "100%",
+                                background: thresholdPct >= 100 ? "linear-gradient(90deg, #00E676, #00E5FF)" : "linear-gradient(90deg, #00B0FF, #00E676)",
+                                transition: "width 0.1s ease"
+                            }} />
+                        </div>
+                        {/* Vectores Triaxiales */}
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "var(--text-secondary)", paddingTop: "4px", borderTop: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                            <span>X: <strong style={{ color: "#FFFFFF" }}>{accAxes.x}</strong></span>
+                            <span>Y: <strong style={{ color: "#FFFFFF" }}>{accAxes.y}</strong></span>
+                            <span>Z: <strong style={{ color: "#FFFFFF" }}>{accAxes.z}</strong> m/s²</span>
+                            <span>PERFIL: <strong style={{ color: "#00E676" }}>SHAKE_BOOST</strong></span>
+                        </div>
+                    </div>
+
+                    {/* Estado y Guía Táctica */}
                     <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text-primary)" }}>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF" }}>
                             {statusText}
                         </div>
-                        <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", marginTop: "4px", lineHeight: 1.4 }}>
-                            Junta dos teléfonos con la app RED abierta y sacúdelos simultáneamente para intercambiar identidades de forma segura mediante la malla P2P.
+                        <div style={{ fontSize: "0.74rem", color: "var(--text-secondary)", marginTop: "4px", lineHeight: 1.4 }}>
+                            Junta dos dispositivos RED y sacúdelos simultáneamente. El enlace físico cruzará paquetes criptográficos P2P sin tocar internet.
                         </div>
                     </div>
 
-                    {/* Botón de Pulso Manual */}
+                    {/* Botón de Pulso Manual Táctico */}
                     <button
                         onClick={handleManualEmit}
-                        className="btn-tactical-primary"
-                        style={{ padding: "10px 20px", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: "8px" }}
+                        style={{
+                            width: "100%", padding: "12px", borderRadius: "12px",
+                            background: "linear-gradient(135deg, #00E676 0%, #00897B 100%)",
+                            border: "none", color: "#000000", fontWeight: 900, fontSize: "0.82rem",
+                            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                            boxShadow: "0 0 20px rgba(0, 230, 118, 0.3)"
+                        }}
                     >
-                        📡 Emitir Pulso de Emparejamiento
+                        <span>📡</span> EMITIR PULSO MANUAL DE VINCULACIÓN
                     </button>
 
                     {/* Tarjeta de Dispositivo Vinculado */}
                     {pairedDevice && (
-                        <div className="card-tactical animate-pop" style={{ width: "100%", padding: "16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderLeft: "4px solid var(--accent-emerald)" }}>
-                            <div>
-                                <div style={{ fontWeight: 800, fontSize: "0.92rem", color: "var(--text-primary)" }}>
-                                    {pairedDevice.name}
+                        <div style={{
+                            width: "100%", padding: "16px", borderRadius: "16px",
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid #00E676", boxShadow: "0 0 25px rgba(0, 230, 118, 0.25)",
+                            display: "flex", flexDirection: "column", gap: "10px"
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontWeight: 900, fontSize: "0.95rem", color: "#FFFFFF" }}>
+                                        {pairedDevice.name}
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
+                                        {pairedDevice.did.substring(0, 24)}…
+                                    </div>
                                 </div>
-                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                    {pairedDevice.did.substring(0, 24)}…
-                                </div>
+                                <span style={{
+                                    fontSize: "0.65rem", fontWeight: 900, padding: "3px 8px", borderRadius: "6px",
+                                    background: "rgba(0, 230, 118, 0.2)", color: "#00E676", border: "1px solid #00E676"
+                                }}>
+                                    {pairedDevice.isAlreadyAdded ? "EXISTENTE" : "NUEVO CONTACTO"}
+                                </span>
                             </div>
-                            <span className="badge-tactical badge-tactical-emerald">
-                                {pairedDevice.isAlreadyAdded ? "EXISTENTE" : "NUEVO CONTACTO"}
-                            </span>
+
+                            <button
+                                onClick={handleOpenChat}
+                                style={{
+                                    width: "100%", padding: "10px", borderRadius: "10px",
+                                    background: "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(0, 180, 80, 0.15) 100%)",
+                                    border: "1px solid #00E676", color: "#00E676",
+                                    fontWeight: 900, fontSize: "0.78rem", cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                                }}
+                            >
+                                <span>💬</span> ABRIR CHAT CIFRADO
+                            </button>
                         </div>
                     )}
                 </div>

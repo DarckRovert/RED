@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { antiForensicPanicWipe } from "../lib/security/AntiForensicPanicWipeEngine";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 interface CalculatorScreenProps {
     onUnlock?: (pin: string) => Promise<any> | any;
@@ -24,8 +26,27 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
     const [waitingForOperand, setWaitingForOperand] = useState(false);
     const [awaitingUnlock, setAwaitingUnlock] = useState(false);
 
-    // Haptic feedback sutil
+    // Registro LIFO de retroceso físico / Esc
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (display !== "0" || equation !== "" || prevValue !== null) {
+                clearAll();
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            if (currentScreen === "calculator") {
+                TacticalAudioEngine.playTap();
+                goBack();
+                return true;
+            }
+            return false;
+        });
+        return unregister;
+    }, [display, equation, prevValue, currentScreen, goBack]);
+
+    // Haptic & piezo feedback sutil
     const triggerHaptic = () => {
+        TacticalAudioEngine.playTap();
         try {
             if (typeof navigator !== "undefined" && navigator.vibrate) {
                 navigator.vibrate(10);
@@ -133,6 +154,7 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
 
         // 1. Verificar si es el PIN de coacción / pánico (Duress Zeroization)
         if (antiForensicPanicWipe.isDuressPin(rawPin)) {
+            TacticalAudioEngine.playWarning();
             await antiForensicPanicWipe.triggerDuressPanicProtocol();
             try {
                 await handleUnlock(rawPin);
@@ -143,7 +165,10 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
 
         // 2. Intentar desbloqueo normal silencioso de la bóveda
         try {
-            await handleUnlock(rawPin);
+            const unlocked = await handleUnlock(rawPin);
+            if (unlocked) {
+                TacticalAudioEngine.playRogerBeep();
+            }
         } catch {}
 
         setAwaitingUnlock(false);
@@ -222,7 +247,7 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
                 <span style={{ fontSize: "0.80rem", fontWeight: 600 }}>Calculadora</span>
                 {currentScreen === "calculator" && (
                     <button
-                        onClick={goBack}
+                        onClick={() => { TacticalAudioEngine.playTap(); goBack(); }}
                         style={{
                             background: "transparent", border: "none", color: "#888",
                             fontSize: "0.80rem", cursor: "pointer", padding: "4px 8px"
