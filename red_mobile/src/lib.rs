@@ -30,12 +30,15 @@ pub mod weather;
 // y actúan como relay para atravesar NAT 4G sin servidor central propio.
 // Fuente: https://github.com/libp2p/go-libp2p/blob/master/config/config.go
 const BOOTSTRAP_NODES: &[&str] = &[
+    "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+    "/ip4/104.248.44.204/tcp/4001/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXDDts6X9R2kS",
+    "/ip4/147.75.109.93/tcp/4001/p2p/QmNnooDu7bfjPFoTKI8XwOSPNKZbPEmLkXNA5yRxklDDe",
+    "/ip4/147.75.70.117/tcp/4001/p2p/QmbLHAnMoJPWSCR5Zhtx6yHzpnVgG9fB5UrD62gJLqDKtv",
+    "/ip4/147.75.83.83/tcp/4001/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
     "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTKI8XwOSPNKZbPEmLkXNA5yRxklDDe",
     "/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXDDts6X9R2kS",
     "/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6yHzpnVgG9fB5UrD62gJLqDKtv",
     "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
-    "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
-    "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
 ];
 
 static ONCE: std::sync::Once = std::sync::Once::new();

@@ -3,6 +3,7 @@ import { RedStore, PendingContactRequest } from '../types';
 import { ConversationItem } from '../../api/types';
 import { RedAPI } from '../../api/client';
 import { meshRouter, normalizeIdentity } from '../../lib/mesh/meshRouter';
+import { mqttRelay } from '../../lib/mesh/mqttRelayTransport';
 import { toast } from '../../components/Toast';
 const _processedHandshakes = new Map<string, number>();
 const MAX_PROCESSED_HANDSHAKES = 1000;
@@ -78,6 +79,7 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
                     timestamp: Date.now() / 1000
                 }));
                 meshRouter.send(req.senderHash, rawBytes).catch(() => {});
+                mqttRelay.sendPacket(req.senderHash, rawBytes);
             } catch {}
         }
         toast.success(`✅ ${req.senderName} agregado a tus contactos`);
@@ -231,9 +233,11 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         }
 
         // Cache peer in meshRouter immediately for instant resolution across views
+        const existingPeer = meshRouter.getPeerByAnyId(cleanHash);
+        const peerTransport: 'wifi' | 'ble' | 'lora' = (existingPeer?.transport === 'ble' || existingPeer?.transport === 'lora') ? existingPeer.transport : 'wifi';
         meshRouter.updatePeer(
             cleanHash,
-            'ble',
+            peerTransport,
             undefined,
             cleanHash,
             cleanName,
@@ -299,8 +303,11 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
                 if (typeof window !== 'undefined') {
                     try {
                         const oldMsgs = localStorage.getItem(`red_web_messages_${oldHash}`);
-                        if (oldMsgs && !localStorage.getItem(`red_web_messages_${resolvedHash}`)) {
-                            localStorage.setItem(`red_web_messages_${resolvedHash}`, oldMsgs);
+                        if (oldMsgs) {
+                            if (!localStorage.getItem(`red_web_messages_${resolvedHash}`)) {
+                                localStorage.setItem(`red_web_messages_${resolvedHash}`, oldMsgs);
+                            }
+                            localStorage.removeItem(`red_web_messages_${oldHash}`);
                         }
                     } catch {}
                 }
@@ -387,6 +394,7 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
                     timestamp: Date.now() / 1000
                 }));
                 meshRouter.send(cleanHash, rawBytes).catch(() => {});
+                mqttRelay.sendPacket(cleanHash, rawBytes);
 
                 // Targeted discovery broadcast: Ensures that even if physical MAC/UUID mapping
                 // is not yet bound to cleanHash, all nearby physical nodes receive the handshake,

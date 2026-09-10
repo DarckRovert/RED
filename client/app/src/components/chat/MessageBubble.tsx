@@ -38,6 +38,7 @@ interface MessageBubbleProps {
     onReply?: (msg: MessageItem) => void;
     onForward?: (msg: MessageItem) => void;
     onEdit?: (msg: MessageItem) => void;
+    onDelete?: (msgId: string) => void;
     onDeleteForEveryone?: (msgId: string) => void;
     onOpenMediaGallery?: (msg: MessageItem) => void;
     isSelectionMode?: boolean;
@@ -241,7 +242,7 @@ function ContextMenu({
 export const MessageBubble = memo(({
     msg, isMine, isFirst, isLast, showDate, peerName, starredMessages,
     searchQuery, isSearchHighlight, isSwiping, onTouchStart, onTouchMove, onTouchEnd,
-    onLongPress, onCancelLongPress, onReaction, onVote, onPin, onStar, onReply, onForward, onEdit, onDeleteForEveryone, onOpenMediaGallery,
+    onLongPress, onCancelLongPress, onReaction, onVote, onPin, onStar, onReply, onForward, onEdit, onDelete, onDeleteForEveryone, onOpenMediaGallery,
     isSelectionMode = false, isSelected = false, onToggleSelect, onSelectMode,
     isGroupChat,
 }: MessageBubbleProps) => {
@@ -672,7 +673,7 @@ export const MessageBubble = memo(({
                     onStar={onStar ? () => onStar(msg.id) : undefined}
                     onEdit={onEdit ? () => onEdit(msg) : undefined}
                     onDeleteForEveryone={onDeleteForEveryone ? () => onDeleteForEveryone(msg.id) : undefined}
-                    onDeleteLocal={() => onLongPress({} as any, msg)}
+                    onDeleteLocal={() => onDelete ? onDelete(msg.id) : (onDeleteForEveryone ? onDeleteForEveryone(msg.id) : undefined)}
                     onSelect={onSelectMode ? () => onSelectMode(msg) : undefined}
                     onReact={(e) => onReaction(msg.id, e)}
                     onTranslate={msg.content && !msg.content.startsWith("data:") ? handleTranslate : undefined}

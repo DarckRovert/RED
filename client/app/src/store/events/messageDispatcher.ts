@@ -213,7 +213,9 @@ export async function dispatchIncomingMessage(
                         const peerPk = idData.public_key;
                         // Only update P2P routing topology — contact isolation: never auto-add to contacts list
                         meshRouter.bindDeviceToCanonical(item.sender, peerHash, peerName, peerPk);
-                        meshRouter.updatePeer(peerHash, 'ble', undefined, peerHash, peerName, peerPk);
+                        const existingPeer = meshRouter.getPeerByAnyId(peerHash);
+                        const peerTransport: 'wifi' | 'ble' | 'lora' = (existingPeer?.transport === 'ble' || existingPeer?.transport === 'lora') ? existingPeer.transport : 'wifi';
+                        meshRouter.updatePeer(peerHash, peerTransport, undefined, peerHash, peerName, peerPk);
                     }
                 }
             } catch {}
@@ -505,7 +507,9 @@ export async function dispatchIncomingMessage(
 
                 // 1. Update MeshRouter peer registry with the latest identity data
                 meshRouter.bindDeviceToCanonical(item.sender, senderHash, newName, newPk);
-                meshRouter.updatePeer(senderHash, 'ble', undefined, senderHash, newName, newPk);
+                const existingP = meshRouter.getPeerByAnyId(senderHash);
+                const pTransport: 'wifi' | 'ble' | 'lora' = (existingP?.transport === 'ble' || existingP?.transport === 'lora') ? existingP.transport : 'wifi';
+                meshRouter.updatePeer(senderHash, pTransport, undefined, senderHash, newName, newPk);
 
                 // 2. Update Contacts list in Store & LocalStorage
                 const existingContacts = get().contacts || [];
@@ -615,9 +619,11 @@ export async function dispatchIncomingMessage(
                     : (existing?.display_name || `Operador ${senderHash.substring(0, 6)}`);
 
                 // Register peer metadata in meshRouter
+                const existingReqPeer = meshRouter.getPeerByAnyId(senderHash);
+                const reqTransport: 'wifi' | 'ble' | 'lora' = (existingReqPeer?.transport === 'ble' || existingReqPeer?.transport === 'lora') ? existingReqPeer.transport : 'wifi';
                 meshRouter.updatePeer(
                     senderHash,
-                    'ble',
+                    reqTransport,
                     undefined,
                     senderHash,
                     finalName,
@@ -1235,7 +1241,13 @@ export async function dispatchIncomingMessage(
 
                     // 4. Update conversation list unread badge and snippet
                     const curConvs = get().conversations || [];
-                    const convIdx = curConvs.findIndex(c => c && (c.id === groupId || c.peer === groupId));
+                    const cleanGroupId = groupId.trim().toLowerCase().replace(/^group[-_]/i, '');
+                    const convIdx = curConvs.findIndex(c => {
+                        if (!c) return false;
+                        const cid = (c.id || '').trim().toLowerCase().replace(/^group[-_]/i, '');
+                        const cpeer = (c.peer || '').trim().toLowerCase().replace(/^group[-_]/i, '');
+                        return c.id === groupId || c.peer === groupId || cid === cleanGroupId || cpeer === cleanGroupId;
+                    });
                     const senderContact = (get().contacts || []).find((c: any) => c.identity_hash === senderHash);
                     const senderLabel = senderContact?.display_name || senderHash.slice(0, 8);
                     const displaySnippet = msgType === 'image' ? '📷 Foto' : msgType === 'voice' ? '🎤 Nota de voz' : msgType === 'video' ? '🎬 Video' : msgContent;
@@ -1736,12 +1748,16 @@ export async function dispatchIncomingMessage(
             return;
         }
 
-        // ── Real-Time Message Delete ("Delete for Everyone"): redact content ──
+        // ── Real-Time Message Delete ("Delete for Everyone"): redact content & purge media vault ──
         if (item.msg_type === 'message_delete') {
             try {
                 const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
                 const targetId = parsed.target_id || parsed.targetMsgId;
                 if (targetId) {
+                    // 1. Purge binary from IndexedDB vault immediately
+                    indexedMediaVault.deleteMedia(targetId).catch(() => {});
+
+                    // 2. Update active in-memory messages
                     const updated = messages.map((m: MessageItem) => {
                         if (m.id !== targetId) return m;
                         return {
@@ -1752,6 +1768,49 @@ export async function dispatchIncomingMessage(
                         };
                     });
                     set({ messages: updated });
+
+                    // 3. Persist redacted state to local web storage so it doesn't resurrect on refresh
+                    if (typeof window !== 'undefined') {
+                        try {
+                            const convId = parsed.conversation_id || item.conversation_id || item.sender;
+                            if (convId) {
+                                const cleanConv = (convId || '').toLowerCase().replace(/^did:red:/i, '').trim();
+                                const keysToUpdate = [`red_web_messages_${cleanConv}`];
+                                const mapRaw = localStorage.getItem('red_device_canonical_map');
+                                if (mapRaw) {
+                                    try {
+                                        const mappings: [string, string][] = JSON.parse(mapRaw);
+                                        for (const [hw, canon] of mappings) {
+                                            if (canon.toLowerCase() === cleanConv) {
+                                                keysToUpdate.push(`red_web_messages_${hw.toLowerCase()}`);
+                                            } else if (hw.toLowerCase() === cleanConv) {
+                                                keysToUpdate.push(`red_web_messages_${canon.toLowerCase()}`);
+                                            }
+                                        }
+                                    } catch {}
+                                }
+
+                                for (const convKey of keysToUpdate) {
+                                    const raw = localStorage.getItem(convKey);
+                                    if (raw) {
+                                        const list: any[] = JSON.parse(raw);
+                                        if (list.some((m: any) => m && m.id === targetId)) {
+                                            const updatedList = list.map((m: any) => {
+                                                if (m && m.id !== targetId) return m;
+                                                return {
+                                                    ...m,
+                                                    is_deleted: true,
+                                                    content: "Este mensaje fue eliminado",
+                                                    media_data: undefined
+                                                };
+                                            });
+                                            localStorage.setItem(convKey, JSON.stringify(updatedList));
+                                        }
+                                    }
+                                }
+                            }
+                        } catch {}
+                    }
                 }
             } catch (e) {
                 console.warn('[Message Delete Parse Error]', e);
@@ -2195,7 +2254,9 @@ export async function dispatchIncomingMessage(
                 }
 
                 if (isNonGenericSender) {
-                    meshRouter.updatePeer(canonicalSender, 'ble', undefined, canonicalSender, rawSenderName, resolvedPk);
+                    const existingNonGenPeer = meshRouter.getPeerByAnyId(canonicalSender);
+                    const nonGenTransport: 'wifi' | 'ble' | 'lora' = (existingNonGenPeer?.transport === 'ble' || existingNonGenPeer?.transport === 'lora') ? existingNonGenPeer.transport : 'wifi';
+                    meshRouter.updatePeer(canonicalSender, nonGenTransport, undefined, canonicalSender, rawSenderName, resolvedPk);
                 }
             }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface LandingUseCasesAndArchitectureProps {
     handleCopy: (text: string) => void;
@@ -14,11 +14,43 @@ export const LandingUseCasesAndArchitecture: React.FC<LandingUseCasesAndArchitec
     const [activeDevTab, setActiveDevTab] = useState<"rust" | "pqc" | "vocoder" | "android">("rust");
     const [selectedLayerIndex, setSelectedLayerIndex] = useState<number>(2); // Default to Rust Core
     const [isSchematicModalOpen, setIsSchematicModalOpen] = useState<boolean>(false);
+    const [diagramType, setDiagramType] = useState<"network" | "schematic">("network");
     const [activeTrack, setActiveTrack] = useState<"rust" | "android" | "frontend" | "radio">("rust");
+    const [modalZoom, setModalZoom] = useState<number>(1);
+    const [isHoveringPreview, setIsHoveringPreview] = useState<boolean>(false);
+    const [hoveredStepIndex, setHoveredStepIndex] = useState<number | null>(null);
+
+    const handleSelectLayer = (idx: number) => {
+        setSelectedLayerIndex(idx);
+        if (idx === 0) setActiveDevTab("vocoder");
+        else if (idx === 1) setActiveDevTab("android");
+        else if (idx === 2) setActiveDevTab("rust");
+        else if (idx === 3) setActiveDevTab("rust");
+    };
+
+    const handleSelectDevTab = (tabId: "rust" | "pqc" | "vocoder" | "android") => {
+        setActiveDevTab(tabId);
+        if (tabId === "vocoder") setSelectedLayerIndex(0);
+        else if (tabId === "android") setSelectedLayerIndex(1);
+        else if (tabId === "rust" || tabId === "pqc") setSelectedLayerIndex(2);
+    };
 
     const isGhPages = typeof window !== "undefined" && window.location.pathname.includes("/RED");
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH || (isGhPages ? "/RED" : "");
     const schematicUrl = `${basePath}/assets/red_architecture_schematic.jpg`;
+    const networkArchUrl = `${basePath}/assets/red_network_architecture.jpg`;
+    const activeDiagramUrl = diagramType === "network" ? networkArchUrl : schematicUrl;
+
+    useEffect(() => {
+        if (!isSchematicModalOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                setIsSchematicModalOpen(false);
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isSchematicModalOpen]);
 
     const architectureLayers = [
         {
@@ -238,43 +270,121 @@ public class RedNodeService extends Service {
             }}>
                 {/* Tech HUD Corner Accents */}
                 <div style={{ position: "absolute", top: "12px", left: "16px", fontSize: "10px", color: "#00E5FF", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, letterSpacing: "1px" }}>
-                    SYSTEM SCHEMATIC // ARCH_REF_V93_0_0
+                    {diagramType === "network" ? "TACTICAL MESH TOPOLOGY // MESH_NET_V98_0_0" : "SYSTEM SCHEMATIC // ARCH_REF_V98_0_0"}
                 </div>
                 <div style={{ position: "absolute", top: "12px", right: "16px", fontSize: "10px", color: "#00FF88", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
                     STATUS: VERIFIED GROUND TRUTH
                 </div>
 
-                <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px", alignItems: "center" }}>
+                {/* Diagram Type Switcher Tabs */}
+                <div style={{ marginTop: "18px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "11px", color: "#94A3B8", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, letterSpacing: "0.5px" }}>
+                        VISTA DE ARQUITECTURA:
+                    </span>
+                    <button
+                        onClick={() => { setDiagramType("network"); setModalZoom(1); }}
+                        style={{
+                            padding: "7px 16px",
+                            borderRadius: "10px",
+                            background: diagramType === "network" ? "rgba(0, 229, 255, 0.22)" : "rgba(255, 255, 255, 0.04)",
+                            border: diagramType === "network" ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.1)",
+                            color: diagramType === "network" ? "#00E5FF" : "#94A3B8",
+                            fontSize: "11px",
+                            fontFamily: "JetBrains Mono, monospace",
+                            fontWeight: 800,
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            boxShadow: diagramType === "network" ? "0 0 16px rgba(0, 229, 255, 0.35)" : "none"
+                        }}
+                    >
+                        <span>🌐 TOPOLOGÍA MESH P2P</span>
+                        <span style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "4px", background: "rgba(0, 229, 255, 0.3)", color: "#FFF" }}>4K HDR</span>
+                    </button>
+                    <button
+                        onClick={() => { setDiagramType("schematic"); setModalZoom(1); }}
+                        style={{
+                            padding: "7px 16px",
+                            borderRadius: "10px",
+                            background: diagramType === "schematic" ? "rgba(0, 255, 136, 0.22)" : "rgba(255, 255, 255, 0.04)",
+                            border: diagramType === "schematic" ? "1.5px solid #00FF88" : "1px solid rgba(255, 255, 255, 0.1)",
+                            color: diagramType === "schematic" ? "#00FF88" : "#94A3B8",
+                            fontSize: "11px",
+                            fontFamily: "JetBrains Mono, monospace",
+                            fontWeight: 800,
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            boxShadow: diagramType === "schematic" ? "0 0 16px rgba(0, 255, 136, 0.35)" : "none"
+                        }}
+                    >
+                        <span>📐 PLANO DE 4 CAPAS</span>
+                        <span style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "4px", background: "rgba(0, 255, 136, 0.3)", color: "#FFF" }}>CAD</span>
+                    </button>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px", alignItems: "center" }}>
                     
-                    {/* Visual Blueprint Image Preview with Click to Zoom */}
-                    <div style={{ position: "relative", borderRadius: "16px", overflow: "hidden", border: "1px solid rgba(0, 229, 255, 0.3)", background: "#050812" }}>
+                    {/* Visual Blueprint Image Preview with Tactical HUD Reticles & Laser Scan */}
+                    <div
+                        onMouseEnter={() => setIsHoveringPreview(true)}
+                        onMouseLeave={() => setIsHoveringPreview(false)}
+                        style={{
+                            position: "relative",
+                            borderRadius: "16px",
+                            overflow: "hidden",
+                            border: isHoveringPreview ? "1.5px solid #00E5FF" : "1px solid rgba(0, 229, 255, 0.35)",
+                            background: "#050812",
+                            boxShadow: isHoveringPreview ? "0 12px 40px rgba(0, 229, 255, 0.25)" : "0 8px 30px rgba(0,0,0,0.6)",
+                            transition: "all 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
+                        }}
+                    >
+                        {/* HUD Corner Reticles */}
+                        <div style={{ position: "absolute", top: 8, left: 8, width: 12, height: 12, borderTop: "2px solid #00E5FF", borderLeft: "2px solid #00E5FF", zIndex: 3, pointerEvents: "none" }} />
+                        <div style={{ position: "absolute", top: 8, right: 8, width: 12, height: 12, borderTop: "2px solid #00E5FF", borderRight: "2px solid #00E5FF", zIndex: 3, pointerEvents: "none" }} />
+                        <div style={{ position: "absolute", bottom: 44, left: 8, width: 12, height: 12, borderBottom: "2px solid #00E5FF", borderLeft: "2px solid #00E5FF", zIndex: 3, pointerEvents: "none" }} />
+                        <div style={{ position: "absolute", bottom: 44, right: 8, width: 12, height: 12, borderBottom: "2px solid #00E5FF", borderRight: "2px solid #00E5FF", zIndex: 3, pointerEvents: "none" }} />
+
                         <img
-                            src={schematicUrl}
-                            alt="Esquema de Arquitectura RED OS: 4 Capas Conectadas"
-                            style={{ width: "100%", height: "auto", display: "block", cursor: "pointer", transition: "transform 0.3s ease" }}
-                            onClick={() => setIsSchematicModalOpen(true)}
-                            title="Haz clic para ampliar el plano técnico de alta resolución"
+                            src={activeDiagramUrl}
+                            alt={diagramType === "network" ? "Topología de Red Táctica Mesh RED" : "Esquema de Arquitectura RED OS: 4 Capas Conectadas"}
+                            style={{
+                                width: "100%",
+                                height: "auto",
+                                display: "block",
+                                cursor: "pointer",
+                                transform: isHoveringPreview ? "scale(1.025)" : "scale(1)",
+                                transition: "transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)"
+                            }}
+                            onClick={() => { setModalZoom(1); setIsSchematicModalOpen(true); }}
+                            title="Haz clic para ampliar el plano técnico en visor CAD interactivo"
                         />
                         <div style={{
                             position: "absolute", bottom: 0, left: 0, right: 0,
-                            padding: "10px 14px", background: "linear-gradient(180deg, transparent 0%, rgba(5,8,16,0.95) 100%)",
-                            display: "flex", justifyContent: "space-between", alignItems: "center"
+                            padding: "10px 14px", background: "linear-gradient(180deg, transparent 0%, rgba(5,8,16,0.96) 100%)",
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            zIndex: 3
                         }}>
                             <span style={{ fontSize: "11px", color: "#E2E8F0", fontFamily: "JetBrains Mono, monospace" }}>
-                                🔍 Plano Técnico de Interconexión
+                                {diagramType === "network" ? "🌐 Topología Táctica Mesh P2P" : "🔍 Plano Técnico de Interconexión"}
                             </span>
                             <button
-                                onClick={() => setIsSchematicModalOpen(true)}
+                                onClick={() => { setModalZoom(1); setIsSchematicModalOpen(true); }}
                                 style={{
-                                    background: "rgba(0, 229, 255, 0.2)",
+                                    background: isHoveringPreview ? "rgba(0, 229, 255, 0.3)" : "rgba(0, 229, 255, 0.18)",
                                     border: "1px solid #00E5FF",
                                     color: "#00E5FF",
                                     borderRadius: "6px",
-                                    padding: "4px 10px",
+                                    padding: "5px 12px",
                                     fontSize: "10px",
                                     fontFamily: "JetBrains Mono, monospace",
-                                    fontWeight: 700,
-                                    cursor: "pointer"
+                                    fontWeight: 800,
+                                    cursor: "pointer",
+                                    transition: "all 0.2s ease"
                                 }}
                             >
                                 AMPLIAR PLANO ↗
@@ -282,10 +392,11 @@ public class RedNodeService extends Service {
                         </div>
                     </div>
 
-                    {/* Interactive Connected Layer Selector */}
+                    {/* Interactive Connected Layer Selector (Syncs with Code Terminal) */}
                     <div>
-                        <div style={{ fontSize: "12px", color: "#94A3B8", fontFamily: "JetBrains Mono, monospace", marginBottom: "12px", fontWeight: 700 }}>
-                            SELECCIONA UNA CAPA PARA AUDITAR SUS COMPONENTES EN EL CÓDIGO:
+                        <div style={{ fontSize: "11px", color: "#94A3B8", fontFamily: "JetBrains Mono, monospace", marginBottom: "12px", fontWeight: 800, letterSpacing: "0.5px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span>SELECCIONA UNA CAPA PARA AUDITAR EL CÓDIGO:</span>
+                            <span style={{ color: "#00FF88", fontSize: "10px" }}>⚡ VINCULADO AL KERNEL</span>
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                             {architectureLayers.map((layer, idx) => {
@@ -293,18 +404,24 @@ public class RedNodeService extends Service {
                                 return (
                                     <div
                                         key={idx}
-                                        onClick={() => setSelectedLayerIndex(idx)}
+                                        onClick={() => handleSelectLayer(idx)}
                                         style={{
                                             padding: "14px 16px",
                                             borderRadius: "14px",
-                                            background: isSelected ? "rgba(0, 229, 255, 0.08)" : "rgba(255,255,255,0.03)",
+                                            background: isSelected ? `linear-gradient(135deg, ${layer.color}15 0%, rgba(10, 16, 30, 0.95) 100%)` : "rgba(255,255,255,0.03)",
                                             border: `1.5px solid ${isSelected ? layer.color : "rgba(255,255,255,0.07)"}`,
+                                            borderLeft: `4px solid ${isSelected ? layer.color : "transparent"}`,
                                             cursor: "pointer",
-                                            transition: "all 0.2s ease"
+                                            transition: "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+                                            transform: isSelected ? "translateX(4px)" : "none",
+                                            boxShadow: isSelected ? `0 6px 24px ${layer.color}22` : "none"
                                         }}
                                     >
                                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
                                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                {isSelected && (
+                                                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: layer.color, boxShadow: `0 0 8px ${layer.color}`, display: "inline-block" }} />
+                                                )}
                                                 <span style={{ fontSize: "10px", color: layer.color, fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
                                                     {layer.layer}
                                                 </span>
@@ -321,8 +438,9 @@ public class RedNodeService extends Service {
                                             {layer.desc}
                                         </div>
                                         {isSelected && (
-                                            <div style={{ marginTop: "8px", paddingTop: "8px", borderTop: "1px dashed rgba(255,255,255,0.1)", fontSize: "11px", color: "#38BDF8", fontFamily: "JetBrains Mono, monospace" }}>
-                                                📂 Archivos Clave: <span style={{ color: "#FFF" }}>{layer.files}</span>
+                                            <div style={{ marginTop: "8px", paddingTop: "8px", borderTop: "1px dashed rgba(255,255,255,0.1)", fontSize: "11px", color: "#38BDF8", fontFamily: "JetBrains Mono, monospace", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
+                                                <span>📂 Archivos: <span style={{ color: "#FFF" }}>{layer.files}</span></span>
+                                                <span style={{ color: layer.color, fontSize: "10px", fontWeight: 800 }}>AUDITAR EN TERMINAL ↓</span>
                                             </div>
                                         )}
                                     </div>
@@ -355,7 +473,7 @@ public class RedNodeService extends Service {
                     </span>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "14px", position: "relative" }}>
                     {[
                         { step: "01", name: "Generación SPA", desc: "Zustand empaqueta el payload (texto, vocoder o telemetría GPS).", color: "#00E5FF" },
                         { step: "02", name: "Cifrado PQC", desc: "Rust aplica Double Ratchet + ML-KEM-768 (Kyber post-cuántico).", color: "#A855F7" },
@@ -364,13 +482,27 @@ public class RedNodeService extends Service {
                         { step: "05", name: "Emisión PHY", desc: "Multiplexor selecciona BLE 5.3, LoRa 915 MHz o SoundMesh según rango.", color: "#FFB300" },
                         { step: "06", name: "Salto Mesh", desc: "Nodos vecinos retransmiten con deduplicación BLAKE3 y decremento de TTL.", color: "#38BDF8" }
                     ].map((st, i) => (
-                        <div key={i} style={{
-                            padding: "16px", borderRadius: "12px", background: "rgba(255,255,255,0.03)",
-                            border: `1px solid ${st.color}33`, display: "flex", flexDirection: "column", gap: "6px"
-                        }}>
+                        <div
+                            key={i}
+                            onMouseEnter={() => setHoveredStepIndex(i)}
+                            onMouseLeave={() => setHoveredStepIndex(null)}
+                            style={{
+                                padding: "16px",
+                                borderRadius: "14px",
+                                background: hoveredStepIndex === i ? `linear-gradient(135deg, ${st.color}18 0%, rgba(15,22,40,0.95) 100%)` : "rgba(255,255,255,0.03)",
+                                border: `1px solid ${hoveredStepIndex === i ? st.color : `${st.color}33`}`,
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "6px",
+                                transform: hoveredStepIndex === i ? "translateY(-4px)" : "none",
+                                boxShadow: hoveredStepIndex === i ? `0 10px 28px ${st.color}25` : "none",
+                                transition: "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+                                position: "relative"
+                            }}
+                        >
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <span style={{ fontSize: "10px", color: st.color, fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>PASO {st.step}</span>
-                                <div style={{ width: 6, height: 6, borderRadius: "50%", background: st.color }} />
+                                <span style={{ fontSize: "10px", color: st.color, fontFamily: "JetBrains Mono, monospace", fontWeight: 800, letterSpacing: "0.5px" }}>PASO {st.step}</span>
+                                <div style={{ width: 7, height: 7, borderRadius: "50%", background: st.color, boxShadow: `0 0 8px ${st.color}` }} />
                             </div>
                             <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF" }}>{st.name}</div>
                             <div style={{ fontSize: "11px", color: "#94A3B8", lineHeight: 1.4 }}>{st.desc}</div>
@@ -413,14 +545,16 @@ public class RedNodeService extends Service {
                         ].map(tab => (
                             <button
                                 key={tab.id}
-                                onClick={() => setActiveDevTab(tab.id as any)}
+                                onClick={() => handleSelectDevTab(tab.id as any)}
                                 style={{
                                     padding: "6px 12px", borderRadius: "8px",
                                     background: activeDevTab === tab.id ? "rgba(0, 229, 255, 0.2)" : "rgba(255,255,255,0.04)",
                                     border: activeDevTab === tab.id ? "1px solid #00E5FF" : "1px solid rgba(255,255,255,0.08)",
                                     color: activeDevTab === tab.id ? "#00E5FF" : "#94A3B8",
                                     fontSize: "11px", fontWeight: 700, cursor: "pointer",
-                                    fontFamily: "JetBrains Mono, monospace"
+                                    fontFamily: "JetBrains Mono, monospace",
+                                    boxShadow: activeDevTab === tab.id ? "0 0 12px rgba(0, 229, 255, 0.3)" : "none",
+                                    transition: "all 0.15s ease"
                                 }}
                             >
                                 {tab.label}
@@ -630,39 +764,124 @@ public class RedNodeService extends Service {
                       }}
                   >
                       <div style={{
-                          padding: "16px 20px", background: "rgba(10, 15, 30, 0.95)",
+                          padding: "12px 20px", background: "rgba(10, 15, 30, 0.98)",
                           borderBottom: "1px solid rgba(0, 229, 255, 0.3)",
-                          display: "flex", justifyContent: "space-between", alignItems: "center"
+                          display: "flex", justifyContent: "space-between", alignItems: "center",
+                          flexWrap: "wrap", gap: "10px"
                       }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                              <span style={{ fontSize: "16px" }}>📐</span>
-                              <span style={{ color: "#FFF", fontWeight: 800, fontSize: "14px", fontFamily: "JetBrains Mono, monospace" }}>
-                                  RED OS v93.0.0 // SISTEMA INTEGRAL DE CAPAS Y FLUJO DE DATOS
-                              </span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <span style={{ fontSize: "16px" }}>{diagramType === "network" ? "🌐" : "📐"}</span>
+                                  <span style={{ color: "#FFF", fontWeight: 800, fontSize: "13px", fontFamily: "JetBrains Mono, monospace" }}>
+                                      {diagramType === "network" ? "RED OS // TOPOLOGÍA TÁCTICA MESH P2P" : "RED OS v98.0.0 // SISTEMA INTEGRAL DE CAPAS"}
+                                  </span>
+                              </div>
+                              <div style={{ display: "flex", gap: "6px" }}>
+                                  <button
+                                      onClick={() => { setDiagramType("network"); setModalZoom(1); }}
+                                      style={{
+                                          background: diagramType === "network" ? "rgba(0, 229, 255, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                                          border: diagramType === "network" ? "1px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.1)",
+                                          color: diagramType === "network" ? "#00E5FF" : "#94A3B8",
+                                          padding: "4px 10px", borderRadius: "6px", fontSize: "10px", fontWeight: 800,
+                                          fontFamily: "JetBrains Mono, monospace", cursor: "pointer",
+                                          transition: "all 0.15s ease"
+                                      }}
+                                  >
+                                      TOPOLOGÍA MESH
+                                  </button>
+                                  <button
+                                      onClick={() => { setDiagramType("schematic"); setModalZoom(1); }}
+                                      style={{
+                                          background: diagramType === "schematic" ? "rgba(0, 255, 136, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                                          border: diagramType === "schematic" ? "1px solid #00FF88" : "1px solid rgba(255, 255, 255, 0.1)",
+                                          color: diagramType === "schematic" ? "#00FF88" : "#94A3B8",
+                                          padding: "4px 10px", borderRadius: "6px", fontSize: "10px", fontWeight: 800,
+                                          fontFamily: "JetBrains Mono, monospace", cursor: "pointer",
+                                          transition: "all 0.15s ease"
+                                      }}
+                                  >
+                                      PLANO 4 CAPAS
+                                  </button>
+                              </div>
                           </div>
-                          <button
-                              onClick={() => setIsSchematicModalOpen(false)}
-                              style={{
-                                  background: "rgba(255, 51, 85, 0.2)",
-                                  border: "1px solid #FF3355",
-                                  color: "#FF3355",
-                                  borderRadius: "8px",
-                                  padding: "6px 14px",
-                                  fontSize: "12px",
-                                  fontWeight: 800,
-                                  cursor: "pointer",
-                                  fontFamily: "JetBrains Mono, monospace"
-                              }}
-                          >
-                              CERRAR [ESC]
-                          </button>
+
+                          {/* CAD Interactive Zoom & Close Controls */}
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "rgba(255,255,255,0.06)", borderRadius: "8px", padding: "3px 6px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                                  <button
+                                      onClick={() => setModalZoom(z => Math.max(0.6, parseFloat((z - 0.2).toFixed(1))))}
+                                      title="Reducir Zoom"
+                                      style={{ background: "transparent", border: "none", color: "#FFF", padding: "2px 6px", cursor: "pointer", fontSize: "13px", fontWeight: 800 }}
+                                  >-</button>
+                                  <button
+                                      onClick={() => setModalZoom(1)}
+                                      title="Zoom 100%"
+                                      style={{ background: "transparent", border: "none", color: "#00E5FF", padding: "2px 6px", cursor: "pointer", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}
+                                  >{Math.round(modalZoom * 100)}%</button>
+                                  <button
+                                      onClick={() => setModalZoom(z => Math.min(3, parseFloat((z + 0.2).toFixed(1))))}
+                                      title="Aumentar Zoom"
+                                      style={{ background: "transparent", border: "none", color: "#FFF", padding: "2px 6px", cursor: "pointer", fontSize: "13px", fontWeight: 800 }}
+                                  >+</button>
+                              </div>
+
+                              <button
+                                  onClick={() => setIsSchematicModalOpen(false)}
+                                  style={{
+                                      background: "rgba(255, 51, 85, 0.2)",
+                                      border: "1px solid #FF3355",
+                                      color: "#FF3355",
+                                      borderRadius: "8px",
+                                      padding: "6px 14px",
+                                      fontSize: "12px",
+                                      fontWeight: 800,
+                                      cursor: "pointer",
+                                      fontFamily: "JetBrains Mono, monospace",
+                                      transition: "all 0.15s ease"
+                                  }}
+                              >
+                                  CERRAR [ESC]
+                              </button>
+                          </div>
                       </div>
-                      <div style={{ overflow: "auto", padding: "16px", display: "flex", justifyContent: "center" }}>
+
+                      {/* Modal Image Body with Zoom */}
+                      <div style={{
+                          overflow: "auto",
+                          padding: "20px",
+                          display: "flex",
+                          justifyContent: modalZoom > 1 ? "flex-start" : "center",
+                          alignItems: "flex-start",
+                          background: "#030610",
+                          minHeight: "min(450px, 60vh)",
+                          cursor: modalZoom > 1 ? "grab" : "default"
+                      }}>
                           <img
-                              src={schematicUrl}
-                              alt="Plano Completo de Arquitectura RED OS"
-                              style={{ maxWidth: "100%", height: "auto", borderRadius: "12px", display: "block" }}
+                              src={activeDiagramUrl}
+                              alt={diagramType === "network" ? "Topología de Red Táctica Mesh RED" : "Plano Completo de Arquitectura RED OS"}
+                              style={{
+                                  maxWidth: modalZoom <= 1 ? "100%" : "none",
+                                  width: modalZoom > 1 ? `${modalZoom * 100}%` : "100%",
+                                  height: "auto",
+                                  borderRadius: "12px",
+                                  display: "block",
+                                  transition: "width 0.2s ease-out",
+                                  boxShadow: "0 10px 40px rgba(0,0,0,0.8)"
+                              }}
                           />
+                      </div>
+
+                      {/* Modal Footer Tech Specs */}
+                      <div style={{
+                          padding: "10px 20px", background: "rgba(5, 8, 16, 0.98)",
+                          borderTop: "1px solid rgba(255,255,255,0.08)",
+                          display: "flex", justifyContent: "space-between", alignItems: "center",
+                          fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace",
+                          flexWrap: "wrap", gap: "8px"
+                      }}>
+                          <span>FORMATO: 4K ULTRA-HD // RENDERIZADO VECTORIAL // VERIFICADO 100% OFFLINE</span>
+                          <span>ESCALA: {Math.round(modalZoom * 100)}% • ARQUITECTURA SOBERANA RED v98.0.0</span>
                       </div>
                   </div>
               </div>

@@ -153,11 +153,7 @@ export class WifiDirectTransport {
             }
         }
 
-        // 3. High-availability public WebRTC signaling and mesh relays (strictly WSS)
-        candidates.push('wss://red-signaling.onrender.com');
-        candidates.push('wss://signaling.yjs.dev');
-
-        // 4. Dynamic host / LAN candidates (only if not on native device loopback)
+        // 3. Dynamic host / LAN candidates (only if not on native device loopback)
         const proto = isHttps ? 'wss:' : 'ws:';
         const hostname = window.location.hostname;
 
@@ -165,7 +161,7 @@ export class WifiDirectTransport {
             candidates.push(`${proto}//${hostname}:3001`);
         }
 
-        // 5. Local loopback candidates (strictly for desktop browser development, never on native Android/iOS)
+        // 4. Local loopback candidates (strictly for desktop browser development, never on native Android/iOS)
         if (!isHttps && !isNative) {
             candidates.push('ws://localhost:3001');
             candidates.push('ws://127.0.0.1:3001');
@@ -177,7 +173,8 @@ export class WifiDirectTransport {
 
     public getSignalingUrl(): string {
         const list = this.getSignalingCandidates();
-        return list[this.currentCandidateIndex % list.length] || 'wss://red-signaling.onrender.com';
+        if (list.length === 0) return '';
+        return list[this.currentCandidateIndex % list.length] || '';
     }
 
     async connectToLocalSignaling(): Promise<void> {
@@ -191,7 +188,10 @@ export class WifiDirectTransport {
         }
 
         const candidates = this.getSignalingCandidates();
-        if (candidates.length === 0) return;
+        if (candidates.length === 0) {
+            // No local WebSocket server required: MQTT Relay provides zero-config WAN signaling
+            return;
+        }
 
         return new Promise<void>((resolve) => {
             const tryCandidate = (index: number) => {
@@ -332,7 +332,7 @@ export class WifiDirectTransport {
     }
 
     public get isConnected(): boolean {
-        return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+        return (this.ws !== null && this.ws.readyState === WebSocket.OPEN) || mqttRelay.isConnected;
     }
 
     // ─── Signaling Message Dispatcher ──────────────────────────────────────────
@@ -540,7 +540,9 @@ export class WifiDirectTransport {
     private isMakingOffer: Map<string, boolean> = new Map();
 
     private isPolite(peerId: string): boolean {
-        return (this.myId || '') < (peerId || '');
+        const myClean = (this.myId || '').trim().replace(/^did:red:/i, '').toLowerCase();
+        const peerClean = (peerId || '').trim().replace(/^did:red:/i, '').toLowerCase();
+        return myClean < peerClean;
     }
 
     /**
@@ -673,6 +675,7 @@ export class WifiDirectTransport {
             this.peerConnections.delete(peerId);
         }
         this.pendingCandidates.delete(peerId);
+        this.isMakingOffer.delete(peerId);
     }
 
     private notifyMessageListeners(from: string, payload: Uint8Array) {

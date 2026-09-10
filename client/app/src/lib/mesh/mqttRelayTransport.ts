@@ -27,12 +27,12 @@ export class MqttRelayTransport {
   public isConnected = false;
   private seenMqttHashes: Set<string> = new Set();
   private reconnectTimers: Map<string, any> = new Map();
+  private reconnectAttempts: Map<string, number> = new Map();
 
   private static readonly BROKER_POOL: string[] = [
-    'wss://broker.emqx.io/mqtt',
-    'wss://broker.hivemq.com/mqtt',
-    'wss://public.mqtthq.com:443/mqtt',
-    'wss://mqtt.eclipseprojects.io/mqtt',
+    'wss://broker.emqx.io:8084/mqtt',
+    'wss://broker.hivemq.com:8884/mqtt',
+    'wss://test.mosquitto.org:8081',
   ];
 
   private static readonly HEX_LUT: string[] = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
@@ -58,10 +58,8 @@ export class MqttRelayTransport {
     if (this.myId && this.myId !== clean) {
       this.unsubscribeFromTopics(this.myId);
     }
-    if (this.myId !== clean) {
-      this.myId = clean;
-      this.subscribeToMyTopics();
-    }
+    this.myId = clean;
+    this.subscribeToMyTopics();
   }
 
   private unsubscribeFromTopics(oldId: string, targetWs?: WebSocket) {
@@ -164,6 +162,7 @@ export class MqttRelayTransport {
       clearTimeout(timer);
     }
     this.reconnectTimers.clear();
+    this.reconnectAttempts.clear();
 
     for (const [url, entry] of this.brokerSockets) {
       if (entry.ws.readyState !== WebSocket.OPEN) {
@@ -226,10 +225,16 @@ export class MqttRelayTransport {
 
   private scheduleBrokerReconnect(url: string) {
     if (this.reconnectTimers.has(url)) return;
+    const attempts = this.reconnectAttempts.get(url) || 0;
+    this.reconnectAttempts.set(url, attempts + 1);
+    // Exponential backoff with jitter to conserve battery: 2s -> 3s -> 4.5s -> 6.7s ... up to 30s max
+    const baseDelay = Math.min(30000, Math.floor(2000 * Math.pow(1.5, Math.min(attempts, 8))));
+    const jitter = Math.floor(Math.random() * 800);
+    const delay = baseDelay + jitter;
     const timer = setTimeout(() => {
       this.reconnectTimers.delete(url);
       this.connectBroker(url);
-    }, 3000);
+    }, delay);
     this.reconnectTimers.set(url, timer);
   }
 
@@ -460,6 +465,7 @@ export class MqttRelayTransport {
         if (returnCode === 0) {
           const entry = this.brokerSockets.get(url);
           if (entry) entry.isAuthed = true;
+          this.reconnectAttempts.set(url, 0); // Reset backoff on successful connection
           this.updateConnectedState();
           console.log(`[MqttRelay] ✅ Connected and authenticated with broker: ${url}`);
           this.subscribeToMyTopics(socket);
@@ -561,6 +567,19 @@ export class MqttRelayTransport {
   public sendPacket(recipientHash: string, payload: Uint8Array): boolean {
     const clean = this.cleanId(recipientHash);
     if (!clean) return false;
+
+    const isBroadcast =
+      clean === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
+      clean === '0000000000000000000000000000000000000000000000000000000000000000' ||
+      clean === 'broadcast';
+
+    if (isBroadcast) {
+      let published = this.publish('red/v65/broadcast', payload);
+      if (this.publish('red/mesh/broadcast', payload)) published = true;
+      if (this.publish('red/v40/broadcast', payload)) published = true;
+      if (this.publish('red/v32/broadcast', payload)) published = true;
+      return published;
+    }
     
     // Publish to primary v65, mesh, v40 and v32 realtime topics
     let published = this.publish(`red/v65/dm/${clean}`, payload);

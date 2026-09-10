@@ -537,18 +537,175 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
     },
 
     deleteMessage: async (messageId: string) => {
-        const { activeConversationId, messages } = get();
+        const { activeConversationId, messages, conversations } = get();
         if (!activeConversationId) return;
-        // Optimistic remove
-        set({ messages: messages.filter(m => m.id !== messageId) });
-        try {
-            await RedAPI.deleteMessage(activeConversationId, messageId);
-        } catch (e) {
-            // Restore on failure
-            const restored = await RedAPI.getMessages(activeConversationId).catch(() => messages);
-            set({ messages: restored });
-            console.error('Delete failed', e);
+
+        // 1. Optimistic remove in UI
+        const updatedMsgs = messages.filter(m => m.id !== messageId);
+        set({ messages: updatedMsgs });
+
+        // 2. Recalculate last_message snippet for conversation item if needed
+        const canonicalPeer = meshRouter.getCanonicalId(activeConversationId) || activeConversationId;
+        const convIdx = conversations.findIndex(c => c && (c.id === activeConversationId || c.peer === activeConversationId || c.id === canonicalPeer || c.peer === canonicalPeer));
+        if (convIdx >= 0) {
+            const lastMsg = updatedMsgs[updatedMsgs.length - 1];
+            const snippet = lastMsg ? (
+                lastMsg.msg_type === 'image' ? '📷 Foto' :
+                lastMsg.msg_type === 'voice' ? '🎤 Nota de voz' :
+                lastMsg.msg_type === 'video' ? '📹 Video' :
+                (lastMsg.content || 'Mensaje P2P')
+            ) : '';
+            const updatedConvs = [...conversations];
+            updatedConvs[convIdx] = {
+                ...updatedConvs[convIdx],
+                last_message: snippet,
+                last_timestamp: lastMsg ? (typeof lastMsg.timestamp === 'number' ? (lastMsg.timestamp > 1e10 ? lastMsg.timestamp / 1000 : lastMsg.timestamp) : Date.now() / 1000) : updatedConvs[convIdx].last_timestamp
+            };
+            set({ conversations: updatedConvs });
+            RedAPI.setWebStore('red_web_conversations', updatedConvs);
         }
+
+        // 3. Persist deletion in RedAPI & IndexedDB media vault
+        await RedAPI.deleteMessage(activeConversationId, messageId).catch(e => console.warn('[RED] deleteMessage error:', e));
+
+        // 4. Mirror to active Live Companion (Web <-> Mobile Real-Time Sync)
+        try {
+            const { companionSyncEngine } = await import('../../lib/mesh/companionSyncEngine');
+            if (companionSyncEngine.isLiveSessionActive()) {
+                companionSyncEngine.publishLiveEvent('LIVE_MSG_DELETE', {
+                    conversation_id: activeConversationId,
+                    message_id: messageId
+                }).catch(() => {});
+            }
+        } catch {}
+    },
+
+    deleteMessageForEveryone: async (messageId: string) => {
+        const { activeConversationId, messages, conversations } = get();
+        if (!activeConversationId) return;
+
+        // 1. In-memory update: mark as deleted
+        const updatedMsgs = messages.map(m => {
+            if (m.id !== messageId) return m;
+            return {
+                ...m,
+                is_deleted: true,
+                content: "🚫 Eliminaste este mensaje",
+                media_data: undefined
+            };
+        });
+        set({ messages: updatedMsgs });
+
+        // 2. Recalculate last_message snippet if needed
+        const canonicalPeer = meshRouter.getCanonicalId(activeConversationId) || activeConversationId;
+        const convIdx = conversations.findIndex(c => c && (c.id === activeConversationId || c.peer === activeConversationId || c.id === canonicalPeer || c.peer === canonicalPeer));
+        if (convIdx >= 0) {
+            const lastMsg = updatedMsgs[updatedMsgs.length - 1];
+            const snippet = lastMsg ? (
+                lastMsg.is_deleted ? '🚫 Mensaje eliminado' :
+                lastMsg.msg_type === 'image' ? '📷 Foto' :
+                lastMsg.msg_type === 'voice' ? '🎤 Nota de voz' :
+                lastMsg.msg_type === 'video' ? '📹 Video' :
+                (lastMsg.content || 'Mensaje P2P')
+            ) : '';
+            const updatedConvs = [...conversations];
+            updatedConvs[convIdx] = {
+                ...updatedConvs[convIdx],
+                last_message: snippet,
+                last_timestamp: lastMsg ? (typeof lastMsg.timestamp === 'number' ? (lastMsg.timestamp > 1e10 ? lastMsg.timestamp / 1000 : lastMsg.timestamp) : Date.now() / 1000) : updatedConvs[convIdx].last_timestamp
+            };
+            set({ conversations: updatedConvs });
+            RedAPI.setWebStore('red_web_conversations', updatedConvs);
+        }
+
+        // 3. Purge binary from IndexedDB vault
+        try {
+            const { indexedMediaVault } = await import('../../lib/storage/indexedMediaVault');
+            await indexedMediaVault.deleteMedia(messageId);
+        } catch {}
+
+        // 4. Update persisted localStorage messages with redacted state
+        if (typeof window !== 'undefined') {
+            try {
+                const cleanConv = (activeConversationId || '').toLowerCase().replace(/^did:red:/i, '').trim();
+                const keysToUpdate = [`red_web_messages_${cleanConv}`];
+                const mapRaw = localStorage.getItem('red_device_canonical_map');
+                if (mapRaw) {
+                    try {
+                        const mappings: [string, string][] = JSON.parse(mapRaw);
+                        for (const [hw, canon] of mappings) {
+                            if (canon.toLowerCase() === cleanConv) {
+                                keysToUpdate.push(`red_web_messages_${hw.toLowerCase()}`);
+                            } else if (hw.toLowerCase() === cleanConv) {
+                                keysToUpdate.push(`red_web_messages_${canon.toLowerCase()}`);
+                            }
+                        }
+                    } catch {}
+                }
+                for (const convKey of keysToUpdate) {
+                    const raw = localStorage.getItem(convKey);
+                    if (raw) {
+                        const list: any[] = JSON.parse(raw);
+                        if (list.some((m: any) => m && m.id === messageId)) {
+                            const updatedList = list.map((m: any) => {
+                                if (m && m.id !== messageId) return m;
+                                return {
+                                    ...m,
+                                    is_deleted: true,
+                                    content: "🚫 Eliminaste este mensaje",
+                                    media_data: undefined
+                                };
+                            });
+                            localStorage.setItem(convKey, JSON.stringify(updatedList));
+                        }
+                    }
+                }
+            } catch {}
+        }
+
+        // 5. Broadcast "delete for everyone" control packet over mesh & WAN
+        try {
+            const rawGroups = get().groups || [];
+            let localWebGroups: any[] = [];
+            if (typeof window !== 'undefined') {
+                try {
+                    const stored = localStorage.getItem('red_web_groups');
+                    if (stored) localWebGroups = JSON.parse(stored);
+                } catch {}
+            }
+            const allKnownGroups = [...rawGroups, ...localWebGroups];
+            const isGroupConv = allKnownGroups.some((g: any) => g && (g.id === activeConversationId || g.group_id === activeConversationId || g.id === canonicalPeer || g.group_id === canonicalPeer));
+
+            const deletePayload = JSON.stringify({
+                type: 'message_delete',
+                target_id: messageId,
+                conversation_id: activeConversationId,
+                sender: get().identity?.identity_hash || 'me'
+            });
+
+            if (isGroupConv) {
+                RedAPI.sendGroupMessage(activeConversationId, deletePayload, {
+                    msg_type: 'message_delete',
+                    target_message_id: messageId
+                }).catch(() => {});
+            } else {
+                RedAPI.sendMessage(canonicalPeer, deletePayload, {
+                    msg_type: 'message_delete',
+                    target_message_id: messageId
+                }).catch(() => {});
+            }
+        } catch {}
+
+        // 6. Mirror to active Live Companion (Web <-> Mobile Real-Time Sync)
+        try {
+            const { companionSyncEngine } = await import('../../lib/mesh/companionSyncEngine');
+            if (companionSyncEngine.isLiveSessionActive()) {
+                companionSyncEngine.publishLiveEvent('LIVE_MSG_DELETE', {
+                    conversation_id: activeConversationId,
+                    message_id: messageId
+                }).catch(() => {});
+            }
+        } catch {}
     },
 
     // ── A3: Edit message ──────────────────────────────────────────────────────,
@@ -574,10 +731,38 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
     // ── Clear conversation ────────────────────────────────────────────────────,
 
     clearConversation: async () => {
-        const { activeConversationId } = get();
+        const { activeConversationId, conversations } = get();
         if (!activeConversationId) return;
+
+        // 1. Optimistic clear
         set({ messages: [] });
+
+        // 2. Clear last message snippet in conversations list
+        const canonicalPeer = meshRouter.getCanonicalId(activeConversationId) || activeConversationId;
+        const convIdx = conversations.findIndex(c => c && (c.id === activeConversationId || c.peer === activeConversationId || c.id === canonicalPeer || c.peer === canonicalPeer));
+        if (convIdx >= 0) {
+            const updatedConvs = [...conversations];
+            updatedConvs[convIdx] = {
+                ...updatedConvs[convIdx],
+                last_message: '',
+                unread_count: 0
+            };
+            set({ conversations: updatedConvs });
+            RedAPI.setWebStore('red_web_conversations', updatedConvs);
+        }
+
+        // 3. Clear local storage and IndexedDB in RedAPI
         await RedAPI.clearConversation(activeConversationId).catch(e => console.error('Clear failed', e));
+
+        // 4. Mirror to active Live Companion
+        try {
+            const { companionSyncEngine } = await import('../../lib/mesh/companionSyncEngine');
+            if (companionSyncEngine.isLiveSessionActive()) {
+                companionSyncEngine.publishLiveEvent('LIVE_CONV_CLEAR', {
+                    conversation_id: activeConversationId
+                }).catch(() => {});
+            }
+        } catch {}
     },
 
     // ── A4: Star/unstar a message (persisted in localStorage) ─────────────────,
@@ -623,31 +808,6 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 emoji: emoji,
                 sender_hash: myHash
             }), { msg_type: 'reaction' }).catch(() => {});
-        }
-    },
-
-    deleteMessageForEveryone: async (messageId: string) => {
-        const { activeConversationId, messages, conversations } = get();
-        if (!activeConversationId) return;
-        const conv = conversations.find(c => c.id === activeConversationId || c.peer === activeConversationId);
-        const peerHash = conv?.peer || activeConversationId;
-        
-        // Optimistic update
-        set({
-            messages: messages.map(m => m.id === messageId ? {
-                ...m,
-                is_deleted: true,
-                content: "Este mensaje fue eliminado",
-                media_data: undefined
-            } : m)
-        });
-
-        // Broadcast delete order across mesh
-        if (peerHash) {
-            RedAPI.sendMessage(peerHash, JSON.stringify({
-                target_id: messageId,
-                delete_for_everyone: true
-            }), { msg_type: 'message_delete' }).catch(() => {});
         }
     },
 

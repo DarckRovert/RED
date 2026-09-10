@@ -436,16 +436,17 @@ class DtnStorage {
     return resetCount;
   }
 
-  public getItemsToRetry(forceAll = false): DtnQueueItem[] {
+  public getItemsToRetry(forceAll = false, maxBatch = 30): DtnQueueItem[] {
     const now = Date.now();
     const items = this.getItems();
     // Filter active items whose retry timer has elapsed (or all if forceAll is true), sorted by Priority DESC then createdAt ASC
-    return items
+    const candidates = items
       .filter(it => it.expiresAt > now && (forceAll || it.nextRetryAfter <= now))
       .sort((a, b) => {
         if (b.priority !== a.priority) return b.priority - a.priority;
         return a.createdAt - b.createdAt;
       });
+    return forceAll ? candidates : candidates.slice(0, maxBatch);
   }
 
   public markAttempt(nonce: string, success: boolean): void {
@@ -461,11 +462,15 @@ class DtnStorage {
       console.log(`[DtnStorage] Packet ${nonce.slice(0, 8)} delivered and removed from DTN queue`);
     } else {
       // Calculate exponential backoff: 3s, 6s, 12s, 24s... capped at 5 minutes
+      // Injects decorrelated full-jitter (±20% spread) to avoid thundering-herd packet bursts
+      // and prevent channel saturation over RF mesh / MQTT broker.
       const item = items[idx];
       item.attempts += 1;
       item.lastAttempt = Date.now();
-      const backoffSec = Math.min(300, Math.pow(2, Math.min(item.attempts, 8)) * 2);
-      item.nextRetryAfter = Date.now() + backoffSec * 1000;
+      const baseBackoffSec = Math.min(300, Math.pow(2, Math.min(item.attempts, 8)) * 2);
+      const jitterFactor = 0.8 + Math.random() * 0.4; // 80% to 120% spread
+      const backoffSec = Math.max(2, baseBackoffSec * jitterFactor);
+      item.nextRetryAfter = Date.now() + Math.floor(backoffSec * 1000);
       this.saveItems(items);
       this.saveItemToDB(item);
     }

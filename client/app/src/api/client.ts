@@ -1401,7 +1401,50 @@ export class RedAPIClient {
 
     /** A2: Delete a single message for both parties */
     async deleteMessage(conversationId: string, messageId: string): Promise<void> {
-        await this.req(`/conversations/${conversationId}/messages/${messageId}`, { method: 'DELETE' });
+        const cleanId = conversationId.toLowerCase().replace(/^did:red:/i, '').trim();
+
+        // 1. Purge from local web message storage immediately
+        if (typeof window !== 'undefined') {
+            try {
+                const keysToClean = [`red_web_messages_${cleanId}`];
+                const mapRaw = localStorage.getItem('red_device_canonical_map');
+                if (mapRaw) {
+                    const mappings: [string, string][] = JSON.parse(mapRaw);
+                    for (const [hw, canon] of mappings) {
+                        if (canon.toLowerCase() === cleanId) {
+                            keysToClean.push(`red_web_messages_${hw.toLowerCase()}`);
+                        } else if (hw.toLowerCase() === cleanId) {
+                            keysToClean.push(`red_web_messages_${canon.toLowerCase()}`);
+                        }
+                    }
+                }
+
+                for (const key of keysToClean) {
+                    const raw = localStorage.getItem(key);
+                    if (raw) {
+                        const msgs: any[] = JSON.parse(raw);
+                        const filtered = msgs.filter((m: any) => m && m.id !== messageId);
+                        if (filtered.length !== msgs.length) {
+                            localStorage.setItem(key, JSON.stringify(filtered));
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[RedAPI] deleteMessage local storage cleanup error:', e);
+            }
+        }
+
+        // 2. Purge binary from IndexedDB vault
+        try {
+            await indexedMediaVault.deleteMedia(messageId);
+        } catch {}
+
+        // 3. Dispatch native HTTP DELETE request if backend is active
+        try {
+            await this.req(`/conversations/${conversationId}/messages/${messageId}`, { method: 'DELETE' });
+        } catch {
+            // Graceful degradation for pure web/mesh mode
+        }
     }
 
     /** A3: Edit the text of an already-sent message */
@@ -1409,12 +1452,55 @@ export class RedAPIClient {
         await this.req(`/conversations/${conversationId}/messages/${messageId}`, {
             method: 'PATCH',
             body: JSON.stringify({ content }),
-        });
+        }).catch(() => {});
     }
 
     /** Clear all messages in a conversation (both parties) */
     async clearConversation(conversationId: string): Promise<void> {
-        await this.req(`/conversations/${conversationId}/clear`, { method: 'DELETE' });
+        const cleanId = conversationId.toLowerCase().replace(/^did:red:/i, '').trim();
+
+        // 1. Collect all message IDs for IndexedDB garbage collection
+        if (typeof window !== 'undefined') {
+            try {
+                const keysToClean = [`red_web_messages_${cleanId}`];
+                const mapRaw = localStorage.getItem('red_device_canonical_map');
+                if (mapRaw) {
+                    const mappings: [string, string][] = JSON.parse(mapRaw);
+                    for (const [hw, canon] of mappings) {
+                        if (canon.toLowerCase() === cleanId) {
+                            keysToClean.push(`red_web_messages_${hw.toLowerCase()}`);
+                        } else if (hw.toLowerCase() === cleanId) {
+                            keysToClean.push(`red_web_messages_${canon.toLowerCase()}`);
+                        }
+                    }
+                }
+
+                const msgIdsToDelete: string[] = [];
+                for (const key of keysToClean) {
+                    const raw = localStorage.getItem(key);
+                    if (raw) {
+                        const msgs: any[] = JSON.parse(raw);
+                        for (const m of msgs) {
+                            if (m?.id) msgIdsToDelete.push(m.id);
+                        }
+                        localStorage.removeItem(key);
+                    }
+                }
+
+                if (msgIdsToDelete.length > 0) {
+                    indexedMediaVault.deleteMediaBatch(msgIdsToDelete).catch(() => {});
+                }
+            } catch (e) {
+                console.warn('[RedAPI] clearConversation local storage cleanup error:', e);
+            }
+        }
+
+        // 2. Dispatch native HTTP DELETE request if backend is active
+        try {
+            await this.req(`/conversations/${conversationId}/clear`, { method: 'DELETE' });
+        } catch {
+            // Graceful degradation for pure web/mesh mode
+        }
     }
 
 

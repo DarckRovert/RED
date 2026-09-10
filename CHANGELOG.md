@@ -1,5 +1,24 @@
 # Changelog
 
+## [98.0.0-tactical-vector-architecture-and-zero-echo-sync-edition] - 2026-09-10
+
+### 🚀 Tactical Vector Architecture & Zero-Echo Sync Edition (Release Oficial v98.0.0)
+
+- **Desacoplamiento Semántico de Mensajería:**
+  - `deleteMessage` ("Eliminar para mí"): Eliminación local atómica, purga en `IndexedMediaVault` y `localStorage` sin emisión de paquetes destructivos hacia la contraparte.
+  - `deleteMessageForEveryone` ("Eliminar para todos"): Redacción del contenido a "🚫 Eliminaste este mensaje", purga inmediata de binarios en el vault, propagación por la malla P2P (1-a-1 y escuadrones) y replicación reactiva vía `LIVE_MSG_DELETE`.
+  - `clearConversation`: Purga en lote (`deleteMediaBatch`) y reseteo inmediato del snippet `last_message`.
+- **Visor CAD Interactivo & Plano Técnico de 4 Capas:**
+  - Renderizado vectorial dual (Topología Táctica Mesh vs. Plano Técnico 4 Capas) en 4K Ultra-HD offline.
+  - Corrección de truncamiento en coordenadas negativas en CSS Flexbox (`justifyContent: modalZoom > 1 ? 'flex-start' : 'center'`).
+  - Controles CAD tácticos (zoom 0.6x a 3.0x, atajo `[ESC]`, retículas HUD).
+  - Sincronización bidireccional entre la pila arquitectónica de 4 capas y el inspector de código fuente en vivo.
+- **Sincronización Web Companion sin Eco (`instanceId`):**
+  - Desacoplamiento de eventos por ID aleatorio de instancia, permitiendo que nodos emparejados (Web y Móvil) no descarten eventos legítimos.
+- **Certificación Dual Multi-Hardware Real (Lenovo Tablet `HA2CHKZ2` + Motorola Moto G22 `ZT322B386P`):**
+  - Despliegue en limpio verificado con `adb logcat` a 60 FPS sin excepciones, transmisión P2P con cifrado Noise y ML-KEM-768 verificado y acuse de recibo de doble check.
+- **Versión Oficial:** `98.0.0` / `versionCode 98000`.
+
 ## [95.0.0-hardened-tactical-mesh-and-sovereign-resilience-edition] - 2026-09-08
 
 ### 🚀 Hardened Tactical Mesh & Sovereign Resilience Edition (Release Oficial v95.0.0)

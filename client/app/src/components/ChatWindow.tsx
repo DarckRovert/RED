@@ -1923,6 +1923,7 @@ export default function ChatWindow() {
                                 onReply={(m) => setReplyTo(m)}
                                 onForward={(m) => setForwardingMsg(m)}
                                 onEdit={(m) => setEditingMsg(m)}
+                                onDelete={(id) => deleteMessage(id)}
                                 onDeleteForEveryone={(id) => deleteMessageForEveryone(id)}
                                 onOpenMediaGallery={(m) => setSelectedViewerMedia(m)}
                                 isSelectionMode={isSelectionMode}

@@ -269,6 +269,35 @@ class IndexedMediaVault {
     }
 
     /**
+     * Deletes multiple media records from vault in a single atomic transaction.
+     */
+    public async deleteMediaBatch(idsOrUris: string[]): Promise<void> {
+        if (!idsOrUris || idsOrUris.length === 0) return;
+        const cleanIds = idsOrUris.map(id => this.normalizeId(id)).filter(Boolean);
+        if (cleanIds.length === 0) return;
+
+        for (const id of cleanIds) {
+            this.memCache.delete(id);
+        }
+
+        try {
+            const db = await this.getDB();
+            await new Promise<void>((resolve, reject) => {
+                const tx = db.transaction(this.storeName, 'readwrite');
+                const store = tx.objectStore(this.storeName);
+                for (const id of cleanIds) {
+                    store.delete(id);
+                }
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        } catch (err) {
+            this.dbPromise = null;
+            console.warn('[MediaVault] Error batch deleting media:', err);
+        }
+    }
+
+    /**
      * Retrieves overall vault metrics (record count and total size in bytes).
      */
     public async getVaultStats(): Promise<{ count: number; totalBytes: number }> {

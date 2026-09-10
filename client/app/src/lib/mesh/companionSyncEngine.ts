@@ -43,6 +43,8 @@ export interface CompanionLiveEvent {
         | 'LIVE_TYPING'           // Indicador de escritura sincronizado
         | 'LIVE_CONTACT_UPDATE'   // Contacto añadido o editado
         | 'LIVE_CONV_WIPE'        // Conversación eliminada
+        | 'LIVE_MSG_DELETE'       // Mensaje específico eliminado
+        | 'LIVE_CONV_CLEAR'       // Conversación vaciada
         | 'LIVE_PROFILE_UPDATE';  // Perfil / avatar actualizado
     senderId: string;
     timestamp: number;
@@ -435,6 +437,7 @@ class CompanionSyncEngineClass {
     private activeSession: ActiveCompanionSession | null = null;
     private liveListeners: ((event: CompanionLiveEvent) => void)[] = [];
     private pingInterval: any = null;
+    private readonly instanceId: string = Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString(36);
 
     constructor() {
         if (typeof window !== 'undefined') {
@@ -874,9 +877,8 @@ class CompanionSyncEngineClass {
                     const msg = JSON.parse(payloadStr);
                     if (msg.iv && msg.ciphertext) {
                         const event: CompanionLiveEvent = await decryptData(aesKey, msg.iv, msg.ciphertext);
-                        // Ignorar eventos generados por nosotros mismos
-                        const myId = localStorage.getItem('red_identity_hash') || '';
-                        if (event.senderId && myId && event.senderId === myId) {
+                        // Ignorar eventos generados por nuestra propia instancia (evitar eco)
+                        if (event.senderId && event.senderId === this.instanceId) {
                             return;
                         }
                         console.log(`[CompanionEngine] ⚡ Evento en Vivo Recibido: ${event.type}`, event.data);
@@ -907,10 +909,9 @@ class CompanionSyncEngineClass {
         }
 
         try {
-            const myId = localStorage.getItem('red_identity_hash') || 'me';
             const event: CompanionLiveEvent = {
                 type,
-                senderId: myId,
+                senderId: this.instanceId,
                 timestamp: Date.now(),
                 data
             };

@@ -250,6 +250,24 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                                     messages: s.activeConversationId === peer ? [] : s.messages
                                 }));
                             }
+                        } else if (event.type === 'LIVE_MSG_DELETE') {
+                            const { conversation_id, message_id } = event.data;
+                            if (message_id) {
+                                set((s: any) => ({
+                                    messages: s.messages.filter((m: any) => m.id !== message_id)
+                                }));
+                                if (conversation_id) {
+                                    RedAPI.deleteMessage(conversation_id, message_id).catch(() => {});
+                                }
+                            }
+                        } else if (event.type === 'LIVE_CONV_CLEAR') {
+                            const { conversation_id } = event.data;
+                            if (conversation_id) {
+                                set((s: any) => ({
+                                    messages: s.activeConversationId === conversation_id ? [] : s.messages
+                                }));
+                                RedAPI.clearConversation(conversation_id).catch(() => {});
+                            }
                         }
                     } catch (liveErr) {
                         console.warn('[RED Live Companion] Error handling live event:', liveErr);

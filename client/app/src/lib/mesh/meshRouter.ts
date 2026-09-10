@@ -1106,6 +1106,18 @@ class MeshRouter {
         } else {
           this.wifi?.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payload).catch(() => {});
         }
+      } else if (payload.length > 0) {
+        // Raw JSON or structured packet broadcast (e.g. creq_bc, identity handshakes)
+        let target = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+        try {
+          const str = new TextDecoder().decode(payload);
+          if (str.startsWith('{')) {
+            const parsed = JSON.parse(str);
+            if (parsed.recipient && parsed.recipient.length >= 16) target = parsed.recipient;
+            else if (parsed.target_hash && parsed.target_hash.length >= 16) target = parsed.target_hash;
+          }
+        } catch {}
+        this.wifi?.send(target, payload).catch(() => {});
       }
     } catch {}
 
@@ -1589,9 +1601,10 @@ class MeshRouter {
     }
 
     // ─── 3. GLOBAL WAN / WebRTC / MQTT Blind Relay Transport ───
-    // For unicast packets, also attempt WAN relay uplink
-    if (this.wifi && !isBroadcast) {
-      const ok = await this.wifi.send(packet.recipient, encoded);
+    // Attempt WAN relay uplink for both unicast and broadcast packets
+    if (this.wifi) {
+      const targetRecipient = !isBroadcast ? (canonicalRecipient || packet.recipient) : 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+      const ok = await this.wifi.send(targetRecipient, encoded);
       if (ok) anySent = true;
     }
 
