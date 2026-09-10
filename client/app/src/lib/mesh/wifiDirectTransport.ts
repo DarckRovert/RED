@@ -1,3 +1,4 @@
+import { blindRelay } from './blindRelayTransport';
 import { mqttRelay, MqttRelayTransport } from './mqttRelayTransport';
 
 const HEX_LUT: string[] = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
@@ -57,14 +58,25 @@ export class WifiDirectTransport {
 
     constructor(myId: string) {
         this.myId = myId;
+        blindRelay.updateIdentity(myId);
         mqttRelay.updateIdentity(myId);
 
-        // Attach MQTT Blind Relay message listeners
+        // Attach Sovereign Blind Relay message listeners (Primary WAN)
+        blindRelay.onMessage(({ from, payload }) => {
+            this.notifyMessageListeners(from, payload);
+        });
+
+        // Attach Sovereign Blind Relay WebRTC signaling listeners (Primary WAN)
+        blindRelay.onSignaling((sigMsg) => {
+            this.handleSignalingMessage(sigMsg);
+        });
+
+        // Attach MQTT Blind Relay message listeners (Secondary Fallback)
         mqttRelay.onMessage(({ from, payload }) => {
             this.notifyMessageListeners(from, payload);
         });
 
-        // Attach MQTT WebRTC signaling listeners
+        // Attach MQTT WebRTC signaling listeners (Secondary Fallback)
         mqttRelay.onSignaling((sigMsg) => {
             this.handleSignalingMessage(sigMsg);
         });
@@ -109,6 +121,7 @@ export class WifiDirectTransport {
         if (!newId || newId === this.myId) return;
         const oldId = this.myId;
         this.myId = newId;
+        blindRelay.updateIdentity(newId);
         mqttRelay.updateIdentity(newId);
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             try {
@@ -180,7 +193,10 @@ export class WifiDirectTransport {
     async connectToLocalSignaling(): Promise<void> {
         if (typeof window === 'undefined') return;
 
-        // Ensure global MQTT Blind Relay connects concurrently
+        // Ensure Sovereign Blind Relay connects concurrently (Primary)
+        blindRelay.connect().catch(e => console.warn('[WebRtcTransport] Sovereign Blind Relay connect error:', e));
+
+        // Ensure global MQTT Blind Relay connects concurrently (Transitional Fallback)
         mqttRelay.connect().catch(e => console.warn('[WebRtcTransport] MQTT connect error:', e));
 
         if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
@@ -454,6 +470,7 @@ export class WifiDirectTransport {
                     candidate: event.candidate,
                 };
                 this.sendWs(icePayload);
+                blindRelay.sendSignaling(peerId, icePayload);
                 mqttRelay.sendSignaling(peerId, icePayload);
             }
         };
@@ -581,6 +598,7 @@ export class WifiDirectTransport {
                 sdp: offer,
             };
             this.sendWs(sigPayload);
+            blindRelay.sendSignaling(peerId, sigPayload);
             mqttRelay.sendSignaling(peerId, sigPayload);
         } catch (err) {
             console.warn(`[WebRtcTransport] Failed to create offer for ${peerId.slice(0, 8)}:`, err);
@@ -624,6 +642,7 @@ export class WifiDirectTransport {
                 sdp: answer,
             };
             this.sendWs(ansPayload);
+            blindRelay.sendSignaling(peerId, ansPayload);
             mqttRelay.sendSignaling(peerId, ansPayload);
         } catch (err) {
             console.warn(`[WebRtcTransport] Failed to handle offer from ${peerId.slice(0, 8)}:`, err);
@@ -712,10 +731,16 @@ export class WifiDirectTransport {
             this.createOffer(peerId).catch(() => {});
         }
 
-        // 2. High-Availability Global MQTT Blind Relay (Fallback 1 on Port 443 WSS)
-        const mqttSent = mqttRelay.sendPacket(peerId, payload);
+        // 2. Sovereign DePIN Blind Relay Transport (Primary Sovereign WAN Route)
+        const blindSent = blindRelay.sendPacket(peerId, payload);
 
-        // 3. Encrypted Blind WebSocket Relay Fallback (Fallback 2, Zero-Knowledge)
+        // 3. High-Availability Global MQTT Blind Relay (Secondary Legacy Fallback)
+        let mqttSent = false;
+        if (!blindSent || !blindRelay.isConnected) {
+            mqttSent = mqttRelay.sendPacket(peerId, payload);
+        }
+
+        // 4. Encrypted Blind WebSocket Relay Fallback (Fallback 3, Zero-Knowledge Local)
         let wsSent = false;
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             try {
@@ -731,7 +756,7 @@ export class WifiDirectTransport {
             }
         }
 
-        return mqttSent || wsSent;
+        return blindSent || mqttSent || wsSent;
     }
 
     onMessage(callback: (msg: { from: string; payload: Uint8Array }) => void) {

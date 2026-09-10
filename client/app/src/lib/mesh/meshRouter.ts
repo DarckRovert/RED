@@ -21,6 +21,7 @@
 
 import { bluetoothTransport } from './bluetoothTransport';
 import { WifiDirectTransport } from './wifiDirectTransport';
+import { blindRelay } from './blindRelayTransport';
 import { mqttRelay } from './mqttRelayTransport';
 import { networkWatcher, NetworkState } from './networkWatcher';
 import { RED_VERSION } from '../version';
@@ -279,6 +280,13 @@ class MeshRouter {
       console.warn('[MeshRouter] No WiFi signaling available (ok if offline):', e);
     }
 
+    // Automatically flush pending DTN store-and-forward queue when Sovereign Blind Relay connects
+    blindRelay.onConnect(() => {
+      console.log('[MeshRouter] Sovereign Blind Relay active — resetting timers and flushing pending DTN queue');
+      dtnStorage.forceResetRetryTimers();
+      this.flushPendingQueue(true).catch(() => {});
+    });
+
     // Automatically flush pending DTN store-and-forward queue when MQTT connects/reconnects
     mqttRelay.onConnect(() => {
       console.log('[MeshRouter] Global MQTT relay active — resetting timers and flushing pending DTN queue');
@@ -332,7 +340,8 @@ class MeshRouter {
       // Force reset DTN backoff timers so pending packets flush immediately
       dtnStorage.forceResetRetryTimers();
 
-      // Proactively refresh MQTT and WebSocket signaling and trigger ICE restarts for 4G/5G transitions
+      // Proactively refresh Sovereign Blind Relay, MQTT and WebSocket signaling and trigger ICE restarts for 4G/5G transitions
+      blindRelay.reconnect();
       mqttRelay.reconnect();
       this.wifi?.reconnect(true).catch(() => {});
 

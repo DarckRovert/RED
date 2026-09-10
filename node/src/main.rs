@@ -24,6 +24,7 @@ mod sos;
 mod voice;
 mod weather;
 mod social;
+pub mod blind_relay;
 
 use clap::{Parser, Subcommand};
 use red_core::crypto::hashing::derive_symmetric_key;
@@ -86,6 +87,20 @@ enum Commands {
     },
     /// Show node status
     Status,
+    /// Run as a Sovereign Blind Relay (DePIN Transit Node)
+    Relay {
+        /// Port to listen on for relay WebSocket traffic
+        #[arg(short, long, default_value = "7331")]
+        port: u16,
+
+        /// Maximum concurrent peer connections
+        #[arg(short, long, default_value = "50000")]
+        max_peers: usize,
+
+        /// Host address to bind to
+        #[arg(long, default_value = "0.0.0.0")]
+        host: String,
+    },
     /// Generate a new identity
     Identity {
         #[command(subcommand)]
@@ -149,6 +164,12 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(Commands::Status) => {
             show_status(data_dir).await?;
+        }
+        Some(Commands::Relay { port, max_peers, host }) => {
+            let addr: std::net::SocketAddr = format!("{}:{}", host, port)
+                .parse()
+                .map_err(|e| anyhow::anyhow!("Invalid host/port '{}:{}': {}", host, port, e))?;
+            blind_relay::run_blind_relay_server(addr, max_peers).await?;
         }
         Some(Commands::Identity { action }) => {
             handle_identity(data_dir, action).await?;
