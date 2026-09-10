@@ -172,12 +172,18 @@ export class WifiDirectTransport {
 
         if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && !hostname.endsWith('.github.io')) {
             candidates.push(`${proto}//${hostname}:3001`);
+            candidates.push(`${proto}//${hostname}:7331/local-signal`);
+            candidates.push(`${proto}//${hostname}:7333/local-signal`);
         }
 
         // 4. Local loopback candidates (strictly for desktop browser development, never on native Android/iOS)
         if (!isHttps && !isNative) {
             candidates.push('ws://localhost:3001');
             candidates.push('ws://127.0.0.1:3001');
+            candidates.push('ws://localhost:7331/local-signal');
+            candidates.push('ws://127.0.0.1:7331/local-signal');
+            candidates.push('ws://localhost:7333/local-signal');
+            candidates.push('ws://127.0.0.1:7333/local-signal');
         }
 
         // Remove duplicates while preserving order

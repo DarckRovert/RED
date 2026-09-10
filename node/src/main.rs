@@ -451,6 +451,7 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             ai_translator,
             social_store: std::sync::Arc::new(social::SocialStore::new(Some(shared_sled.clone()))),
             session_token: std::sync::Arc::new(session_token),
+            blind_relay: std::sync::Arc::new(blind_relay::BlindRelayState::new(50000)),
         };
 
         let my_identity_hash = {

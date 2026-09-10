@@ -40,9 +40,11 @@ export class BlindRelayTransport {
         // Community and regional relays
         'wss://relay1.redmesh.network/relay/ws',
         'wss://relay2.redmesh.network/relay/ws',
-        // Local node fallback (desktop / dev / local mesh node)
+        // Local node fallback (desktop / dev / local mesh node: 7331 desktop, 7333 mobile)
         'ws://127.0.0.1:7331/relay/ws',
         'ws://localhost:7331/relay/ws',
+        'ws://127.0.0.1:7333/relay/ws',
+        'ws://localhost:7333/relay/ws',
     ];
 
     private static readonly HEX_LUT: string[] = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));

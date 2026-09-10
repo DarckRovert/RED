@@ -79,6 +79,8 @@ pub struct ApiState {
     pub social_store: Arc<crate::social::SocialStore>,
     /// v70.1: Token de sesión local para autenticación entre Capacitor WebView → Nodo
     pub session_token: Arc<String>,
+    /// v98.0: Motor de retransmisión ciega soberana (Zero-Knowledge Blind Relay)
+    pub blind_relay: Arc<crate::blind_relay::BlindRelayState>,
 }
 
 /// Middleware que verifica el token de sesión local en endpoints /api/*.
@@ -590,6 +592,10 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/mesh/apk", get(handle_download_apk))
         // Local WebRTC signaling
         .route("/local-signal", get(handle_local_signal))
+        // v98.0: Sovereign Blind Relay & DePIN Transit endpoints
+        .route("/relay/ws", get(handle_api_relay_ws))
+        .route("/relay/stats", get(handle_api_relay_stats))
+        .route("/relay/health", get(handle_api_relay_health))
         // ── v19.0: Sistema Alerta AMBER-RED ─────────────────────────────────
         .route("/api/amber/alert", post(handle_create_amber_alert))
         .route("/api/amber/alerts", get(handle_list_amber_alerts))
@@ -2646,6 +2652,27 @@ async fn handle_socket(socket: WebSocket) {
         _ = (&mut send_task) => recv_task.abort(),
         _ = (&mut recv_task) => send_task.abort(),
     };
+}
+
+// ─── v98.0: Handlers Relay Ciego Soberano (Blind Relay) ─────────────────────
+
+async fn handle_api_relay_health() -> &'static str {
+    "OK"
+}
+
+async fn handle_api_relay_stats(
+    axum::extract::State(state): axum::extract::State<ApiState>,
+) -> impl IntoResponse {
+    axum::Json(state.blind_relay.get_stats())
+}
+
+async fn handle_api_relay_ws(
+    ws: WebSocketUpgrade,
+    axum::extract::State(state): axum::extract::State<ApiState>,
+) -> impl IntoResponse {
+    let relay_state = (*state.blind_relay).clone();
+    ws.max_message_size(relay_state.max_packet_size)
+        .on_upgrade(move |socket| crate::blind_relay::handle_relay_socket(socket, relay_state))
 }
 
 // ─── v19.0: Handlers Alerta AMBER-RED ────────────────────────────────────────

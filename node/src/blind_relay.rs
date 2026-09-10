@@ -295,7 +295,7 @@ async fn handle_relay_ws(
 }
 
 /// Active WebSocket session loop
-async fn handle_relay_socket(socket: WebSocket, state: BlindRelayState) {
+pub async fn handle_relay_socket(socket: WebSocket, state: BlindRelayState) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let (tx, mut rx) = mpsc::channel::<WsMessage>(256);
 
