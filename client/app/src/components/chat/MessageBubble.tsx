@@ -13,6 +13,7 @@ import { translateTextAI } from "../../api/ai";
 import { useRedStore } from "../../store/useRedStore";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { MessageInfoModal } from "./MessageInfoModal";
+import { TacIcon } from "../ui/TacIcon";
 
 interface MessageBubbleProps {
     msg: MessageItem;
@@ -199,34 +200,37 @@ function ContextMenu({
                 animation: "contextMenuIn 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
             }}>
                 {[
-                    ...(!isDeleted ? [{ label: t.chat_extended?.reply_to || "Responder", icon: "↩️", action: onReply }] : []),
-                    ...(!isDeleted && onStar ? [{ label: isStarred ? "Desmarcar destacado" : "Destacar", icon: "⭐", action: onStar }] : []),
-                    ...(!isDeleted && onShowInfo ? [{ label: "Info. del mensaje", icon: "ℹ️", action: onShowInfo }] : []),
-                    ...(!isDeleted && onSpeakMessage ? [{ label: "Escuchar mensaje", icon: "🔊", action: onSpeakMessage }] : []),
-                    ...(!isDeleted && onTranslate ? [{ label: "Traducir con IA", icon: "🌐", action: onTranslate }] : []),
-                    ...(!isDeleted && onAskCopilot ? [{ label: "Consultar a Copiloto", icon: "🤖", action: onAskCopilot }] : []),
-                    ...(!isDeleted && onForward ? [{ label: t.chat_extended?.forward_btn || "Reenviar", icon: "➡️", action: onForward }] : []),
-                    ...(!isDeleted ? [{ label: t.radar?.copy_did || "Copiar", icon: "📋", action: onCopy }] : []),
-                    ...(!isDeleted && onSelect ? [{ label: "Seleccionar", icon: "☑️", action: onSelect }] : []),
-                    ...(onPin && !isDeleted ? [{ label: "Fijar Mensaje", icon: "📌", action: onPin }] : []),
-                    ...(onEdit && isMine && !isDeleted ? [{ label: t.profile?.edit_alias || "Editar", icon: "✏️", action: onEdit }] : []),
-                    ...(onDeleteForEveryone && isMine && !isDeleted ? [{ label: t.chat?.wipe_chat || "Eliminar para todos", icon: "🗑️", action: onDeleteForEveryone, danger: true }] : []),
-                    { label: t.chat?.delete_chat || "Eliminar", icon: "❌", action: onDeleteLocal, danger: true },
+                    ...(!isDeleted ? [{ label: t.chat_extended?.reply_to || "Responder", icon: <TacIcon name="reply" size={16} color="currentColor" />, action: onReply }] : []),
+                    ...(!isDeleted && onStar ? [{ label: isStarred ? "Desmarcar destacado" : "Destacar", icon: <TacIcon name="star" size={16} color={isStarred ? "#FFBA00" : "currentColor"} />, action: onStar }] : []),
+                    ...(!isDeleted && onShowInfo ? [{ label: "Info. del mensaje", icon: <TacIcon name="info" size={16} color="currentColor" />, action: onShowInfo }] : []),
+                    ...(!isDeleted && onSpeakMessage ? [{ label: "Escuchar mensaje", icon: <TacIcon name="volume" size={16} color="currentColor" />, action: onSpeakMessage }] : []),
+                    ...(!isDeleted && onTranslate ? [{ label: "Traducir con IA", icon: <TacIcon name="globe" size={16} color="currentColor" />, action: onTranslate }] : []),
+                    ...(!isDeleted && onAskCopilot ? [{ label: "Consultar a Copiloto", icon: <TacIcon name="robot" size={16} color="currentColor" />, action: onAskCopilot }] : []),
+                    ...(!isDeleted && onForward ? [{ label: t.chat_extended?.forward_btn || "Reenviar", icon: <TacIcon name="forward" size={16} color="currentColor" />, action: onForward }] : []),
+                    ...(!isDeleted ? [{ label: t.radar?.copy_did || "Copiar", icon: <TacIcon name="copy" size={16} color="currentColor" />, action: onCopy }] : []),
+                    ...(!isDeleted && onSelect ? [{ label: "Seleccionar", icon: <TacIcon name="check" size={16} color="currentColor" />, action: onSelect }] : []),
+                    ...(onPin && !isDeleted ? [{ label: "Fijar Mensaje", icon: <TacIcon name="pin" size={16} color="currentColor" />, action: onPin }] : []),
+                    ...(onEdit && isMine && !isDeleted ? [{ label: t.profile?.edit_alias || "Editar", icon: <TacIcon name="edit" size={16} color="currentColor" />, action: onEdit }] : []),
+                    ...(onDeleteForEveryone && isMine && !isDeleted ? [{ label: t.chat?.wipe_chat || "Eliminar para todos", icon: <TacIcon name="trash" size={16} color="#FF4B6B" />, action: onDeleteForEveryone, danger: true }] : []),
+                    { label: t.chat?.delete_chat || "Eliminar", icon: <TacIcon name="trash" size={16} color="#FF4B6B" />, action: onDeleteLocal, danger: true },
                 ].map((item: any) => (
                     <button key={item.label} onClick={() => { item.action(); onClose(); }}
                         style={{
-                            display: "flex", alignItems: "center", gap: "10px",
-                            width: "100%", padding: "12px 16px",
+                            display: "flex", alignItems: "center", gap: "12px",
+                            width: "100%", padding: "11px 16px",
                             background: "transparent", border: "none",
                             color: item.danger ? "#FF4B6B" : "#fff",
                             fontSize: "0.85rem", fontWeight: 600, cursor: "pointer",
                             textAlign: "left", borderBottom: "1px solid rgba(255,255,255,0.06)",
                             transition: "background 0.1s"
                         }}
-                        onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(255,255,255,0.07)")}
+                        onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(255,255,255,0.08)")}
                         onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
                     >
-                        <span style={{ fontSize: "1rem" }}>{item.icon}</span>{item.label}
+                        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18, flexShrink: 0 }}>
+                            {item.icon}
+                        </span>
+                        <span>{item.label}</span>
                     </button>
                 ))}
             </div>
@@ -432,7 +436,7 @@ export const MessageBubble = memo(({
 
     const renderVectorCheck = () => {
         if (isFailed) {
-            return <span style={{ color: "#FF3B30", fontSize: "0.75rem", lineHeight: 1 }}>⚠️</span>;
+            return <TacIcon name="hazard" size={13} color="#FF3B30" />;
         }
         if (isPending) {
             return (
@@ -736,7 +740,7 @@ export const MessageBubble = memo(({
                         transition: "background 0.2s ease",
                         pointerEvents: "none"
                     }}>
-                        ↩️
+                        <TacIcon name="reply" size={18} color={swipeOffset > 45 ? "#000" : "#fff"} />
                     </div>
                 )}
 
@@ -753,8 +757,12 @@ export const MessageBubble = memo(({
                         padding: (msg.msg_type === "image" || resolvedImage) && !isPaymentMessage ? "4px" : "8px 12px",
                         borderRadius: isFamiliar 
                             ? (isMine 
-                                ? (isFirst ? "10px 0px 10px 10px" : "10px 10px 10px 10px") 
-                                : (isFirst ? "0px 10px 10px 10px" : "10px 10px 10px 10px"))
+                                ? (isFirst 
+                                    ? (isLast ? "16px 16px 4px 16px" : "16px 16px 4px 16px") 
+                                    : (isLast ? "16px 4px 16px 16px" : "16px 4px 4px 16px"))
+                                : (isFirst 
+                                    ? (isLast ? "16px 16px 16px 4px" : "16px 16px 16px 4px") 
+                                    : (isLast ? "4px 16px 16px 16px" : "4px 16px 16px 4px")))
                             : `${tl}px ${tr}px ${br}px ${bl}px`,
                         background: isSearchHighlight
                             ? "linear-gradient(135deg, rgba(255,167,38,0.4) 0%, rgba(255,109,0,0.6) 100%)"
@@ -816,7 +824,8 @@ export const MessageBubble = memo(({
                             fontSize: "0.68rem", color: isMine ? "rgba(255, 255, 255, 0.75)" : "var(--accent-cyan)",
                             fontWeight: 700, fontStyle: "italic", marginBottom: "2px"
                         }}>
-                            <span>↩️ {t.chat_extended?.forward_btn || "Reenviado"}</span>
+                            <TacIcon name="forward" size={12} color="currentColor" />
+                            <span>{t.chat_extended?.forward_btn || "Reenviado"}</span>
                         </div>
                     )}
 
@@ -833,10 +842,10 @@ export const MessageBubble = memo(({
                             animation: "pulse 2s infinite"
                         }}>
                             <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                <span>🔥</span>
+                                <TacIcon name="flame" size={13} color="#FF5252" />
                                 <span>{t.settings?.burner_title ? "Expira" : "Expira en"}</span>
                             </span>
-                            <span>
+                            <span className="tabular-telemetry">
                                 {Math.floor(burnSecondsLeft / 60)}:{(burnSecondsLeft % 60).toString().padStart(2, '0')}
                             </span>
                         </div>
@@ -1344,7 +1353,7 @@ export const MessageBubble = memo(({
                     )}
 
                     {/* Timestamp & Status footer */}
-                    <div style={{
+                    <div className="tabular-telemetry" style={{
                         display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "4px",
                         fontSize: "0.65rem", color: isMine ? "rgba(255,255,255,0.72)" : "var(--text-muted)",
                         fontFamily: "JetBrains Mono, monospace", marginTop: "1px"
@@ -1352,22 +1361,30 @@ export const MessageBubble = memo(({
                         {/* Flame self-destruct countdown */}
                         {burnSecondsLeft !== null && burnSecondsLeft > 0 && !isDeleted && (
                             <span style={{
-                                display: "inline-flex", alignItems: "center", gap: "2px",
+                                display: "inline-flex", alignItems: "center", gap: "3px",
                                 color: burnSecondsLeft <= 10 ? "#FF4B6B" : "rgba(255,180,0,0.95)",
                                 fontWeight: 800, animation: burnSecondsLeft <= 10 ? "pulse 0.6s infinite alternate" : "none"
                             }}>
-                                🔥{burnSecondsLeft < 3600
-                                    ? `${Math.floor(burnSecondsLeft / 60)}:${String(burnSecondsLeft % 60).padStart(2, "0")}`
-                                    : `${Math.floor(burnSecondsLeft / 3600)}h`
-                                }
+                                <TacIcon name="flame" size={11} color={burnSecondsLeft <= 10 ? "#FF4B6B" : "rgba(255,180,0,0.95)"} />
+                                <span>
+                                    {burnSecondsLeft < 3600
+                                        ? `${Math.floor(burnSecondsLeft / 60)}:${String(burnSecondsLeft % 60).padStart(2, "0")}`
+                                        : `${Math.floor(burnSecondsLeft / 3600)}h`
+                                    }
+                                </span>
                             </span>
                         )}
                         {isForwarded && !isDeleted && (
-                            <span style={{ opacity: 0.7, fontSize: "0.6rem" }}>↪ reenviado</span>
+                            <span style={{ opacity: 0.7, fontSize: "0.6rem", display: "inline-flex", alignItems: "center", gap: "2px" }}>
+                                <TacIcon name="forward" size={10} color="currentColor" />
+                                <span>reenviado</span>
+                            </span>
                         )}
                         {isEdited && !isDeleted && <span>(editado)</span>}
                         {starredMessages?.includes(msg.id) && (
-                            <span title="Mensaje destacado" style={{ color: "#F0B90B", fontSize: "0.72rem", marginRight: "2px" }}>⭐</span>
+                            <span title="Mensaje destacado" style={{ color: "#F0B90B", display: "inline-flex", alignItems: "center", marginRight: "2px" }}>
+                                <TacIcon name="star" size={11} color="#F0B90B" />
+                            </span>
                         )}
                         <span>{timeStr(msg.timestamp)}</span>
                         {isMine && !isDeleted && (
@@ -1425,189 +1442,6 @@ export const MessageBubble = memo(({
                     isMine={isMine}
                     onClose={() => setShowInfoModal(false)}
                 />
-            )}
-
-            {/* Long-press / Context Menu & Reaction Picker */}
-            {contextMenu && (
-                <div
-                    onClick={(e) => { e.stopPropagation(); setContextMenu(null); }}
-                    onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
-                    style={{
-                        position: "fixed",
-                        inset: 0,
-                        zIndex: 9999,
-                        background: "rgba(0, 0, 0, 0.45)",
-                        backdropFilter: "blur(4px)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        animation: "fadeIn 0.15s ease-out"
-                    }}
-                >
-                    <div
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                            position: "fixed",
-                            left: typeof window !== "undefined" ? Math.max(16, Math.min(window.innerWidth - 280, (contextMenu.x || window.innerWidth / 2) - 140)) : 16,
-                            top: typeof window !== "undefined" ? Math.max(60, Math.min(window.innerHeight - 340, (contextMenu.y || window.innerHeight / 2) - 80)) : 60,
-                            width: 270,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "8px",
-                            zIndex: 10000,
-                            animation: "scaleIn 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
-                        }}
-                    >
-                        {/* Quick Reaction Emoji Pill Bar */}
-                        <div style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-around",
-                            padding: "8px 12px",
-                            borderRadius: "28px",
-                            background: isFamiliar ? "#202C33" : "rgba(14, 18, 32, 0.96)",
-                            border: isFamiliar ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(0, 229, 255, 0.35)",
-                            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
-                            backdropFilter: "blur(16px)"
-                        }}>
-                            {['👍', '❤️', '🔥', '😂', '😮', '⚡', '🛡️'].map(emoji => (
-                                <button
-                                    key={emoji}
-                                    onClick={() => {
-                                        onReaction(msg.id, emoji);
-                                        setContextMenu(null);
-                                    }}
-                                    style={{
-                                        background: "transparent",
-                                        border: "none",
-                                        fontSize: "1.4rem",
-                                        cursor: "pointer",
-                                        padding: "2px 4px",
-                                        borderRadius: "50%",
-                                        transition: "transform 0.15s ease",
-                                    }}
-                                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.3)")}
-                                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1.0)")}
-                                >
-                                    {emoji}
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Action Menu List */}
-                        <div style={{
-                            borderRadius: "14px",
-                            background: isFamiliar ? "#202C33" : "rgba(14, 18, 32, 0.96)",
-                            border: isFamiliar ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0, 229, 255, 0.25)",
-                            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
-                            overflow: "hidden",
-                            display: "flex",
-                            flexDirection: "column"
-                        }}>
-                            {onReply && (
-                                <button
-                                    onClick={() => { onReply(msg); setContextMenu(null); }}
-                                    style={{
-                                        padding: "11px 16px", background: "transparent", border: "none",
-                                        borderBottom: "1px solid rgba(255,255,255,0.06)",
-                                        color: "#fff", display: "flex", alignItems: "center", gap: "10px",
-                                        fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
-                                    }}
-                                >
-                                    <span>↩️</span>
-                                    <span>{(t.chat_extended as any)?.reply_btn || "Responder"}</span>
-                                </button>
-                            )}
-
-                            {onStar && (
-                                <button
-                                    onClick={() => { onStar(msg.id); setContextMenu(null); }}
-                                    style={{
-                                        padding: "11px 16px", background: "transparent", border: "none",
-                                        borderBottom: "1px solid rgba(255,255,255,0.06)",
-                                        color: "#fff", display: "flex", alignItems: "center", gap: "10px",
-                                        fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
-                                    }}
-                                >
-                                    <span>⭐</span>
-                                    <span>{starredMessages?.includes(msg.id) ? "Quitar de destacados" : "Destacar"}</span>
-                                </button>
-                            )}
-
-                            {msg.content && !msg.content.startsWith("data:") && (
-                                <button
-                                    onClick={() => { handleCopy(); toast.success("Texto copiado"); setContextMenu(null); }}
-                                    style={{
-                                        padding: "11px 16px", background: "transparent", border: "none",
-                                        borderBottom: "1px solid rgba(255,255,255,0.06)",
-                                        color: "#fff", display: "flex", alignItems: "center", gap: "10px",
-                                        fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
-                                    }}
-                                >
-                                    <span>📋</span>
-                                    <span>{(t.common as any)?.copy || "Copiar texto"}</span>
-                                </button>
-                            )}
-
-                            {onForward && (
-                                <button
-                                    onClick={() => { onForward(msg); setContextMenu(null); }}
-                                    style={{
-                                        padding: "11px 16px", background: "transparent", border: "none",
-                                        borderBottom: "1px solid rgba(255,255,255,0.06)",
-                                        color: "#fff", display: "flex", alignItems: "center", gap: "10px",
-                                        fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
-                                    }}
-                                >
-                                    <span>↪️</span>
-                                    <span>{t.chat_extended?.forward_btn || "Reenviar"}</span>
-                                </button>
-                            )}
-
-                            <button
-                                onClick={() => { setShowInfoModal(true); setContextMenu(null); }}
-                                style={{
-                                    padding: "11px 16px", background: "transparent", border: "none",
-                                    borderBottom: isMine ? "1px solid rgba(255,255,255,0.06)" : "none",
-                                    color: "#fff", display: "flex", alignItems: "center", gap: "10px",
-                                    fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
-                                }}
-                            >
-                                <span>ℹ️</span>
-                                <span>Detalles & Cripto Info</span>
-                            </button>
-
-                            {isMine && !isDeleted && onEdit && msg.msg_type === "text" && (
-                                <button
-                                    onClick={() => { onEdit(msg); setContextMenu(null); }}
-                                    style={{
-                                        padding: "11px 16px", background: "transparent", border: "none",
-                                        borderBottom: "1px solid rgba(255,255,255,0.06)",
-                                        color: "#fff", display: "flex", alignItems: "center", gap: "10px",
-                                        fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
-                                    }}
-                                >
-                                    <span>✏️</span>
-                                    <span>Editar mensaje</span>
-                                </button>
-                            )}
-
-                            {isMine && !isDeleted && onDeleteForEveryone && (
-                                <button
-                                    onClick={() => { onDeleteForEveryone(msg.id); setContextMenu(null); }}
-                                    style={{
-                                        padding: "11px 16px", background: "transparent", border: "none",
-                                        color: "#FF5252", display: "flex", alignItems: "center", gap: "10px",
-                                        fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
-                                    }}
-                                >
-                                    <span>🗑️</span>
-                                    <span>Eliminar para todos</span>
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>
             )}
         </React.Fragment>
     );

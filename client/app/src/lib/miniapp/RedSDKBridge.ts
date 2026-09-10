@@ -22,6 +22,7 @@ import { MonetizationEngine } from '../network/MonetizationEngine';
 import { LocalAIEngine } from '../ai/localAiEngine';
 import { queryAICopilot } from '../../api/ai';
 import { toast } from '../../components/Toast';
+import { TacticalLocationEngine } from '../sensors/TacticalLocationEngine';
 
 const BROADCAST_RECIPIENT = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
@@ -301,22 +302,19 @@ export class RedSDKBridge {
             // --- 6. Sensores y Hardware ---
             case 'sensors.getLocation':
                 this.requirePermission('sensors');
-                return await new Promise((resolve, reject) => {
-                    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-                        return resolve({ latitude: null, longitude: null, altitude: null, accuracy: null, timestamp: Date.now() });
+                try {
+                    const loc = await TacticalLocationEngine.getEmergencyLocation(5000);
+                    if (loc && TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                        return {
+                            latitude: loc.lat,
+                            longitude: loc.lon,
+                            altitude: loc.alt ?? null,
+                            accuracy: loc.accuracy ?? null,
+                            timestamp: loc.timestamp,
+                        };
                     }
-                    navigator.geolocation.getCurrentPosition(
-                        (pos) => resolve({
-                            latitude: pos.coords.latitude,
-                            longitude: pos.coords.longitude,
-                            altitude: pos.coords.altitude ?? null,
-                            accuracy: pos.coords.accuracy,
-                            timestamp: pos.timestamp,
-                        }),
-                        () => resolve({ latitude: null, longitude: null, altitude: null, accuracy: null, timestamp: Date.now() }),
-                        { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
-                    );
-                });
+                } catch {}
+                return { latitude: null, longitude: null, altitude: null, accuracy: null, timestamp: Date.now() };
 
             case 'ui.showToast': {
                 const message = String(params?.message || params || '');

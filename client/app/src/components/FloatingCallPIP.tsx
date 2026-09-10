@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { TacIcon } from "./ui/TacIcon";
 
 export const FloatingCallPIP: React.FC = () => {
     const { t } = useTranslation();
@@ -145,15 +146,16 @@ export const FloatingCallPIP: React.FC = () => {
                         borderRadius: "6px",
                         color: "var(--accent-cyan, #00E5FF)",
                         fontSize: "0.72rem",
-                        padding: "2px 6px",
+                        padding: "3px 6px",
                         cursor: "pointer",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center"
                     }}
                     title={t.calls_extended?.pip_return || "Maximizar"}
+                    aria-label="Maximizar llamada"
                 >
-                    ⛶
+                    <TacIcon name="maximize" size={13} color="var(--accent-cyan, #00E5FF)" />
                 </button>
             </div>
 
@@ -187,7 +189,7 @@ export const FloatingCallPIP: React.FC = () => {
                         boxShadow: "0 0 16px rgba(0,229,255,0.4)",
                     }}
                 >
-                    {peerName[0]?.toUpperCase() || "📞"}
+                    {peerName[0]?.toUpperCase() || <TacIcon name="calls" size={20} color="#000" />}
                 </div>
 
                 <div
@@ -252,8 +254,9 @@ export const FloatingCallPIP: React.FC = () => {
                         transition: "all 0.18s ease"
                     }}
                     title={isMuted ? "Activar micrófono" : "Silenciar micrófono"}
+                    aria-label="Silenciar micrófono"
                 >
-                    {isMuted ? "🔇" : "🎙️"}
+                    {isMuted ? <TacIcon name="mic-off" size={15} color="#FF3355" /> : <TacIcon name="mic" size={15} color="#FFFFFF" />}
                 </button>
 
                 {/* Hangup Button */}
@@ -271,13 +274,13 @@ export const FloatingCallPIP: React.FC = () => {
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        transform: "rotate(135deg)",
                         boxShadow: "0 0 12px rgba(255, 51, 85, 0.5)",
                         transition: "transform 0.18s ease"
                     }}
                     title={t.calls?.reject || "Colgar"}
+                    aria-label="Colgar llamada"
                 >
-                    📞
+                    <TacIcon name="phone-hangup" size={16} color="#FFF" />
                 </button>
             </div>
         </div>

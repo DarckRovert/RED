@@ -19,3 +19,5 @@ export { default as ProgressBarDefault } from './ProgressBar';
 export { EmptyState } from './EmptyState';
 export { SkeletonCard } from './SkeletonCard';
 export { ErrorBanner } from './ErrorBanner';
+export { TacIcon, type TacIconName } from './TacIcon';
+

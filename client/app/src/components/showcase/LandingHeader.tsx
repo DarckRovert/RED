@@ -1,5 +1,6 @@
 import React from 'react';
 import { RED_VERSION } from '../../lib/version';
+import { TacIcon } from '../ui/TacIcon';
 
 interface LandingHeaderProps {
     activeSection: string;
@@ -25,13 +26,15 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
     const navItems = [
         { id: "hero", label: "Inicio" },
         { id: "how-it-works", label: "¿Cómo Funciona?" },
-        { id: "architecture", label: "Arquitectura" },
+        { id: "hardware", label: "Hardware Real" },
         { id: "scenarios", label: "Escenarios" },
         { id: "calculator", label: "Calculadora" },
         { id: "bento", label: "Pilares" },
         { id: "matrix-comparison", label: "Benchmark" },
         { id: "live-mesh-demo", label: "Malla en Vivo" },
-        { id: "modules", label: "Módulos (49)" },
+        { id: "modules", label: "57 Módulos" },
+        { id: "deployment", label: "Despliegue" },
+        { id: "architecture", label: "Arquitectura" },
         { id: "contribute", label: "Contribuir" },
         { id: "download", label: "Descarga" },
         { id: "faq", label: "FAQ & Legal" },
@@ -68,11 +71,10 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "20px",
               boxShadow: "0 0 20px rgba(255, 42, 81, 0.6)",
             }}
           >
-            🛡️
+            <TacIcon name="shield" size={20} color="#FFF" />
           </div>
           <div>
             <div style={{ fontSize: "18px", fontWeight: 900, color: "#FFF", letterSpacing: "1px" }}>
@@ -122,13 +124,23 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
         </div>
 
         {/* Desktop Navigation Links */}
-        <nav style={{ display: "flex", gap: "2px", alignItems: "center" }} className="desktop-nav">
-          {navItems.slice(0, 10).map((tab) => (
+        <nav
+          style={{
+            display: "flex",
+            gap: "2px",
+            alignItems: "center",
+            overflowX: "auto",
+            maxWidth: "calc(100vw - 440px)",
+            scrollbarWidth: "none"
+          }}
+          className="desktop-nav"
+        >
+          {navItems.map((tab) => (
             <button
               key={tab.id}
               onClick={() => scrollToSection(tab.id)}
               style={{
-                padding: "6px 10px",
+                padding: "6px 9px",
                 borderRadius: "8px",
                 border: activeSection === tab.id ? "1px solid #FF2A51" : "1px solid transparent",
                 background: activeSection === tab.id ? "rgba(255, 42, 81, 0.18)" : "transparent",
@@ -136,6 +148,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
                 fontSize: "11px",
                 fontWeight: 700,
                 cursor: "pointer",
+                whiteSpace: "nowrap",
                 transition: "all 0.15s ease",
               }}
             >
@@ -176,7 +189,8 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
               gap: "6px",
             }}
           >
-            <span>📥</span> APK
+            <TacIcon name="download" size={13} color="#00FF88" />
+            <span>APK</span>
           </a>
 
           <button
@@ -196,7 +210,8 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
               gap: "8px",
             }}
           >
-            <span>🚀</span> Iniciar Web Companion
+            <TacIcon name="zap" size={14} color="#FFF" />
+            <span>Iniciar Web Companion</span>
           </button>
 
           <button
@@ -207,12 +222,15 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
               background: "rgba(255,255,255,0.05)",
               border: "1px solid rgba(255,255,255,0.1)",
               color: "#FFF",
-              fontSize: "18px",
               cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
             className="mobile-hamburger"
+            title="Menú"
           >
-            {isMobileMenuOpen ? "✕" : "☰"}
+            {isMobileMenuOpen ? <TacIcon name="x" size={18} /> : <TacIcon name="more-vertical" size={18} />}
           </button>
         </div>
 

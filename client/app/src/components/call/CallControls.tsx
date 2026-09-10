@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
+import { TacIcon } from "../ui/TacIcon";
 
 import { VideoTacticalFilter } from "./CallVideoGrid";
 
@@ -62,8 +63,9 @@ export const CallControls: React.FC<CallControlsProps> = ({
                             transition: "all 0.2s ease"
                         }}
                         title={micMuted ? (t.calls_extended?.mic_on || "Activar Micrófono") : (t.calls_extended?.mic_off || "Silenciar Micrófono")}
+                        aria-label="Micrófono"
                     >
-                        {micMuted ? "🔇" : "🎤"}
+                        {micMuted ? <TacIcon name="mic-off" size={22} color="#FFF" /> : <TacIcon name="mic" size={22} color="#FFF" />}
                     </button>
                     <span style={{ fontSize: "0.64rem", color: micMuted ? "#FF5252" : "#FFFFFF", fontWeight: 800, letterSpacing: "0.3px" }}>
                         {micMuted ? (t.calls?.mute || "MUTE") : "MIC"}
@@ -85,8 +87,9 @@ export const CallControls: React.FC<CallControlsProps> = ({
                             transition: "all 0.2s ease"
                         }}
                         title={(camMuted || isAudioOnly) ? (t.calls_extended?.cam_on || "Encender Cámara") : (t.calls_extended?.cam_off || "Apagar Cámara")}
+                        aria-label="Cámara"
                     >
-                        {(camMuted || isAudioOnly) ? "🚫" : "📹"}
+                        {(camMuted || isAudioOnly) ? <TacIcon name="video-off" size={22} color="rgba(255,255,255,0.7)" /> : <TacIcon name="camera" size={22} color="var(--accent-cyan)" />}
                     </button>
                     <span style={{ fontSize: "0.64rem", color: (camMuted || isAudioOnly) ? "#CBD5E1" : "var(--accent-cyan)", fontWeight: 800, letterSpacing: "0.3px" }}>
                         {(camMuted || isAudioOnly) ? "CAM OFF" : "CAM ON"}
@@ -108,8 +111,9 @@ export const CallControls: React.FC<CallControlsProps> = ({
                                 transition: "all 0.2s ease"
                             }}
                             title={t.calls_extended?.switch_cam || "Cambiar Cámara Frontal / Trasera"}
+                            aria-label="Girar Cámara"
                         >
-                            🔄
+                            <TacIcon name="refresh" size={22} color="var(--accent-cyan)" />
                         </button>
                         <span style={{ fontSize: "0.64rem", color: "#E0F7FA", fontWeight: 800, letterSpacing: "0.3px" }}>
                             {t.calls?.camera_switch || "GIRAR"}
@@ -132,8 +136,9 @@ export const CallControls: React.FC<CallControlsProps> = ({
                             transition: "all 0.2s ease"
                         }}
                         title={isSpeakerOn ? (t.calls_extended?.speaker_on || "Altavoz Activado") : (t.calls_extended?.speaker_off || "Auricular")}
+                        aria-label="Altavoz"
                     >
-                        {isSpeakerOn ? "🔊" : "🔈"}
+                        {isSpeakerOn ? <TacIcon name="volume" size={22} color="var(--accent-emerald)" /> : <TacIcon name="volume-x" size={22} color="#FFF" />}
                     </button>
                     <span style={{ fontSize: "0.64rem", color: isSpeakerOn ? "var(--accent-emerald)" : "#CBD5E1", fontWeight: 800, letterSpacing: "0.3px" }}>
                         {isSpeakerOn ? "ALTAVOZ" : "AURICULAR"}
@@ -156,8 +161,9 @@ export const CallControls: React.FC<CallControlsProps> = ({
                                 transition: "all 0.2s ease"
                             }}
                             title={isScreenSharing ? (t.calls_extended?.stop_share_screen || "Detener Pantalla") : (t.calls_extended?.share_screen || "Compartir Pantalla")}
+                            aria-label="Compartir Pantalla"
                         >
-                            💻
+                            <TacIcon name="terminal" size={22} color={isScreenSharing ? "var(--accent-cyan)" : "#FFF"} />
                         </button>
                         <span style={{ fontSize: "0.64rem", color: isScreenSharing ? "var(--accent-cyan)" : "#CBD5E1", fontWeight: 800, letterSpacing: "0.3px" }}>
                             {isScreenSharing ? "CAST ON" : "PANTALLA"}
@@ -181,8 +187,9 @@ export const CallControls: React.FC<CallControlsProps> = ({
                                 boxShadow: tacticalFilter !== "normal" ? "0 0 20px rgba(0,230,118,0.5)" : "none"
                             }}
                             title={`Filtro Táctico: ${tacticalFilter.toUpperCase()}`}
+                            aria-label="Filtro Táctico"
                         >
-                            {tacticalFilter === "night_vision" ? "🥽" : (tacticalFilter === "flir_thermal" ? "🌡️" : (tacticalFilter === "surveillance_crt" ? "📼" : "👁️"))}
+                            <TacIcon name="eye" size={22} color={tacticalFilter !== "normal" ? "var(--accent-emerald)" : "#FFF"} />
                         </button>
                         <span style={{ fontSize: "0.64rem", color: tacticalFilter !== "normal" ? "var(--accent-emerald)" : "#CBD5E1", fontWeight: 800, letterSpacing: "0.3px" }}>
                             {tacticalFilter === "night_vision" ? "NVG" : (tacticalFilter === "flir_thermal" ? "FLIR" : (tacticalFilter === "surveillance_crt" ? "CRT" : "FILTRO"))}
@@ -197,16 +204,16 @@ export const CallControls: React.FC<CallControlsProps> = ({
                         style={{
                             width: "68px", height: "68px", borderRadius: "50%",
                             background: "linear-gradient(135deg, #FF1744 0%, #B71C1C 100%)",
-                            color: "white", fontSize: "1.9rem",
+                            color: "white",
                             border: "2px solid #FF8A80",
                             boxShadow: "0 10px 40px rgba(255,23,68,0.85), 0 0 20px rgba(255,23,68,0.5)",
                             cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                            transform: "rotate(135deg)",
                             transition: "all 0.15s ease"
                         }}
                         title={t.calls_extended?.end_call || "Finalizar Llamada"}
+                        aria-label="Colgar Llamada"
                     >
-                        📞
+                        <TacIcon name="phone-hangup" size={32} color="#FFF" />
                     </button>
                     <span style={{ fontSize: "0.64rem", color: "#FF5252", fontWeight: 900, letterSpacing: "0.4px" }}>
                         {t.calls?.reject || "COLGAR"}

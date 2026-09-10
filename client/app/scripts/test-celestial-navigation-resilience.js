@@ -7,8 +7,11 @@
  * 3. Sanitización de coordenadas NaN e Infinity en calculateEphemeris.
  * 4. Normalización canónica de azimut solar y lunar en el rango [0, 360).
  * 5. Clamping de hora solar de mediodía UTC en el rango [0, 24).
- * 6. Sanitización y clamping físico en estimatePositionFromSolarNoon (Lat [-90, 90], Lon [-180, 180]).
- * 7. Resiliencia ante cadenas horarias de tránsito vacías o malformadas.
+ * 6. Soporte de culminación meridiana Norte (Hemisferio Sur y Trópicos, e.g. Perú).
+ * 7. Soporte de culminación meridiana Sur (Hemisferio Norte).
+ * 8. Incorporación analítica de la Ecuación del Tiempo (EoT) para longitud certera.
+ * 9. Cálculo de Día Juliano en UTC puro sin sesgo de zona horaria local.
+ * 10. Resiliencia ante cadenas horarias de tránsito vacías o malformadas.
  */
 
 const assert = require('assert');
@@ -52,6 +55,17 @@ runTest('3. CelestialNavigationEngine: Normalización canónica angular [0, 360)
     assert(engineCode.includes('((rawMoonAz % 360) + 360) % 360'), 'Debe normalizar azimut lunar');
 });
 
+runTest('4. CelestialNavigationEngine: Día Juliano en UTC puro (sin resta de getTimezoneOffset)', () => {
+    assert(!engineCode.includes('getTimezoneOffset() / 1440'), 'No debe restar getTimezoneOffset al Día Juliano UTC');
+    assert(engineCode.includes('(time / 86400000) + 2440587.5'), 'Debe usar la fórmula canónica de Día Juliano');
+});
+
+runTest('5. CelestialNavigationEngine: Soporte de dirección de culminación y Ecuación del Tiempo', () => {
+    assert(engineCode.includes('culminationDirection'), 'Debe aceptar parámetro culminationDirection');
+    assert(engineCode.includes('eotHours'), 'Debe calcular eotHours (Ecuación del Tiempo)');
+    assert(engineCode.includes('rawLat = declinationDeg - zenithDist'), 'Debe calcular latitud para culminación Norte');
+});
+
 // ── 2. Simulación y Validación Astronómica ─────────────────────────────────────
 function simulateEphemeris(latDeg, lonDeg, date = new Date()) {
     const rad = Math.PI / 180;
@@ -62,7 +76,7 @@ function simulateEphemeris(latDeg, lonDeg, date = new Date()) {
     const safeDate = (date instanceof Date && !isNaN(date.getTime())) ? date : new Date();
 
     const time = safeDate.getTime();
-    const julianDay = (time / 86400000) - (safeDate.getTimezoneOffset() / 1440) + 2440587.5;
+    const julianDay = (time / 86400000) + 2440587.5;
     const d = julianDay - 2451545.0;
 
     const L = (280.460 + 0.9856474 * d) % 360;
@@ -96,20 +110,20 @@ function simulateEphemeris(latDeg, lonDeg, date = new Date()) {
     };
 }
 
-runTest('4. Astronomía: Cálculo en Polo Norte (90° N) no genera división por cero ni NaN', () => {
+runTest('6. Astronomía: Cálculo en Polo Norte (90° N) no genera división por cero ni NaN', () => {
     const res = simulateEphemeris(90, 0);
     assert(isFinite(res.azimuthDeg), `Azimut debe ser finito en polo: ${res.azimuthDeg}`);
     assert(isFinite(res.altitudeDeg), `Altitud debe ser finita en polo: ${res.altitudeDeg}`);
 });
 
-runTest('5. Astronomía: Coordenadas NaN devuelven efemérides válidas sin propagar NaN', () => {
+runTest('7. Astronomía: Coordenadas NaN devuelven efemérides válidas sin propagar NaN', () => {
     const res = simulateEphemeris(NaN, NaN);
     assert(isFinite(res.azimuthDeg), 'Azimut debe ser finito con NaN');
     assert(isFinite(res.altitudeDeg), 'Altitud debe ser finita con NaN');
     assert(isFinite(res.declinationDeg), 'Declinación debe ser finita con NaN');
 });
 
-function simulateSolarNoonPosition(timeStr, altitudeDeg) {
+function simulateSolarNoonPosition(timeStr, altitudeDeg, date = new Date(), culminationDirection = 'SOUTH') {
     const safeStr = typeof timeStr === 'string' ? timeStr.trim() : '12:00:00';
     const parts = safeStr.split(':');
     const h = parseFloat(parts[0] || '12');
@@ -117,31 +131,63 @@ function simulateSolarNoonPosition(timeStr, altitudeDeg) {
     const s = parseFloat(parts[2] || '0');
     const utcHours = (!isNaN(h) && isFinite(h)) ? h + ((!isNaN(m) && isFinite(m)) ? m / 60 : 0) + ((!isNaN(s) && isFinite(s)) ? s / 3600 : 0) : 12;
 
-    const rawLon = ((12 - utcHours) * 15);
-    const normalizedLon = ((((rawLon + 180) % 360) + 360) % 360) - 180;
-    const estimatedLon = Math.round(normalizedLon * 100) / 100;
-
     const safeAltitude = (typeof altitudeDeg === 'number' && isFinite(altitudeDeg))
         ? Math.max(0, Math.min(90, altitudeDeg))
         : 45;
 
-    const rawLat = 90 - safeAltitude;
+    const safeDate = (date instanceof Date && !isNaN(date.getTime())) ? date : new Date();
+    const rad = Math.PI / 180;
+    const deg = 180 / Math.PI;
+    const time = safeDate.getTime();
+    const julianDay = (time / 86400000) + 2440587.5;
+    const d = julianDay - 2451545.0;
+    const L = (280.460 + 0.9856474 * d) % 360;
+    const g = ((357.528 + 0.9856003 * d) % 360) * rad;
+    const lambda = (L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad;
+    const epsilon = (23.439 - 0.0000004 * d) * rad;
+    const sinDecl = Math.sin(epsilon) * Math.sin(lambda);
+    const declinationDeg = Math.asin(sinDecl) * deg;
+
+    const raRad = Math.atan2(Math.cos(epsilon) * Math.sin(lambda), Math.cos(lambda));
+    const raDeg = ((raRad * deg % 360) + 360) % 360;
+    const normalizedL = ((L % 360) + 360) % 360;
+    let eotDeg = normalizedL - raDeg;
+    if (eotDeg > 180) eotDeg -= 360;
+    if (eotDeg < -180) eotDeg += 360;
+    const eotHours = eotDeg / 15;
+
+    const rawLon = ((12.0 - eotHours - utcHours) * 15);
+    const normalizedLon = ((((rawLon + 180) % 360) + 360) % 360) - 180;
+    const estimatedLon = Math.round(normalizedLon * 100) / 100;
+
+    const zenithDist = 90 - safeAltitude;
+    let rawLat;
+    if (culminationDirection === 'NORTH') {
+        rawLat = declinationDeg - zenithDist;
+    } else {
+        rawLat = declinationDeg + zenithDist;
+    }
     const estimatedLat = Math.round(Math.max(-90, Math.min(90, rawLat)) * 100) / 100;
 
-    return { estimatedLat, estimatedLon };
+    return { estimatedLat, estimatedLon, declinationDeg, eotHours };
 }
 
-runTest('6. Tránsito Solar: Tránsito a las 17:00 UTC calcula longitud 75° Oeste (-75.0°)', () => {
-    const pos = simulateSolarNoonPosition('17:00:00', 60);
-    assert.strictEqual(pos.estimatedLon, -75, `Longitud esperada: -75°, obtenida: ${pos.estimatedLon}°`);
-    assert(pos.estimatedLat >= 0 && pos.estimatedLat <= 90, `Latitud debe estar acotada: ${pos.estimatedLat}°`);
+runTest('8. Tránsito Solar: Culminación Norte en Lima, Perú (Lat ~ -12°) estima latitud negativa correcta', () => {
+    const equinoxDate = new Date('2026-09-22T12:00:00Z');
+    const pos = simulateSolarNoonPosition('17:08:00', 78, equinoxDate, 'NORTH');
+    assert(pos.estimatedLat < -10 && pos.estimatedLat > -14, `Latitud en Lima debe ser ~ -12°, obtenida: ${pos.estimatedLat}°`);
 });
 
-runTest('7. Tránsito Solar: Cadena de tiempo vacía o corrupta no arroja excepción', () => {
+runTest('9. Tránsito Solar: Culminación Sur en Madrid, España (Lat ~ +40.4°) estima latitud positiva correcta', () => {
+    const equinoxDate = new Date('2026-09-22T12:00:00Z');
+    const pos = simulateSolarNoonPosition('12:15:00', 49.6, equinoxDate, 'SOUTH');
+    assert(pos.estimatedLat > 38 && pos.estimatedLat < 42, `Latitud en Madrid debe ser ~ +40.4°, obtenida: ${pos.estimatedLat}°`);
+});
+
+runTest('10. Tránsito Solar: Cadena de tiempo vacía o corrupta no arroja excepción', () => {
     const pos = simulateSolarNoonPosition('corrupt_time', NaN);
     assert(isFinite(pos.estimatedLat), 'Latitud debe ser finita');
     assert(isFinite(pos.estimatedLon), 'Longitud debe ser finita');
-    assert.strictEqual(pos.estimatedLon, 0, 'UTC 12:00 por defecto genera longitud 0°');
 });
 
 console.log('\n================================================================================');

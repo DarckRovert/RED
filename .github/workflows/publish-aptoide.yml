@@ -1,0 +1,120 @@
+name: Sync Release to Aptoide Connect
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Git Release Tag (e.g., v96.0.0)'
+        required: true
+        type: string
+      apk_url:
+        description: 'Direct APK Download URL (leave blank to auto-derive from release tag)'
+        required: false
+        type: string
+      release_notes:
+        description: 'Release notes to show in store listing (optional)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish-aptoide:
+    name: Publish APK to Aptoide Connect / Catappult
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Determine Release Parameters
+        id: params
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.version_tag }}"
+            APK_URL="${{ inputs.apk_url }}"
+            NOTES="${{ inputs.release_notes }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+            APK_URL=""
+            NOTES="${{ github.event.release.body }}"
+          fi
+
+          if [ -z "$APK_URL" ]; then
+            APK_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/red-${TAG}-release.apk"
+          fi
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "apk_url=$APK_URL" >> $GITHUB_OUTPUT
+          
+          # Write notes to temporary file to safely handle multi-line strings
+          printf "%s\n" "$NOTES" > /tmp/release_notes.txt
+
+      - name: Check Catappult Secret Configuration
+        env:
+          CATAPPULT_KEY: ${{ secrets.CATAPPULT_API_KEY }}
+        run: |
+          if [ -z "$CATAPPULT_KEY" ]; then
+            echo "::error::CATAPPULT_API_KEY secret is not configured in repository secrets."
+            echo "Please navigate to Settings > Secrets and variables > Actions and add CATAPPULT_API_KEY."
+            exit 1
+          fi
+
+      - name: Fetch Release APK Binary
+        id: fetch_apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/aptoide_apk
+          TAG="${{ steps.params.outputs.tag }}"
+          echo "Attempting to locate attached release APK binary for $TAG..."
+          if gh release download "$TAG" -p "*release.apk" -D /tmp/aptoide_apk/ 2>/dev/null; then
+            APK_FILE=$(find /tmp/aptoide_apk/ -name "*release.apk" | head -n 1)
+            if [ -f "$APK_FILE" ]; then
+              echo "apk_file=$APK_FILE" >> $GITHUB_OUTPUT
+              echo "Successfully acquired release binary: $APK_FILE"
+            else
+              echo "apk_file=" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "apk_file=" >> $GITHUB_OUTPUT
+            echo "Binary download unavailable, will utilize direct release URL fallback."
+          fi
+
+      - name: Publish to Aptoide Uploader API
+        env:
+          CATAPPULT_API_KEY: ${{ secrets.CATAPPULT_API_KEY }}
+        run: |
+          if [ -n "${{ steps.fetch_apk.outputs.apk_file }}" ]; then
+            echo "Publishing via direct binary upload..."
+            python scripts/publish_to_aptoide.py \
+              --apk-file "${{ steps.fetch_apk.outputs.apk_file }}" \
+              --notes-file "/tmp/release_notes.txt" \
+              --release-mode IMMEDIATE
+          else
+            echo "Publishing via public URL delegation..."
+            python scripts/publish_to_aptoide.py \
+              --tag "${{ steps.params.outputs.tag }}" \
+              --apk-url "${{ steps.params.outputs.apk_url }}" \
+              --notes-file "/tmp/release_notes.txt" \
+              --release-mode IMMEDIATE
+          fi
+
+      - name: Generate Action Summary
+        if: always()
+        run: |
+          echo "### Aptoide Connect Release Sync" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Package** | \`f.red.app\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version Tag** | \`${{ steps.params.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **APK URL** | [Direct Download](${{ steps.params.outputs.apk_url }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Console** | [Aptoide Connect Dashboard](https://developer.connect.aptoide.com/myApps/f.red.app?operatingSystem=android) |" >> $GITHUB_STEP_SUMMARY

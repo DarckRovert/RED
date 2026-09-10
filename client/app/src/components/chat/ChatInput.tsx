@@ -6,6 +6,7 @@ import { translateTextAI } from "../../api/ai";
 import { toast } from "../Toast";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { TacticalEmojiPicker } from "./TacticalEmojiPicker";
+import { TacIcon } from "../ui/TacIcon";
 
 export interface ChatInputProps {
     inputText?: string;
@@ -448,14 +449,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             justifyItems: "center"
                         }}>
                             {[
-                                { icon: "📄", label: "Documento", bg: "linear-gradient(135deg, #5F66CD, #5157C4)", shadow: "rgba(95,102,205,0.5)", action: () => { setIsAttachOpen(false); handleDocument(); } },
-                                { icon: "📷", label: "Cámara", bg: "linear-gradient(135deg, #D3396D, #BE2D5E)", shadow: "rgba(211,57,109,0.5)", action: () => { setIsAttachOpen(false); handleCamera(); } },
-                                { icon: "🖼️", label: "Galería", bg: "linear-gradient(135deg, #AC44CF, #9732B8)", shadow: "rgba(172,68,207,0.5)", action: () => { setIsAttachOpen(false); handleGallery(); } },
-                                { icon: "🎵", label: "Audio", bg: "linear-gradient(135deg, #F07F26, #E06615)", shadow: "rgba(240,127,38,0.5)", action: () => { setIsAttachOpen(false); handleAudio(); } },
-                                { icon: "📍", label: "Ubicación", bg: "linear-gradient(135deg, #069F7B, #008767)", shadow: "rgba(6,159,123,0.5)", action: () => { setIsAttachOpen(false); handleLocation(); } },
-                                { icon: "👤", label: "Contacto", bg: "linear-gradient(135deg, #029AD4, #0280B3)", shadow: "rgba(2,154,212,0.5)", action: () => { setIsAttachOpen(false); handleShareContact(); } },
-                                { icon: "📊", label: "Encuesta", bg: "linear-gradient(135deg, #00A389, #008F79)", shadow: "rgba(0,163,137,0.5)", action: () => { setIsAttachOpen(false); setShowPollModal(true); } },
-                                { icon: "💸", label: "Pagar RED", bg: "linear-gradient(135deg, #00B0FF, #0091EA)", shadow: "rgba(0,176,255,0.5)", action: () => { setIsAttachOpen(false); handlePay(); } },
+                                { icon: <TacIcon name="terminal" size={22} color="#FFFFFF" />, label: "Documento", bg: "linear-gradient(135deg, #5F66CD, #5157C4)", shadow: "rgba(95,102,205,0.5)", action: () => { setIsAttachOpen(false); handleDocument(); } },
+                                { icon: <TacIcon name="camera" size={22} color="#FFFFFF" />, label: "Cámara", bg: "linear-gradient(135deg, #D3396D, #BE2D5E)", shadow: "rgba(211,57,109,0.5)", action: () => { setIsAttachOpen(false); handleCamera(); } },
+                                { icon: <TacIcon name="chats" size={22} color="#FFFFFF" />, label: "Galería", bg: "linear-gradient(135deg, #AC44CF, #9732B8)", shadow: "rgba(172,68,207,0.5)", action: () => { setIsAttachOpen(false); handleGallery(); } },
+                                { icon: <TacIcon name="mic" size={22} color="#FFFFFF" />, label: "Audio", bg: "linear-gradient(135deg, #F07F26, #E06615)", shadow: "rgba(240,127,38,0.5)", action: () => { setIsAttachOpen(false); handleAudio(); } },
+                                { icon: <TacIcon name="compass" size={22} color="#FFFFFF" />, label: "Ubicación", bg: "linear-gradient(135deg, #069F7B, #008767)", shadow: "rgba(6,159,123,0.5)", action: () => { setIsAttachOpen(false); handleLocation(); } },
+                                { icon: <TacIcon name="user" size={22} color="#FFFFFF" />, label: "Contacto", bg: "linear-gradient(135deg, #029AD4, #0280B3)", shadow: "rgba(2,154,212,0.5)", action: () => { setIsAttachOpen(false); handleShareContact(); } },
+                                { icon: <TacIcon name="status" size={22} color="#FFFFFF" />, label: "Encuesta", bg: "linear-gradient(135deg, #00A389, #008F79)", shadow: "rgba(0,163,137,0.5)", action: () => { setIsAttachOpen(false); setShowPollModal(true); } },
+                                { icon: <TacIcon name="wallet" size={22} color="#FFFFFF" />, label: "Pagar RED", bg: "linear-gradient(135deg, #00B0FF, #0091EA)", shadow: "rgba(0,176,255,0.5)", action: () => { setIsAttachOpen(false); handlePay(); } },
                             ].map((a, i) => (
                                 <button
                                     key={a.label}
@@ -641,40 +642,45 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                 onClick={() => { setIsHandsFree(!isHandsFree); }}
                                 className="btn-icon"
                                 style={{
-                                    width: 32, height: 32, fontSize: "0.85rem",
+                                    width: 32, height: 32,
                                     color: isHandsFree ? "var(--accent-cyan)" : "var(--text-muted)",
                                     background: isHandsFree ? "rgba(0,229,255,0.12)" : "transparent",
                                     borderRadius: "50%", border: "none",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
                                     transition: "background 0.2s ease, color 0.2s ease"
                                 }}
                                 title="Modo manos libres"
                             >
-                                {isHandsFree ? "🔓" : "🔒"}
+                                <TacIcon name="lock" size={15} color={isHandsFree ? "var(--accent-cyan)" : "currentColor"} />
                             </button>
                             <button
                                 onClick={cancelRecording}
                                 className="btn-icon"
-                                style={{ width: 34, height: 34, fontSize: "0.90rem", color: "#FF5252" }}
+                                style={{
+                                    width: 34, height: 34, color: "#FF5252",
+                                    display: "flex", alignItems: "center", justifyContent: "center"
+                                }}
                                 title="Descartar grabación"
                             >
-                                🗑️
+                                <TacIcon name="trash" size={16} color="#FF5252" />
                             </button>
                             <button
                                 onClick={stopRecording}
                                 className="btn-icon"
                                 style={{
-                                    width: 38, height: 38, fontSize: "1rem",
+                                    width: 38, height: 38,
                                     background: isFamiliar ? "#00A884" : "var(--primary)",
                                     color: "#fff",
                                     boxShadow: isFamiliar ? "0 0 14px rgba(0,168,132,0.5)" : "0 0 14px rgba(232,33,58,0.5)",
                                     borderRadius: "50%", border: "none",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
                                     transition: "transform 0.15s ease"
                                 }}
                                 title="Enviar audio"
                                 onMouseEnter={ev => (ev.currentTarget.style.transform = "scale(1.1)")}
                                 onMouseLeave={ev => (ev.currentTarget.style.transform = "scale(1)")}
                             >
-                                📤
+                                <TacIcon name="forward" size={16} color="#FFFFFF" />
                             </button>
                         </div>
                     </div>

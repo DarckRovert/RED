@@ -5,6 +5,7 @@ import { useRedStore } from "../../store/useRedStore";
 import { meshRouter } from "../../lib/mesh/meshRouter";
 import { avatarStyle, formatTime } from "./types";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
+import { TacIcon } from "../ui/TacIcon";
 
 interface ConversationListProps {
     filteredConvs: any[];
@@ -40,12 +41,12 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                         padding: "4px 2px"
                     }}>
                         <div style={{
-                            fontSize: "0.65rem", fontWeight: 900,
+                            fontSize: "0.75rem", fontWeight: 800,
                             color: "var(--accent-purple, #B388FF)",
                             fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.8px",
                             display: "flex", alignItems: "center", gap: "6px"
                         }}>
-                            <span>👥</span> {t('sidebar.squads_title') || "ESCUADRONES P2P"}
+                            <TacIcon name="users" size={14} color="var(--accent-purple, #B388FF)" /> {t('sidebar.squads_title') || "ESCUADRONES P2P"}
                         </div>
                         <button
                             onClick={() => navigate("groups")}
@@ -70,7 +71,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                 cursor: "pointer", transition: "all 0.2s ease"
                             }}
                         >
-                            <span style={{ fontSize: "1.2rem" }}>👥</span>
+                            <TacIcon name="users" size={24} color="#B388FF" />
                             <div>
                                 <div style={{ fontSize: "0.80rem", fontWeight: 800, color: "var(--text-primary)" }}>
                                     {t('sidebar.no_squads') || "Sin escuadrones activos"}
@@ -112,7 +113,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                             {Array.isArray(g.members) ? g.members.length : 0} {t('modules.groups')?.includes('P2P') ? 'miembros' : 'members'} · E2E SenderKey
                                         </div>
                                     </div>
-                                    <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>›</span>
+                                    <TacIcon name="chevron-right" size={14} color="var(--text-muted)" />
                                 </div>
                             ))}
                             {groups.length > 5 && (
@@ -121,10 +122,11 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                     style={{
                                         background: "none", border: "1px solid rgba(124,77,255,0.2)", borderRadius: "8px",
                                         color: "#B388FF", cursor: "pointer", fontSize: "0.72rem", fontWeight: 800,
-                                        padding: "6px 12px", transition: "all 0.15s ease"
+                                        padding: "6px 12px", transition: "all 0.15s ease",
+                                        display: "flex", alignItems: "center", justifyContent: "center", gap: 6
                                     }}
                                 >
-                                    Ver todos ({groups.length}) →
+                                    Ver todos ({groups.length}) <TacIcon name="chevron-right" size={12} color="#B388FF" />
                                 </button>
                             )}
                         </div>
@@ -155,9 +157,9 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                             width: "64px", height: "64px", borderRadius: "50%",
                             background: "rgba(0, 168, 132, 0.1)",
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: "1.8rem", marginBottom: "16px", color: "#00A884"
+                            marginBottom: "16px", color: "#00A884"
                         }}>
-                            💬
+                            <TacIcon name="chats" size={32} color="#00A884" />
                         </div>
                         <div style={{ fontSize: "1rem", fontWeight: 600, color: "#E9EDEF", marginBottom: "8px" }}>
                             No tienes chats aún
@@ -178,12 +180,15 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                             onMouseEnter={e => e.currentTarget.style.background = "#02906f"}
                             onMouseLeave={e => e.currentTarget.style.background = "#00A884"}
                         >
-                            <span>➕</span> Iniciar un chat
+                            <TacIcon name="chats" size={16} color="#FFFFFF" />
+                            <span>Iniciar un chat</span>
                         </button>
                     </div>
                 ) : (
                     <div className="empty-state-tactical animate-fade-scale">
-                        <div className="empty-state-icon">📡</div>
+                        <div className="empty-state-icon" style={{ display: "flex", justifyContent: "center", marginBottom: "8px" }}>
+                            <TacIcon name="radio" size={36} color="var(--accent-red, #E8213A)" />
+                        </div>
                         <div className="empty-state-title">{t('sidebar.no_contacts') || "Sin Transmisiones en Malla"}</div>
                         <div className="empty-state-desc">{t('sidebar.no_contacts_desc') || "Escanea un código QR o descubre nodos vecinos en el Radar táctico."}</div>
                         <button
@@ -289,8 +294,12 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                         display: "flex", alignItems: "center", justifyContent: "center",
                                         fontSize: "1.15rem", fontWeight: 700, color: "#FFFFFF",
                                         ...avatarStyle(c.peer),
+                                        border: "2px solid rgba(255,255,255,0.14)",
+                                        boxShadow: isPeerOnline && !c.is_group
+                                            ? "0 0 0 2px #00A884, 0 2px 10px rgba(0, 168, 132, 0.35)"
+                                            : "0 1px 4px rgba(0,0,0,0.25)"
                                     }}>
-                                        {c.is_group ? "👥" : resolvePeerName(c.peer).charAt(0).toUpperCase()}
+                                        {c.is_group ? <TacIcon name="users" size={22} color="#FFFFFF" /> : resolvePeerName(c.peer).charAt(0).toUpperCase()}
                                     </div>
                                     {isPeerOnline && !c.is_group && (
                                         <span
@@ -309,7 +318,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                         }}>
                                             {resolvePeerName(c.peer)}
                                         </div>
-                                        <div style={{
+                                        <div className="tabular-telemetry" style={{
                                             fontSize: "0.74rem",
                                             color: (c.unread_count || 0) > 0 ? "#25D366" : "#8696A0",
                                             fontWeight: (c.unread_count || 0) > 0 ? 600 : 400,
@@ -338,7 +347,9 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                                 </span>
                                             ) : isRecording ? (
                                                 <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                                                    <span style={{ animation: "pulse 1s infinite" }}>🎙️</span>
+                                                    <span style={{ animation: "pulse 1s infinite", display: "inline-flex", alignItems: "center" }}>
+                                                        <TacIcon name="mic" size={13} color="#00A884" />
+                                                    </span>
                                                     <span>grabando audio...</span>
                                                 </span>
                                             ) : hasDraft ? (
@@ -365,7 +376,9 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                                                     <path d="M10.91 3.316l-6.49 6.76-2.92-3.04.78-.75 2.14 2.23 5.71-5.95.78.75z" fill="#8696A0"/>
                                                                 </svg>
                                                             ) : (
-                                                                <span style={{ fontSize: "0.72rem", color: "#8696A0" }}>🕒</span>
+                                                                <span style={{ display: "inline-flex", alignItems: "center", color: "#8696A0" }}>
+                                                                    <TacIcon name="status" size={12} color="#8696A0" />
+                                                                </span>
                                                             )}
                                                         </span>
                                                     )}
@@ -418,10 +431,10 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                     display: "flex", alignItems: "center", justifyContent: "center",
                                     fontSize: c.is_group ? "1.25rem" : "1.1rem", fontWeight: 800, color: "#fff",
                                     ...avatarStyle(c.peer),
-                                    boxShadow: isPeerOnline ? "0 0 10px rgba(0, 230, 118, 0.4)" : undefined,
-                                    border: isPeerOnline ? "2px solid rgba(0, 230, 118, 0.7)" : "2px solid rgba(255,255,255,0.08)",
+                                    boxShadow: isPeerOnline ? "0 0 0 2px var(--accent-emerald, #00E676), 0 0 12px rgba(0, 230, 118, 0.45)" : "0 0 0 1px rgba(255,255,255,0.1)",
+                                    border: "2px solid rgba(255,255,255,0.08)",
                                 }}>
-                                    {c.is_group ? "👥" : resolvePeerName(c.peer).charAt(0).toUpperCase()}
+                                    {c.is_group ? <TacIcon name="users" size={20} color="#FFFFFF" /> : resolvePeerName(c.peer).charAt(0).toUpperCase()}
                                 </div>
 
                                 {isPeerOnline && (
@@ -441,7 +454,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                             </span>
                                         )}
                                     </div>
-                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                    <div className="tabular-telemetry" style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
                                         {rawTs ? formatTime(rawTs) : ""}
                                     </div>
                                 </div>
@@ -456,14 +469,18 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                     </div>
                                 ) : isRecording ? (
                                     <div style={{ fontSize: "0.80rem", color: "var(--accent-emerald, #00E676)", fontWeight: 700, marginTop: "2px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                                        <span style={{ animation: "pulse 1s infinite" }}>🎙️</span>
+                                        <span style={{ animation: "pulse 1s infinite", display: "inline-flex", alignItems: "center" }}>
+                                            <TacIcon name="mic" size={13} color="#00E676" />
+                                        </span>
                                         <span>grabando audio...</span>
                                     </div>
                                 ) : (
                                     <div style={{ fontSize: "0.78rem", color: hasDraft ? "var(--accent-amber, #FFB300)" : "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: "2px" }}>
                                         {hasDraft ? (
-                                            <span>
-                                                <strong style={{ color: "var(--accent-amber, #FFB300)" }}>✏️ Borrador: </strong>
+                                            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                                <strong style={{ color: "var(--accent-amber, #FFB300)", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                                    <TacIcon name="edit" size={12} color="#FFB300" /> Borrador:
+                                                </strong>
                                                 {savedDraft!.trim().slice(0, 35)}
                                             </span>
                                         ) : snippet}

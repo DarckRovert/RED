@@ -267,7 +267,6 @@ export class ManDownDetectorEngine {
     public destroy(): void {
         this.disarmSentry();
         this.listeners.clear();
-        ManDownDetectorEngine.instance = null;
     }
 }
 

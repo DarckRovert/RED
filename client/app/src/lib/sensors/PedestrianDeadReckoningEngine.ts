@@ -83,7 +83,8 @@ export class PedestrianDeadReckoningEngine {
 
         // Conectar sensor de orientación táctica unificado (Fusión 3D tilt-compensated + fallback cinemático)
         this.compassUnsub = tacticalCompass.subscribe((telemetry) => {
-            this.currentHeadingDeg = telemetry.headingDeg;
+            const heading = (typeof telemetry.headingDeg === 'number' && isFinite(telemetry.headingDeg)) ? telemetry.headingDeg : 0;
+            this.currentHeadingDeg = ((Math.round(heading) % 360) + 360) % 360;
         });
 
         // Conectar sensor inercial de movimiento para podometría táctica
@@ -224,7 +225,6 @@ export class PedestrianDeadReckoningEngine {
         this.stopTracking();
         this.resetPdr();
         this.listeners.clear();
-        PedestrianDeadReckoningEngine.instance = null;
     }
 }
 

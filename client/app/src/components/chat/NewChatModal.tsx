@@ -8,6 +8,7 @@ import { NewContactModal } from "./NewContactModal";
 import { WebCompanionPairConfirmationModal } from "../WebCompanionPairConfirmationModal";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { TacIcon } from "../ui/TacIcon";
 
 interface NewChatModalProps {
     isOpen: boolean;
@@ -207,10 +208,9 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                         <div style={{
                             width: "38px", height: "38px", borderRadius: "50%",
                             backgroundColor: "#00A884", color: "#FFFFFF",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: "1.2rem", fontWeight: 900
+                            display: "flex", alignItems: "center", justifyContent: "center"
                         }}>
-                            💬
+                            <TacIcon name="chats" size={20} color="#FFFFFF" />
                         </div>
                         <div>
                             <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "#E9EDEF" }}>
@@ -230,12 +230,14 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                             background: "transparent",
                             border: "none",
                             color: "#8696A0",
-                            fontSize: "1.3rem",
                             cursor: "pointer",
-                            padding: "4px 8px"
+                            padding: "4px 8px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center"
                         }}
                     >
-                        ✕
+                        <TacIcon name="x" size={18} color="#8696A0" />
                     </button>
                 </div>
 
@@ -249,7 +251,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                         borderRadius: "10px",
                         padding: "8px 12px"
                     }}>
-                        <span style={{ color: "#8696A0", fontSize: "0.95rem" }}>🔍</span>
+                        <TacIcon name="search" size={16} color="#8696A0" />
                         <input
                             type="text"
                             placeholder="Buscar nombre o contacto..."
@@ -267,9 +269,9 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                         {searchQuery && (
                             <button
                                 onClick={() => setSearchQuery("")}
-                                style={{ background: "transparent", border: "none", color: "#8696A0", cursor: "pointer" }}
+                                style={{ background: "transparent", border: "none", color: "#8696A0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                             >
-                                ✕
+                                <TacIcon name="x" size={14} color="#8696A0" />
                             </button>
                         )}
                     </div>
@@ -295,10 +297,9 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                             <div style={{
                                 width: "42px", height: "42px", borderRadius: "50%",
                                 backgroundColor: "#00A884", color: "#FFFFFF",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.2rem"
+                                display: "flex", alignItems: "center", justifyContent: "center"
                             }}>
-                                👤
+                                <TacIcon name="user" size={20} color="#FFFFFF" />
                             </div>
                             <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF" }}>
@@ -327,13 +328,14 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                             <div style={{
                                 width: "42px", height: "42px", borderRadius: "50%",
                                 backgroundColor: "#00A884", color: "#FFFFFF",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.2rem"
+                                display: "flex", alignItems: "center", justifyContent: "center"
                             }}>
-                                👥
+                                <TacIcon name="users" size={20} color="#FFFFFF" />
                             </div>
-                            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF" }}>
-                                Nuevo grupo / escuadrón
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF" }}>
+                                    Nuevo grupo / escuadrón
+                                </div>
                             </div>
                         </div>
 
@@ -353,10 +355,9 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                             <div style={{
                                 width: "42px", height: "42px", borderRadius: "50%",
                                 backgroundColor: "#202C33", border: "1px solid rgba(255, 255, 255, 0.12)",
-                                color: "#00A884", display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.2rem"
+                                color: "#00A884", display: "flex", alignItems: "center", justifyContent: "center"
                             }}>
-                                📷
+                                <TacIcon name="camera" size={20} color="#00A884" />
                             </div>
                             <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF" }}>
@@ -384,10 +385,9 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                             <div style={{
                                 width: "42px", height: "42px", borderRadius: "50%",
                                 backgroundColor: "#202C33", border: "1px solid rgba(255, 255, 255, 0.12)",
-                                color: "#53BDEB", display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.2rem"
+                                color: "#53BDEB", display: "flex", alignItems: "center", justifyContent: "center"
                             }}>
-                                🪪
+                                <TacIcon name="card" size={20} color="#53BDEB" />
                             </div>
                             <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF" }}>
@@ -420,7 +420,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                                         }}
                                     >
                                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                            <span style={{ fontSize: "1.2rem" }}>📶</span>
+                                            <TacIcon name="radio" size={18} color="#00E676" />
                                             <div>
                                                 <div style={{ fontSize: "0.90rem", fontWeight: 700, color: "#E9EDEF" }}>
                                                     {p.name}

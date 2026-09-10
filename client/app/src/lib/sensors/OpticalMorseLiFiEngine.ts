@@ -261,12 +261,8 @@ export class OpticalMorseLiFiEngine {
     public destroy(): void {
         this.stopTransmission();
         this.stopAudioTone();
-        if (this.audioCtx) {
-            try { this.audioCtx.close(); } catch {}
-            this.audioCtx = null;
-        }
+        this.audioCtx = null;
         this.listeners.clear();
-        OpticalMorseLiFiEngine.instance = null;
     }
 
     private sleep(ms: number): Promise<void> {

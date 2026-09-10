@@ -154,12 +154,8 @@ export class MagneticAnomalyDetectorEngine {
 
     public destroy(): void {
         this.stopListening();
-        if (this.audioCtx) {
-            try { this.audioCtx.close(); } catch {}
-            this.audioCtx = null;
-        }
+        this.audioCtx = null;
         this.listeners.clear();
-        MagneticAnomalyDetectorEngine.instance = null;
     }
 
     public calibrateBaseline(targetBaseline?: number) {

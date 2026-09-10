@@ -12,10 +12,13 @@ import { MeshTab } from "./settings/MeshTab";
 import { IdentityTab } from "./settings/IdentityTab";
 import { BackupTab } from "./settings/BackupTab";
 import { UpdatesTab } from "./settings/UpdatesTab";
+import { PaymentsTab } from "./settings/PaymentsTab";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
-type SettingsTab = "appearance" | "calls" | "audio" | "storage" | "privacy" | "mesh" | "identity" | "backup" | "updates";
+import { TacIcon, TacIconName } from "./ui/TacIcon";
+
+type SettingsTab = "appearance" | "payments" | "calls" | "audio" | "storage" | "privacy" | "mesh" | "identity" | "backup" | "updates";
 
 interface SettingsModalProps {
     onClose?: () => void;
@@ -38,16 +41,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         return unregister;
     }, [handleClose]);
 
-    const tabs: { id: SettingsTab; label: string; icon: string }[] = [
-        { id: "appearance", label: t('settings.tab_appearance'), icon: "🎨" },
-        { id: "calls", label: t('settings.tab_calls'), icon: "📞" },
-        { id: "audio", label: t('settings.tab_audio'), icon: "🔊" },
-        { id: "storage", label: t('settings.tab_storage'), icon: "💾" },
-        { id: "privacy", label: t('settings.tab_privacy'), icon: "🛡️" },
-        { id: "mesh", label: t('settings.tab_mesh'), icon: "📡" },
-        { id: "identity", label: t('settings.tab_identity'), icon: "🆔" },
-        { id: "backup", label: t('settings.tab_backup'), icon: "🔐" },
-        { id: "updates", label: t('settings.tab_updates'), icon: "🔄" },
+    const tabs: { id: SettingsTab; label: string; iconName: TacIconName }[] = [
+        { id: "appearance", label: t('settings.tab_appearance'), iconName: "palette" },
+        { id: "payments", label: "Pasaporte de Pagos", iconName: "card" },
+        { id: "calls", label: t('settings.tab_calls'), iconName: "calls" },
+        { id: "audio", label: t('settings.tab_audio'), iconName: "volume" },
+        { id: "storage", label: t('settings.tab_storage'), iconName: "database" },
+        { id: "privacy", label: t('settings.tab_privacy'), iconName: "shield" },
+        { id: "mesh", label: t('settings.tab_mesh'), iconName: "radio" },
+        { id: "identity", label: t('settings.tab_identity'), iconName: "user" },
+        { id: "backup", label: t('settings.tab_backup'), iconName: "lock" },
+        { id: "updates", label: t('settings.tab_updates'), iconName: "refresh" },
     ];
 
     return (
@@ -79,7 +83,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     background: "rgba(255, 255, 255, 0.02)"
                 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <span style={{ fontSize: "1.3rem" }}>⚙️</span>
+                        <TacIcon name="settings" size={20} color="var(--primary, #E8213A)" />
                         <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, color: "#FFF" }}>
                             {t('settings.master_title')}
                         </h2>
@@ -87,9 +91,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     <button
                         onClick={() => { TacticalAudioEngine.playTap(); handleClose(); }}
                         className="btn-icon"
-                        style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255, 255, 255, 0.06)" }}
+                        style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255, 255, 255, 0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}
                     >
-                        ✕
+                        <TacIcon name="x" size={16} color="#FFF" />
                     </button>
                 </div>
 
@@ -111,11 +115,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                 color: activeTab === tab.id ? "#FFF" : "var(--text-secondary)",
                                 fontSize: "0.82rem", fontWeight: activeTab === tab.id ? 800 : 500,
                                 boxShadow: activeTab === tab.id ? "0 0 12px var(--primary-glow)" : "none",
-                                cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
+                                cursor: "pointer", display: "flex", alignItems: "center", gap: "8px",
                                 whiteSpace: "nowrap", transition: "all 0.15s"
                             }}
                         >
-                            <span>{tab.icon}</span>
+                            <TacIcon
+                                name={tab.iconName}
+                                size={14}
+                                color={activeTab === tab.id ? "#FFF" : "var(--text-secondary)"}
+                            />
                             <span>{tab.label}</span>
                         </button>
                     ))}
@@ -127,6 +135,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     display: "flex", flexDirection: "column"
                 }}>
                     {activeTab === "appearance" && <AppearanceTab />}
+                    {activeTab === "payments" && <PaymentsTab />}
                     {activeTab === "calls" && <CallsTab />}
                     {activeTab === "audio" && <AudioTab />}
                     {activeTab === "storage" && <StorageTab />}

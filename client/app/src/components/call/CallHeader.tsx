@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import type { VideoCallQuality } from "../../lib/settingsManager";
+import { TacIcon } from "../ui/TacIcon";
 
 interface CallHeaderProps {
     isAudioOnly: boolean;
@@ -66,21 +67,22 @@ export const CallHeader: React.FC<CallHeaderProps> = ({
                     WebkitBackdropFilter: "blur(24px)",
                     border: "1.5px solid rgba(255,255,255,0.2)", boxShadow: "0 10px 30px rgba(0,0,0,0.8)"
                 }}>
-                    <span style={{ color: "var(--accent-emerald)", fontSize: "0.78rem", fontWeight: 900, letterSpacing: "0.5px", textShadow: "0 0 8px rgba(0,230,118,0.4)" }}>
-                        🔒 {isAudioOnly ? (t.calls_extended?.audio_only || "VOZ E2E") : (t.calls_extended?.video_call || "HD VIDEO E2E")}
+                    <span style={{ color: "var(--accent-emerald)", fontSize: "0.78rem", fontWeight: 900, letterSpacing: "0.5px", textShadow: "0 0 8px rgba(0,230,118,0.4)", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <TacIcon name="lock" size={13} color="var(--accent-emerald)" />
+                        <span>{isAudioOnly ? (t.calls_extended?.audio_only || "VOZ E2E") : (t.calls_extended?.video_call || "HD VIDEO E2E")}</span>
                     </span>
                     {isDataChannelReady && (
-                        <span style={{ color: "var(--accent-cyan)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }} title="Canal de Datos P2P Activo (<5ms)">
-                            · ⚡ DC
+                        <span style={{ color: "var(--accent-cyan)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, display: "flex", alignItems: "center", gap: "3px" }} title="Canal de Datos P2P Activo (<5ms)">
+                            · <TacIcon name="zap" size={11} color="var(--accent-cyan)" /> DC
                         </span>
                     )}
                     {isVocoderActive && (
-                        <span style={{ color: "#FF9100", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }} title="Códec Vocoder Táctico 16 kbps FEC Activo">
-                            · 🎙️ VOC-16K
+                        <span style={{ color: "#FF9100", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, display: "flex", alignItems: "center", gap: "3px" }} title="Códec Vocoder Táctico 16 kbps FEC Activo">
+                            · <TacIcon name="mic" size={11} color="#FF9100" /> VOC-16K
                         </span>
                     )}
                     {callActive && (
-                        <span style={{ color: "#FFFFFF", fontSize: "0.86rem", fontFamily: "JetBrains Mono, monospace", fontWeight: 900 }}>
+                        <span className="tabular-telemetry" style={{ color: "#FFFFFF", fontSize: "0.86rem", fontFamily: "JetBrains Mono, monospace", fontWeight: 900 }}>
                             · {formatDuration(callDuration)}
                         </span>
                     )}
@@ -107,8 +109,10 @@ export const CallHeader: React.FC<CallHeaderProps> = ({
                             gap: "6px"
                         }}
                         title="Opciones de Llamada"
+                        aria-label="Opciones"
                     >
-                        ⚙️ Opciones
+                        <TacIcon name="settings" size={14} color={isOptionsMenuOpen ? "#000" : "#00E5FF"} />
+                        <span>Opciones</span>
                     </button>
 
                     {/* PIP Floating Minimize Button */}
@@ -131,11 +135,13 @@ export const CallHeader: React.FC<CallHeaderProps> = ({
                             boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
                             display: "flex",
                             alignItems: "center",
-                            gap: "4px"
+                            gap: "5px"
                         }}
                         title={t.calls_extended?.pip_return || "PIP"}
+                        aria-label="PIP"
                     >
-                        🗗 PIP
+                        <TacIcon name="minimize" size={13} color="#00E5FF" />
+                        <span>PIP</span>
                     </button>
 
                     {/* Telemetry HUD Toggle Button */}

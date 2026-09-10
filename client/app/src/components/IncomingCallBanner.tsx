@@ -9,6 +9,7 @@ import { callHistory } from "../lib/audio/CallHistoryEngine";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { TacIcon } from "./ui/TacIcon";
 
 
 export function IncomingCallBanner() {
@@ -127,11 +128,11 @@ export function IncomingCallBanner() {
                         ? "linear-gradient(135deg, #00E5FF, #0097A7)"
                         : "linear-gradient(135deg, #00E676, #00B368)",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "1.3rem", color: isVideo ? "#000" : "#000",
+                    color: "#000",
                     boxShadow: isVideo ? "0 0 16px rgba(0,229,255,0.6)" : "0 0 16px rgba(0,230,118,0.6)",
                     animation: "pulse 1s infinite"
                 }}>
-                    {isVideo ? "📹" : "📞"}
+                    {isVideo ? <TacIcon name="camera" size={22} color="#000" /> : <TacIcon name="calls" size={22} color="#000" />}
                 </div>
                 <div>
                     <div style={{ color: "white", fontWeight: 800, fontSize: "0.95rem" }}>
@@ -148,14 +149,15 @@ export function IncomingCallBanner() {
                 </div>
             </div>
 
-            <div style={{ display: "flex", gap: "8px" }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <button
                     onClick={handleReject}
                     className="btn-icon"
-                    style={{ width: 38, height: 38, background: "rgba(255,51,85,0.2)", border: "1px solid var(--accent-crimson)", color: "var(--accent-crimson)" }}
+                    style={{ width: 38, height: 38, background: "rgba(255,51,85,0.2)", border: "1px solid var(--accent-crimson)", color: "var(--accent-crimson)", borderRadius: "50%" }}
                     title={t.calls?.reject || "Rechazar"}
+                    aria-label="Rechazar llamada"
                 >
-                    ✕
+                    <TacIcon name="x" size={16} color="var(--accent-crimson)" />
                 </button>
                 <button
                     onClick={handleAccept}
@@ -168,10 +170,15 @@ export function IncomingCallBanner() {
                             : "linear-gradient(135deg, #00E676, #00B368)", 
                         color: "#000", 
                         fontWeight: 900, 
-                        fontSize: "0.82rem" 
+                        fontSize: "0.82rem",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px"
                     }}
+                    aria-label="Aceptar llamada"
                 >
-                    {t.calls?.accept || "Contestar"}
+                    <TacIcon name="calls" size={15} color="#000" />
+                    <span>{t.calls?.accept || "Contestar"}</span>
                 </button>
             </div>
         </div>

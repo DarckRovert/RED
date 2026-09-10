@@ -2,6 +2,8 @@ import React from "react";
 import { useRedStore } from "../../store/useRedStore";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
+import { TacIcon } from "../ui/TacIcon";
+
 
 interface ChatHeaderProps {
     goBack: () => void;
@@ -166,7 +168,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                         title={t.common?.back || "Volver"}
                         style={{ width: 36, height: 36, flexShrink: 0, color: isFamiliar ? "#D1D7DB" : "#FFFFFF" }}
                     >
-                        ←
+                        <TacIcon name="arrow-left" size={18} color="currentColor" />
                     </button>
 
                     {/* Avatar y Datos del Interlocutor (Click para abrir perfil) */}
@@ -180,13 +182,17 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                 width: 40, height: 40, borderRadius: "50%",
                                 ...avStyle(peerHash || "RED"),
                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                fontWeight: 900, color: "white", fontSize: "1.05rem"
+                                fontWeight: 900, color: "white", fontSize: "1.05rem",
+                                border: isFamiliar ? "2px solid rgba(255,255,255,0.14)" : "2px solid rgba(0, 229, 255, 0.3)",
+                                boxShadow: isOnline
+                                    ? (isFamiliar ? "0 0 0 2px #00A884, 0 2px 10px rgba(0, 168, 132, 0.35)" : "0 0 0 2px var(--accent-emerald), 0 0 12px rgba(0, 230, 118, 0.5)")
+                                    : "0 2px 8px rgba(0,0,0,0.3)"
                             }}>
-                                {peerName[0]?.toUpperCase() || "🔴"}
+                                {peerName[0]?.toUpperCase() || "R"}
                             </div>
                             <div style={{
                                 position: "absolute", bottom: -1, right: -1,
-                                width: 10, height: 10, borderRadius: "50%",
+                                width: 11, height: 11, borderRadius: "50%",
                                 background: isOnline ? (isFamiliar ? "#00A884" : "var(--accent-emerald)") : "var(--text-muted)",
                                 border: `2px solid ${isFamiliar ? "#202C33" : "var(--bg-void)"}`,
                                 boxShadow: isOnline ? `0 0 6px ${isFamiliar ? "#00A884" : "var(--accent-emerald)"}` : "none"
@@ -207,11 +213,13 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                             fontSize: "0.68rem", padding: isFamiliar ? "0 2px" : "1px 6px", flexShrink: 0, cursor: "pointer",
                                             background: isFamiliar ? "transparent" : "rgba(0, 230, 118, 0.15)",
                                             color: isFamiliar ? "#00A884" : "#00E676",
-                                            border: isFamiliar ? "none" : "1px solid rgba(0, 230, 118, 0.4)"
+                                            border: isFamiliar ? "none" : "1px solid rgba(0, 230, 118, 0.4)",
+                                            display: "inline-flex", alignItems: "center", gap: "3px"
                                         }}
                                         title="Safety Number Verificado"
                                     >
-                                        🛡️ {isFamiliar ? "" : (t.safety_number?.verified || "VERIFICADO")}
+                                        <TacIcon name="shield" size={13} color={isFamiliar ? "#00A884" : "#00E676"} />
+                                        <span>{isFamiliar ? "" : (t.safety_number?.verified || "VERIFICADO")}</span>
                                     </span>
                                 )}
                             </div>
@@ -290,10 +298,10 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                 background: burnTimer ? "rgba(255, 82, 82, 0.15)" : "transparent",
                                 borderRadius: "10px",
                                 border: burnTimer ? "1px solid rgba(255, 82, 82, 0.4)" : "none",
-                                fontSize: "0.95rem"
+                                display: "flex", alignItems: "center", justifyContent: "center"
                             }}
                         >
-                            {burnTimer ? "🔥" : "⏱️"}
+                            {burnTimer ? <TacIcon name="flame" size={16} color="var(--accent-red, #FF5252)" /> : <TacIcon name="status" size={16} color="currentColor" />}
                         </button>
                     )}
 
@@ -304,7 +312,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                         title={isGroupChat ? "Sala de Video Grupal del Escuadrón" : "Videollamada HD P2P WebRTC"}
                         style={{ width: 36, height: 36, color: isFamiliar ? "#D1D7DB" : "var(--accent-cyan)" }}
                     >
-                        📹
+                        <TacIcon name="camera" size={18} color="currentColor" />
                     </button>
 
                     {/* Voice Call Button */}
@@ -314,7 +322,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                         title={isGroupChat ? "Sala de Voz Grupal del Escuadrón" : "Llamada de Voz P2P WebRTC"}
                         style={{ width: 36, height: 36, color: isFamiliar ? "#D1D7DB" : "var(--accent-emerald)" }}
                     >
-                        📞
+                        <TacIcon name="calls" size={18} color="currentColor" />
                     </button>
 
                     {/* Search in Chat Button */}
@@ -324,7 +332,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                         title="Buscar en conversación"
                         style={{ width: 36, height: 36, color: searchOpen ? "var(--accent-amber)" : (isFamiliar ? "#D1D7DB" : "var(--text-secondary)") }}
                     >
-                        🔍
+                        <TacIcon name="search" size={18} color="currentColor" />
                     </button>
 
                     {/* Tactical Mode Only Buttons */}
@@ -336,7 +344,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                 title="🧭 Brújula Táctica P2P (Apuntar rumbo al contacto)"
                                 style={{ width: 36, height: 36, color: "var(--accent-amber)" }}
                             >
-                                🧭
+                                <TacIcon name="compass" size={18} color="currentColor" />
                             </button>
 
                             <button
@@ -346,7 +354,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                 title="Resumen IA del Canal"
                                 style={{ width: 36, height: 36, color: "var(--accent-cyan)" }}
                             >
-                                {isSummarizing ? "..." : "🤖"}
+                                {isSummarizing ? "..." : <TacIcon name="terminal" size={16} color="currentColor" />}
                             </button>
 
                             <button
@@ -357,11 +365,10 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                     width: 36, height: 36,
                                     color: isVerified ? "var(--accent-emerald, #00E676)" : "var(--text-secondary)",
                                     background: isVerified ? "rgba(0, 230, 118, 0.12)" : "transparent",
-                                    borderRadius: "10px",
-                                    fontSize: "0.95rem"
+                                    borderRadius: "10px"
                                 }}
                             >
-                                🛡️
+                                <TacIcon name="shield" size={16} color="currentColor" />
                             </button>
                         </>
                     )}
@@ -399,7 +406,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                             cursor: "pointer", textAlign: "left"
                                         }}
                                     >
-                                        <span>👤</span>
+                                        <TacIcon name="user" size={16} color="currentColor" />
                                         <span>Info. del contacto</span>
                                     </button>
 
@@ -416,7 +423,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                             cursor: "pointer", textAlign: "left"
                                         }}
                                     >
-                                        <span>🖼️</span>
+                                        <TacIcon name="camera" size={16} color="currentColor" />
                                         <span>Archivos, enlaces y docs</span>
                                     </button>
 
@@ -433,7 +440,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                                 cursor: "pointer", textAlign: "left"
                                             }}
                                         >
-                                            <span>⭐</span>
+                                            <TacIcon name="star" size={16} color="#FFBA00" />
                                             <span>Mensajes destacados</span>
                                         </button>
                                     )}
@@ -450,7 +457,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                             cursor: "pointer", textAlign: "left"
                                         }}
                                     >
-                                        <span>🔍</span>
+                                        <TacIcon name="search" size={16} color="currentColor" />
                                         <span>Buscar en el chat</span>
                                     </button>
 
@@ -466,7 +473,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                             cursor: "pointer", textAlign: "left"
                                         }}
                                     >
-                                        <span>⏱️</span>
+                                        <TacIcon name="status" size={16} color="currentColor" />
                                         <span>Mensajes temporales {burnTimer ? `(${burnTimer}s)` : ""}</span>
                                     </button>
 
@@ -483,7 +490,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                                 cursor: "pointer", textAlign: "left"
                                             }}
                                         >
-                                            <span>🎨</span>
+                                            <TacIcon name="chats" size={16} color="currentColor" />
                                             <span>Fondo de pantalla</span>
                                         </button>
                                     )}
@@ -501,7 +508,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                                 cursor: "pointer", textAlign: "left"
                                             }}
                                         >
-                                            <span>📄</span>
+                                            <TacIcon name="terminal" size={16} color="currentColor" />
                                             <span>Exportar chat</span>
                                         </button>
                                     )}
@@ -519,7 +526,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                                 cursor: "pointer", textAlign: "left"
                                             }}
                                         >
-                                            <span>🧹</span>
+                                            <TacIcon name="trash" size={16} color="#FF9800" />
                                             <span>Vaciar chat</span>
                                         </button>
                                     )}
@@ -538,7 +545,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                             cursor: "pointer", textAlign: "left"
                                         }}
                                     >
-                                        <span>🛡️</span>
+                                        <TacIcon name="shield" size={16} color="currentColor" />
                                         <span>Safety Number (Signal-Class)</span>
                                     </button>
 
@@ -554,7 +561,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                             cursor: "pointer", textAlign: "left"
                                         }}
                                     >
-                                        <span>🤖</span>
+                                        <TacIcon name="robot" size={16} color="currentColor" />
                                         <span>Resumen IA del Canal</span>
                                     </button>
 
@@ -570,7 +577,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                             cursor: "pointer", textAlign: "left"
                                         }}
                                     >
-                                        <span>🧭</span>
+                                        <TacIcon name="compass" size={16} color="currentColor" />
                                         <span>Brújula Táctica P2P</span>
                                     </button>
 
@@ -588,7 +595,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                             cursor: "pointer", textAlign: "left"
                                         }}
                                     >
-                                        <span>💣</span>
+                                        <TacIcon name="hazard" size={16} color="currentColor" />
                                         <span>Borrado Remoto P2P</span>
                                     </button>
                                 </div>

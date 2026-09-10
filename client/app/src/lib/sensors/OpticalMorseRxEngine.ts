@@ -186,7 +186,6 @@ export class OpticalMorseRxEngine {
     public destroy(): void {
         this.reset();
         this.listeners.clear();
-        OpticalMorseRxEngine.instance = null;
     }
 }
 

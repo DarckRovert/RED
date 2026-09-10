@@ -8,6 +8,7 @@ import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 import { getSecurePin } from "../lib/crypto/BiometricLockEngine";
+import { TacIcon } from "./ui/TacIcon";
 
 interface WebCompanionPairConfirmationModalProps {
     qrData: string;
@@ -122,20 +123,26 @@ export const WebCompanionPairConfirmationModal: React.FC<WebCompanionPairConfirm
                         position: "absolute", top: "16px", right: "16px",
                         background: "rgba(255,255,255,0.06)", border: "none",
                         width: "32px", height: "32px", borderRadius: "50%",
-                        color: "var(--text-muted)", fontSize: "16px", cursor: "pointer"
+                        color: "var(--text-muted)", cursor: "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center"
                     }}
                 >
-                    ✕
+                    <TacIcon name="x" size={16} color="var(--text-muted)" />
                 </button>
 
                 <div style={{ textAlign: "center" }}>
                     <div style={{
                         width: "56px", height: "56px", borderRadius: "18px",
-                        background: "rgba(0, 229, 255, 0.1)", border: "1px solid rgba(0, 229, 255, 0.3)",
+                        background: status === "success" ? "rgba(0, 230, 118, 0.15)" : "rgba(0, 229, 255, 0.1)", 
+                        border: status === "success" ? "1px solid rgba(0, 230, 118, 0.4)" : "1px solid rgba(0, 229, 255, 0.3)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.8rem", margin: "0 auto 12px auto"
+                        margin: "0 auto 12px auto"
                     }}>
-                        {status === "success" ? "🎉" : status === "transmitting" ? "⚡" : "💻"}
+                        <TacIcon 
+                            name={status === "success" ? "check" : status === "transmitting" ? "zap" : "terminal"} 
+                            size={28} 
+                            color={status === "success" ? "#00E676" : "var(--accent-cyan)"} 
+                        />
                     </div>
                     <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 900 }}>
                         {status === "success" ? "¡Sesión Web Activa!" : "Vincular con RED Web (PC)"}
@@ -155,15 +162,15 @@ export const WebCompanionPairConfirmationModal: React.FC<WebCompanionPairConfirm
                         fontSize: "0.78rem"
                     }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span>🔒</span>
+                            <TacIcon name="lock" size={14} color="var(--accent-cyan)" />
                             <span>Cifrado de extremo a extremo (ECDH P-256)</span>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span>🔄</span>
+                            <TacIcon name="refresh" size={14} color="var(--accent-cyan)" />
                             <span>Sincroniza contactos y mensajes recientes</span>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span>👤</span>
+                            <TacIcon name="user" size={14} color="var(--accent-cyan)" />
                             <span>Misma identidad: <strong>{identity?.nickname || "Operador RED"}</strong></span>
                         </div>
                     </div>
@@ -171,7 +178,9 @@ export const WebCompanionPairConfirmationModal: React.FC<WebCompanionPairConfirm
 
                 {status === "transmitting" && (
                     <div style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
-                        <div className="animate-spin" style={{ fontSize: "2rem" }}>⚙️</div>
+                        <div className="animate-spin" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <TacIcon name="settings" size={32} color="var(--accent-cyan)" />
+                        </div>
                         <span style={{ fontSize: "0.8rem", color: "var(--accent-cyan)", fontWeight: 700 }}>
                             Transmitiendo bóveda cifrada…
                         </span>
@@ -190,9 +199,9 @@ export const WebCompanionPairConfirmationModal: React.FC<WebCompanionPairConfirm
                         <button
                             onClick={handleConfirmPairing}
                             className="btn-tactical-primary"
-                            style={{ flex: 2, padding: "12px", fontSize: "0.88rem", fontWeight: 900 }}
+                            style={{ flex: 2, padding: "12px", fontSize: "0.88rem", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                         >
-                            ⚡ Autorizar y Vincular
+                            <TacIcon name="zap" size={16} /> Autorizar y Vincular
                         </button>
                     </div>
                 )}

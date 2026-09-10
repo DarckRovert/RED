@@ -4,6 +4,7 @@ import { toast } from "../Toast";
 import { ContactQrModal } from "./ContactQrModal";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { TacIcon } from "../ui/TacIcon";
 
 interface NewContactModalProps {
     isOpen: boolean;
@@ -199,10 +200,9 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                             <div style={{
                                 width: 38, height: 38, borderRadius: "50%",
                                 backgroundColor: "#00A884",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.2rem"
+                                display: "flex", alignItems: "center", justifyContent: "center"
                             }}>
-                                👤
+                                <TacIcon name="user" size={20} color="#FFFFFF" />
                             </div>
                             <div>
                                 <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "#E9EDEF" }}>
@@ -218,8 +218,19 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                                 TacticalAudioEngine.playTap();
                                 onClose();
                             }}
-                            style={{ background: "transparent", border: "none", color: "#8696A0", fontSize: "1.3rem", cursor: "pointer", padding: "4px 8px" }}
-                        >✕</button>
+                            style={{ 
+                                background: "transparent", 
+                                border: "none", 
+                                color: "#8696A0", 
+                                cursor: "pointer", 
+                                padding: "4px 8px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center"
+                            }}
+                        >
+                            <TacIcon name="x" size={18} color="#8696A0" />
+                        </button>
                     </div>
 
                     {/* ── Form ── */}
@@ -282,7 +293,6 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                                         backgroundColor: "#202C33",
                                         border: "1px solid rgba(255,255,255,0.1)",
                                         color: "#8696A0",
-                                        fontSize: "1.05rem",
                                         cursor: "pointer",
                                         display: "flex", alignItems: "center", justifyContent: "center",
                                         transition: "background 0.15s",
@@ -290,7 +300,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                                     onMouseEnter={e => (e.currentTarget.style.background = "#2A3942")}
                                     onMouseLeave={e => (e.currentTarget.style.background = "#202C33")}
                                 >
-                                    📋
+                                    <TacIcon name="clipboard" size={18} color="#8696A0" />
                                 </button>
                                 {/* QR */}
                                 <button
@@ -306,7 +316,6 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                                         backgroundColor: "rgba(0,168,132,0.15)",
                                         border: "1px solid rgba(0,168,132,0.3)",
                                         color: "#00A884",
-                                        fontSize: "1.05rem",
                                         cursor: "pointer",
                                         display: "flex", alignItems: "center", justifyContent: "center",
                                         transition: "background 0.15s",
@@ -314,7 +323,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                                     onMouseEnter={e => (e.currentTarget.style.background = "rgba(0,168,132,0.25)")}
                                     onMouseLeave={e => (e.currentTarget.style.background = "rgba(0,168,132,0.15)")}
                                 >
-                                    📷
+                                    <TacIcon name="camera" size={18} color="#00A884" />
                                 </button>
                             </div>
                             {didError && (
@@ -357,7 +366,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                             {isSaving ? (
                                 <>⏳ Guardando contacto...</>
                             ) : (
-                                <>✅ Guardar contacto</>
+                                <><TacIcon name="check" size={18} color="#FFFFFF" /> Guardar contacto</>
                             )}
                         </button>
 

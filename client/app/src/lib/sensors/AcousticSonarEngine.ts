@@ -6,6 +6,8 @@
  * cavity resonance modes, and distances to physical obstacles in zero-visibility scenarios.
  */
 
+import { AudioContextManager } from '../audio/AudioContextManager';
+
 export type SonarMediumType = 'AIR_20C' | 'CONCRETE' | 'WATER' | 'STEEL';
 
 export interface SonarPingResult {
@@ -102,12 +104,7 @@ export class AcousticSonarEngine {
 
     private initAudio() {
         if (!this.audioCtx || this.audioCtx.state === 'closed') {
-            const AudioContextClass = typeof window !== 'undefined'
-                ? (window.AudioContext || (window as any).webkitAudioContext)
-                : null;
-            if (AudioContextClass) {
-                this.audioCtx = new AudioContextClass();
-            }
+            this.audioCtx = AudioContextManager.acquireDedicatedContext('acoustic_sonar');
         }
     }
 
@@ -362,11 +359,10 @@ export class AcousticSonarEngine {
         this.isMicListening = false;
 
         if (this.audioCtx) {
-            try { this.audioCtx.close(); } catch {}
+            AudioContextManager.releaseDedicatedContext('acoustic_sonar').catch(() => {});
             this.audioCtx = null;
         }
         this.listeners.clear();
-        AcousticSonarEngine.instance = null;
     }
 
     public getState(): { isScanning: boolean; lastResult: SonarPingResult | null; medium: SonarMediumType } {

@@ -12,9 +12,20 @@ const MAX_HISTORY_LENGTH = 30;
 export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = (set, get) => ({
     preferences: typeof window !== 'undefined' ? SettingsManager.init() : DEFAULT_PREFERENCES,
 
+    paymentPassport: typeof window !== 'undefined' ? SettingsManager.getPaymentPassport() : {
+        preferredChainId: 137,
+        acceptsVouchers: true,
+        isPublicOnMesh: false,
+    },
+
+    updatePaymentPassport: (patch) => {
+        const updated = SettingsManager.updatePaymentPassport(patch);
+        set({ paymentPassport: updated, preferences: SettingsManager.getPreferences() });
+    },
+
     updatePreferences: (patch: Partial<UserPreferences>) => {
         const updated = SettingsManager.updatePreferences(patch);
-        set({ preferences: updated });
+        set({ preferences: updated, paymentPassport: updated.paymentPassport || get().paymentPassport });
         if (patch.meshPowerProfile) {
             const intervals = SettingsManager.getMeshPowerIntervals(patch.meshPowerProfile);
             localTransport.setScanInterval(intervals.bleScanMs);

@@ -6,6 +6,7 @@
 
 import { RingtoneType } from "./CallRingtoneEngine";
 import type { LanguageMode } from "./i18n/i18nEngine";
+import type { SovereignPaymentPassport } from "./miniapp/RedSDKTypes";
 
 export type TacticalThemeId = 
     | 'void-crimson' 
@@ -231,6 +232,8 @@ export interface UserPreferences {
     chatWallpaper?: 'doodle_dark' | 'doodle_green' | 'void_black';
     readReceiptsEnabled?: boolean;
     enterIsSend?: boolean;
+    // Pasaporte de Pagos Soberano Multi-Riel (Non-Custodial)
+    paymentPassport?: SovereignPaymentPassport;
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -261,12 +264,35 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     chatWallpaper: 'doodle_dark',
     readReceiptsEnabled: true,
     enterIsSend: false,
+    paymentPassport: {
+        preferredChainId: 137,
+        acceptsVouchers: true,
+        isPublicOnMesh: false,
+    },
 };
 
 const STORAGE_KEY = 'red_user_preferences_v1';
 
 export class SettingsManager {
     private static currentPrefs: UserPreferences = { ...DEFAULT_PREFERENCES };
+
+    public static getPaymentPassport(): SovereignPaymentPassport {
+        return this.currentPrefs.paymentPassport || {
+            preferredChainId: 137,
+            acceptsVouchers: true,
+            isPublicOnMesh: false,
+        };
+    }
+
+    public static updatePaymentPassport(patch: Partial<SovereignPaymentPassport>): SovereignPaymentPassport {
+        const updatedPassport: SovereignPaymentPassport = {
+            ...this.getPaymentPassport(),
+            ...patch,
+            updatedAt: Date.now(),
+        };
+        this.updatePreferences({ paymentPassport: updatedPassport });
+        return updatedPassport;
+    }
 
     /** Carga y aplica las preferencias almacenadas en el arranque */
     public static init(): UserPreferences {

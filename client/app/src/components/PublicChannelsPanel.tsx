@@ -8,6 +8,7 @@ import { toast } from "./Toast";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { copyToClipboard } from "../lib/clipboard";
+import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
 
 const DEFAULT_CHANNELS = [
     "red-local-general",
@@ -235,25 +236,20 @@ export const PublicChannelsPanel: React.FC = () => {
     };
 
     // ── Inyección Táctica de Coordenadas GPS ──────────────────────────────────
-    const handleInsertGps = () => {
-        if (!navigator.geolocation) {
-            toast.warning("Geolocalización no soportada en este entorno");
-            return;
-        }
+    const handleInsertGps = async () => {
         toast.info("Obteniendo coordenadas GPS fijas...");
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                const lat = pos.coords.latitude.toFixed(5);
-                const lon = pos.coords.longitude.toFixed(5);
+        try {
+            const loc = await TacticalLocationEngine.getEmergencyLocation(4000);
+            if (loc && TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                const lat = loc.lat!.toFixed(5);
+                const lon = loc.lon!.toFixed(5);
                 const gpsTag = `[📍 GPS: ${lat}, ${lon}] `;
                 setInputText(prev => `${gpsTag}${prev}`);
                 toast.success("Coordenadas inyectadas");
-            },
-            () => {
-                toast.error("No se pudo obtener posición GPS");
-            },
-            { timeout: 8000, enableHighAccuracy: true }
-        );
+                return;
+            }
+        } catch {}
+        toast.error("No se pudo obtener posición GPS");
     };
 
     // ── Inyección Táctica de Alerta ───────────────────────────────────────────

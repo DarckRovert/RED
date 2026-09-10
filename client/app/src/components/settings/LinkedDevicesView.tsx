@@ -8,6 +8,7 @@ import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 import { copyToClipboard } from "../../lib/clipboard";
+import { TacIcon } from "../ui/TacIcon";
 
 interface LinkedDevicesViewProps {
     onClose?: () => void;
@@ -385,12 +386,12 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
                         style={{
                             width: "44px", height: "44px", borderRadius: "50%",
                             background: "rgba(0,0,0,0.65)", border: "1px solid rgba(255,255,255,0.2)",
-                            color: "#fff", fontSize: "1.2rem", cursor: "pointer",
+                            color: "#fff", cursor: "pointer",
                             display: "flex", alignItems: "center", justifyContent: "center"
                         }}
                         title="Cancelar escaneo"
                     >
-                        ✕
+                        <TacIcon name="x" size={20} color="#fff" />
                     </button>
 
                     <div style={{
@@ -399,7 +400,7 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
                         color: "#E9EDEF", fontSize: "0.85rem", fontWeight: 700,
                         display: "flex", alignItems: "center", gap: "8px"
                     }}>
-                        <span>💻</span>
+                        <TacIcon name="terminal" size={16} color="var(--accent-cyan)" />
                         <span>Escanear código de RED Web</span>
                     </div>
 
@@ -409,12 +410,12 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
                             width: "44px", height: "44px", borderRadius: "50%",
                             background: isTorchOn ? "#00A884" : "rgba(0,0,0,0.65)",
                             border: "1px solid rgba(255,255,255,0.2)",
-                            color: "#fff", fontSize: "1.2rem", cursor: "pointer",
+                            color: "#fff", cursor: "pointer",
                             display: "flex", alignItems: "center", justifyContent: "center"
                         }}
                         title="Linterna"
                     >
-                        {isTorchOn ? "🔦" : "💡"}
+                        <TacIcon name="zap" size={20} color="#fff" />
                     </button>
                 </div>
 
@@ -465,7 +466,7 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
                                 display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                             }}
                         >
-                            <span>🖼️</span> Subir foto
+                            <TacIcon name="image" size={16} color="#fff" /> Subir foto
                         </button>
                         <button
                             onClick={async () => {
@@ -488,7 +489,7 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
                                 display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                             }}
                         >
-                            <span>📋</span> Pegar código
+                            <TacIcon name="clipboard" size={16} color="#00A884" /> Pegar código
                         </button>
                     </div>
                 </div>
@@ -537,12 +538,12 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
                             onClick={onClose}
                             style={{
                                 background: "transparent", border: "none",
-                                color: "#AEBAC1", fontSize: "1.25rem", cursor: "pointer",
+                                color: "#AEBAC1", cursor: "pointer",
                                 display: "flex", alignItems: "center", justifyContent: "center"
                             }}
                             title="Volver"
                         >
-                            ←
+                            <TacIcon name="arrow-left" size={20} color="#AEBAC1" />
                         </button>
                     )}
                     <div style={{ fontSize: "1.15rem", fontWeight: 700, color: "#E9EDEF" }}>
@@ -568,9 +569,9 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
                         background: "linear-gradient(135deg, rgba(0, 168, 132, 0.15) 0%, rgba(0, 229, 255, 0.1) 100%)",
                         border: "1.5px solid rgba(0, 168, 132, 0.35)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "3rem", boxShadow: "0 8px 30px rgba(0, 168, 132, 0.15)"
+                        boxShadow: "0 8px 30px rgba(0, 168, 132, 0.15)"
                     }}>
-                        💻
+                        <TacIcon name="terminal" size={48} color="#00A884" />
                     </div>
 
                     <div>
@@ -599,7 +600,7 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
                         onMouseEnter={(e) => (e.currentTarget.style.background = "#02906f")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "#00A884")}
                     >
-                        <span>📷</span>
+                        <TacIcon name="camera" size={18} color="#FFFFFF" />
                         <span>Vincular un dispositivo</span>
                     </button>
                 </div>
@@ -611,7 +612,7 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
                     display: "flex", alignItems: "center", gap: "12px",
                     fontSize: "0.78rem", color: "#8696A0"
                 }}>
-                    <span style={{ fontSize: "1.2rem", flexShrink: 0 }}>🔒</span>
+                    <TacIcon name="lock" size={18} color="#8696A0" />
                     <span>Tus datos personales y mensajes están cifrados de extremo a extremo y nunca tocan la nube sin cifrar.</span>
                 </div>
 
@@ -633,9 +634,9 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
                                     width: "44px", height: "44px", borderRadius: "12px",
                                     background: "rgba(0, 168, 132, 0.15)", border: "1px solid rgba(0, 168, 132, 0.3)",
                                     display: "flex", alignItems: "center", justifyContent: "center",
-                                    fontSize: "1.4rem", color: "#00A884", flexShrink: 0
+                                    flexShrink: 0
                                 }}>
-                                    💻
+                                    <TacIcon name="terminal" size={24} color="#00A884" />
                                 </div>
                                 <div>
                                     <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#E9EDEF" }}>
@@ -669,7 +670,7 @@ export const LinkedDevicesView: React.FC<LinkedDevicesViewProps> = ({ onClose, h
                             display: "flex", alignItems: "center", gap: "12px",
                             color: "#8696A0", fontSize: "0.85rem"
                         }}>
-                            <span style={{ fontSize: "1.2rem" }}>ℹ️</span>
+                            <TacIcon name="info" size={18} color="#8696A0" />
                             <span>No hay computadoras ni navegadores vinculados actualmente.</span>
                         </div>
                     )}

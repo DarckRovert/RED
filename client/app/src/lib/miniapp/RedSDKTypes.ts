@@ -42,7 +42,29 @@ export interface RedAppBundle {
     files: Record<string, string>;      // path -> content (text or Base64 data URL)
 }
 
-export type PaymentRail = 'paypal' | 'stripe' | 'web3_usdt' | 'lightning' | 'offgrid_voucher';
+export type PaymentRail = 'web3_usdt' | 'fiat_local' | 'paypal' | 'stripe' | 'lightning' | 'offgrid_voucher';
+
+export interface FiatPaymentChannel {
+    type: 'yape' | 'plin' | 'paypal' | 'pix' | 'bizum' | 'custom';
+    identifier: string;          // Número telefónico, email o alias
+    beneficiaryName?: string;    // Titular registrado en la app bancaria
+    qrDataUrl?: string;          // Imagen Base64 del código QR para escaneo directo
+    instructions?: string;       // Instrucciones adicionales para el comprador
+}
+
+export interface SovereignPaymentPassport {
+    evmAddress?: string;          // 0x... en Polygon (ChainId 137) o Base (ChainId 8453)
+    preferredChainId?: number;    // 137 (Polygon PoS) | 8453 (Base)
+    fiatType?: 'yape' | 'plin' | 'paypal' | 'pix' | 'bizum' | 'custom';
+    fiatIdentifier?: string;
+    fiatBeneficiaryName?: string;
+    fiatQrDataUrl?: string;
+    fiatChannels?: FiatPaymentChannel[];
+    lightningAddress?: string;    // usuario@dominio.com o LNURL
+    acceptsVouchers: boolean;     // Acepta trueque con vales off-grid RED
+    isPublicOnMesh: boolean;      // Compartir con nodos vecinos en el directorio de la malla
+    updatedAt?: number;
+}
 
 export interface PaymentIntentRequest {
     title: string;
@@ -57,6 +79,12 @@ export interface PaymentIntentRequest {
         evmAddress?: string;            // 0x... EVM address for USDT/USDC (Polygon/Base)
         lightningAddress?: string;      // e.g. user@getalby.com or LNURL
         pixKey?: string;                // Pix Key for Brazil
+        fiatType?: 'yape' | 'plin' | 'paypal' | 'pix' | 'bizum' | 'custom';
+        fiatIdentifier?: string;
+        fiatBeneficiaryName?: string;
+        fiatQrDataUrl?: string;
+        fiatChannels?: FiatPaymentChannel[];
+        paymentPassport?: SovereignPaymentPassport;
     };
     supportedRails?: PaymentRail[];
 }

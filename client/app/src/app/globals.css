@@ -233,8 +233,79 @@ body.native-app .app-container {
   box-shadow: 0 0 25px rgba(0, 229, 255, 0.2), inset 0 1px 0 rgba(0, 229, 255, 0.3) !important;
 }
 
+/* ─── C4ISR Telemetry & HUD Cards ────────────────────────────────────────────── */
+.tabular-telemetry {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-variant-numeric: tabular-nums !important;
+  letter-spacing: 0.03em;
+}
+
+.touch-target-tactical {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tactical-card-hud {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  transition: all var(--dur-normal) var(--ease-smooth);
+}
+
+.tactical-card-hud::before,
+.tactical-card-hud::after {
+  content: '';
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  pointer-events: none;
+  border-color: var(--primary-bright);
+  opacity: 0.7;
+}
+
+.tactical-card-hud::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid;
+  border-left: 2px solid;
+  border-top-left-radius: 3px;
+}
+
+.tactical-card-hud::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid;
+  border-right: 2px solid;
+  border-bottom-right-radius: 3px;
+}
+
+/* Adaptive GPU Degradation for Low-End Mobile WebViews & Power-Saving */
+.mode-eco-gpu,
+.power-profile-eco {
+  --glass-blur: none !important;
+}
+
+.mode-eco-gpu .card-tactical,
+.mode-eco-gpu .card-tactical-interactive,
+.mode-eco-gpu .tactical-card-hud,
+.power-profile-eco .card-tactical,
+.power-profile-eco .card-tactical-interactive,
+.power-profile-eco .tactical-card-hud {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(14, 14, 26, 0.98) !important;
+}
+
 /* Legacy Glass Panel Support */
 .glass-panel {
+
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   backdrop-filter: var(--glass-blur);

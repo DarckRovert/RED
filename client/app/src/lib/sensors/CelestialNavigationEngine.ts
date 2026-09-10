@@ -57,9 +57,9 @@ export class CelestialNavigationEngine {
         const safeLon = (typeof lonDeg === 'number' && isFinite(lonDeg)) ? Math.max(-180, Math.min(180, lonDeg)) : 0;
         const safeDate = (date instanceof Date && !isNaN(date.getTime())) ? date : new Date();
 
-        // Día juliano simplificado
+        // Día juliano exacto UTC (J2000.0)
         const time = safeDate.getTime();
-        const julianDay = (time / 86400000) - (safeDate.getTimezoneOffset() / 1440) + 2440587.5;
+        const julianDay = (time / 86400000) + 2440587.5;
         const d = julianDay - 2451545.0; // Días desde J2000.0
 
         // Posición solar simplificada
@@ -174,11 +174,16 @@ export class CelestialNavigationEngine {
 
     /**
      * Estima la posición geográfica por tránsito del mediodía solar
+     * @param solarZenithUtcTimeStr Hora de culminación solar en UTC ("HH:MM:SS" o "HH:MM")
+     * @param maxMeasuredSolarAltitudeDeg Altitud máxima medida en el tránsito (0° a 90°)
+     * @param date Fecha de la observación
+     * @param culminationDirection Dirección de culminación solar: 'SOUTH' (al Sur, típico Hemisferio N) o 'NORTH' (al Norte, típico Hemisferio S / Trópicos)
      */
     public estimatePositionFromSolarNoon(
         solarZenithUtcTimeStr: string,
         maxMeasuredSolarAltitudeDeg: number,
-        date: Date = new Date()
+        date: Date = new Date(),
+        culminationDirection: 'SOUTH' | 'NORTH' | 'AUTO' = 'SOUTH'
     ): { estimatedLat: number; estimatedLon: number } {
         const safeStr = typeof solarZenithUtcTimeStr === 'string' ? solarZenithUtcTimeStr.trim() : '12:00:00';
         const parts = safeStr.split(':');
@@ -187,21 +192,16 @@ export class CelestialNavigationEngine {
         const s = parseFloat(parts[2] || '0');
         const utcHours = (!isNaN(h) && isFinite(h)) ? h + ((!isNaN(m) && isFinite(m)) ? m / 60 : 0) + ((!isNaN(s) && isFinite(s)) ? s / 3600 : 0) : 12;
 
-        // Longitud = (12 - UTC_transit) * 15
-        const rawLon = ((12 - utcHours) * 15);
-        const normalizedLon = ((((rawLon + 180) % 360) + 360) % 360) - 180;
-        const estimatedLon = Math.round(normalizedLon * 100) / 100;
-
         const safeAltitude = (typeof maxMeasuredSolarAltitudeDeg === 'number' && isFinite(maxMeasuredSolarAltitudeDeg))
             ? Math.max(0, Math.min(90, maxMeasuredSolarAltitudeDeg))
             : 45;
 
-        // Declinación solar astronómica exacta para la fecha
+        // Declinación solar astronómica y Ecuación del Tiempo (EoT) exactas para la fecha
         const safeDate = (date instanceof Date && !isNaN(date.getTime())) ? date : new Date();
         const rad = Math.PI / 180;
         const deg = 180 / Math.PI;
         const time = safeDate.getTime();
-        const julianDay = (time / 86400000) - (safeDate.getTimezoneOffset() / 1440) + 2440587.5;
+        const julianDay = (time / 86400000) + 2440587.5;
         const d = julianDay - 2451545.0;
         const L = (280.460 + 0.9856474 * d) % 360;
         const g = ((357.528 + 0.9856003 * d) % 360) * rad;
@@ -210,7 +210,34 @@ export class CelestialNavigationEngine {
         const sinDecl = Math.sin(epsilon) * Math.sin(lambda);
         const declinationDeg = Math.asin(sinDecl) * deg;
 
-        const rawLat = 90 - safeAltitude + declinationDeg;
+        // Ecuación del Tiempo (EoT) analítica
+        // EoT = Tiempo Solar Aparente - Tiempo Solar Medio
+        const raRad = Math.atan2(Math.cos(epsilon) * Math.sin(lambda), Math.cos(lambda));
+        const raDeg = ((raRad * deg % 360) + 360) % 360;
+        const normalizedL = ((L % 360) + 360) % 360;
+        let eotDeg = normalizedL - raDeg;
+        if (eotDeg > 180) eotDeg -= 360;
+        if (eotDeg < -180) eotDeg += 360;
+        const eotHours = eotDeg / 15;
+
+        // Longitud corregida por la Ecuación del Tiempo:
+        // En el mediodía aparente local, el Tiempo Solar Medio Local = 12.0 - EoT.
+        // Longitud = (Tiempo Solar Medio Local - UTC_transito) * 15
+        const rawLon = ((12.0 - eotHours - utcHours) * 15);
+        const normalizedLon = ((((rawLon + 180) % 360) + 360) % 360) - 180;
+        const estimatedLon = Math.round(normalizedLon * 100) / 100;
+
+        // Reducción meridiana de latitud:
+        // Distancia cenital z = 90° - Altitud
+        // Culminación al Sur: Latitud = Declinación + z = 90° - Altitud + Declinación
+        // Culminación al Norte: Latitud = Declinación - z = Altitud + Declinación - 90°
+        const zenithDist = 90 - safeAltitude;
+        let rawLat: number;
+        if (culminationDirection === 'NORTH') {
+            rawLat = declinationDeg - zenithDist;
+        } else {
+            rawLat = declinationDeg + zenithDist;
+        }
         const estimatedLat = Math.round(Math.max(-90, Math.min(90, rawLat)) * 100) / 100;
 
         return {

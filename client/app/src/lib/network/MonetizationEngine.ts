@@ -19,6 +19,8 @@ export interface ProPerkStatus {
     credits: number;
 }
 
+import type { SovereignPaymentPassport, PaymentRail } from '../miniapp/RedSDKTypes';
+
 export interface TacticalProduct {
     id: string;
     title: string;
@@ -30,6 +32,8 @@ export interface TacticalProduct {
     affiliateUrl: string;
     authorHash?: string;
     authorName?: string;
+    sellerPaymentPassport?: SovereignPaymentPassport;
+    supportedRails?: PaymentRail[];
 }
 
 export const TACTICAL_CATALOG: TacticalProduct[] = [

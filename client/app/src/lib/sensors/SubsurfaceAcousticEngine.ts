@@ -5,6 +5,8 @@
  * to penetrate dense physical barriers (reinforced concrete, rubble, earth, water) for trapped survivors.
  */
 
+import { AudioContextManager } from '../audio/AudioContextManager';
+
 export interface SubsurfaceBeaconConfig {
     frequencyHz: number;
     pulseDurationMs: number;
@@ -101,10 +103,7 @@ export class SubsurfaceAcousticEngine {
             clearInterval(this.timer);
             this.timer = null;
         }
-        if (this.audioCtx) {
-            try { this.audioCtx.close(); } catch {}
-            this.audioCtx = null;
-        }
+        this.audioCtx = null;
         this.notify();
     }
 
@@ -120,12 +119,7 @@ export class SubsurfaceAcousticEngine {
         // 1. Pulso de audio VLF subsónico
         try {
             if (typeof window !== 'undefined') {
-                if (!this.audioCtx || this.audioCtx.state === 'closed') {
-                    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-                    if (AudioContextClass) {
-                        this.audioCtx = new AudioContextClass();
-                    }
-                }
+                this.audioCtx = AudioContextManager.getSharedContext();
                 if (this.audioCtx && this.audioCtx.state === 'suspended') {
                     this.audioCtx.resume().catch(() => {});
                 }

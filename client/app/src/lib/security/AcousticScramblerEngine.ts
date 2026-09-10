@@ -5,6 +5,8 @@
  * to saturate non-linear MEMS microphone diaphragms and prevent acoustic eavesdropping in tactical briefs.
  */
 
+import { AudioContextManager } from '../audio/AudioContextManager';
+
 export type ScramblerMode = 'PINK_NOISE_CHAOS' | 'ULTRASONIC_MEMS_JAMMER' | 'VOICE_MASKING_CHOPPER' | 'OFF';
 
 export class AcousticScramblerEngine {
@@ -45,8 +47,8 @@ export class AcousticScramblerEngine {
 
     private initAudio() {
         if (!this.audioCtx || this.audioCtx.state === 'closed') {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            this.audioCtx = new AudioContextClass();
+            this.audioCtx = AudioContextManager.getSharedContext();
+            if (!this.audioCtx) return;
             this.gainNode = this.audioCtx.createGain();
             this.gainNode.gain.value = this.volume;
             this.analyserNode = this.audioCtx.createAnalyser();
@@ -54,7 +56,7 @@ export class AcousticScramblerEngine {
             this.gainNode.connect(this.analyserNode);
             this.analyserNode.connect(this.audioCtx.destination);
         }
-        if (this.audioCtx.state === 'suspended') {
+        if (this.audioCtx && this.audioCtx.state === 'suspended') {
             this.audioCtx.resume().catch(() => {});
         }
     }
@@ -185,10 +187,7 @@ export class AcousticScramblerEngine {
             try { this.analyserNode.disconnect(); } catch {}
             this.analyserNode = null;
         }
-        if (this.audioCtx) {
-            try { this.audioCtx.close(); } catch {}
-            this.audioCtx = null;
-        }
+        this.audioCtx = null;
         this.listeners.clear();
     }
 

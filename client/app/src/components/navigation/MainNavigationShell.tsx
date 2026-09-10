@@ -18,6 +18,7 @@ import { SettingsModal } from "../SettingsModal";
 import { FamiliarSettingsView } from "../settings/FamiliarSettingsView";
 
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacIcon } from "../ui/TacIcon";
 
 export type NavTab = "chats" | "status" | "calls" | "tools" | "settings";
 
@@ -172,11 +173,11 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
                                     ? (isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)") 
                                     : (isFamiliar ? "#8696A0" : "#888"),
                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.3rem", cursor: "pointer", position: "relative"
+                                cursor: "pointer", position: "relative"
                             }}
                             title="Chats"
                         >
-                            💬
+                            <TacIcon name="chats" size={22} color={activeTab === "chats" ? (isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)") : (isFamiliar ? "#8696A0" : "#888")} />
                             {unreadMessagesCount > 0 && (
                                 <span style={{
                                     position: "absolute", top: "2px", right: "2px",
@@ -205,11 +206,11 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
                                     ? (isFamiliar ? "#00A884" : "var(--accent-emerald, #00E676)") 
                                     : (isFamiliar ? "#8696A0" : "#888"),
                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.3rem", cursor: "pointer", position: "relative"
+                                cursor: "pointer", position: "relative"
                             }}
                             title="Novedades & Estados"
                         >
-                            ⭕
+                            <TacIcon name="status" size={22} color={activeTab === "status" ? (isFamiliar ? "#00A884" : "var(--accent-emerald, #00E676)") : (isFamiliar ? "#8696A0" : "#888")} />
                             {unreadStoriesCount > 0 && (
                                 <span style={{
                                     position: "absolute", top: "4px", right: "4px",
@@ -234,11 +235,11 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
                                     ? (isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)") 
                                     : (isFamiliar ? "#8696A0" : "#888"),
                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.3rem", cursor: "pointer", position: "relative"
+                                cursor: "pointer", position: "relative"
                             }}
                             title="Llamadas WebRTC"
                         >
-                            📞
+                            <TacIcon name="calls" size={22} color={activeTab === "calls" ? (isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)") : (isFamiliar ? "#8696A0" : "#888")} />
                             {missedCallsCount > 0 && (
                                 <span style={{
                                     position: "absolute", top: "2px", right: "2px",
@@ -263,11 +264,11 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
                                 border: activeTab === "tools" ? "1px solid rgba(179, 136, 255, 0.4)" : "1px solid transparent",
                                 color: activeTab === "tools" ? "#B388FF" : (isFamiliar ? "#8696A0" : "#888"),
                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.3rem", cursor: "pointer"
+                                cursor: "pointer"
                             }}
                             title="Centro de Malla & Herramientas Tácticas"
                         >
-                            ⚡
+                            <TacIcon name="tools" size={22} color={activeTab === "tools" ? "#B388FF" : (isFamiliar ? "#8696A0" : "#888")} />
                         </button>
                     </div>
 
@@ -282,11 +283,11 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
                             border: activeTab === "settings" ? "1px solid rgba(255, 255, 255, 0.3)" : "1px solid transparent",
                             color: activeTab === "settings" ? "#FFF" : (isFamiliar ? "#8696A0" : "#888"),
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: "1.3rem", cursor: "pointer"
+                            cursor: "pointer"
                         }}
                         title="Ajustes"
                     >
-                        ⚙️
+                        <TacIcon name="settings" size={22} color={activeTab === "settings" ? "#FFF" : (isFamiliar ? "#8696A0" : "#888")} />
                     </button>
                 </aside>
             )}
@@ -306,23 +307,26 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
 
             {/* Mobile Bottom Navigation Bar (WhatsApp Style) */}
             {!isTablet && (
-                <nav style={{
-                    height: "calc(60px + env(safe-area-inset-bottom, 0px))",
-                    paddingBottom: "env(safe-area-inset-bottom, 0px)",
-                    background: isFamiliar 
-                        ? "#121B22" 
-                        : "linear-gradient(180deg, rgba(14, 18, 36, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
-                    borderTop: isFamiliar 
-                        ? "1px solid rgba(255, 255, 255, 0.08)" 
-                        : "1px solid rgba(0, 229, 255, 0.15)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-around",
-                    zIndex: 20,
-                    flexShrink: 0,
-                    backdropFilter: "blur(24px)",
-                    WebkitBackdropFilter: "blur(24px)"
-                }}>
+                <nav 
+                    className="mobile-bottom-nav"
+                    style={{
+                        height: "calc(60px + env(safe-area-inset-bottom, 0px))",
+                        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+                        background: isFamiliar 
+                            ? "#121B22" 
+                            : "linear-gradient(180deg, rgba(14, 18, 36, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                        borderTop: isFamiliar 
+                            ? "1px solid rgba(255, 255, 255, 0.08)" 
+                            : "1px solid rgba(0, 229, 255, 0.15)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-around",
+                        zIndex: 20,
+                        flexShrink: 0,
+                        backdropFilter: "var(--glass-blur, blur(24px))",
+                        WebkitBackdropFilter: "var(--glass-blur, blur(24px))"
+                    }}
+                >
                     {/* 1. Chats */}
                     <button
                         onClick={() => setActiveTab("chats")}
@@ -337,12 +341,17 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
                         }}
                     >
                         <div style={{
-                            position: "relative", fontSize: "1.35rem",
-                            padding: isFamiliar && activeTab === "chats" ? "2px 14px" : "2px",
+                            position: "relative",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            padding: isFamiliar && activeTab === "chats" ? "4px 14px" : "4px",
                             borderRadius: "16px",
                             backgroundColor: isFamiliar && activeTab === "chats" ? "rgba(0, 168, 132, 0.16)" : "transparent"
                         }}>
-                            💬
+                            <TacIcon 
+                                name="chats" 
+                                size={22} 
+                                color={activeTab === "chats" ? (isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)") : (isFamiliar ? "#8696A0" : "var(--text-muted, #888)")} 
+                            />
                             {unreadMessagesCount > 0 && (
                                 <span style={{
                                     position: "absolute", top: "-2px", right: "-4px",
@@ -379,12 +388,17 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
                         }}
                     >
                         <div style={{
-                            position: "relative", fontSize: "1.35rem",
-                            padding: isFamiliar && activeTab === "status" ? "2px 14px" : "2px",
+                            position: "relative",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            padding: isFamiliar && activeTab === "status" ? "4px 14px" : "4px",
                             borderRadius: "16px",
                             backgroundColor: isFamiliar && activeTab === "status" ? "rgba(0, 168, 132, 0.16)" : "transparent"
                         }}>
-                            ⭕
+                            <TacIcon 
+                                name="status" 
+                                size={22} 
+                                color={activeTab === "status" ? (isFamiliar ? "#00A884" : "var(--accent-emerald, #00E676)") : (isFamiliar ? "#8696A0" : "var(--text-muted, #888)")} 
+                            />
                             {unreadStoriesCount > 0 && (
                                 <span style={{
                                     position: "absolute", top: "0px", right: "-2px",
@@ -416,12 +430,17 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
                         }}
                     >
                         <div style={{
-                            position: "relative", fontSize: "1.35rem",
-                            padding: isFamiliar && activeTab === "calls" ? "2px 14px" : "2px",
+                            position: "relative",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            padding: isFamiliar && activeTab === "calls" ? "4px 14px" : "4px",
                             borderRadius: "16px",
                             backgroundColor: isFamiliar && activeTab === "calls" ? "rgba(0, 168, 132, 0.16)" : "transparent"
                         }}>
-                            📞
+                            <TacIcon 
+                                name="calls" 
+                                size={22} 
+                                color={activeTab === "calls" ? (isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)") : (isFamiliar ? "#8696A0" : "var(--text-muted, #888)")} 
+                            />
                             {missedCallsCount > 0 && (
                                 <span style={{
                                     position: "absolute", top: "-2px", right: "-4px",
@@ -458,12 +477,16 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
                         }}
                     >
                         <div style={{
-                            fontSize: "1.35rem",
-                            padding: isFamiliar && activeTab === "tools" ? "2px 14px" : "2px",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            padding: isFamiliar && activeTab === "tools" ? "4px 14px" : "4px",
                             borderRadius: "16px",
                             backgroundColor: isFamiliar && activeTab === "tools" ? "rgba(179, 136, 255, 0.16)" : "transparent"
                         }}>
-                            ⚡
+                            <TacIcon 
+                                name="tools" 
+                                size={22} 
+                                color={activeTab === "tools" ? "#B388FF" : (isFamiliar ? "#8696A0" : "var(--text-muted, #888)")} 
+                            />
                         </div>
                         <span style={{ 
                             fontSize: "0.72rem", 
@@ -488,12 +511,16 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
                         }}
                     >
                         <div style={{
-                            fontSize: "1.35rem",
-                            padding: isFamiliar && activeTab === "settings" ? "2px 14px" : "2px",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            padding: isFamiliar && activeTab === "settings" ? "4px 14px" : "4px",
                             borderRadius: "16px",
                             backgroundColor: isFamiliar && activeTab === "settings" ? "rgba(255, 255, 255, 0.12)" : "transparent"
                         }}>
-                            ⚙️
+                            <TacIcon 
+                                name="settings" 
+                                size={22} 
+                                color={activeTab === "settings" ? "#FFFFFF" : (isFamiliar ? "#8696A0" : "var(--text-muted, #888)")} 
+                            />
                         </div>
                         <span style={{ 
                             fontSize: "0.72rem", 

@@ -27,6 +27,7 @@ import { TacticalVoiceAnalyzer } from "../lib/audio/TacticalVoiceAnalyzer";
 import { WhatsAppDoodleBackground } from "./chat/WhatsAppDoodleBackground";
 import { MediaSendPreviewModal } from "./chat/MediaSendPreviewModal";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacIcon } from "./ui/TacIcon";
 
 /* ── Avatar helpers ───────────────────────────────────────────────────────── */
 const AVATAR_COLORS = [
@@ -1373,7 +1374,7 @@ export default function ChatWindow() {
                     animation: "fadeIn 0.15s ease-out",
                     boxShadow: "0 4px 20px rgba(0, 0, 0, 0.6)"
                 }}>
-                    <span style={{ fontSize: "0.9rem", color: "var(--accent-cyan)" }}>🔍</span>
+                    <TacIcon name="search" size={14} color="var(--accent-cyan)" />
                     <input
                         type="text"
                         placeholder="Buscar en esta conversación..."
@@ -1408,27 +1409,27 @@ export default function ChatWindow() {
                         onClick={handlePrevMatch}
                         disabled={searchMatches.length <= 1}
                         className="btn-icon"
-                        style={{ width: 28, height: 28, fontSize: "0.8rem", color: searchMatches.length > 1 ? "#fff" : "var(--text-muted)" }}
+                        style={{ width: 28, height: 28, color: searchMatches.length > 1 ? "#fff" : "var(--text-muted)" }}
                         title="Coincidencia anterior"
                     >
-                        ▲
+                        <TacIcon name="chevron-up" size={14} />
                     </button>
                     <button
                         onClick={handleNextMatch}
                         disabled={searchMatches.length <= 1}
                         className="btn-icon"
-                        style={{ width: 28, height: 28, fontSize: "0.8rem", color: searchMatches.length > 1 ? "#fff" : "var(--text-muted)" }}
+                        style={{ width: 28, height: 28, color: searchMatches.length > 1 ? "#fff" : "var(--text-muted)" }}
                         title="Coincidencia siguiente"
                     >
-                        ▼
+                        <TacIcon name="chevron-down" size={14} />
                     </button>
                     <button
                         onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
                         className="btn-icon"
-                        style={{ width: 28, height: 28, fontSize: "0.85rem", color: "var(--text-muted)" }}
+                        style={{ width: 28, height: 28, color: "var(--text-muted)" }}
                         title="Cerrar búsqueda"
                     >
-                        ✕
+                        <TacIcon name="x" size={14} />
                     </button>
                 </div>
             )}
@@ -1454,7 +1455,7 @@ export default function ChatWindow() {
                         boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
                     }}>
                         <div style={{ fontSize: "0.82rem", color: "#8696A0", display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span>👤</span>
+                            <TacIcon name="user" size={14} color="#8696A0" />
                             <span>Este interlocutor no está en tu lista de contactos.</span>
                         </div>
                         <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
@@ -1470,10 +1471,10 @@ export default function ChatWindow() {
                                     padding: "6px 12px", fontSize: "0.75rem", fontWeight: 700,
                                     borderRadius: "8px", background: "rgba(241, 92, 109, 0.12)",
                                     border: "1px solid rgba(241, 92, 109, 0.3)", color: "#F15C6D",
-                                    cursor: "pointer"
+                                    cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px"
                                 }}
                             >
-                                🚫 Bloquear
+                                <TacIcon name="hazard" size={13} color="#F15C6D" /> Bloquear
                             </button>
                             <button
                                 onClick={async () => {
@@ -1484,10 +1485,11 @@ export default function ChatWindow() {
                                     padding: "6px 14px", fontSize: "0.75rem", fontWeight: 700,
                                     borderRadius: "8px", background: "#00A884",
                                     border: "none", color: "#FFFFFF", cursor: "pointer",
-                                    boxShadow: "0 2px 8px rgba(0, 168, 132, 0.35)"
+                                    boxShadow: "0 2px 8px rgba(0, 168, 132, 0.35)",
+                                    display: "inline-flex", alignItems: "center", gap: "4px"
                                 }}
                             >
-                                ➕ Añadir a contactos
+                                <TacIcon name="plus" size={13} color="#FFFFFF" /> Añadir a contactos
                             </button>
                         </div>
                     </div>
@@ -1498,7 +1500,7 @@ export default function ChatWindow() {
                         display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"
                     }}>
                         <div style={{ fontSize: "0.78rem", color: "#FFFFFF", display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span>👤</span>
+                            <TacIcon name="user" size={14} color="#00E5FF" />
                             <span>{t.sidebar?.no_contacts_desc || "Este interlocutor no está en tu lista de contactos."}</span>
                         </div>
                         <button
@@ -1507,9 +1509,9 @@ export default function ChatWindow() {
                                 toast.success(`🤝 ${peerName}`);
                             }}
                             className="btn-tactical-primary"
-                            style={{ padding: "4px 10px", fontSize: "0.72rem", fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0 }}
+                            style={{ padding: "4px 10px", fontSize: "0.72rem", fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: "4px" }}
                         >
-                            ➕ {t.sidebar?.add_contact_btn || "GUARDAR CONTACTO"}
+                            <TacIcon name="plus" size={12} color="#000000" /> {t.sidebar?.add_contact_btn || "GUARDAR CONTACTO"}
                         </button>
                     </div>
                 )
@@ -1527,10 +1529,12 @@ export default function ChatWindow() {
                     }}
                 >
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span>⚠️</span>
+                        <TacIcon name="hazard" size={14} color="#FFD54F" />
                         <span>{t.safety_number?.unverified || "La clave pública de este contacto ha cambiado. Toca para verificar su Safety Number."}</span>
                     </div>
-                    <span style={{ textDecoration: "underline", fontSize: "0.72rem", flexShrink: 0 }}>{t.safety_number?.verify_action || "Verificar →"}</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "underline", fontSize: "0.72rem", flexShrink: 0 }}>
+                        {t.safety_number?.verify_action || "Verificar"} <TacIcon name="chevron-right" size={12} color="#FFD54F" />
+                    </span>
                 </div>
             )}
 
@@ -1549,7 +1553,9 @@ export default function ChatWindow() {
                     }}
                 >
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        <span style={{ color: isFamiliar ? "#00A884" : "var(--accent-cyan)", fontWeight: 700 }}>📌 Mensaje fijado:</span>
+                        <span style={{ color: isFamiliar ? "#00A884" : "var(--accent-cyan)", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <TacIcon name="pin" size={12} color={isFamiliar ? "#00A884" : "var(--accent-cyan)"} /> Mensaje fijado:
+                        </span>
                         <span style={{ color: isFamiliar ? "#E9EDEF" : "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {pinnedMessage.content?.startsWith("data:") ? "📎 Archivo adjunto" : pinnedMessage.content}
                         </span>
@@ -1563,10 +1569,10 @@ export default function ChatWindow() {
                             }
                             toast.info("Mensaje desfijado");
                         }}
-                        style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.9rem" }}
+                        style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center" }}
                         title="Desfijar"
                     >
-                        ✕
+                        <TacIcon name="x" size={14} />
                     </button>
                 </div>
             )}
@@ -1584,7 +1590,7 @@ export default function ChatWindow() {
                         fontSize: "0.85rem", fontWeight: 700, color: "var(--accent-cyan)",
                         letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "JetBrains Mono, monospace"
                     }}>
-                        <span>🎙️</span>
+                        <TacIcon name="mic" size={16} color="var(--accent-cyan)" />
                         <span>Vista Previa de Audio Táctico</span>
                     </div>
 
@@ -1616,13 +1622,12 @@ export default function ChatWindow() {
                                     border: "1.5px solid var(--accent-cyan)",
                                     color: "#FFFFFF", cursor: "pointer",
                                     display: "flex", alignItems: "center", justifyContent: "center",
-                                    fontSize: "1.1rem", fontWeight: 900,
                                     boxShadow: "0 0 12px rgba(0, 229, 255, 0.35)",
                                     flexShrink: 0
                                 }}
                                 title={voicePreviewPlaying ? "Pausar" : "Reproducir"}
                             >
-                                {voicePreviewPlaying ? "❚❚" : "▶"}
+                                {voicePreviewPlaying ? <TacIcon name="pause" size={16} color="#FFFFFF" /> : <TacIcon name="play" size={16} color="#FFFFFF" />}
                             </button>
 
                             {/* Waveform preview bars */}
@@ -1680,7 +1685,7 @@ export default function ChatWindow() {
                             className="btn-tactical-secondary"
                             style={{ padding: "10px 24px", borderRadius: "30px", display: "flex", alignItems: "center", gap: "8px" }}
                         >
-                            <span>🗑️</span>
+                            <TacIcon name="trash" size={14} color="currentColor" />
                             <span>Descartar</span>
                         </button>
                         <button
@@ -1688,7 +1693,7 @@ export default function ChatWindow() {
                             className="btn-tactical-primary"
                             style={{ padding: "10px 28px", borderRadius: "30px", display: "flex", alignItems: "center", gap: "8px" }}
                         >
-                            <span>➤</span>
+                            <TacIcon name="forward" size={14} color="currentColor" />
                             <span>Enviar Nota de Voz</span>
                         </button>
                     </div>
@@ -1732,10 +1737,9 @@ export default function ChatWindow() {
                                     <div style={{
                                         width: 48, height: 48, borderRadius: "50%",
                                         background: "rgba(0, 168, 132, 0.15)",
-                                        display: "flex", alignItems: "center", justifyContent: "center",
-                                        fontSize: "1.4rem"
+                                        display: "flex", alignItems: "center", justifyContent: "center"
                                     }}>
-                                        🔒
+                                        <TacIcon name="lock" size={24} color="#00A884" />
                                     </div>
                                     <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "#E9EDEF" }}>
                                         Cifrado de extremo a extremo
@@ -1748,10 +1752,11 @@ export default function ChatWindow() {
                                         style={{
                                             marginTop: "4px", padding: "6px 14px", borderRadius: "20px",
                                             background: "rgba(0, 168, 132, 0.15)", border: "1px solid rgba(0, 168, 132, 0.35)",
-                                            color: "#00A884", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer"
+                                            color: "#00A884", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer",
+                                            display: "inline-flex", alignItems: "center", gap: "6px"
                                         }}
                                     >
-                                        🛡️ Verificar Safety Number
+                                        <TacIcon name="shield" size={14} color="#00A884" /> Verificar Safety Number
                                     </button>
 
                                     {/* Quick Starters Familiares */}
@@ -1779,7 +1784,7 @@ export default function ChatWindow() {
                                                 cursor: "pointer", display: "flex", alignItems: "center", gap: "6px"
                                             }}
                                         >
-                                            📷 Enviar foto
+                                            <TacIcon name="camera" size={14} color="#E9EDEF" /> Enviar foto
                                         </button>
                                         <button
                                             onClick={() => {
@@ -1803,7 +1808,7 @@ export default function ChatWindow() {
                                                 cursor: "pointer", display: "flex", alignItems: "center", gap: "6px"
                                             }}
                                         >
-                                            📞 Llamar
+                                            <TacIcon name="calls" size={14} color="#00A884" /> Llamar
                                         </button>
                                     </div>
                                 </div>
@@ -1814,11 +1819,10 @@ export default function ChatWindow() {
                                         background: "linear-gradient(135deg, rgba(0, 229, 255, 0.2) 0%, rgba(232, 33, 58, 0.2) 100%)",
                                         border: "1px solid rgba(0, 229, 255, 0.4)",
                                         display: "flex", alignItems: "center", justifyContent: "center",
-                                        fontSize: "2rem",
                                         animation: "cyberShieldGlow 3s ease-in-out infinite",
                                         boxShadow: "0 0 24px rgba(0, 229, 255, 0.35)"
                                     }}>
-                                        🛡️
+                                        <TacIcon name="shield" size={32} color="var(--accent-cyan)" />
                                     </div>
                                     <div>
                                         <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.4px" }}>
@@ -1837,19 +1841,19 @@ export default function ChatWindow() {
                                             onClick={() => setIsSafetyModalOpen(true)}
                                             className="tactical-action-chip"
                                         >
-                                            <span>🛡️</span> Safety Number
+                                            <TacIcon name="shield" size={14} color="var(--accent-cyan)" /> Safety Number
                                         </button>
                                         <button
                                             onClick={() => navigate("compass")}
                                             className="tactical-action-chip"
                                         >
-                                            <span>🧭</span> Brújula Táctica
+                                            <TacIcon name="compass" size={14} color="var(--accent-cyan)" /> Brújula Táctica
                                         </button>
                                         <button
                                             onClick={() => navigate("radar")}
                                             className="tactical-action-chip"
                                         >
-                                            <span>📡</span> Radar Malla
+                                            <TacIcon name="radio" size={14} color="var(--accent-cyan)" /> Radar Malla
                                         </button>
                                     </div>
                                 </div>
@@ -1945,9 +1949,9 @@ export default function ChatWindow() {
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                             <button
                                 onClick={exitSelectionMode}
-                                style={{ background: "transparent", border: "none", color: isFamiliar ? "#8696A0" : "var(--text-muted)", fontSize: "0.85rem", cursor: "pointer", padding: "6px 8px" }}
+                                style={{ background: "transparent", border: "none", color: isFamiliar ? "#8696A0" : "var(--text-muted)", cursor: "pointer", padding: "6px 8px", display: "flex", alignItems: "center" }}
                             >
-                                ✕
+                                <TacIcon name="x" size={14} color={isFamiliar ? "#8696A0" : "var(--text-muted)"} />
                             </button>
                             <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "#fff" }}>
                                 {selectedMsgIds.size}
@@ -1963,11 +1967,12 @@ export default function ChatWindow() {
                                     border: isFamiliar ? "1px solid rgba(255,255,255,0.12)" : "1px solid var(--glass-border)",
                                     color: "#E9EDEF", fontSize: "0.78rem", fontWeight: 600,
                                     cursor: selectedMsgIds.size === 0 ? "not-allowed" : "pointer",
-                                    display: "flex", alignItems: "center", gap: "4px"
+                                    display: "flex", alignItems: "center", gap: "6px"
                                 }}
                                 title="Copiar texto"
                             >
-                                📋 Copiar
+                                <TacIcon name="copy" size={14} color="currentColor" />
+                                <span>Copiar</span>
                             </button>
                             <button
                                 onClick={starSelected}
@@ -1978,11 +1983,12 @@ export default function ChatWindow() {
                                     border: "1px solid rgba(255, 186, 0, 0.3)",
                                     color: "#FFBA00", fontSize: "0.78rem", fontWeight: 600,
                                     cursor: selectedMsgIds.size === 0 ? "not-allowed" : "pointer",
-                                    display: "flex", alignItems: "center", gap: "4px"
+                                    display: "flex", alignItems: "center", gap: "6px"
                                 }}
                                 title="Destacar mensajes"
                             >
-                                ⭐ Destacar
+                                <TacIcon name="star" size={14} color="#FFBA00" />
+                                <span>Destacar</span>
                             </button>
                             <button
                                 onClick={forwardSelected}
@@ -1993,10 +1999,12 @@ export default function ChatWindow() {
                                     border: isFamiliar ? "1px solid rgba(0,168,132,0.35)" : "1px solid rgba(0,229,255,0.3)",
                                     color: isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)",
                                     fontSize: "0.78rem", fontWeight: 600,
-                                    cursor: selectedMsgIds.size === 0 ? "not-allowed" : "pointer"
+                                    cursor: selectedMsgIds.size === 0 ? "not-allowed" : "pointer",
+                                    display: "flex", alignItems: "center", gap: "6px"
                                 }}
                             >
-                                ➡️ Reenviar
+                                <TacIcon name="forward" size={14} color="currentColor" />
+                                <span>Reenviar</span>
                             </button>
                             <button
                                 onClick={deleteSelected}
@@ -2005,10 +2013,12 @@ export default function ChatWindow() {
                                     padding: "6px 12px", borderRadius: "16px",
                                     background: "rgba(232,33,58,0.14)", border: "1px solid rgba(232,33,58,0.4)",
                                     color: "#FF4B6B", fontSize: "0.78rem", fontWeight: 600,
-                                    cursor: selectedMsgIds.size === 0 ? "not-allowed" : "pointer"
+                                    cursor: selectedMsgIds.size === 0 ? "not-allowed" : "pointer",
+                                    display: "flex", alignItems: "center", gap: "6px"
                                 }}
                             >
-                                🗑️ Eliminar
+                                <TacIcon name="trash" size={14} color="#FF4B6B" />
+                                <span>Eliminar</span>
                             </button>
                         </div>
                     </div>
@@ -2064,7 +2074,7 @@ export default function ChatWindow() {
                     }}
                     title="Bajar al mensaje más reciente"
                 >
-                    <span style={{ fontSize: "1.1rem", color: isFamiliar ? "#00A884" : "var(--accent-cyan)", fontWeight: 900 }}>↓</span>
+                    <TacIcon name="arrow-down" size={18} color={isFamiliar ? "#00A884" : "var(--accent-cyan)"} />
                     {unreadInChatCount > 0 && (
                         <span style={{
                             background: isFamiliar ? "#00A884" : "var(--accent-cyan)",
@@ -2182,7 +2192,7 @@ export default function ChatWindow() {
                                 className="btn-icon"
                                 style={{ width: 30, height: 30 }}
                             >
-                                ✕
+                                <TacIcon name="x" size={14} />
                             </button>
                         </div>
 
@@ -2244,9 +2254,9 @@ export default function ChatWindow() {
                                     handleSendPayment(amt, payMemo);
                                 }}
                                 className="btn-tactical-primary"
-                                style={{ flex: 1, padding: "12px", borderRadius: "12px", background: "var(--accent-emerald)", color: "#000" }}
+                                style={{ flex: 1, padding: "12px", borderRadius: "12px", background: "var(--accent-emerald)", color: "#000", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                             >
-                                💸 Enviar Pago
+                                <TacIcon name="wallet" size={16} color="#000000" /> Enviar Pago
                             </button>
                         </div>
                     </div>
@@ -2352,7 +2362,7 @@ export default function ChatWindow() {
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span style={{ fontSize: "1.3rem" }}>💣</span>
+                            <TacIcon name="trash" size={22} color="var(--accent-crimson, #FF3C5F)" />
                             <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 800, color: "var(--accent-crimson, #FF3C5F)" }}>
                                 Confirmar Borrado Remoto P2P
                             </h2>

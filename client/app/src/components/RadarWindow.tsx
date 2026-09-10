@@ -9,6 +9,7 @@ import { getProximityNodes } from "../lib/api";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { WebCompanionPairConfirmationModal } from "./WebCompanionPairConfirmationModal";
 import { toast } from "./Toast";
+import { TacIcon } from "./ui/TacIcon";
 
 type RadarTab = "radar" | "qr" | "manual";
 
@@ -724,10 +725,12 @@ export default function RadarWindow() {
                                 border: "1px solid #FF3355",
                                 borderRadius: "14px", color: "#FFFFFF",
                                 fontWeight: 900, fontSize: "0.9rem",
-                                cursor: "pointer", boxShadow: "0 0 16px rgba(232,33,58,0.4)"
+                                cursor: "pointer", boxShadow: "0 0 16px rgba(232,33,58,0.4)",
+                                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px"
                             }}
                         >
-                            ✕ CANCELAR ESCANEO
+                            <TacIcon name="x" size={18} color="#FFFFFF" />
+                            <span>CANCELAR ESCANEO</span>
                         </button>
                     </div>
                 </div>
@@ -748,8 +751,10 @@ export default function RadarWindow() {
                         background: "linear-gradient(135deg, rgba(0, 230, 118, 0.2) 0%, rgba(0, 229, 255, 0.15) 100%)",
                         border: "1px solid rgba(0, 230, 118, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.3rem", boxShadow: "0 0 15px rgba(0,230,118,0.25)"
-                    }}>📡</div>
+                        boxShadow: "0 0 15px rgba(0,230,118,0.25)"
+                    }}>
+                        <TacIcon name="beacon" size={20} color="#00E676" />
+                    </div>
                     <div>
                         <div style={{ fontSize: "0.98rem", fontWeight: 900, letterSpacing: "0.4px", color: "#FFFFFF" }}>
                             {t('radar.title') || "RADAR TÁCTICO P2P"}
@@ -766,21 +771,24 @@ export default function RadarWindow() {
                         style={{
                             padding: "6px 12px", fontSize: "0.78rem", fontWeight: 800,
                             background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.35)",
-                            borderRadius: "10px", color: "var(--accent-cyan, #00E5FF)", cursor: "pointer"
+                            borderRadius: "10px", color: "var(--accent-cyan, #00E5FF)", cursor: "pointer",
+                            display: "flex", alignItems: "center", gap: "6px"
                         }}
                     >
-                        🗺️ MAPA
+                        <TacIcon name="map" size={13} color="var(--accent-cyan, #00E5FF)" />
+                        <span>MAPA</span>
                     </button>
                     <button
                         onClick={goBack}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
-                            color: "#FFFFFF", cursor: "pointer", fontWeight: 900, fontSize: "0.9rem"
+                            color: "#FFFFFF", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center"
                         }}
                         title={t('common.close')}
+                        aria-label="Cerrar"
                     >
-                        ✕
+                        <TacIcon name="x" size={15} color="#FFF" />
                     </button>
                 </div>
             </header>
@@ -804,7 +812,8 @@ export default function RadarWindow() {
                         boxShadow: activeTab === "radar" ? "0 0 15px rgba(0, 230, 118, 0.25)" : "none"
                     }}
                 >
-                    <span>📡</span> {t('radar.tab_ble') || "RADAR EN VIVO"} ({nearbyPeers.length})
+                    <TacIcon name="radio" size={15} color={activeTab === "radar" ? "#00E676" : "var(--text-secondary)"} />
+                    <span>{t('radar.tab_ble') || "RADAR EN VIVO"} ({nearbyPeers.length})</span>
                 </button>
                 <button
                     onClick={() => setActiveTab("qr")}
@@ -817,7 +826,8 @@ export default function RadarWindow() {
                         boxShadow: activeTab === "qr" ? "0 0 15px rgba(0, 229, 255, 0.25)" : "none"
                     }}
                 >
-                    <span>🪪</span> {t('radar.tab_qr') || "MI QR TÁCTICO"}
+                    <TacIcon name="qr" size={15} color={activeTab === "qr" ? "#00E5FF" : "var(--text-secondary)"} />
+                    <span>{t('radar.tab_qr') || "MI QR TÁCTICO"}</span>
                 </button>
                 <button
                     onClick={() => setActiveTab("manual")}
@@ -830,7 +840,8 @@ export default function RadarWindow() {
                         boxShadow: activeTab === "manual" ? "0 0 15px rgba(255, 51, 85, 0.25)" : "none"
                     }}
                 >
-                    <span>➕</span> {t('radar.tab_manual') || "MANUAL / CÁMARA"}
+                    <TacIcon name="plus" size={15} color={activeTab === "manual" ? "#FF3355" : "var(--text-secondary)"} />
+                    <span>{t('radar.tab_manual') || "MANUAL / CÁMARA"}</span>
                 </button>
             </div>
 
@@ -918,7 +929,8 @@ export default function RadarWindow() {
                                         cursor: "pointer", display: "flex", alignItems: "center", gap: "6px"
                                     }}
                                 >
-                                    🔄 ESCANEAR
+                                    <TacIcon name="refresh" size={13} color="#00E676" />
+                                    <span>ESCANEAR</span>
                                 </button>
                             </div>
 
@@ -936,9 +948,12 @@ export default function RadarWindow() {
                                 }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                                         <div>
-                                            <span style={{ fontSize: "0.62rem", color: "#00E5FF", fontWeight: 800, textTransform: "uppercase" }}>🎯 NODO SELECCIONADO EN RADAR</span>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
+                                                <TacIcon name="crosshair" size={13} color="#00E5FF" />
+                                                <span style={{ fontSize: "0.62rem", color: "#00E5FF", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em" }}>NODO SELECCIONADO EN RADAR</span>
+                                            </div>
                                             <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#FFFFFF" }}>{selectedPeer.name}</div>
-                                            <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
+                                            <div className="tabular-telemetry" style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
                                                 ID: {selectedPeer.id} · RSSI: {selectedPeer.rssi} dBm · ~{selectedPeer.estimatedMeters || 50}m
                                             </div>
                                         </div>
@@ -946,10 +961,11 @@ export default function RadarWindow() {
                                             onClick={() => setSelectedPeer(null)}
                                             style={{
                                                 background: "rgba(255,255,255,0.08)", border: "none", color: "#AAA",
-                                                width: "28px", height: "28px", borderRadius: "8px", cursor: "pointer", fontWeight: 900
+                                                width: "28px", height: "28px", borderRadius: "8px", cursor: "pointer", fontWeight: 900,
+                                                display: "flex", alignItems: "center", justifyContent: "center"
                                             }}
                                         >
-                                            ✕
+                                            <TacIcon name="x" size={14} color="#AAA" />
                                         </button>
                                     </div>
 
@@ -960,10 +976,11 @@ export default function RadarWindow() {
                                                 padding: "8px 6px", borderRadius: "8px",
                                                 background: "rgba(0, 229, 255, 0.18)", border: "1px solid #00E5FF",
                                                 color: "#00E5FF", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer",
-                                                display: "flex", alignItems: "center", justifyContent: "center", gap: "4px"
+                                                display: "flex", alignItems: "center", justifyContent: "center", gap: "5px"
                                             }}
                                         >
-                                            🧭 Brújula P2P
+                                            <TacIcon name="compass" size={14} color="#00E5FF" />
+                                            <span>Brújula P2P</span>
                                         </button>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handleTrackInFoxhunt(selectedPeer); }}
@@ -971,10 +988,11 @@ export default function RadarWindow() {
                                                 padding: "8px 6px", borderRadius: "8px",
                                                 background: "rgba(255, 179, 0, 0.18)", border: "1px solid #FFB300",
                                                 color: "#FFB300", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer",
-                                                display: "flex", alignItems: "center", justifyContent: "center", gap: "4px"
+                                                display: "flex", alignItems: "center", justifyContent: "center", gap: "5px"
                                             }}
                                         >
-                                            🦊 Foxhunt
+                                            <TacIcon name="beacon" size={14} color="#FFB300" />
+                                            <span>Foxhunt</span>
                                         </button>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handleOpenChatWithPeer(selectedPeer); }}
@@ -982,10 +1000,11 @@ export default function RadarWindow() {
                                                 padding: "8px 6px", borderRadius: "8px",
                                                 background: "rgba(0, 230, 118, 0.18)", border: "1px solid #00E676",
                                                 color: "#00E676", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer",
-                                                display: "flex", alignItems: "center", justifyContent: "center", gap: "4px"
+                                                display: "flex", alignItems: "center", justifyContent: "center", gap: "5px"
                                             }}
                                         >
-                                            💬 Chat Cifrado
+                                            <TacIcon name="chats" size={14} color="#00E676" />
+                                            <span>Chat Cifrado</span>
                                         </button>
                                     </div>
                                 </div>
@@ -996,9 +1015,12 @@ export default function RadarWindow() {
                                 <div style={{
                                     textAlign: "center", padding: "24px 16px",
                                     background: "rgba(0, 0, 0, 0.3)", borderRadius: "14px",
-                                    border: "1px dashed rgba(255, 255, 255, 0.12)"
+                                    border: "1px dashed rgba(255, 255, 255, 0.12)",
+                                    display: "flex", flexDirection: "column", alignItems: "center"
                                 }}>
-                                    <div style={{ fontSize: "1.8rem", marginBottom: "6px" }}>📡</div>
+                                    <div style={{ marginBottom: "10px", opacity: 0.8 }}>
+                                        <TacIcon name="radio" size={32} color="#00E676" />
+                                    </div>
                                     <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#FFFFFF" }}>
                                         Buscando Nodos en Espectro BLE...
                                     </div>
@@ -1023,13 +1045,13 @@ export default function RadarWindow() {
                                         >
                                             <div>
                                                 <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#FFFFFF" }}>{p.name}</div>
-                                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                <div className="tabular-telemetry" style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
                                                     DID: {p.id.substring(0, 16)}… · ~{p.estimatedMeters}m
                                                 </div>
                                             </div>
 
                                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                                <span style={{
+                                                <span className="tabular-telemetry" style={{
                                                     fontSize: "0.65rem", fontWeight: 900, padding: "2px 8px", borderRadius: "6px",
                                                     background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.3)"
                                                 }}>
@@ -1041,10 +1063,12 @@ export default function RadarWindow() {
                                                         padding: "6px 14px", borderRadius: "8px",
                                                         background: "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(0, 180, 80, 0.15) 100%)",
                                                         border: "1px solid #00E676", color: "#00E676",
-                                                        fontWeight: 900, fontSize: "0.74rem", cursor: "pointer"
+                                                        fontWeight: 900, fontSize: "0.74rem", cursor: "pointer",
+                                                        display: "flex", alignItems: "center", gap: "5px"
                                                     }}
                                                 >
-                                                    ENLAZAR
+                                                    <TacIcon name="zap" size={12} color="#00E676" />
+                                                    <span>ENLAZAR</span>
                                                 </button>
                                             </div>
                                         </div>
@@ -1095,13 +1119,15 @@ export default function RadarWindow() {
                                     boxShadow: "0 0 20px rgba(0, 230, 118, 0.3)"
                                 }}
                             >
-                                <span>📷</span> {t('radar.scan_scanner_btn') || "ESCANEAR QR DE OTRO OPERADOR"}
+                                <TacIcon name="camera" size={18} color="#FFFFFF" />
+                                <span>{t('radar.scan_scanner_btn') || "ESCANEAR QR DE OTRO OPERADOR"}</span>
                             </button>
 
                             <div style={{ width: "100%", display: "flex", gap: "8px" }}>
                                 <input
                                     readOnly
                                     value={myDid}
+                                    className="tabular-telemetry"
                                     style={{
                                         flex: 1, fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace",
                                         background: "rgba(0, 0, 0, 0.5)", border: "1px solid rgba(0, 229, 255, 0.25)",
@@ -1113,10 +1139,12 @@ export default function RadarWindow() {
                                     style={{
                                         padding: "10px 16px", fontSize: "0.78rem", fontWeight: 900,
                                         background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.4)",
-                                        borderRadius: "10px", color: "var(--accent-cyan, #00E5FF)", cursor: "pointer"
+                                        borderRadius: "10px", color: "var(--accent-cyan, #00E5FF)", cursor: "pointer",
+                                        display: "flex", alignItems: "center", gap: "6px"
                                     }}
                                 >
-                                    COPIAR
+                                    <TacIcon name="copy" size={13} color="var(--accent-cyan, #00E5FF)" />
+                                    <span>COPIAR</span>
                                 </button>
                             </div>
                         </div>
@@ -1138,7 +1166,7 @@ export default function RadarWindow() {
                                     borderRadius: "16px", cursor: "pointer"
                                 }}
                             >
-                                <span style={{ fontSize: "2.4rem" }}>📷</span>
+                                <TacIcon name="camera" size={36} color="#00E676" />
                                 <span style={{ fontSize: "1rem", fontWeight: 900, color: "#00E676" }}>{t('radar.scan_scanner_btn') || "ABRIR CÁMARA QR"}</span>
                                 <span style={{ fontSize: "0.74rem", color: "var(--text-secondary)" }}>{t('radar.manual_desc') || "Escaneo óptico de identidades de pares"}</span>
                             </button>
@@ -1150,6 +1178,7 @@ export default function RadarWindow() {
                                     value={manualHash}
                                     onChange={e => setManualHash(e.target.value)}
                                     placeholder="DID o Hash (64 hex)..."
+                                    className="tabular-telemetry"
                                     style={{
                                         fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem",
                                         padding: "11px 14px", background: "rgba(0, 0, 0, 0.5)",
@@ -1201,10 +1230,12 @@ export default function RadarWindow() {
                                         width: "100%", padding: "14px", fontSize: "0.92rem", fontWeight: 900,
                                         background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
                                         border: "none", borderRadius: "12px", color: "#FFFFFF", cursor: "pointer",
-                                        boxShadow: "0 0 20px rgba(255, 51, 85, 0.3)"
+                                        boxShadow: "0 0 20px rgba(255, 51, 85, 0.3)",
+                                        display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
                                     }}
                                 >
-                                    {isAdding ? addingStatus || t('common.loading') : t('radar.add_btn') || "⚡ ENLAZAR PAR MANUAL"}
+                                    <TacIcon name="zap" size={16} color="#FFFFFF" />
+                                    <span>{isAdding ? addingStatus || t('common.loading') : t('radar.add_btn') || "ENLAZAR PAR MANUAL"}</span>
                                 </button>
                             </div>
                         </div>

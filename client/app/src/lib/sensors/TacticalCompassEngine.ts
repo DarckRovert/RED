@@ -42,16 +42,18 @@ export class TacticalCompassEngine {
     private static instance: TacticalCompassEngine | null = null;
 
     private headingDeg: number = 0;
+    private headingPreciseDeg: number = 0;
     private pitchDeg: number = 0;
     private rollDeg: number = 0;
     private source: CompassHeadingSource = 'manual';
     private hasHardwareMagnetometer: boolean = false;
     private hasReceivedAbsoluteReading: boolean = false;
 
-    // Filtro vectorial circular (seno/coseno)
+    // Filtro vectorial circular (seno/coseno) con respuesta adaptativa e histéresis
     private vecX: number = 0;
     private vecY: number = 0;
-    private readonly filterFactor: number = 0.22; // 22% nueva lectura, 78% inercia previa
+    private lastNotifyTs: number = 0;
+    private lastEmittedHeading: number = -1;
 
     // Sensores y listeners
     private absoluteSensor: any = null;
@@ -130,36 +132,81 @@ export class TacticalCompassEngine {
 
     /**
      * Aplica filtro vectorial de paso bajo en el círculo unitario para evitar saltos en 0° <-> 360°
+     * con amortiguamiento adaptativo contra micro-temblor de mano e histéresis anti-parpadeo.
      */
     private updateSmoothHeading(rawDeg: number, source: CompassHeadingSource) {
         if (!isFinite(rawDeg) || isNaN(rawDeg)) return;
 
-        const normalizedDeg = ((rawDeg % 360) + 360) % 360;
-        const rad = (normalizedDeg * Math.PI) / 180;
+        // Compensar por rotación de pantalla si el usuario sostiene el dispositivo en horizontal (landscape)
+        let screenAngle = 0;
+        if (typeof window !== 'undefined') {
+            const screenOrientation = (window.screen as any)?.orientation;
+            if (typeof screenOrientation?.angle === 'number') {
+                screenAngle = screenOrientation.angle;
+            } else if (typeof (window as any).orientation === 'number') {
+                screenAngle = (window as any).orientation;
+            }
+        }
+
+        const compensatedRaw = ((rawDeg + screenAngle) % 360 + 360) % 360;
+        const rad = (compensatedRaw * Math.PI) / 180;
         const curCos = Math.cos(rad);
         const curSin = Math.sin(rad);
 
         if (this.vecX === 0 && this.vecY === 0) {
             this.vecX = curCos;
             this.vecY = curSin;
+            this.headingPreciseDeg = compensatedRaw;
+            this.headingDeg = Math.round(compensatedRaw) % 360;
+            this.lastEmittedHeading = this.headingDeg;
         } else {
-            this.vecX = this.vecX * (1 - this.filterFactor) + curCos * this.filterFactor;
-            this.vecY = this.vecY * (1 - this.filterFactor) + curSin * this.filterFactor;
+            // Diferencia angular absoluta en el círculo unitario (0° a 180°)
+            const angleDiff = Math.abs((((compensatedRaw - this.headingPreciseDeg) + 540) % 360) - 180);
+
+            // Factor de filtrado adaptativo:
+            // - < 1.5°: micro-temblor muscular / ruido magnético -> amortiguamiento pesado (0.08)
+            // - 1.5° a 10°: rotación deliberada suave -> amortiguamiento medio (0.22)
+            // - > 10°: viraje táctico rápido -> respuesta inmediata (0.65)
+            let adaptiveFactor = 0.22;
+            if (angleDiff < 1.5) {
+                adaptiveFactor = 0.08;
+            } else if (angleDiff > 10.0) {
+                adaptiveFactor = 0.65;
+            }
+
+            this.vecX = this.vecX * (1 - adaptiveFactor) + curCos * adaptiveFactor;
+            this.vecY = this.vecY * (1 - adaptiveFactor) + curSin * adaptiveFactor;
+
+            let smooth = (Math.atan2(this.vecY, this.vecX) * 180) / Math.PI;
+            smooth = ((smooth % 360) + 360) % 360;
+            this.headingPreciseDeg = smooth;
+
+            // Histéresis de banda muerta de 0.35° para el valor entero:
+            // Erradica el parpadeo constante de números en pantalla al sostener el celular en mano
+            const deltaFromCurrent = Math.abs((((smooth - this.headingDeg) + 540) % 360) - 180);
+            if (deltaFromCurrent >= 0.35) {
+                this.headingDeg = Math.round(smooth) % 360;
+            }
         }
 
-        let smoothDeg = Math.round((Math.atan2(this.vecY, this.vecX) * 180) / Math.PI);
-        smoothDeg = ((smoothDeg % 360) + 360) % 360;
-
-        this.headingDeg = smoothDeg;
         this.source = source;
 
-        if (typeof window !== 'undefined') {
-            try {
-                localStorage.setItem('red_tactical_last_heading', String(smoothDeg));
-            } catch {}
-        }
+        // Throttling de notificación para no saturar React a 60Hz:
+        // Notifica de inmediato si cambió el grado entero, o a máximo 16-20 fps (60ms) si hubo micro-variaciones
+        const now = Date.now();
+        const headingChanged = this.headingDeg !== this.lastEmittedHeading;
+        if (headingChanged || (now - this.lastNotifyTs > 60)) {
+            this.lastNotifyTs = now;
+            this.lastEmittedHeading = this.headingDeg;
 
-        this.notify();
+            if (typeof window !== 'undefined') {
+                try {
+                    localStorage.setItem('red_tactical_last_heading', String(this.headingDeg));
+                } catch {}
+            }
+
+            this.notify();
+        }
     }
 
     /**
@@ -242,54 +289,14 @@ export class TacticalCompassEngine {
         if (this.isListening || typeof window === 'undefined') return;
         this.isListening = true;
 
-        // ── Nivel 1: Generic Sensor API (AbsoluteOrientationSensor) ───────────
-        try {
-            const AbsoluteOrientation = (window as any).AbsoluteOrientationSensor;
-            if (typeof AbsoluteOrientation === 'function') {
-                const sensor = new AbsoluteOrientation({ frequency: 50, referenceFrame: 'device' });
-                sensor.addEventListener('reading', () => {
-                    if (sensor.quaternion && Array.isArray(sensor.quaternion) && sensor.quaternion.length === 4) {
-                        const [x, y, z, w] = sensor.quaternion;
-                        // Conversión de cuaternión a ángulo de yaw (rumbo) con compensación 3D nativa
-                        const siny_cosp = 2 * (w * z + x * y);
-                        const cosy_cosp = 1 - 2 * (y * y + z * z);
-                        const yawRad = Math.atan2(siny_cosp, cosy_cosp);
-                        let heading = ((-yawRad * 180 / Math.PI) + 360) % 360;
+        // Variable para arbitraje: si Nivel 1 (deviceorientationabsolute) está activo, suprime sensores redundantes
+        let isAbsoluteOrientationActive = false;
 
-                        // Pitch (cabeceo)
-                        const sinp = 2 * (w * y - z * x);
-                        if (Math.abs(sinp) >= 1) {
-                            this.pitchDeg = Math.round((Math.sign(sinp) * Math.PI / 2) * 180 / Math.PI);
-                        } else {
-                            this.pitchDeg = Math.round(Math.asin(sinp) * 180 / Math.PI);
-                        }
-
-                        // Roll (alabeo)
-                        const sinr_cosp = 2 * (w * x + y * z);
-                        const cosr_cosp = 1 - 2 * (x * x + y * y);
-                        this.rollDeg = Math.round(Math.atan2(sinr_cosp, cosr_cosp) * 180 / Math.PI);
-
-                        this.hasHardwareMagnetometer = true;
-                        this.hasReceivedAbsoluteReading = true;
-                        this.lastAbsoluteReadingTs = Date.now();
-                        this.updateSmoothHeading(heading, 'magnetometer');
-                    }
-                });
-
-                sensor.addEventListener('error', (err: any) => {
-                    console.warn('[TacticalCompassEngine] AbsoluteOrientationSensor error:', err);
-                });
-
-                sensor.start();
-                this.absoluteSensor = sensor;
-            }
-        } catch (e) {
-            console.warn('[TacticalCompassEngine] AbsoluteOrientationSensor no soportado:', e);
-        }
-
-        // ── Nivel 2: W3C deviceorientationabsolute con Compensación de Inclinación 3D
+        // ── Nivel 1: W3C deviceorientationabsolute con proyección 3D canónica ──
+        // Es el estándar primario de hardware en Android HAL (Qualcomm / MediaTek / Moto G22 / Samsung)
         const handleDeviceOrientationAbsolute = (e: DeviceOrientationEvent) => {
             if (e.alpha !== null && isFinite(e.alpha)) {
+                isAbsoluteOrientationActive = true;
                 this.hasHardwareMagnetometer = true;
                 this.hasReceivedAbsoluteReading = true;
                 this.lastAbsoluteReadingTs = Date.now();
@@ -301,24 +308,31 @@ export class TacticalCompassEngine {
                 this.pitchDeg = Math.round(beta);
                 this.rollDeg = Math.round(gamma);
 
-                let heading = (360 - alpha) % 360;
+                let heading: number;
 
-                // Compensación de inclinación 3D si el dispositivo está inclinado en mano (> 15°)
-                if (Math.abs(beta) > 15 || Math.abs(gamma) > 15) {
+                // Modo Periscopio / Cámara Vertical: Si el teléfono se sostiene casi vertical (|beta| > 75°)
+                // se proyecta el vector de la cámara trasera [0, 0, -1] hacia el horizonte con roll completo
+                if (Math.abs(beta) > 75) {
+                    const aRad = (alpha * Math.PI) / 180;
                     const bRad = (beta * Math.PI) / 180;
                     const gRad = (gamma * Math.PI) / 180;
-                    const aRad = (alpha * Math.PI) / 180;
 
                     const cA = Math.cos(aRad), sA = Math.sin(aRad);
                     const cB = Math.cos(bRad), sB = Math.sin(bRad);
                     const cG = Math.cos(gRad), sG = Math.sin(gRad);
 
-                    const rX = -cA * sG - sA * sB * cG;
-                    const rY = -sA * cB;
-                    if (Math.abs(rX) > 0.001 || Math.abs(rY) > 0.001) {
-                        const tiltHeading = (Math.atan2(rY, rX) * 180) / Math.PI;
-                        heading = ((tiltHeading % 360) + 360) % 360;
+                    const camEast = -cA * sG - sA * sB * cG;
+                    const camNorth = -sA * sG + cA * sB * cG;
+                    if (Math.abs(camEast) > 0.001 || Math.abs(camNorth) > 0.001) {
+                        heading = ((Math.atan2(camEast, camNorth) * 180) / Math.PI + 360) % 360;
+                    } else {
+                        heading = ((360 - alpha) % 360 + 360) % 360;
                     }
+                } else {
+                    // Modo Portátil Estándar (en mesa o en mano mirando la pantalla, -75° <= beta <= 75°):
+                    // El vector longitudinal +Y apunta al frente. La proyección horizontal en Android HAL
+                    // es estrictamente (360 - alpha) % 360, invariante al pitch y roll.
+                    heading = ((360 - alpha) % 360 + 360) % 360;
                 }
 
                 this.updateSmoothHeading(heading, 'magnetometer');
@@ -330,7 +344,59 @@ export class TacticalCompassEngine {
             this.absoluteOrientationHandler = handleDeviceOrientationAbsolute;
         }
 
-        // ── Nivel 3: deviceorientation estándar (WebKit / iOS compass heading)
+        // ── Nivel 2: Generic Sensor API (AbsoluteOrientationSensor) ───────────
+        // Solo se activa como fallback si deviceorientationabsolute no está disponible
+        if (!this.absoluteOrientationHandler) {
+            try {
+                const AbsoluteOrientation = (window as any).AbsoluteOrientationSensor;
+                if (typeof AbsoluteOrientation === 'function') {
+                    const sensor = new AbsoluteOrientation({ frequency: 50, referenceFrame: 'device' });
+                    sensor.addEventListener('reading', () => {
+                        if (isAbsoluteOrientationActive) return; // Suprimir si Nivel 1 ya está reportando
+                        if (sensor.quaternion && Array.isArray(sensor.quaternion) && sensor.quaternion.length === 4) {
+                            const [x, y, z, w] = sensor.quaternion;
+
+                            // Pitch y Roll a partir de cuaternión unitario
+                            const sinp = 2 * (w * y - z * x);
+                            this.pitchDeg = Math.round(Math.asin(Math.max(-1, Math.min(1, sinp))) * (180 / Math.PI));
+
+                            const sinr_cosp = 2 * (w * x + y * z);
+                            const cosr_cosp = 1 - 2 * (x * x + y * y);
+                            this.rollDeg = Math.round(Math.atan2(sinr_cosp, cosr_cosp) * (180 / Math.PI));
+
+                            let heading: number;
+                            if (Math.abs(this.pitchDeg) > 75) {
+                                // Proyección de vector de cámara trasera [0, 0, -1]
+                                const camEast = -2 * (x * z + w * y);
+                                const camNorth = -2 * (y * z - w * x);
+                                heading = ((Math.atan2(camEast, camNorth) * 180) / Math.PI + 360) % 360;
+                            } else {
+                                // Proyección del eje longitudinal +Y del teléfono [0, 1, 0] sobre ENU
+                                const east = 2 * (x * y - w * z);
+                                const north = 1 - 2 * (x * x + z * z);
+                                heading = ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
+                            }
+
+                            this.hasHardwareMagnetometer = true;
+                            this.hasReceivedAbsoluteReading = true;
+                            this.lastAbsoluteReadingTs = Date.now();
+                            this.updateSmoothHeading(heading, 'magnetometer');
+                        }
+                    });
+
+                    sensor.addEventListener('error', (err: any) => {
+                        console.warn('[TacticalCompassEngine] AbsoluteOrientationSensor error:', err);
+                    });
+
+                    sensor.start();
+                    this.absoluteSensor = sensor;
+                }
+            } catch (e) {
+                console.warn('[TacticalCompassEngine] AbsoluteOrientationSensor no soportado:', e);
+            }
+        }
+
+        // ── Nivel 3: deviceorientation estándar (WebKit / iOS compass heading) ──
         const handleStandardDeviceOrientation = (e: DeviceOrientationEvent) => {
             // Si Nivel 1 o Nivel 2 están emitiendo lecturas absolutas en vivo, IGNORAR este evento para evitar jitter
             if (this.hasReceivedAbsoluteReading && (Date.now() - this.lastAbsoluteReadingTs < 1500)) {

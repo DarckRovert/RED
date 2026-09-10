@@ -16,12 +16,14 @@ import { deadDropVault } from "../lib/storage/DeadDropVaultEngine";
 import { milStd2525 } from "../lib/tactical/MilStd2525Engine";
 import { sitrepEngine, SitrepReport } from "../lib/tactical/SitrepEngine";
 import { pedestrianDeadReckoning, PdrState } from "../lib/sensors/PedestrianDeadReckoningEngine";
+import { TacticalLocationEngine, TacticalLocation } from "../lib/sensors/TacticalLocationEngine";
 import { tacticalCompass } from "../lib/sensors/TacticalCompassEngine";
 import { tacticalRdf } from "../lib/sensors/TacticalRdfEngine";
 import { meshUavRelayEngine } from "../lib/mesh/MeshUavRelayEngine";
 import { cbrnPlumeDispersionEngine, CbrnIncidentSource } from "../lib/tactical/CbrnPlumeDispersionEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { copyToClipboard } from "../lib/clipboard";
+import { TacIcon } from "./ui/TacIcon";
 
 function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
@@ -103,16 +105,17 @@ export default function NodeMap() {
         heading?: number;
         timestamp: number;
     }>(() => {
-        if (typeof window !== "undefined") {
-            try {
-                const saved = localStorage.getItem("red_last_known_gps");
-                if (saved) {
-                    const parsed = JSON.parse(saved);
-                    if (typeof parsed.lat === "number" && typeof parsed.lng === "number") {
-                        return { lat: parsed.lat, lng: parsed.lng, timestamp: parsed.timestamp || Date.now() };
-                    }
-                }
-            } catch {}
+        const last = TacticalLocationEngine.getLastKnownLocation();
+        if (last && TacticalLocationEngine.isValidCoordinates(last.lat, last.lon)) {
+            return {
+                lat: last.lat!,
+                lng: last.lon!,
+                accuracy: last.accuracy,
+                altitude: last.alt,
+                speed: last.speed,
+                heading: last.heading,
+                timestamp: last.timestamp
+            };
         }
         return { lat: 0, lng: 0, timestamp: Date.now() };
     });
@@ -155,11 +158,12 @@ export default function NodeMap() {
         return unsub;
     }, []);
 
+    const pdrOrGpsHeading = isPdrActive ? pdrState.currentHeadingDeg : (gpsData.heading || 0);
     const effectiveHeading = isPdrActive
         ? pdrState.currentHeadingDeg
         : (gpsData.heading !== undefined && (gpsData.speed || 0) > 1.2
             ? gpsData.heading
-            : compassHeading);
+            : (compassHeading || pdrOrGpsHeading));
 
     // Interceptor Base LIFO para NodeMap (Cierre ordenado al pulsar Atrás)
     useEffect(() => {
@@ -381,30 +385,25 @@ export default function NodeMap() {
         )
         : null;
 
-    // 1. Geolocalización en tiempo real continua de hardware y broadcast por la malla
+    // 1. Geolocalización en tiempo real continua de hardware y broadcast por la malla (SSOT vía TacticalLocationEngine)
     useEffect(() => {
         let mounted = true;
-        let watchId: string | null = null;
-        let html5WatchId: number | null = null;
 
-        const handleRealCoords = (coords: any, timestamp?: number) => {
-            if (!mounted || !coords) return;
-            const newLat = coords.latitude;
-            const newLng = coords.longitude;
+        const unsubLocation = TacticalLocationEngine.watchLocation((loc: TacticalLocation) => {
+            if (!mounted) return;
+            if (!TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) return;
+            const newLat = loc.lat!;
+            const newLng = loc.lon!;
             setGpsData({
                 lat: newLat,
                 lng: newLng,
-                accuracy: coords.accuracy ?? undefined,
-                altitude: coords.altitude ?? undefined,
-                speed: coords.speed ?? undefined,
-                heading: coords.heading ?? undefined,
-                timestamp: timestamp || Date.now()
+                accuracy: loc.accuracy,
+                altitude: loc.alt,
+                speed: loc.speed,
+                heading: loc.heading,
+                timestamp: loc.timestamp
             });
-            setRealGPS(true);
-
-            if (typeof window !== "undefined") {
-                localStorage.setItem("red_last_known_gps", JSON.stringify({ lat: newLat, lng: newLng, lon: newLng, timestamp: Date.now() }));
-            }
+            setRealGPS(!loc.isEstimated);
 
             if (leafletMapRef.current && !realGPS) {
                 try {
@@ -413,75 +412,16 @@ export default function NodeMap() {
             }
 
             // Retransmitir coordenadas reales a los demás nodos de la malla
-            meshRouter.broadcastLocation(coords.latitude, coords.longitude, coords.altitude ?? undefined, coords.accuracy ?? undefined);
-        };
-
-        const startHtml5Fallback = () => {
-            if (!mounted) return;
-            if (typeof navigator !== "undefined" && navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => handleRealCoords(pos.coords, pos.timestamp),
-                    (err) => console.warn("[NodeMap] HTML5 getCurrentPosition fallback:", err.message),
-                    { enableHighAccuracy: true, timeout: 8000, maximumAge: 5000 }
-                );
-                try {
-                    html5WatchId = navigator.geolocation.watchPosition(
-                        (pos) => handleRealCoords(pos.coords, pos.timestamp),
-                        (err) => console.warn("[NodeMap] HTML5 watchPosition notice:", err.message),
-                        { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 }
-                    );
-                } catch (e) {
-                    console.warn("[NodeMap] watchPosition error:", e);
-                }
+            if (!loc.isEstimated) {
+                meshRouter.broadcastLocation(newLat, newLng, loc.alt, loc.accuracy);
             }
-        };
-
-        const initGeoWatch = async () => {
-            let capacitorActive = false;
-            try {
-                const { Geolocation } = await import("@capacitor/geolocation");
-                const permission = await Geolocation.checkPermissions().catch(() => null);
-                if (permission?.location !== "granted") {
-                    await Geolocation.requestPermissions().catch(() => null);
-                }
-                
-                const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true }).catch(() => null);
-                if (pos?.coords) {
-                    handleRealCoords(pos.coords, pos.timestamp);
-                    capacitorActive = true;
-                }
-
-                watchId = await Geolocation.watchPosition({ enableHighAccuracy: true }, (position) => {
-                    if (position?.coords) {
-                        handleRealCoords(position.coords, position.timestamp);
-                    }
-                });
-                if (watchId) {
-                    capacitorActive = true;
-                }
-            } catch {
-                capacitorActive = false;
-            }
-
-            if (!capacitorActive) {
-                startHtml5Fallback();
-            }
-        };
-
-        initGeoWatch();
+        });
 
         return () => {
             mounted = false;
-            if (watchId) {
-                import("@capacitor/geolocation").then(({ Geolocation }) => {
-                    Geolocation.clearWatch({ id: watchId as string });
-                }).catch(() => {});
-            }
-            if (html5WatchId !== null && typeof navigator !== "undefined" && navigator.geolocation) {
-                navigator.geolocation.clearWatch(html5WatchId);
-            }
+            unsubLocation();
         };
-    }, []);
+    }, [realGPS]);
 
     // 2. Extracción y Deduplicación Estricta de Telemetría de Malla
     useEffect(() => {
@@ -1079,8 +1019,10 @@ export default function NodeMap() {
                         width: 36, height: 36, borderRadius: "10px", flexShrink: 0,
                         background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.15rem", boxShadow: "0 4px 14px rgba(0,229,255,0.3)"
-                    }}>🗺️</div>
+                        boxShadow: "0 4px 14px rgba(0,229,255,0.3)"
+                    }}>
+                        <TacIcon name="map" size={20} color="#000" />
+                    </div>
                     <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: "0.92rem", fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {t('map.title')}
@@ -1091,7 +1033,7 @@ export default function NodeMap() {
                     </div>
                 </div>
 
-                <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
                     <button
                         onClick={async () => {
                             try {
@@ -1107,7 +1049,6 @@ export default function NodeMap() {
                                 const bftEvt = cursorOnTarget.createBftEvent(nodeId, callsign, gpsData.lat, gpsData.lng, 'COMMAND_HQ', batt);
                                 const cotXml = cursorOnTarget.serializeToXml(bftEvt);
                                 await copyToClipboard(cotXml);
-                                // Broadcast CoT over the mesh router
                                 try {
                                     meshRouter.broadcastLocation(gpsData.lat, gpsData.lng, gpsData.altitude, gpsData.accuracy);
                                 } catch {}
@@ -1117,50 +1058,53 @@ export default function NodeMap() {
                             }
                         }}
                         className="btn-tactical-secondary"
-                        style={{ padding: "6px 9px", fontSize: "0.74rem" }}
+                        style={{ padding: "6px 9px", fontSize: "0.74rem", display: "flex", alignItems: "center", gap: "4px" }}
                         title="Exportar y Difundir Cursor-on-Target (ATAK/CivTAK XML)"
                     >
-                        🎯 CoT
+                        <TacIcon name="crosshair" size={13} color="var(--accent-cyan)" />
+                        <span>CoT</span>
                     </button>
                     <button
                         onClick={handleTogglePdr}
                         className={isPdrActive ? "btn-tactical-primary" : "btn-tactical-secondary"}
-                        style={{ padding: "6px 9px", fontSize: "0.74rem", background: isPdrActive ? "#FF9100" : undefined, borderColor: isPdrActive ? "#FFB74D" : undefined }}
+                        style={{ padding: "6px 9px", fontSize: "0.74rem", background: isPdrActive ? "#FF9100" : undefined, borderColor: isPdrActive ? "#FFB74D" : undefined, display: "flex", alignItems: "center", gap: "4px" }}
                         title={isPdrActive ? "Desactivar PDR Inercial" : "Activar PDR Inercial (Sin GPS)"}
                     >
-                        🧭 {isPdrActive ? `${pdrState.totalSteps}p` : "PDR"}
+                        <TacIcon name="compass" size={13} color={isPdrActive ? "#000" : "var(--accent-amber)"} />
+                        <span>{isPdrActive ? `${pdrState.totalSteps}p` : "PDR"}</span>
                     </button>
                     <button
                         onClick={() => { setShowVaultModal(true); loadVaultStats(); }}
                         className="btn-tactical-secondary"
-                        style={{ padding: "6px 9px", fontSize: "0.74rem" }}
+                        style={{ width: 34, height: 34, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
                         title="Bóveda de Mapas Offline"
                     >
-                        📥
+                        <TacIcon name="download" size={15} color="var(--accent-cyan)" />
                     </button>
                     <button
                         onClick={() => setShowTelemetryDrawer(!showTelemetryDrawer)}
                         className={`btn-tactical-${showTelemetryDrawer ? "primary" : "secondary"}`}
-                        style={{ padding: "6px 10px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
+                        style={{ padding: "6px 10px", fontSize: "0.74rem", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "5px" }}
                         title={t('map.telemetry_btn')}
                     >
-                        📊 {peers.length}
+                        <TacIcon name="database" size={13} />
+                        <span className="tabular-telemetry">{peers.length}</span>
                     </button>
                     <button
                         onClick={recenterMap}
                         className="btn-tactical-secondary"
-                        style={{ padding: "6px 9px", fontSize: "0.74rem" }}
+                        style={{ width: 34, height: 34, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
                         title={t('map.recenter')}
                     >
-                        📍
+                        <TacIcon name="crosshair" size={15} color="var(--accent-cyan)" />
                     </button>
                     <button
                         onClick={goBack}
                         className="btn-icon"
                         title={t('common.close')}
-                        style={{ width: 34, height: 34 }}
+                        style={{ width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center" }}
                     >
-                        ✕
+                        <TacIcon name="x" size={16} color="var(--text-muted)" />
                     </button>
                 </div>
             </header>
@@ -1226,8 +1170,8 @@ export default function NodeMap() {
                         display: "flex", flexDirection: "column", gap: "8px"
                     }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span style={{ fontSize: "1.1rem" }}>🎯</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <TacIcon name="crosshair" size={16} color="#FF6B81" />
                                 <div>
                                     <div style={{ fontSize: "0.60rem", color: "#FF6B81", fontWeight: 800, letterSpacing: "0.5px" }}>
                                         VECTOR HACIA OBJETIVO
@@ -1247,10 +1191,14 @@ export default function NodeMap() {
                                     borderRadius: "6px",
                                     fontSize: "0.70rem",
                                     fontWeight: 700,
-                                    cursor: "pointer"
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px"
                                 }}
                             >
-                                🗑️ Cancelar
+                                <TacIcon name="trash" size={12} color="#FFF" />
+                                <span>Cancelar</span>
                             </button>
                         </div>
 
@@ -1260,19 +1208,19 @@ export default function NodeMap() {
                         }}>
                             <div>
                                 <div style={{ fontSize: "0.55rem", color: "var(--text-muted)", fontWeight: 700 }}>DISTANCIA</div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                <div className="tabular-telemetry" style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
                                     {tacticalGuidance.formattedDistance}
                                 </div>
                             </div>
                             <div>
                                 <div style={{ fontSize: "0.55rem", color: "var(--text-muted)", fontWeight: 700 }}>RUMBO</div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFB300", fontFamily: "JetBrains Mono, monospace" }}>
+                                <div className="tabular-telemetry" style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFB300", fontFamily: "JetBrains Mono, monospace" }}>
                                     {tacticalGuidance.bearingDegrees}° {tacticalGuidance.cardinal}
                                 </div>
                             </div>
                             <div>
                                 <div style={{ fontSize: "0.55rem", color: "var(--text-muted)", fontWeight: 700 }}>TIEMPO A PIE</div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
+                                <div className="tabular-telemetry" style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
                                     {tacticalGuidance.estimatedWalkTimeFormatted}
                                 </div>
                             </div>
@@ -1280,10 +1228,11 @@ export default function NodeMap() {
 
                         <div style={{
                             fontSize: "0.68rem", fontWeight: 700, color: "#FFF",
-                            background: "rgba(232, 33, 58, 0.2)", padding: "4px 8px", borderRadius: "6px",
-                            textAlign: "center"
+                            background: "rgba(232, 33, 58, 0.2)", padding: "6px 8px", borderRadius: "6px",
+                            display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                         }}>
-                            🧭 {tacticalGuidance.steeringInstruction}
+                            <TacIcon name="compass" size={14} color="#FF6B81" />
+                            <span>{tacticalGuidance.steeringInstruction}</span>
                         </div>
                     </div>
                 </div>
@@ -1333,20 +1282,18 @@ export default function NodeMap() {
                             osmLayerRef.current.options.isVectorGrid = (next === 'vectorGrid');
                             osmLayerRef.current.redraw();
                         }
-                        toast.info(next === 'vectorGrid' ? "🌐 Modo Rejilla Vectorial Pura (Sin Teselas / Bajo Consumo)" : "🗺️ Modo Cartografía Táctica");
+                        toast.info(next === 'vectorGrid' ? "Modo Rejilla Vectorial Pura (Sin Teselas / Bajo Consumo)" : "Modo Cartografía Táctica");
                     }}
                     className={mapMode === 'vectorGrid' ? "btn-tactical-primary" : "btn-tactical-secondary"}
                     style={{
                         width: "36px", height: "36px", padding: 0,
-                        fontSize: "0.95rem",
                         display: "flex", alignItems: "center", justifyContent: "center",
                         borderRadius: "8px", background: mapMode === 'vectorGrid' ? "#00E5FF" : "rgba(10, 14, 26, 0.92)",
-                        color: mapMode === 'vectorGrid' ? "#000" : "var(--text-primary)",
                         border: "1px solid var(--glass-border)"
                     }}
                     title={mapMode === 'vectorGrid' ? "Conmutar a Mapa Táctico" : "Conmutar a Rejilla Vectorial Pura"}
                 >
-                    {mapMode === 'vectorGrid' ? "🌐" : "🗺️"}
+                    <TacIcon name={mapMode === 'vectorGrid' ? "globe" : "map"} size={16} color={mapMode === 'vectorGrid' ? "#000" : "var(--accent-cyan)"} />
                 </button>
             </div>
 
@@ -1363,16 +1310,18 @@ export default function NodeMap() {
                         boxShadow: "0 12px 35px rgba(0,0,0,0.8), 0 0 20px rgba(0,229,255,0.2)"
                     }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span style={{ fontSize: "1.1rem" }}>📍</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <TacIcon name="crosshair" size={16} color="var(--accent-cyan)" />
                                 <div>
                                     <div style={{ fontSize: "0.62rem", color: "var(--accent-cyan)", fontWeight: 800 }}>PUNTO TÁCTICO SELECCIONADO</div>
-                                    <div style={{ fontSize: "0.78rem", fontWeight: 900, fontFamily: "JetBrains Mono, monospace" }}>
+                                    <div className="tabular-telemetry" style={{ fontSize: "0.78rem", fontWeight: 900, fontFamily: "JetBrains Mono, monospace" }}>
                                         {contextActionPoint.lat.toFixed(5)}, {contextActionPoint.lng.toFixed(5)}
                                     </div>
                                 </div>
                             </div>
-                            <button onClick={() => setContextActionPoint(null)} className="btn-icon" style={{ width: 28, height: 28 }}>✕</button>
+                            <button onClick={() => setContextActionPoint(null)} className="btn-icon" style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <TacIcon name="x" size={14} color="var(--text-muted)" />
+                            </button>
                         </div>
 
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
@@ -1382,9 +1331,10 @@ export default function NodeMap() {
                                     setContextActionPoint(null);
                                 }}
                                 className="btn-tactical-primary"
-                                style={{ padding: "8px", fontSize: "0.74rem" }}
+                                style={{ padding: "8px", fontSize: "0.74rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                             >
-                                🎯 Fijar Objetivo
+                                <TacIcon name="crosshair" size={14} />
+                                <span>Fijar Objetivo</span>
                             </button>
                             <button
                                 onClick={() => {
@@ -1410,9 +1360,10 @@ export default function NodeMap() {
                                     }
                                 }}
                                 className="btn-tactical-secondary"
-                                style={{ padding: "8px", fontSize: "0.74rem" }}
+                                style={{ padding: "8px", fontSize: "0.74rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                             >
-                                🚩 Añadir Waypoint
+                                <TacIcon name="pin" size={14} color="var(--accent-cyan)" />
+                                <span>Añadir Waypoint</span>
                             </button>
                         </div>
 
@@ -1439,9 +1390,10 @@ export default function NodeMap() {
                                     }
                                 }}
                                 className="btn-tactical-secondary"
-                                style={{ flex: 1, padding: "7px", fontSize: "0.72rem", color: "var(--accent-emerald)" }}
+                                style={{ flex: 1, padding: "7px", fontSize: "0.72rem", color: "var(--accent-emerald)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                             >
-                                📋 Marcar SITREP
+                                <TacIcon name="clipboard" size={13} color="var(--accent-emerald)" />
+                                <span>Marcar SITREP</span>
                             </button>
                             <button
                                 onClick={() => setContextActionPoint(null)}
@@ -1494,7 +1446,9 @@ export default function NodeMap() {
                                     : `📍 GPS Remoto Real (${selectedPeer.lat?.toFixed(5)}, ${selectedPeer.lng?.toFixed(5)}) · Distancia: ${selectedPeer.distMeters ?? 0}m`}
                             </div>
                         </div>
-                        <button onClick={() => setSelectedPeer(null)} className="btn-icon" style={{ width: 28, height: 28, flexShrink: 0 }}>✕</button>
+                        <button onClick={() => setSelectedPeer(null)} className="btn-icon" style={{ width: 28, height: 28, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <TacIcon name="x" size={14} color="var(--text-muted)" />
+                        </button>
                     </div>
 
                     <div style={{ display: "flex", gap: "8px" }}>
@@ -1508,9 +1462,10 @@ export default function NodeMap() {
                                 navigate("chat", resolvedHash || finalId);
                             }}
                             className="btn-tactical-primary"
-                            style={{ flex: 1, padding: "8px", fontSize: "0.78rem" }}
+                            style={{ flex: 1, padding: "8px", fontSize: "0.78rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                         >
-                            💬 Chat Seguro
+                            <TacIcon name="chats" size={14} />
+                            <span>Chat Seguro</span>
                         </button>
                         <button
                             onClick={async () => {
@@ -1522,9 +1477,10 @@ export default function NodeMap() {
                                 toast.success(`Contacto ${finalName} guardado`);
                             }}
                             className="btn-tactical-secondary"
-                            style={{ padding: "8px 12px", fontSize: "0.78rem", whiteSpace: "nowrap" }}
+                            style={{ padding: "8px 12px", fontSize: "0.78rem", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "4px" }}
                         >
-                            + Guardar
+                            <TacIcon name="plus" size={13} />
+                            <span>Guardar</span>
                         </button>
                     </div>
                 </div>
@@ -1541,10 +1497,14 @@ export default function NodeMap() {
                     padding: "12px 14px", overflow: "hidden"
                 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                        <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "0.3px" }}>
-                            📊 Nodos en el Espectro ({peers.length})
+                        <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "0.3px", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <TacIcon name="radio" size={15} color="var(--accent-cyan)" />
+                            <span>Nodos en el Espectro</span>
+                            <span className="tabular-telemetry" style={{ color: "var(--accent-cyan)" }}>({peers.length})</span>
                         </div>
-                        <button onClick={() => setShowTelemetryDrawer(false)} className="btn-icon" style={{ width: 26, height: 26 }}>✕</button>
+                        <button onClick={() => setShowTelemetryDrawer(false)} className="btn-icon" style={{ width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <TacIcon name="x" size={14} color="var(--text-muted)" />
+                        </button>
                     </div>
 
                     <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -1629,7 +1589,7 @@ export default function NodeMap() {
                     }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <span style={{ fontSize: "1.3rem" }}>📥</span>
+                                <TacIcon name="download" size={20} color="var(--accent-cyan)" />
                                 <div>
                                     <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--text-primary)" }}>
                                         Bóveda de Mapas Offline
@@ -1641,9 +1601,9 @@ export default function NodeMap() {
                             </div>
                             <button 
                                 onClick={() => { handleCancelVaultDownload(); setShowVaultModal(false); }}
-                                className="btn-icon" style={{ width: 28, height: 28 }}
+                                className="btn-icon" style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}
                             >
-                                ✕
+                                <TacIcon name="x" size={14} color="var(--text-muted)" />
                             </button>
                         </div>
 
@@ -1654,13 +1614,13 @@ export default function NodeMap() {
                         }}>
                             <div>
                                 <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontWeight: 700 }}>TESELAS EN BÓVEDA</div>
-                                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
+                                <div className="tabular-telemetry" style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
                                     {vaultStats ? vaultStats.totalTiles : "…"}
                                 </div>
                             </div>
                             <div style={{ textAlign: "right" }}>
                                 <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontWeight: 700 }}>ESPACIO EN DISCO</div>
-                                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                <div className="tabular-telemetry" style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
                                     {vaultStats ? vaultStats.formattedSize : "…"}
                                 </div>
                             </div>
@@ -1719,18 +1679,21 @@ export default function NodeMap() {
                                     style={{
                                         flex: 1, padding: "10px", borderRadius: "8px",
                                         background: "rgba(255, 60, 95, 0.2)", border: "1px solid var(--accent-crimson)",
-                                        color: "#FFF", fontWeight: 800, fontSize: "0.82rem", cursor: "pointer"
+                                        color: "#FFF", fontWeight: 800, fontSize: "0.82rem", cursor: "pointer",
+                                        display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                                     }}
                                 >
-                                    🛑 Detener Descarga
+                                    <TacIcon name="x" size={14} color="#FFF" />
+                                    <span>Detener Descarga</span>
                                 </button>
                             ) : (
                                 <button
                                     onClick={handleStartVaultDownload}
                                     className="btn-tactical-primary"
-                                    style={{ flex: 1, padding: "10px", fontSize: "0.82rem", fontWeight: 800 }}
+                                    style={{ flex: 1, padding: "10px", fontSize: "0.82rem", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                                 >
-                                    📥 Descargar Zona ({vaultRadiusKm} km)
+                                    <TacIcon name="download" size={14} />
+                                    <span>Descargar Zona ({vaultRadiusKm} km)</span>
                                 </button>
                             )}
 
@@ -1740,11 +1703,12 @@ export default function NodeMap() {
                                 style={{
                                     padding: "10px 14px", borderRadius: "8px",
                                     background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)",
-                                    color: "var(--text-muted)", fontWeight: 700, fontSize: "0.78rem", cursor: "pointer"
+                                    color: "var(--text-muted)", fontWeight: 700, fontSize: "0.78rem", cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center"
                                 }}
                                 title="Vaciar caché de mapas"
                             >
-                                🗑️
+                                <TacIcon name="trash" size={14} color="var(--text-muted)" />
                             </button>
                         </div>
                     </div>

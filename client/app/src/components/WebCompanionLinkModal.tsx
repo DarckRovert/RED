@@ -8,6 +8,7 @@ import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { getSecurePin } from "../lib/crypto/BiometricLockEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacIcon } from "./ui/TacIcon";
 
 interface WebCompanionLinkModalProps {
     onClose: () => void;
@@ -508,15 +509,19 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 <button
                     onClick={handleCancel}
                     className="btn-icon"
-                    style={{ position: "absolute", top: "16px", right: "16px", width: "32px", height: "32px" }}
+                    style={{ position: "absolute", top: "16px", right: "16px", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center" }}
                 >
-                    ✕
+                    <TacIcon name="x" size={16} color="var(--text-muted)" />
                 </button>
 
                 {/* Header */}
                 <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: "2.2rem", marginBottom: "6px" }}>
-                        {mode === "success" ? "🎉" : mode === "encrypting" || mode === "receiving" ? "⚡" : mode === "error" ? "❌" : "💻"}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "6px" }}>
+                        <TacIcon 
+                            name={mode === "success" ? "check" : mode === "encrypting" || mode === "receiving" ? "zap" : mode === "error" ? "x" : "terminal"} 
+                            size={36} 
+                            color={mode === "success" ? "#00E676" : mode === "error" ? "#FF3355" : "var(--accent-cyan)"} 
+                        />
                     </div>
                     <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800 }}>
                         {mode === "success" ? "¡Sesión Vinculada!" : "Web Companion Link"}
@@ -538,10 +543,11 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                                 flex: 1, padding: "6px 10px", borderRadius: "var(--radius-full)",
                                 background: mode === "receive_qr" ? "var(--accent-cyan)" : "transparent",
                                 color: mode === "receive_qr" ? "#000" : "var(--text-secondary)",
-                                border: "none", fontWeight: 800, fontSize: "0.72rem", cursor: "pointer"
+                                border: "none", fontWeight: 800, fontSize: "0.72rem", cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                             }}
                         >
-                            📥 Recibir en esta PC
+                            <TacIcon name="download" size={13} color={mode === "receive_qr" ? "#000" : "var(--text-secondary)"} /> Recibir en esta PC
                         </button>
                         <button
                             onClick={() => {
@@ -556,10 +562,11 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                                 flex: 1, padding: "6px 10px", borderRadius: "var(--radius-full)",
                                 background: mode === "manual" ? "var(--accent-cyan)" : "transparent",
                                 color: mode === "manual" ? "#000" : "var(--text-secondary)",
-                                border: "none", fontWeight: 800, fontSize: "0.72rem", cursor: "pointer"
+                                border: "none", fontWeight: 800, fontSize: "0.72rem", cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                             }}
                         >
-                            📤 Transmitir Bóveda
+                            <TacIcon name="upload" size={13} color={mode === "manual" ? "#000" : "var(--text-secondary)"} /> Transmitir Bóveda
                         </button>
                     </div>
                 )}
@@ -630,10 +637,11 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                                             background: "linear-gradient(135deg, #00F0FF 0%, #0077B6 100%)",
                                             border: "none", borderRadius: "10px",
                                             color: "#000", fontWeight: 900, fontSize: "0.75rem",
-                                            cursor: "pointer", boxShadow: "0 0 15px rgba(0,240,255,0.4)"
+                                            cursor: "pointer", boxShadow: "0 0 15px rgba(0,240,255,0.4)",
+                                            display: "inline-flex", alignItems: "center", gap: "6px"
                                         }}
                                     >
-                                        🔄 RENOVAR TOKEN
+                                        <TacIcon name="refresh" size={14} color="#000" /> RENOVAR TOKEN
                                     </button>
                                 </div>
                             )}
@@ -643,9 +651,9 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                             <button
                                 onClick={handleCopyCode}
                                 className="btn-tactical-secondary"
-                                style={{ padding: "8px 14px", fontSize: "0.74rem", width: "100%" }}
+                                style={{ padding: "8px 14px", fontSize: "0.74rem", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                             >
-                                📋 Copiar Código de Emparejamiento
+                                <TacIcon name="clipboard" size={14} /> Copiar Código de Emparejamiento
                             </button>
                         )}
 
@@ -677,9 +685,9 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                             onClick={() => handleSendVaultWithCode(manualCode.trim())}
                             disabled={!manualCode.trim()}
                             className="btn-tactical-primary"
-                            style={{ width: "100%", padding: "12px", fontWeight: 800 }}
+                            style={{ width: "100%", padding: "12px", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                         >
-                            ⚡ VINCULAR O IMPORTAR BÓVEDA
+                            <TacIcon name="zap" size={15} /> VINCULAR O IMPORTAR BÓVEDA
                         </button>
 
                         <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "10px" }}>
@@ -689,7 +697,7 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                                 className="btn-tactical-secondary"
                                 style={{ width: "100%", padding: "10px", fontSize: "0.75rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
                             >
-                                <span>🛡️</span>
+                                <TacIcon name="shield" size={14} color="var(--accent-cyan)" />
                                 <span>{isExportingAirGap ? "Generando…" : "Generar Cápsula Air-Gap (Búnker / Sin Red)"}</span>
                             </button>
 

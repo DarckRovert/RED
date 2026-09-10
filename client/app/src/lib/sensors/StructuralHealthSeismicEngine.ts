@@ -48,6 +48,7 @@ export class StructuralHealthSeismicEngine {
 
     private gravityEma: number = 9.81;
     private lastAlarmTimeMs: number = 0;
+    private hopCounter: number = 0;
 
     private constructor() {
         if (typeof window !== 'undefined') {
@@ -119,10 +120,15 @@ export class StructuralHealthSeismicEngine {
             }
 
             this.sampleBuffer.push(mag);
-
-            if (this.sampleBuffer.length >= 64) {
-                this.computeSpectralHealth(this.sampleBuffer.slice(-64));
+            if (this.sampleBuffer.length > 64) {
                 this.sampleBuffer.shift();
+            }
+
+            this.hopCounter++;
+            // Hop interval: ejecutar DFT de 64 puntos cada 8 muestras (~6.25 Hz a 50Hz de tasa inercial)
+            // Reduciendo la carga de CPU móvil en un 87.5% sin perder resolución de resonancia.
+            if (this.sampleBuffer.length >= 64 && (this.hopCounter % 8 === 0)) {
+                this.computeSpectralHealth(this.sampleBuffer.slice(-64));
             }
         };
 

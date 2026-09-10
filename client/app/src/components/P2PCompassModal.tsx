@@ -8,6 +8,7 @@ import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalLocationEngine, TacticalLocation } from "../lib/sensors/TacticalLocationEngine";
 import { tacticalCompass, TacticalCompassTelemetry } from "../lib/sensors/TacticalCompassEngine";
 import { toast } from "./Toast";
+import { TacIcon } from "./ui/TacIcon";
 
 function calculateGreatCircleBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const phi1 = (lat1 * Math.PI) / 180;
@@ -289,8 +290,10 @@ export const P2PCompassModal: React.FC = () => {
                         width: 40, height: 40, borderRadius: "12px",
                         background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,229,255,0.35)"
-                    }}>🧭</div>
+                        boxShadow: "0 4px 16px rgba(0,229,255,0.35)"
+                    }}>
+                        <TacIcon name="compass" size={22} color="#000" />
+                    </div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
                             {t('compass.title') || "Brújula Táctica P2P"}
@@ -309,18 +312,18 @@ export const P2PCompassModal: React.FC = () => {
                         onClick={() => loadNodes(true)}
                         className="btn-icon"
                         title="Escanear Nodos"
-                        style={{ width: 38, height: 38, fontSize: "1rem", cursor: "pointer" }}
+                        style={{ width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                         disabled={isScanning}
                     >
-                        {isScanning ? "⏳" : "🔄"}
+                        <TacIcon name="refresh" size={16} className={isScanning ? "spin-pulse" : ""} />
                     </button>
                     <button
                         onClick={() => navigate("sidebar")}
                         className="btn-icon"
                         title={t('common.close') || "Cerrar"}
-                        style={{ width: 38, height: 38, fontSize: "1.1rem", cursor: "pointer" }}
+                        style={{ width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                     >
-                        ✕
+                        <TacIcon name="x" size={16} />
                     </button>
                 </div>
             </header>
@@ -341,10 +344,13 @@ export const P2PCompassModal: React.FC = () => {
                         borderRadius: "var(--radius-full, 9999px)", whiteSpace: "nowrap",
                         background: activeTab === "compass" ? "#00E5FF" : "transparent",
                         color: activeTab === "compass" ? "#000" : "#AAA",
-                        border: "none", cursor: "pointer"
+                        border: "none", cursor: "pointer",
+                        display: "flex", alignItems: "center", gap: "6px"
                     }}
                 >
-                    🧭 Rosa Táctica {trackedPeer && "🎯"}
+                    <TacIcon name="compass" size={14} />
+                    <span>Rosa Táctica</span>
+                    {trackedPeer && <TacIcon name="crosshair" size={12} color={activeTab === "compass" ? "#000" : "#FF3355"} />}
                 </button>
                 <button
                     onClick={() => setActiveTab("nodes")}
@@ -354,10 +360,12 @@ export const P2PCompassModal: React.FC = () => {
                         borderRadius: "var(--radius-full, 9999px)", whiteSpace: "nowrap",
                         background: activeTab === "nodes" ? "#00E5FF" : "transparent",
                         color: activeTab === "nodes" ? "#000" : "#AAA",
-                        border: "none", cursor: "pointer"
+                        border: "none", cursor: "pointer",
+                        display: "flex", alignItems: "center", gap: "6px"
                     }}
                 >
-                    📡 Nodos en Alcance ({nodes.length})
+                    <TacIcon name="radio" size={14} />
+                    <span>Nodos en Alcance ({nodes.length})</span>
                 </button>
             </div>
 
@@ -401,22 +409,26 @@ export const P2PCompassModal: React.FC = () => {
                                         style={{
                                             padding: "4px 8px", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800,
                                             background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)",
-                                            color: "#FFF", cursor: "pointer"
+                                            color: "#FFF", cursor: "pointer",
+                                            display: "flex", alignItems: "center", gap: "4px"
                                         }}
                                         title="Ajustar rumbo -15°"
                                     >
-                                        ◀ -15°
+                                        <TacIcon name="chevron-left" size={10} />
+                                        <span>-15°</span>
                                     </button>
                                     <button
                                         onClick={() => tacticalCompass.adjustManualHeading(15)}
                                         style={{
                                             padding: "4px 8px", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800,
                                             background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)",
-                                            color: "#FFF", cursor: "pointer"
+                                            color: "#FFF", cursor: "pointer",
+                                            display: "flex", alignItems: "center", gap: "4px"
                                         }}
                                         title="Ajustar rumbo +15°"
                                     >
-                                        +15° ▶
+                                        <span>+15°</span>
+                                        <TacIcon name="chevron-right" size={10} />
                                     </button>
                                     {myCoords && (
                                         <button
@@ -424,11 +436,13 @@ export const P2PCompassModal: React.FC = () => {
                                             style={{
                                                 padding: "4px 8px", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800,
                                                 background: "rgba(255,179,0,0.25)", border: "1px solid #FFB300",
-                                                color: "#FFB300", cursor: "pointer"
+                                                color: "#FFB300", cursor: "pointer",
+                                                display: "flex", alignItems: "center", gap: "4px"
                                             }}
                                             title="Calibrar apuntando hacia el Sol"
                                         >
-                                            ☀️ Calibrar Sol
+                                            <TacIcon name="sun" size={12} />
+                                            <span>Calibrar Sol</span>
                                         </button>
                                     )}
                                 </div>
@@ -446,12 +460,12 @@ export const P2PCompassModal: React.FC = () => {
                                 }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                            <span style={{ fontSize: "1.2rem", animation: "pulse 1.2s infinite" }}>🎯</span>
+                                            <TacIcon name="crosshair" size={18} color="#FF3355" style={{ animation: "pulse 1.2s infinite" }} />
                                             <div>
                                                 <div style={{ fontSize: "0.86rem", fontWeight: 900, color: "#FFF" }}>
                                                     RASTREANDO: {trackedPeer.nickname || trackedPeer.display_name || "Nodo P2P"}
                                                 </div>
-                                                <div style={{ fontSize: "0.68rem", color: "#AAA", fontFamily: "JetBrains Mono, monospace" }}>
+                                                <div className="tabular-telemetry" style={{ fontSize: "0.68rem", color: "#AAA", fontFamily: "JetBrains Mono, monospace" }}>
                                                     {(trackedPeer.peer_id || trackedPeer.identity_hash || "").slice(0, 16)}...
                                                 </div>
                                             </div>
@@ -461,17 +475,19 @@ export const P2PCompassModal: React.FC = () => {
                                             style={{
                                                 background: "rgba(255,255,255,0.1)", border: "none",
                                                 color: "#FF5252", padding: "4px 8px", borderRadius: "6px",
-                                                cursor: "pointer", fontSize: "0.72rem", fontWeight: 800
+                                                cursor: "pointer", fontSize: "0.72rem", fontWeight: 800,
+                                                display: "flex", alignItems: "center", gap: "4px"
                                             }}
                                         >
-                                            ✕ Cancelar
+                                            <TacIcon name="x" size={12} />
+                                            <span>Cancelar</span>
                                         </button>
                                     </div>
 
                                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                                         <div style={{ background: "rgba(0,0,0,0.4)", padding: "8px 10px", borderRadius: "8px" }}>
                                             <div style={{ fontSize: "0.62rem", color: "#AAA", textTransform: "uppercase" }}>RUMBO AL PAR</div>
-                                            <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#00E5FF", fontFamily: "JetBrains Mono, monospace" }}>
+                                            <div className="tabular-telemetry" style={{ fontSize: "1.1rem", fontWeight: 900, color: "#00E5FF", fontFamily: "JetBrains Mono, monospace" }}>
                                                 {trackingGuidance.targetBearing}° {trackingGuidance.cardinal}
                                             </div>
                                             <div style={{ fontSize: "0.65rem", color: "#FFB300", fontWeight: 700, marginTop: "2px" }}>
@@ -480,10 +496,10 @@ export const P2PCompassModal: React.FC = () => {
                                         </div>
                                         <div style={{ background: "rgba(0,0,0,0.4)", padding: "8px 10px", borderRadius: "8px" }}>
                                             <div style={{ fontSize: "0.62rem", color: "#AAA", textTransform: "uppercase" }}>ALCANCE ESTIMADO</div>
-                                            <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#00E676", fontFamily: "JetBrains Mono, monospace" }}>
+                                            <div className="tabular-telemetry" style={{ fontSize: "1.1rem", fontWeight: 900, color: "#00E676", fontFamily: "JetBrains Mono, monospace" }}>
                                                 {trackedPeer.distance_meters != null ? `${trackedPeer.distance_meters.toFixed(1)}m` : "~ En rango"}
                                             </div>
-                                            <div style={{ fontSize: "0.65rem", color: "#AAA", marginTop: "2px" }}>
+                                            <div className="tabular-telemetry" style={{ fontSize: "0.65rem", color: "#AAA", marginTop: "2px" }}>
                                                 RSSI: {trackedPeer.rssi_dbm != null ? `${trackedPeer.rssi_dbm} dBm` : "Radio P2P"}
                                             </div>
                                         </div>
@@ -499,7 +515,8 @@ export const P2PCompassModal: React.FC = () => {
                                                 display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                                             }}
                                         >
-                                            🎯 Fijar Blanco
+                                            <TacIcon name="crosshair" size={14} />
+                                            <span>Fijar Blanco</span>
                                         </button>
                                         <button
                                             onClick={() => handleOpenChat(trackedPeer)}
@@ -510,7 +527,8 @@ export const P2PCompassModal: React.FC = () => {
                                                 display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                                             }}
                                         >
-                                            💬 Abrir Canal
+                                            <TacIcon name="chats" size={14} />
+                                            <span>Abrir Canal</span>
                                         </button>
                                     </div>
                                 </div>
@@ -584,10 +602,71 @@ export const P2PCompassModal: React.FC = () => {
                                             />
                                         );
                                     })}
+
+                                    {/* Renderizar par fijado como blanco táctico si no está en la lista de escaneo local */}
+                                    {trackedPeer && !nodes.some(n => (n.peer_id || n.identity_hash) === trackedPeerId) && (() => {
+                                        const nodeBearing = getNodeBearing(trackedPeer, 0);
+                                        const angle = (nodeBearing * Math.PI) / 180;
+                                        const dist = 85;
+                                        const x = Math.sin(angle) * dist;
+                                        const y = -Math.cos(angle) * dist;
+                                        return (
+                                            <div
+                                                key="tracked-remote-target"
+                                                onClick={() => handleSelectTrackedPeer(trackedPeer)}
+                                                style={{
+                                                    position: "absolute",
+                                                    transform: `translate(${x}px, ${y}px)`,
+                                                    width: 18,
+                                                    height: 18,
+                                                    borderRadius: "50%",
+                                                    background: "#FF3355",
+                                                    border: "2px solid #FFF",
+                                                    boxShadow: "0 0 20px #FF3355",
+                                                    cursor: "pointer",
+                                                    zIndex: 9
+                                                }}
+                                                title={`${trackedPeer.nickname || trackedPeer.display_name || "Blanco Fijado"} (${trackedPeer.distance_meters || "?"}m)`}
+                                            />
+                                        );
+                                    })()}
                                 </div>
 
+                                {/* Aguja Vectorial Táctica hacia el Blanco Rastreado (Alineada con proa) */}
+                                {trackingGuidance && (
+                                    <div style={{
+                                        position: "absolute",
+                                        inset: 0,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        transform: `rotate(${trackingGuidance.relativeSteeringDeg}deg)`,
+                                        transition: "transform 0.08s linear",
+                                        pointerEvents: "none",
+                                        zIndex: 7
+                                    }}>
+                                        <div style={{
+                                            position: "absolute",
+                                            top: "14px",
+                                            width: 0,
+                                            height: 0,
+                                            borderLeft: "7px solid transparent",
+                                            borderRight: "7px solid transparent",
+                                            borderBottom: "22px solid #00E676",
+                                            filter: "drop-shadow(0 0 8px rgba(0,230,118,0.9))"
+                                        }} />
+                                        <div style={{
+                                            position: "absolute",
+                                            top: "34px",
+                                            bottom: "50%",
+                                            width: "2px",
+                                            background: "linear-gradient(to bottom, #00E676, rgba(0,230,118,0.1))"
+                                        }} />
+                                    </div>
+                                )}
+
                                 {/* Centro Óptico */}
-                                <div style={{ width: 14, height: 14, borderRadius: "50%", background: "var(--accent-cyan, #00E5FF)", boxShadow: "0 0 12px #00E5FF", zIndex: 6 }} />
+                                <div style={{ width: 14, height: 14, borderRadius: "50%", background: "var(--accent-cyan, #00E5FF)", boxShadow: "0 0 12px #00E5FF", zIndex: 8 }} />
                             </div>
 
                             <div style={{ fontSize: "0.72rem", color: "var(--text-muted, #888)", textAlign: "center" }}>
@@ -605,10 +684,11 @@ export const P2PCompassModal: React.FC = () => {
                         }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                 <div>
-                                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary, #FFF)" }}>
-                                        📡 Nodos de Proximidad Detectados ({filteredNodes.length})
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary, #FFF)" }}>
+                                        <TacIcon name="radio" size={16} color="var(--accent-cyan, #00E5FF)" />
+                                        <span>Nodos de Proximidad Detectados ({filteredNodes.length})</span>
                                     </div>
-                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted, #888)" }}>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted, #888)", marginTop: "2px" }}>
                                         Dispositivos detectados por RSSI BLE, WiFi-Direct y radiofrecuencia local
                                     </div>
                                 </div>
@@ -621,21 +701,28 @@ export const P2PCompassModal: React.FC = () => {
                             </div>
 
                             {/* Buscador de Nodos */}
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="🔍 Buscar nodo por nombre, hash o transporte..."
-                                style={{
-                                    width: "100%", padding: "9px 12px", borderRadius: "8px",
-                                    background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.1)",
-                                    color: "#FFF", fontSize: "0.8rem", boxSizing: "border-box"
-                                }}
-                            />
+                            <div style={{ position: "relative" }}>
+                                <div style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", display: "flex", alignItems: "center" }}>
+                                    <TacIcon name="search" size={14} color="rgba(255,255,255,0.4)" />
+                                </div>
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Buscar nodo por nombre, hash o transporte..."
+                                    style={{
+                                        width: "100%", padding: "9px 12px 9px 32px", borderRadius: "8px",
+                                        background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.1)",
+                                        color: "#FFF", fontSize: "0.8rem", boxSizing: "border-box"
+                                    }}
+                                />
+                            </div>
 
                             {filteredNodes.length === 0 ? (
                                 <div style={{ padding: "30px 20px", textAlign: "center", color: "#888" }}>
-                                    <div style={{ fontSize: "2rem" }}>📡</div>
+                                    <div style={{ display: "flex", justifyContent: "center", marginBottom: "8px" }}>
+                                        <TacIcon name="radio" size={32} color="#64748b" />
+                                    </div>
                                     <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#DDD", marginTop: "8px" }}>
                                         {searchQuery ? "No se encontraron nodos que coincidan" : "Escaneando Espectro..."}
                                     </div>
@@ -673,18 +760,19 @@ export const P2PCompassModal: React.FC = () => {
                                                         </span>
                                                     </div>
 
-                                                    <div style={{ fontSize: "0.72rem", color: "#AAA", marginTop: "4px", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    <div className="tabular-telemetry" style={{ fontSize: "0.72rem", color: "#AAA", marginTop: "4px" }}>
                                                         RSSI: {n.rssi_dbm != null ? `${n.rssi_dbm} dBm` : "N/D"} · Distancia: {n.distance_meters != null ? `${n.distance_meters.toFixed(1)} m` : "~ En rango"}
                                                     </div>
                                                 </div>
 
                                                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                                    <div style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem", color: "var(--accent-cyan, #00E5FF)", fontWeight: 800, marginRight: "4px" }}>
+                                                    <div className="tabular-telemetry" style={{ textAlign: "right", fontSize: "0.82rem", color: "var(--accent-cyan, #00E5FF)", fontWeight: 800, marginRight: "4px" }}>
                                                         {nodeBearing}° {getCardinal(nodeBearing)}
                                                     </div>
                                                     <button
                                                         onClick={() => handleSelectTrackedPeer(n)}
                                                         style={{
+                                                            display: "inline-flex", alignItems: "center", gap: "4px",
                                                             padding: "5px 10px", borderRadius: "6px",
                                                             background: isTracked ? "#FF3355" : "rgba(0,229,255,0.15)",
                                                             border: `1px solid ${isTracked ? "#FF3355" : "rgba(0,229,255,0.4)"}`,
@@ -693,11 +781,13 @@ export const P2PCompassModal: React.FC = () => {
                                                         }}
                                                         title="Fijar objetivo en la rosa táctica"
                                                     >
-                                                        {isTracked ? "🎯 Guiando" : "🎯 Rastrear"}
+                                                        <TacIcon name="crosshair" size={12} color={isTracked ? "#FFF" : "#00E5FF"} />
+                                                        <span>{isTracked ? "Guiando" : "Rastrear"}</span>
                                                     </button>
                                                     <button
                                                         onClick={() => handleOpenChat(n)}
                                                         style={{
+                                                            display: "inline-flex", alignItems: "center", justifyContent: "center",
                                                             padding: "5px 8px", borderRadius: "6px",
                                                             background: "rgba(255,255,255,0.06)",
                                                             border: "1px solid rgba(255,255,255,0.15)",
@@ -705,7 +795,7 @@ export const P2PCompassModal: React.FC = () => {
                                                         }}
                                                         title="Abrir chat cifrado"
                                                     >
-                                                        💬
+                                                        <TacIcon name="chats" size={13} color="#FFF" />
                                                     </button>
                                                 </div>
                                             </div>

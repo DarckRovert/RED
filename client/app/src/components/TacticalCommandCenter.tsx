@@ -14,6 +14,7 @@ import { GlobalSearchModal } from './GlobalSearchModal';
 import { toast } from './Toast';
 import { BackHandlerRegistry } from '../lib/navigation/BackHandlerRegistry';
 import { TacticalAudioEngine } from '../lib/audio/TacticalAudioEngine';
+import { TacIcon } from './ui/TacIcon';
 
 type CommandDomain = 'favs' | 'comms' | 'nav' | 'survival' | 'security' | 'economy';
 
@@ -713,10 +714,10 @@ export const TacticalCommandCenter: React.FC = () => {
                         <div style={{
                             width: '38px', height: '38px', borderRadius: '12px',
                             background: 'rgba(0, 229, 255, 0.15)', border: '1px solid rgba(0, 229, 255, 0.4)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
                             boxShadow: '0 0 15px rgba(0, 229, 255, 0.2)'
                         }}>
-                            ⚡
+                            <TacIcon name="tools" size={20} color="#00E5FF" />
                         </div>
                         <div>
                             <h1 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900, letterSpacing: '0.8px', color: '#FFFFFF' }}>
@@ -738,7 +739,7 @@ export const TacticalCommandCenter: React.FC = () => {
                                 cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
                             }}
                         >
-                            <span>🔍</span> <span className="hidden sm:inline">BUSCAR</span>
+                            <TacIcon name="search" size={14} color="currentColor" /> <span className="hidden sm:inline">BUSCAR</span>
                         </button>
 
                         <button
@@ -750,7 +751,7 @@ export const TacticalCommandCenter: React.FC = () => {
                                 cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
                             }}
                         >
-                            <span>🌐</span> <span className="hidden sm:inline">ENJAMBRE</span>
+                            <TacIcon name="globe" size={14} color="currentColor" /> <span className="hidden sm:inline">ENJAMBRE</span>
                         </button>
                     </div>
                 </div>
@@ -763,13 +764,13 @@ export const TacticalCommandCenter: React.FC = () => {
                 }}>
                     <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: '0.6rem', color: '#94A3B8', fontWeight: 800 }}>SIGINT RF</div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 900, color: sigintTelemetry.activeEmittersCount > 0 ? '#FFB300' : '#00E676' }}>
+                        <div className="tabular-telemetry" style={{ fontSize: '0.85rem', fontWeight: 900, color: sigintTelemetry.activeEmittersCount > 0 ? '#FFB300' : '#00E676' }}>
                             {sigintTelemetry.activeEmittersCount} ACTIVAS
                         </div>
                     </div>
                     <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255, 255, 255, 0.08)' }}>
                         <div style={{ fontSize: '0.6rem', color: '#94A3B8', fontWeight: 800 }}>BALIZAS SOS</div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 900, color: activeSosCount > 0 ? '#FF3355' : '#00E676' }}>
+                        <div className="tabular-telemetry" style={{ fontSize: '0.85rem', fontWeight: 900, color: activeSosCount > 0 ? '#FF3355' : '#00E676' }}>
                             {activeSosCount > 0 ? `🚨 ${activeSosCount}` : '0 ALERTAS'}
                         </div>
                     </div>
@@ -779,13 +780,13 @@ export const TacticalCommandCenter: React.FC = () => {
                         title="Abrir Escudo Global DEFCON"
                     >
                         <div style={{ fontSize: '0.6rem', color: '#94A3B8', fontWeight: 800 }}>DEFCON</div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 900, color: shieldTelemetry.activeProfile?.color || (shieldTelemetry.currentDefcon === 5 ? '#00E676' : '#00E5FF') }}>
+                        <div className="tabular-telemetry" style={{ fontSize: '0.85rem', fontWeight: 900, color: shieldTelemetry.activeProfile?.color || (shieldTelemetry.currentDefcon === 5 ? '#00E676' : '#00E5FF') }}>
                             NIVEL {shieldTelemetry.currentDefcon || 5}
                         </div>
                     </div>
                     <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255, 255, 255, 0.08)' }}>
                         <div style={{ fontSize: '0.6rem', color: '#94A3B8', fontWeight: 800 }}>FAILOVERS</div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#00E676' }}>
+                        <div className="tabular-telemetry" style={{ fontSize: '0.85rem', fontWeight: 900, color: '#00E676' }}>
                             {swarmTelemetry.totalFailoversExecuted} EJEC
                         </div>
                     </div>
@@ -842,10 +843,11 @@ export const TacticalCommandCenter: React.FC = () => {
                         <div
                             key={mod.id}
                             onClick={() => { TacticalAudioEngine.playTap(); navigate(mod.action); }}
+                            className="tactical-card-hud card-tactical-interactive"
                             style={{
                                 background: 'linear-gradient(135deg, rgba(16, 22, 44, 0.85) 0%, rgba(8, 12, 28, 0.95) 100%)',
                                 border: '1px solid rgba(255, 255, 255, 0.1)',
-                                borderRadius: '16px',
+                                borderRadius: '14px',
                                 padding: '16px',
                                 display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
                                 gap: '12px', cursor: 'pointer',

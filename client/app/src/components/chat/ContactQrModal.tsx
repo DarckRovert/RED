@@ -10,6 +10,7 @@ import { WebCompanionPairConfirmationModal } from "../WebCompanionPairConfirmati
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 import { copyToClipboard } from "../../lib/clipboard";
+import { TacIcon } from "../ui/TacIcon";
 
 interface ContactQrModalProps {
     isOpen?: boolean;
@@ -552,13 +553,15 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                             background: "transparent",
                             border: "none",
                             color: "#E9EDEF",
-                            fontSize: "1.3rem",
                             cursor: "pointer",
-                            padding: "4px 8px"
+                            padding: "4px 8px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center"
                         }}
                         title="Cerrar"
                     >
-                        ←
+                        <TacIcon name="chevron-left" size={24} color="#E9EDEF" />
                     </button>
                     <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "#E9EDEF" }}>
                         Código QR
@@ -581,12 +584,11 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                             alignItems: "center",
                             justifyContent: "center",
                             color: "#FFFFFF",
-                            fontSize: "1.1rem",
                             cursor: "pointer"
                         }}
                         title="Linterna"
                     >
-                        {isTorchOn ? "🔦" : "💡"}
+                        <TacIcon name="zap" size={18} color="#FFFFFF" />
                     </button>
                 )}
             </header>
@@ -753,7 +755,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                             onMouseEnter={e => e.currentTarget.style.background = "#02906f"}
                             onMouseLeave={e => e.currentTarget.style.background = "#00A884"}
                         >
-                            <span>📤</span> Compartir / Copiar código
+                            <TacIcon name="share" size={16} color="#FFFFFF" /> Compartir / Copiar código
                         </button>
 
                         {/* Copy DID directly */}
@@ -781,7 +783,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                             onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.07)"}
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                         >
-                            <span>📋</span> Copiar mi DID
+                            <TacIcon name="clipboard" size={16} color="#E9EDEF" /> Copiar mi DID
                         </button>
 
                         {/* Save QR image as PNG */}
@@ -806,7 +808,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                 onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
                                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                             >
-                                <span>💾</span> Guardar imagen QR
+                                <TacIcon name="download" size={16} color="#8696A0" /> Guardar imagen QR
                             </button>
                         )}
                     </div>
@@ -882,7 +884,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                             boxShadow: "0 4px 14px rgba(0, 168, 132, 0.35)"
                                         }}
                                     >
-                                        <span>➕</span> Añadir y Chatear
+                                        <TacIcon name="plus" size={16} color="#FFFFFF" /> Añadir y Chatear
                                     </button>
                                 ) : (
                                     <button
@@ -898,7 +900,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                             boxShadow: "0 4px 14px rgba(0, 168, 132, 0.35)"
                                         }}
                                     >
-                                        <span>💬</span> Abrir conversación
+                                        <TacIcon name="chats" size={16} color="#FFFFFF" /> Abrir conversación
                                     </button>
                                 )}
 
@@ -912,10 +914,11 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                         width: "100%", padding: "10px", borderRadius: "24px",
                                         background: "transparent", color: "#8696A0",
                                         border: "1px solid rgba(255, 255, 255, 0.12)",
-                                        fontSize: "0.85rem", fontWeight: 600, cursor: "pointer"
+                                        fontSize: "0.85rem", fontWeight: 600, cursor: "pointer",
+                                        display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
                                     }}
                                 >
-                                    🔄 Escanear otro código
+                                    <TacIcon name="refresh" size={15} color="#8696A0" /> Escanear otro código
                                 </button>
                             </div>
                         </div>
@@ -974,25 +977,25 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
 
                             {/* Bottom floating button to pick photo from gallery */}
                             <div style={{ position: "absolute", bottom: "32px", pointerEvents: "auto" }}>
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    style={{
-                                        padding: "10px 20px",
-                                        background: "rgba(255, 255, 255, 0.2)",
-                                        backdropFilter: "blur(10px)",
-                                        border: "1px solid rgba(255, 255, 255, 0.3)",
-                                        borderRadius: "24px",
-                                        color: "#FFFFFF",
-                                        fontSize: "0.85rem",
-                                        fontWeight: 600,
-                                        cursor: "pointer",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "8px"
-                                    }}
-                                >
-                                    <span>🖼️</span> Subir desde fotos
-                                </button>
+                                    <button
+                                        onClick={() => fileInputRef.current?.click()}
+                                        style={{
+                                            padding: "10px 20px",
+                                            background: "rgba(255, 255, 255, 0.2)",
+                                            backdropFilter: "blur(10px)",
+                                            border: "1px solid rgba(255, 255, 255, 0.3)",
+                                            borderRadius: "24px",
+                                            color: "#FFFFFF",
+                                            fontSize: "0.85rem",
+                                            fontWeight: 600,
+                                            cursor: "pointer",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "8px"
+                                        }}
+                                    >
+                                        <TacIcon name="image" size={16} color="#FFFFFF" /> Subir desde fotos
+                                    </button>
                             </div>
                         </div>
                     ) : isWebCamActive ? (
@@ -1039,7 +1042,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                     display: "flex", alignItems: "center", gap: "6px"
                                 }}
                             >
-                                ✕ Cerrar cámara
+                                <TacIcon name="x" size={14} color="#FFFFFF" /> Cerrar cámara
                             </button>
                         </div>
                     ) : (
@@ -1061,9 +1064,9 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                 width: 64, height: 64, borderRadius: "50%",
                                 background: "rgba(0, 168, 132, 0.15)",
                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "2rem", color: "#00A884"
+                                color: "#00A884"
                             }}>
-                                📷
+                                <TacIcon name="camera" size={32} color="#00A884" />
                             </div>
 
                             <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "#E9EDEF" }}>
@@ -1085,7 +1088,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                         display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
                                     }}
                                 >
-                                    <span>📷</span> Abrir cámara web
+                                    <TacIcon name="camera" size={16} color="#FFFFFF" /> Abrir cámara web
                                 </button>
                             )}
 
@@ -1099,7 +1102,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                     display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
                                 }}
                             >
-                                <span>🖼️</span> Seleccionar foto del QR
+                                <TacIcon name="image" size={16} color="#E9EDEF" /> Seleccionar foto del QR
                             </button>
 
                             <button
@@ -1116,10 +1119,11 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                     width: "100%", padding: "10px", borderRadius: "24px",
                                     background: "transparent", color: "#00A884",
                                     border: "1px solid rgba(0, 168, 132, 0.3)",
-                                    fontSize: "0.82rem", fontWeight: 600, cursor: "pointer"
+                                    fontSize: "0.82rem", fontWeight: 600, cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
                                 }}
                             >
-                                📋 Pegar código del portapapeles
+                                <TacIcon name="clipboard" size={15} color="#00A884" /> Pegar código del portapapeles
                             </button>
                         </div>
                     )}

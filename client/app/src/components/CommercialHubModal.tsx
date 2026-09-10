@@ -9,6 +9,8 @@ import { TacticalAudioEngine } from '../lib/audio/TacticalAudioEngine';
 import { meshRouter } from '../lib/mesh/meshRouter';
 import { getP2PWallet } from '../api/economy';
 import { toast } from './Toast';
+import { MultiRailCheckoutModal } from './MultiRailCheckoutModal';
+import { TacIcon } from './ui/TacIcon';
 
 import { useRedStore } from '../store/useRedStore';
 
@@ -21,7 +23,7 @@ type HubTab = 'catalog' | 'redeem' | 'transactions' | 'create';
 
 export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, onClose }) => {
     const { t } = useTranslation();
-    const { identity } = useRedStore();
+    const { identity, paymentPassport } = useRedStore();
     const [activeTab, setActiveTab] = useState<HubTab>('catalog');
     const [proStatus, setProStatus] = useState<ProPerkStatus>(MonetizationEngine.getProStatus());
     const [p2pWalletBalance, setP2pWalletBalance] = useState<number | null>(null);
@@ -39,6 +41,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
     const [newTag, setNewTag] = useState('EQUIPO TÁCTICO');
     const [newIcon, setNewIcon] = useState('📡');
     const [newUrl, setNewUrl] = useState('');
+    const [linkMyPassport, setLinkMyPassport] = useState<boolean>(true);
+
+    // Multi-Rail Checkout Modal
+    const [checkoutProduct, setCheckoutProduct] = useState<TacticalProduct | null>(null);
 
     // P2P Voucher Modal
     const [p2pModalItem, setP2pModalItem] = useState<TacticalProduct | null>(null);
@@ -63,6 +69,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
     useEffect(() => {
         if (!isOpen) return;
         return BackHandlerRegistry.register(() => {
+            if (checkoutProduct) {
+                setCheckoutProduct(null);
+                return true;
+            }
             if (p2pModalItem) {
                 setP2pModalItem(null);
                 setP2pQrData(null);
@@ -76,7 +86,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
             onClose();
             return true;
         });
-    }, [isOpen, p2pModalItem, activeTab, onClose]);
+    }, [isOpen, checkoutProduct, p2pModalItem, activeTab, onClose]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -196,7 +206,9 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
             icon: newIcon.trim() || "📦",
             affiliateUrl: newUrl.trim() || "#",
             authorHash: identity?.identity_hash,
-            authorName: identity?.nickname || "Operador RED"
+            authorName: identity?.nickname || "Operador RED",
+            sellerPaymentPassport: (linkMyPassport && paymentPassport) ? paymentPassport : undefined,
+            supportedRails: (linkMyPassport && paymentPassport) ? ['web3_usdt', 'fiat_local', 'paypal', 'lightning', 'offgrid_voucher'] : ['offgrid_voucher']
         };
 
         MonetizationEngine.addProduct(product);
@@ -329,9 +341,8 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontSize: '20px'
                         }}>
-                            🪙
+                            <TacIcon name="wallet" size={20} color="#00E5FF" />
                         </div>
                         <div>
                             <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.3px' }}>
@@ -351,8 +362,9 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                         }}
                         className="btn-icon"
                         style={{ width: '36px', height: '36px' }}
+                        aria-label="Cerrar modal"
                     >
-                        ✕
+                        <TacIcon name="x" size={16} color="#FFF" />
                     </button>
                 </div>
 
@@ -374,28 +386,44 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                         <span style={{
                             fontSize: '11px',
                             fontWeight: 800,
-                            padding: '2px 8px',
+                            padding: '3px 8px',
                             borderRadius: '6px',
                             background: proStatus.isPro ? 'rgba(0, 230, 118, 0.15)' : 'rgba(255, 255, 255, 0.08)',
                             color: proStatus.isPro ? 'var(--accent-emerald)' : 'var(--text-secondary)',
-                            border: proStatus.isPro ? '1px solid rgba(0, 230, 118, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)'
+                            border: proStatus.isPro ? '1px solid rgba(0, 230, 118, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
                         }}>
-                            {proStatus.isPro ? `⚡ PRO ACTIVO (${proStatus.remainingHours}h)` : '🛡️ MODO ESTÁNDAR'}
+                            {proStatus.isPro ? (
+                                <>
+                                    <TacIcon name="zap" size={12} color="var(--accent-emerald)" />
+                                    <span>PRO ACTIVO ({proStatus.remainingHours}h)</span>
+                                </>
+                            ) : (
+                                <>
+                                    <TacIcon name="shield" size={12} color="var(--text-secondary)" />
+                                    <span>MODO ESTÁNDAR</span>
+                                </>
+                            )}
                         </span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                 Bóveda P2P:
                             </span>
-                            <span style={{
+                            <span className="tabular-telemetry" style={{
                                 fontSize: '12px',
                                 fontWeight: 800,
                                 color: '#00E676',
-                                fontFamily: 'JetBrains Mono, monospace'
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
                             }}>
-                                💳 {p2pWalletBalance !== null ? p2pWalletBalance : proStatus.credits} RED
+                                <TacIcon name="card" size={13} color="#00E676" />
+                                <span>{p2pWalletBalance !== null ? p2pWalletBalance : proStatus.credits} RED</span>
                             </span>
                         </div>
 
@@ -403,13 +431,16 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                             <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                 Billetera Local:
                             </span>
-                            <span style={{
+                            <span className="tabular-telemetry" style={{
                                 fontSize: '12px',
                                 fontWeight: 800,
                                 color: 'var(--accent-amber)',
-                                fontFamily: 'JetBrains Mono, monospace'
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
                             }}>
-                                🪙 {proStatus.credits} RED
+                                <TacIcon name="wallet" size={13} color="var(--accent-amber)" />
+                                <span>{proStatus.credits} RED</span>
                             </span>
                         </div>
 
@@ -418,11 +449,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                 onClick={handleBroadcastBazaarSync}
                                 style={{
                                     fontSize: '10px',
-                                    padding: '3px 8px',
+                                    padding: '4px 8px',
                                     borderRadius: '6px',
                                     background: 'rgba(0, 229, 255, 0.15)',
                                     color: 'var(--accent-cyan)',
-                                    fontFamily: 'JetBrains Mono, monospace',
                                     border: '1px solid rgba(0, 229, 255, 0.35)',
                                     cursor: 'pointer',
                                     fontWeight: 800,
@@ -432,7 +462,8 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                 }}
                                 title="Difundir catálogo CRDT a todos los nodos en la malla P2P"
                             >
-                                📡 BAZAAR CRDT ({catalog.length})
+                                <TacIcon name="radio" size={12} color="var(--accent-cyan)" />
+                                <span>BAZAAR CRDT ({catalog.length})</span>
                             </button>
                         </div>
                     </div>
@@ -453,9 +484,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                             setActiveTab('catalog');
                         }}
                         className={activeTab === 'catalog' ? 'glow-pill-active' : 'btn-ghost'}
-                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0' }}
+                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}
                     >
-                        📦 Catálogo Homologado ({catalog.length})
+                        <TacIcon name="box" size={15} />
+                        <span>Catálogo Homologado ({catalog.length})</span>
                     </button>
                     <button
                         onClick={() => {
@@ -463,9 +495,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                             setActiveTab('redeem');
                         }}
                         className={activeTab === 'redeem' ? 'glow-pill-active' : 'btn-ghost'}
-                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0' }}
+                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}
                     >
-                        ⚡ Canjear Modo Pro
+                        <TacIcon name="zap" size={15} />
+                        <span>Canjear Modo Pro</span>
                     </button>
                     <button
                         onClick={() => {
@@ -473,9 +506,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                             setActiveTab('transactions');
                         }}
                         className={activeTab === 'transactions' ? 'glow-pill-active' : 'btn-ghost'}
-                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0' }}
+                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}
                     >
-                        📑 Transacciones ({transactions.length})
+                        <TacIcon name="chats" size={15} />
+                        <span>Transacciones ({transactions.length})</span>
                     </button>
                     <button
                         onClick={() => {
@@ -483,9 +517,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                             setActiveTab('create');
                         }}
                         className={activeTab === 'create' ? 'glow-pill-active' : 'btn-ghost'}
-                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0' }}
+                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}
                     >
-                        ➕ Añadir Equipo
+                        <TacIcon name="plus" size={15} />
+                        <span>Añadir Equipo</span>
                     </button>
                 </div>
 
@@ -521,7 +556,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                             Validación Proof-of-Relay (+24h Modo Pro & +100 RED)
                                         </h3>
                                     </div>
-                                    <span style={{ fontSize: '24px' }}>⚡</span>
+                                    <TacIcon name="zap" size={24} color="var(--accent-crimson)" />
                                 </div>
 
                                 <p style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.8)', lineHeight: 1.45 }}>
@@ -540,7 +575,14 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                     className="btn-tactical-primary"
                                     style={{ padding: '12px 18px', fontSize: '0.86rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                                 >
-                                    {isLoadingAd ? '⏳ Validando retransmisión...' : '⚡ VALIDAR RETRANSMISIÓN & RECLAMAR +100 RED'}
+                                    {isLoadingAd ? (
+                                        <span>⏳ Validando retransmisión...</span>
+                                    ) : (
+                                        <>
+                                            <TacIcon name="zap" size={16} color="#000" />
+                                            <span>VALIDAR RETRANSMISIÓN & RECLAMAR +100 RED</span>
+                                        </>
+                                    )}
                                 </button>
                             </div>
 
@@ -605,7 +647,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                                 }}>
                                                     {item.tag}
                                                 </span>
-                                                <span style={{ fontSize: '11px', color: 'var(--accent-emerald)', fontWeight: 800, fontFamily: 'JetBrains Mono, monospace' }}>
+                                                <span className="tabular-telemetry" style={{ fontSize: '11px', color: 'var(--accent-emerald)', fontWeight: 800, fontFamily: 'JetBrains Mono, monospace' }}>
                                                     {item.priceEst}
                                                 </span>
                                             </div>
@@ -615,21 +657,53 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                             <div style={{ fontSize: '0.74rem', color: 'rgba(255, 255, 255, 0.6)', marginTop: '2px', lineHeight: 1.35 }}>
                                                 {item.description}
                                             </div>
+                                            {/* Badges de Rieles de Pago Aceptados */}
+                                            <div style={{ display: 'flex', gap: '5px', marginTop: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                {item.sellerPaymentPassport?.evmAddress && (
+                                                    <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(0, 229, 255, 0.15)', color: '#00E5FF', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                        <TacIcon name="gem" size={10} color="#00E5FF" />
+                                                        <span>{item.sellerPaymentPassport.preferredChainId === 8453 ? 'Base' : 'USDT'}</span>
+                                                    </span>
+                                                )}
+                                                {item.sellerPaymentPassport?.fiatIdentifier && (
+                                                    <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(0, 230, 118, 0.15)', color: '#00E676', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                        <TacIcon name="card" size={10} color="#00E676" />
+                                                        <span>{item.sellerPaymentPassport.fiatType?.toUpperCase() || 'FIAT'}</span>
+                                                    </span>
+                                                )}
+                                                {item.sellerPaymentPassport?.lightningAddress && (
+                                                    <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255, 179, 0, 0.15)', color: '#FFB300', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                        <TacIcon name="zap" size={10} color="#FFB300" />
+                                                        <span>LN</span>
+                                                    </span>
+                                                )}
+                                                <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(232, 33, 58, 0.15)', color: '#E8213A', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                    <TacIcon name="shield" size={10} color="#E8213A" />
+                                                    <span>Vales</span>
+                                                </span>
+                                            </div>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                                             <button
-                                                onClick={() => handleBuyWithP2PVoucher(item)}
-                                                disabled={isIssuingVoucher}
+                                                onClick={() => {
+                                                    TacticalAudioEngine.playTap();
+                                                    setCheckoutProduct(item);
+                                                }}
                                                 className="btn-tactical-secondary"
                                                 style={{
                                                     padding: '8px 12px',
                                                     fontSize: '0.74rem',
-                                                    borderColor: 'rgba(0, 230, 118, 0.4)',
-                                                    color: 'var(--accent-emerald)',
-                                                    whiteSpace: 'nowrap'
+                                                    borderColor: 'rgba(0, 229, 255, 0.5)',
+                                                    color: '#00E5FF',
+                                                    fontWeight: 800,
+                                                    whiteSpace: 'nowrap',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '5px'
                                                 }}
                                             >
-                                                💳 Pagar P2P
+                                                <TacIcon name="card" size={13} color="#00E5FF" />
+                                                <span>Adquirir / Pagar</span>
                                             </button>
                                             <a
                                                 href={item.affiliateUrl}
@@ -648,10 +722,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                             <button
                                                 onClick={() => handleDeleteProduct(item.id, item.title)}
                                                 className="btn-icon"
-                                                style={{ width: '32px', height: '32px', color: 'var(--accent-crimson)', opacity: 0.6 }}
+                                                style={{ width: '32px', height: '32px', color: 'var(--accent-crimson)', opacity: 0.7 }}
                                                 title="Eliminar de catálogo local"
                                             >
-                                                🗑️
+                                                <TacIcon name="trash" size={14} color="var(--accent-crimson)" />
                                             </button>
                                         </div>
                                     </div>
@@ -666,7 +740,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                             <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(0, 230, 118, 0.08)', border: '1px solid rgba(0, 230, 118, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div>
                                     <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>Balance Disponible</div>
-                                    <div style={{ fontSize: '1.4rem', fontWeight: 900, fontFamily: 'JetBrains Mono, monospace' }}>🪙 {proStatus.credits} RED</div>
+                                    <div className="tabular-telemetry" style={{ fontSize: '1.4rem', fontWeight: 900, fontFamily: 'JetBrains Mono, monospace', display: 'flex', alignItems: 'center', gap: '6px', color: '#FFF' }}>
+                                        <TacIcon name="wallet" size={20} color="var(--accent-amber)" />
+                                        <span>{proStatus.credits} RED</span>
+                                    </div>
                                 </div>
                                 <button
                                     onClick={() => MonetizationEngine.addCredits(50)}
@@ -836,7 +913,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                             </div>
 
                             <div>
-                                <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Enlace Web / Afiliado</label>
+                                <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Enlace Web / Afiliado (Opcional)</label>
                                 <input
                                     type="url"
                                     value={newUrl}
@@ -845,6 +922,31 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                     className="input-tactical"
                                     style={{ width: '100%', marginTop: '4px' }}
                                 />
+                            </div>
+
+                            <div style={{
+                                padding: '10px 12px',
+                                background: 'rgba(0, 229, 255, 0.05)',
+                                border: '1px solid rgba(0, 229, 255, 0.2)',
+                                borderRadius: '10px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                marginTop: '4px'
+                            }}>
+                                <input
+                                    type="checkbox"
+                                    id="linkPassportCheck"
+                                    checked={linkMyPassport}
+                                    onChange={e => setLinkMyPassport(e.target.checked)}
+                                    style={{ accentColor: '#00E5FF', width: 18, height: 18, cursor: 'pointer' }}
+                                />
+                                <label htmlFor="linkPassportCheck" style={{ fontSize: '0.76rem', color: '#FFF', cursor: 'pointer', lineHeight: 1.3 }}>
+                                    <strong>💳 Vincular mi Pasaporte de Pagos Soberano</strong>
+                                    <div style={{ fontSize: '0.68rem', color: '#8A92A6' }}>
+                                        Habilita cobros en USDT/Base, Yape/Plin, PayPal y Lightning configurados en tus Ajustes.
+                                    </div>
+                                </label>
                             </div>
 
                             <button
@@ -1005,6 +1107,18 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                             </button>
                         </div>
                     </div>
+                )}
+
+                {/* Modal de Checkout Multi-Riel Soberano */}
+                {checkoutProduct && (
+                    <MultiRailCheckoutModal
+                        isOpen={!!checkoutProduct}
+                        product={checkoutProduct}
+                        onClose={() => setCheckoutProduct(null)}
+                        onSuccess={() => {
+                            refreshData();
+                        }}
+                    />
                 )}
             </div>
         </div>

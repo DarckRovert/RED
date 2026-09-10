@@ -15,6 +15,7 @@ import { TacticalLocationEngine, TacticalLocation } from "../lib/sensors/Tactica
 import { tacticalCompass, CompassTelemetry } from "../lib/sensors/TacticalCompassEngine";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { TacIcon } from "./ui/TacIcon";
 
 export function OffGridCompassModal() {
     const { navigate, identity } = useRedStore();
@@ -47,8 +48,13 @@ export function OffGridCompassModal() {
         };
     }, []);
 
+    // Posición y Geodesia Base
+    const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
+    const [utmString, setUtmString] = useState<string>("Buscando señal GPS...");
+
     // Odometría y Navegación Inercial PDR
     const [pdrState, setPdrState] = useState<PdrState>(() => pedestrianDeadReckoning.getState());
+    const pdrOriginRef = useRef<{ lat: number; lon: number } | null>(null);
 
     useEffect(() => {
         const unsub = pedestrianDeadReckoning.subscribe((state) => {
@@ -60,17 +66,43 @@ export function OffGridCompassModal() {
     const togglePdrTracking = useCallback(() => {
         if (pdrState.isTracking) {
             pedestrianDeadReckoning.stopTracking();
+            pdrOriginRef.current = null;
             toast.info("Rastreo inercial PDR detenido");
         } else {
+            let baseLat = userCoords?.lat;
+            let baseLon = userCoords?.lon;
+            if (baseLat === undefined || baseLon === undefined) {
+                const last = TacticalLocationEngine.getLastKnownLocation();
+                if (last && TacticalLocationEngine.isValidCoordinates(last.lat, last.lon)) {
+                    baseLat = last.lat!;
+                    baseLon = last.lon!;
+                } else {
+                    try {
+                        const cached = localStorage.getItem("red_last_known_gps");
+                        if (cached) {
+                            const parsed = JSON.parse(cached);
+                            baseLat = parsed.lat;
+                            baseLon = parsed.lon ?? parsed.lng;
+                        }
+                    } catch {}
+                }
+            }
+            if (typeof baseLat === "number" && typeof baseLon === "number" && isFinite(baseLat) && isFinite(baseLon)) {
+                pdrOriginRef.current = { lat: baseLat, lon: baseLon };
+            }
+            pedestrianDeadReckoning.reset();
             pedestrianDeadReckoning.startTracking();
             toast.success("Rastreo inercial PDR iniciado (Acelerómetro & Giroscopio activos)");
         }
-    }, [pdrState.isTracking]);
+    }, [pdrState.isTracking, userCoords]);
 
     const handleResetPdr = useCallback(() => {
-        pedestrianDeadReckoning.resetPdr();
+        pedestrianDeadReckoning.reset();
+        if (userCoords) {
+            pdrOriginRef.current = { lat: userCoords.lat, lon: userCoords.lon };
+        }
         toast.info("Odometría inercial puesta a cero");
-    }, []);
+    }, [userCoords]);
 
     const [compassTelemetry, setCompassTelemetry] = useState<CompassTelemetry>(() => tacticalCompass.getTelemetry());
     const heading = compassTelemetry.headingDeg;
@@ -81,8 +113,6 @@ export function OffGridCompassModal() {
     }, []);
 
     const [solarAzimuth, setSolarAzimuth] = useState<{ azimuthDegrees: number; elevationDegrees: number; isNight: boolean }>({ azimuthDegrees: 0, elevationDegrees: 0, isNight: false });
-    const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
-    const [utmString, setUtmString] = useState<string>("Buscando señal GPS...");
 
     // Tactical Target Navigation State (Persisted in memory & localStorage)
     const [target, setTarget] = useState<TacticalTarget | null>(null);
@@ -109,6 +139,7 @@ export function OffGridCompassModal() {
 
     // One-time initialization guard to prevent GPS watch ticks from overwriting user typing input
     const hasInitializedLandmarks = useRef<boolean>(false);
+    const ephemCacheRef = useRef<{ data: any; ts: number; lat: number; lon: number } | null>(null);
 
     // Load initial stored values from localStorage
     useEffect(() => {
@@ -207,9 +238,43 @@ export function OffGridCompassModal() {
         };
     }, []);
 
-    // Guidance computed in real-time if userCoords and target exist
-    const tacticalGuidance = (userCoords && target)
-        ? OffGridNavigationEngine.calculateTacticalGuidance(userCoords.lat, userCoords.lon, target.lat, target.lon, heading)
+    // Posición táctica efectiva: Si PDR está activo y se tiene un punto de anclaje geodésico, proyectar vector inercial; si no, usar GPS directo
+    const activeCoords: { lat: number; lon: number } | null = (pdrState.isTracking && pdrOriginRef.current)
+        ? {
+            lat: Math.round((pdrOriginRef.current.lat + (pdrState.displacementNorthMeters / 111139)) * 100000) / 100000,
+            lon: Math.round((pdrOriginRef.current.lon + (pdrState.displacementEastMeters / (111139 * Math.max(0.01, Math.cos((pdrOriginRef.current.lat * Math.PI) / 180))))) * 100000) / 100000
+        }
+        : userCoords;
+
+    // Sincronizar pdrOrigin si PDR ya estaba activo al montar o cuando llega un fix geodésico
+    useEffect(() => {
+        if (pdrState.isTracking && !pdrOriginRef.current) {
+            let baseLat = userCoords?.lat;
+            let baseLon = userCoords?.lon;
+            if (baseLat === undefined || baseLon === undefined) {
+                const last = TacticalLocationEngine.getLastKnownLocation();
+                if (last && TacticalLocationEngine.isValidCoordinates(last.lat, last.lon)) {
+                    baseLat = last.lat!;
+                    baseLon = last.lon!;
+                }
+            }
+            if (typeof baseLat === "number" && typeof baseLon === "number" && isFinite(baseLat) && isFinite(baseLon)) {
+                pdrOriginRef.current = { lat: baseLat, lon: baseLon };
+            }
+        }
+    }, [pdrState.isTracking, userCoords]);
+
+    // Mantener UTM y posición astronómica sincronizados con la posición activa (GPS o PDR inercial)
+    useEffect(() => {
+        if (activeCoords) {
+            setUtmString(OffGridNavigationEngine.gpsToUtm(activeCoords.lat, activeCoords.lon));
+            setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(activeCoords.lat, activeCoords.lon));
+        }
+    }, [activeCoords?.lat, activeCoords?.lon]);
+
+    // Guidance computed in real-time if activeCoords and target exist
+    const tacticalGuidance = (activeCoords && target)
+        ? OffGridNavigationEngine.calculateTacticalGuidance(activeCoords.lat, activeCoords.lon, target.lat, target.lon, heading)
         : null;
 
     // Set or update tactical target point (synchronized across all navigation modals)
@@ -226,13 +291,13 @@ export function OffGridCompassModal() {
             localStorage.setItem("red_active_target", JSON.stringify(newTarget));
         } catch {}
 
-        if (userCoords) {
-            const g = OffGridNavigationEngine.calculateTacticalGuidance(userCoords.lat, userCoords.lon, newTarget.lat, newTarget.lon, heading);
+        if (activeCoords) {
+            const g = OffGridNavigationEngine.calculateTacticalGuidance(activeCoords.lat, activeCoords.lon, newTarget.lat, newTarget.lon, heading);
             toast.success(`🎯 Objetivo Fijado: ${g.formattedDistance} | Rumbo ${g.bearingDegrees}° ${g.cardinal}`);
         } else {
             toast.success(`🎯 Objetivo Fijado: [${newTarget.lat.toFixed(5)}, ${newTarget.lon.toFixed(5)}]`);
         }
-    }, [userCoords, heading]);
+    }, [activeCoords, heading]);
 
     // Clear tactical target point
     const handleClearTarget = useCallback(() => {
@@ -246,8 +311,8 @@ export function OffGridCompassModal() {
 
     // Proyectar posición estimada PDR (Dead Reckoning) hacia el sistema de coordenadas
     const handleAdoptPdrCoords = useCallback(() => {
-        let baseLat = userCoords?.lat;
-        let baseLon = userCoords?.lon;
+        let baseLat = pdrOriginRef.current?.lat ?? userCoords?.lat;
+        let baseLon = pdrOriginRef.current?.lon ?? userCoords?.lon;
 
         if (baseLat === undefined || baseLon === undefined) {
             try {
@@ -276,6 +341,7 @@ export function OffGridCompassModal() {
 
         const coords = { lat: estimatedLat, lon: estimatedLon };
         setUserCoords(coords);
+        pdrOriginRef.current = coords;
         setUtmString(OffGridNavigationEngine.gpsToUtm(coords.lat, coords.lon));
         setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(coords.lat, coords.lon));
         try {
@@ -373,13 +439,23 @@ export function OffGridCompassModal() {
         ctx.fillText("S", 0, radius - 16);
         ctx.fillText("W", -radius + 16, 0);
 
-        // Draw Sun & Moon Celestial Markers (Jean Meeus Astronomical Equations)
+        // Draw Sun & Moon Celestial Markers (Jean Meeus Astronomical Equations con Caché de 10s)
         try {
-            const ephem = CelestialNavigationEngine.getInstance().calculateEphemeris(
-                userCoords?.lat || 0,
-                userCoords?.lon || 0,
-                new Date()
-            );
+            const curLat = activeCoords?.lat || 0;
+            const curLon = activeCoords?.lon || 0;
+            const now = Date.now();
+            let ephem = ephemCacheRef.current?.data;
+
+            if (
+                !ephem ||
+                !ephemCacheRef.current ||
+                (now - ephemCacheRef.current.ts > 10000) ||
+                Math.abs(curLat - ephemCacheRef.current.lat) > 0.001 ||
+                Math.abs(curLon - ephemCacheRef.current.lon) > 0.001
+            ) {
+                ephem = CelestialNavigationEngine.getInstance().calculateEphemeris(curLat, curLon, new Date());
+                ephemCacheRef.current = { data: ephem, ts: now, lat: curLat, lon: curLon };
+            }
 
             // Sun Marker (☀️ Amber)
             const sunRad = (ephem.sun.azimuthDeg * Math.PI) / 180;
@@ -414,8 +490,8 @@ export function OffGridCompassModal() {
         }
 
         // Draw Active Tactical Target Vector Ray & Marker on Radar Canvas
-        if (userCoords && target) {
-            const rel = OffGridNavigationEngine.calculateDistanceAndBearing(userCoords.lat, userCoords.lon, target.lat, target.lon);
+        if (activeCoords && target) {
+            const rel = OffGridNavigationEngine.calculateDistanceAndBearing(activeCoords.lat, activeCoords.lon, target.lat, target.lon);
             const targetRad = (rel.bearingDegrees * Math.PI) / 180;
             const isBeyondRange = rel.distanceMeters > radarMaxDist;
             const normDistRatio = isBeyondRange ? 1.0 : (rel.distanceMeters / radarMaxDist);
@@ -460,10 +536,10 @@ export function OffGridCompassModal() {
         }
 
         // Draw Triangulation Landmarks with Range Scaling
-        if (userCoords) {
+        if (activeCoords) {
             [landmark1, landmark2].forEach((lm, idx) => {
                 if (lm.lat !== 0 && lm.lon !== 0) {
-                    const rel = OffGridNavigationEngine.calculateDistanceAndBearing(userCoords.lat, userCoords.lon, lm.lat, lm.lon);
+                    const rel = OffGridNavigationEngine.calculateDistanceAndBearing(activeCoords.lat, activeCoords.lon, lm.lat, lm.lon);
                     const lmRad = (rel.bearingDegrees * Math.PI) / 180;
                     const isBeyondRange = rel.distanceMeters > radarMaxDist;
                     const normDistRatio = isBeyondRange ? 1.0 : (rel.distanceMeters / radarMaxDist);
@@ -498,8 +574,8 @@ export function OffGridCompassModal() {
             validGeofenceWps.forEach((wp, idx) => {
                 let liveBearing = wp.bearingDegrees;
                 let liveDist = wp.distanceMeters;
-                if (userCoords) {
-                    const rel = OffGridNavigationEngine.calculateDistanceAndBearing(userCoords.lat, userCoords.lon, wp.lat, wp.lon);
+                if (activeCoords) {
+                    const rel = OffGridNavigationEngine.calculateDistanceAndBearing(activeCoords.lat, activeCoords.lon, wp.lat, wp.lon);
                     liveBearing = rel.bearingDegrees;
                     liveDist = rel.distanceMeters;
                 }
@@ -527,8 +603,8 @@ export function OffGridCompassModal() {
             let liveBearing = wp.bearingDegrees;
             let liveDist = wp.distanceMeters;
 
-            if (userCoords && (wp.lat !== 0 || wp.lon !== 0)) {
-                const rel = OffGridNavigationEngine.calculateDistanceAndBearing(userCoords.lat, userCoords.lon, wp.lat, wp.lon);
+            if (activeCoords && (wp.lat !== 0 || wp.lon !== 0)) {
+                const rel = OffGridNavigationEngine.calculateDistanceAndBearing(activeCoords.lat, activeCoords.lon, wp.lat, wp.lon);
                 liveBearing = rel.bearingDegrees;
                 liveDist = rel.distanceMeters;
             }
@@ -568,7 +644,7 @@ export function OffGridCompassModal() {
         ctx.moveTo(cx - 12, cy);
         ctx.lineTo(cx + 12, cy);
         ctx.stroke();
-    }, [heading, solarAzimuth, waypoints, userCoords, radarMaxDist, landmark1, landmark2, target]);
+    }, [heading, solarAzimuth, waypoints, activeCoords, radarMaxDist, landmark1, landmark2, target]);
 
     // Leaflet Interactive Tactical Vector Map Effect
     useEffect(() => {
@@ -579,8 +655,8 @@ export function OffGridCompassModal() {
             const L = (await import("leaflet")).default;
             if (!mapContainerRef.current) return;
 
-            const initialLat = userCoords?.lat || 0;
-            const initialLon = userCoords?.lon || 0;
+            const initialLat = activeCoords?.lat || 0;
+            const initialLon = activeCoords?.lon || 0;
 
             if (leafletMapRef.current) {
                 try {
@@ -679,23 +755,23 @@ export function OffGridCompassModal() {
                 markersGroupRef.current.clearLayers();
 
                 // 1. User Position Marker
-                if (userCoords) {
+                if (activeCoords) {
                     const selfIcon = L.divIcon({
                         className: "custom-self-marker",
-                        html: `<div style="width:24px;height:24px;border-radius:50%;background:#00E5FF;border:3px solid #fff;box-shadow:0 0 20px #00E5FF;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#000;">📍</div>`,
+                        html: `<div style="width:24px;height:24px;border-radius:50%;background:${pdrState.isTracking ? '#00E676' : '#00E5FF'};border:3px solid #fff;box-shadow:0 0 20px ${pdrState.isTracking ? '#00E676' : '#00E5FF'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#000;">${pdrState.isTracking ? '🧭' : '📍'}</div>`,
                         iconSize: [24, 24],
                         iconAnchor: [12, 12]
                     });
-                    L.marker([userCoords.lat, userCoords.lon], { icon: selfIcon })
-                        .bindPopup(`<div style="font-family:monospace;font-size:11px;color:#000;"><strong>📍 Mi Posición GPS</strong><br/>${userCoords.lat.toFixed(5)}, ${userCoords.lon.toFixed(5)}</div>`)
+                    L.marker([activeCoords.lat, activeCoords.lon], { icon: selfIcon })
+                        .bindPopup(`<div style="font-family:monospace;font-size:11px;color:#000;"><strong>${pdrState.isTracking ? '🧭 Mi Posición (PDR Inercial)' : '📍 Mi Posición GPS'}</strong><br/>${activeCoords.lat.toFixed(5)}, ${activeCoords.lon.toFixed(5)}</div>`)
                         .addTo(markersGroupRef.current);
 
                     // User Tactical Range Ring (50m, 100m)
-                    L.circle([userCoords.lat, userCoords.lon], {
+                    L.circle([activeCoords.lat, activeCoords.lon], {
                         radius: 50,
-                        color: "rgba(0,229,255,0.3)",
+                        color: pdrState.isTracking ? "rgba(0,230,118,0.3)" : "rgba(0,229,255,0.3)",
                         weight: 1,
-                        fillColor: "rgba(0,229,255,0.03)",
+                        fillColor: pdrState.isTracking ? "rgba(0,230,118,0.03)" : "rgba(0,229,255,0.03)",
                         dashArray: "4, 6"
                     }).addTo(markersGroupRef.current);
                 }
@@ -711,8 +787,8 @@ export function OffGridCompassModal() {
 
                     const targetMarker = L.marker([target.lat, target.lon], { icon: targetIcon }).addTo(markersGroupRef.current);
                     
-                    const distText = userCoords 
-                        ? OffGridNavigationEngine.calculateTacticalGuidance(userCoords.lat, userCoords.lon, target.lat, target.lon, heading).formattedDistance
+                    const distText = activeCoords 
+                        ? OffGridNavigationEngine.calculateTacticalGuidance(activeCoords.lat, activeCoords.lon, target.lat, target.lon, heading).formattedDistance
                         : "Calculando...";
 
                     targetMarker.bindPopup(`
@@ -724,8 +800,8 @@ export function OffGridCompassModal() {
                     `);
 
                     // Draw connecting Tactical Vector Line
-                    if (userCoords) {
-                        L.polyline([[userCoords.lat, userCoords.lon], [target.lat, target.lon]], {
+                    if (activeCoords) {
+                        L.polyline([[activeCoords.lat, activeCoords.lon], [target.lat, target.lon]], {
                             color: "#E8213A",
                             weight: 3.5,
                             dashArray: "8, 8",
@@ -733,8 +809,8 @@ export function OffGridCompassModal() {
                         }).addTo(markersGroupRef.current);
 
                         // Midpoint marker with distance label
-                        const midLat = (userCoords.lat + target.lat) / 2;
-                        const midLon = (userCoords.lon + target.lon) / 2;
+                        const midLat = (activeCoords.lat + target.lat) / 2;
+                        const midLon = (activeCoords.lon + target.lon) / 2;
                         const labelIcon = L.divIcon({
                             className: "custom-vector-label",
                             html: `<div style="background:rgba(14,14,26,0.9);border:1px solid #E8213A;padding:2px 8px;border-radius:6px;color:#00E676;font-family:monospace;font-size:10px;font-weight:800;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.6);">${distText}</div>`,
@@ -773,12 +849,12 @@ export function OffGridCompassModal() {
                 markersGroupRef.current = null;
             }
         };
-    }, [activeTab, userCoords, target, waypoints, heading, handleSetTarget]);
+    }, [activeTab, activeCoords, target, waypoints, heading, handleSetTarget, pdrState.isTracking]);
 
     const recenterMapOnUser = () => {
-        if (leafletMapRef.current && userCoords) {
-            leafletMapRef.current.flyTo([userCoords.lat, userCoords.lon], 17, { duration: 0.8 });
-            toast.info("Mapa centrado en posición GPS");
+        if (leafletMapRef.current && activeCoords) {
+            leafletMapRef.current.flyTo([activeCoords.lat, activeCoords.lon], 17, { duration: 0.8 });
+            toast.info(pdrState.isTracking ? "Mapa centrado en posición PDR inercial" : "Mapa centrado en posición GPS");
         }
     };
 
@@ -815,8 +891,8 @@ export function OffGridCompassModal() {
             return;
         }
 
-        if (!userCoords) {
-            toast.warning("Esperando señal GPS para determinar la posición base del waypoint");
+        if (!activeCoords) {
+            toast.warning("Esperando señal GPS o PDR para determinar la posición base del waypoint");
             return;
         }
 
@@ -833,7 +909,7 @@ export function OffGridCompassModal() {
             return;
         }
         
-        const destination = OffGridNavigationEngine.calculateDestinationPoint(userCoords.lat, userCoords.lon, dist, brg);
+        const destination = OffGridNavigationEngine.calculateDestinationPoint(activeCoords.lat, activeCoords.lon, dist, brg);
 
         const wp: Waypoint = {
             id: Date.now().toString(),
@@ -931,7 +1007,9 @@ export function OffGridCompassModal() {
                 zIndex: 10, flexShrink: 0,
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: 38, height: 38, borderRadius: '12px', background: 'linear-gradient(135deg, #00E676, #00A859)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', boxShadow: '0 0 16px rgba(0,230,118,0.3)' }}>🧭</div>
+                    <div style={{ width: 38, height: 38, borderRadius: '12px', background: 'linear-gradient(135deg, #00E676, #00A859)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 16px rgba(0,230,118,0.3)' }}>
+                        <TacIcon name="compass" size={20} color="#000" />
+                    </div>
                     <div>
                         <div style={{ fontSize: '1.05rem', fontWeight: 800 }}>{t.modules?.off_grid_compass || "Radar Topográfico Off-Grid"}</div>
                         <div style={{ fontSize: '0.68rem', color: '#00E676', fontFamily: 'monospace', fontWeight: 700 }}>
@@ -944,10 +1022,12 @@ export function OffGridCompassModal() {
                     style={{
                         background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
                         color: '#fff', padding: '8px 14px', borderRadius: '10px',
-                        cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem'
+                        cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem',
+                        display: 'flex', alignItems: 'center', gap: '6px'
                     }}
                 >
-                    ✕ {t.common?.close || "Cerrar"}
+                    <TacIcon name="x" size={14} />
+                    <span>{t.common?.close || "Cerrar"}</span>
                 </button>
             </header>
 
@@ -965,10 +1045,12 @@ export function OffGridCompassModal() {
                         padding: "8px 14px", fontSize: "0.8rem", fontWeight: 800, borderRadius: "20px",
                         background: activeTab === "radar" ? "#00E676" : "rgba(255,255,255,0.06)",
                         color: activeTab === "radar" ? "#000" : "#AAA",
-                        border: "none", cursor: "pointer", whiteSpace: "nowrap"
+                        border: "none", cursor: "pointer", whiteSpace: "nowrap",
+                        display: "flex", alignItems: "center", gap: "6px"
                     }}
                 >
-                    🧭 Radar & Rosa HUD
+                    <TacIcon name="compass" size={14} />
+                    <span>Radar & Rosa HUD</span>
                 </button>
                 <button
                     onClick={() => setActiveTab("map")}
@@ -977,10 +1059,13 @@ export function OffGridCompassModal() {
                         background: activeTab === "map" ? "#E8213A" : (target ? "rgba(232,33,58,0.25)" : "rgba(255,255,255,0.06)"),
                         color: activeTab === "map" ? "#FFF" : (target ? "#FF3355" : "#AAA"),
                         border: target ? "1px solid rgba(232,33,58,0.5)" : "none",
-                        cursor: "pointer", whiteSpace: "nowrap"
+                        cursor: "pointer", whiteSpace: "nowrap",
+                        display: "flex", alignItems: "center", gap: "6px"
                     }}
                 >
-                    🗺️ Mapa Táctico Vectorial {target && "🎯"}
+                    <TacIcon name="map" size={14} />
+                    <span>Mapa Táctico Vectorial</span>
+                    {target && <TacIcon name="crosshair" size={12} color="#FFF" />}
                 </button>
                 <button
                     onClick={() => setActiveTab("resection")}
@@ -988,10 +1073,12 @@ export function OffGridCompassModal() {
                         padding: "8px 14px", fontSize: "0.8rem", fontWeight: 800, borderRadius: "20px",
                         background: activeTab === "resection" ? "#38BDF8" : "rgba(255,255,255,0.06)",
                         color: activeTab === "resection" ? "#000" : "#AAA",
-                        border: "none", cursor: "pointer", whiteSpace: "nowrap"
+                        border: "none", cursor: "pointer", whiteSpace: "nowrap",
+                        display: "flex", alignItems: "center", gap: "6px"
                     }}
                 >
-                    📐 Resección (2 Puntos)
+                    <TacIcon name="crosshair" size={14} />
+                    <span>Resección (2 Puntos)</span>
                 </button>
                 <button
                     onClick={() => setActiveTab("waypoints")}
@@ -999,10 +1086,12 @@ export function OffGridCompassModal() {
                         padding: "8px 14px", fontSize: "0.8rem", fontWeight: 800, borderRadius: "20px",
                         background: activeTab === "waypoints" ? "#FFB300" : "rgba(255,255,255,0.06)",
                         color: activeTab === "waypoints" ? "#000" : "#AAA",
-                        border: "none", cursor: "pointer", whiteSpace: "nowrap"
+                        border: "none", cursor: "pointer", whiteSpace: "nowrap",
+                        display: "flex", alignItems: "center", gap: "6px"
                     }}
                 >
-                    📌 Waypoints ({waypoints.length})
+                    <TacIcon name="pin" size={14} />
+                    <span>Waypoints ({waypoints.length})</span>
                 </button>
             </div>
 
@@ -1028,10 +1117,10 @@ export function OffGridCompassModal() {
                             }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{ fontSize: '1.2rem', animation: 'pulse 1.2s infinite' }}>🎯</span>
+                                        <TacIcon name="crosshair" size={20} color="#E8213A" style={{ animation: 'pulse 1.2s infinite' }} />
                                         <div>
                                             <div style={{ fontSize: '0.88rem', fontWeight: 900, color: '#FFF' }}>OBJETIVO TÁCTICO FIJADO</div>
-                                            <div style={{ fontSize: '0.68rem', color: '#AAA', fontFamily: 'monospace' }}>{target.lat.toFixed(5)}°, {target.lon.toFixed(5)}°</div>
+                                            <div className="tabular-telemetry" style={{ fontSize: '0.68rem', color: '#AAA', fontFamily: 'monospace' }}>{target.lat.toFixed(5)}°, {target.lon.toFixed(5)}°</div>
                                         </div>
                                     </div>
                                     <button
@@ -1040,25 +1129,26 @@ export function OffGridCompassModal() {
                                             background: 'rgba(232,33,58,0.25)', border: '1px solid #E8213A',
                                             color: '#FFF', padding: '6px 12px', borderRadius: '8px',
                                             cursor: 'pointer', fontWeight: 800, fontSize: '0.74rem',
-                                            display: 'flex', alignItems: 'center', gap: '4px'
+                                            display: 'flex', alignItems: 'center', gap: '6px'
                                         }}
                                     >
-                                        🗑️ Borrar Objetivo
+                                        <TacIcon name="trash" size={12} />
+                                        <span>Borrar Objetivo</span>
                                     </button>
                                 </div>
 
                                 {tacticalGuidance ? (
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                         <div style={{ background: 'rgba(0,0,0,0.4)', padding: '10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                                            <div style={{ fontSize: '0.65rem', color: '#AAA', textTransform: 'uppercase' }}>📏 Distancia al Objetivo</div>
-                                            <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace' }}>
+                                            <div style={{ fontSize: '0.65rem', color: '#AAA', textTransform: 'uppercase' }}>Distancia al Objetivo</div>
+                                            <div className="tabular-telemetry" style={{ fontSize: '1.25rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace' }}>
                                                 {tacticalGuidance.formattedDistance}
                                             </div>
-                                            <div style={{ fontSize: '0.68rem', color: '#38BDF8', marginTop: '2px' }}>{tacticalGuidance.estimatedWalkTimeFormatted}</div>
+                                            <div className="tabular-telemetry" style={{ fontSize: '0.68rem', color: '#38BDF8', marginTop: '2px' }}>{tacticalGuidance.estimatedWalkTimeFormatted}</div>
                                         </div>
                                         <div style={{ background: 'rgba(0,0,0,0.4)', padding: '10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                                            <div style={{ fontSize: '0.65rem', color: '#AAA', textTransform: 'uppercase' }}>🧭 Rumbo / Azimut Requerido</div>
-                                            <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#E8213A', fontFamily: 'monospace' }}>
+                                            <div style={{ fontSize: '0.65rem', color: '#AAA', textTransform: 'uppercase' }}>Rumbo / Azimut Requerido</div>
+                                            <div className="tabular-telemetry" style={{ fontSize: '1.25rem', fontWeight: 900, color: '#E8213A', fontFamily: 'monospace' }}>
                                                 {tacticalGuidance.bearingDegrees}° {tacticalGuidance.cardinal}
                                             </div>
                                             <div style={{ fontSize: '0.68rem', color: '#FFB300', marginTop: '2px', fontWeight: 700 }}>
@@ -1067,8 +1157,9 @@ export function OffGridCompassModal() {
                                         </div>
                                     </div>
                                 ) : (
-                                    <div style={{ fontSize: '0.75rem', color: '#FFB300', fontStyle: 'italic' }}>
-                                        ⚠️ Esperando coordenadas GPS actuales para calcular distancia y rumbo vectoriales.
+                                    <div style={{ fontSize: '0.75rem', color: '#FFB300', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <TacIcon name="hazard" size={14} color="#FFB300" />
+                                        <span>Esperando coordenadas GPS actuales para calcular distancia y rumbo vectoriales.</span>
                                     </div>
                                 )}
                             </div>
@@ -1091,23 +1182,23 @@ export function OffGridCompassModal() {
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '2px' }}>
                                         {compassTelemetry.source === 'magnetometer' && (
-                                            <span style={{ fontSize: '0.68rem', color: '#00E676', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-                                                ● 🧭 Magnetómetro Fusión 3D
+                                            <span style={{ fontSize: '0.68rem', color: '#00E676', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <TacIcon name="compass" size={12} /> Magnetómetro Fusión 3D
                                             </span>
                                         )}
                                         {compassTelemetry.source === 'gps_cog' && (
-                                            <span style={{ fontSize: '0.68rem', color: '#00E5FF', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-                                                ● 🛰️ Rumbo GPS Cinemático (COG)
+                                            <span style={{ fontSize: '0.68rem', color: '#00E5FF', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <TacIcon name="satellite" size={12} /> Rumbo GPS Cinemático (COG)
                                             </span>
                                         )}
                                         {compassTelemetry.source === 'solar' && (
-                                            <span style={{ fontSize: '0.68rem', color: '#FFB300', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-                                                ● ☀️ Brújula Solar Calibrada
+                                            <span style={{ fontSize: '0.68rem', color: '#FFB300', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <TacIcon name="sun" size={12} /> Brújula Solar Calibrada
                                             </span>
                                         )}
                                         {compassTelemetry.source === 'manual' && (
-                                            <span style={{ fontSize: '0.68rem', color: '#FF9100', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-                                                ● ✋ Rumbo Manual (Sin Magnetómetro)
+                                            <span style={{ fontSize: '0.68rem', color: '#FF9100', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <TacIcon name="crosshair" size={12} /> Rumbo Manual (Sin Magnetómetro)
                                             </span>
                                         )}
                                     </div>
@@ -1124,35 +1215,41 @@ export function OffGridCompassModal() {
                                             onClick={() => tacticalCompass.setManualHeading((heading - 15 + 360) % 360)}
                                             style={{
                                                 padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)',
-                                                color: '#FFF', border: 'none', cursor: 'pointer', fontSize: '0.70rem', fontWeight: 800
+                                                color: '#FFF', border: 'none', cursor: 'pointer', fontSize: '0.70rem', fontWeight: 800,
+                                                display: 'flex', alignItems: 'center', gap: '4px'
                                             }}
                                             title="Girar 15° a babor"
                                         >
-                                            ◀ -15°
+                                            <TacIcon name="chevron-left" size={10} />
+                                            <span>-15°</span>
                                         </button>
                                         <button
                                             onClick={() => tacticalCompass.setManualHeading((heading + 15) % 360)}
                                             style={{
                                                 padding: '4px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)',
-                                                color: '#FFF', border: 'none', cursor: 'pointer', fontSize: '0.70rem', fontWeight: 800
+                                                color: '#FFF', border: 'none', cursor: 'pointer', fontSize: '0.70rem', fontWeight: 800,
+                                                display: 'flex', alignItems: 'center', gap: '4px'
                                             }}
                                             title="Girar 15° a estribor"
                                         >
-                                            +15° ▶
+                                            <span>+15°</span>
+                                            <TacIcon name="chevron-right" size={10} />
                                         </button>
                                         {solarAzimuth && !solarAzimuth.isNight && (
                                             <button
                                                 onClick={() => {
                                                     tacticalCompass.calibrateWithSolarAzimuth(solarAzimuth.azimuthDegrees);
-                                                    toast.success(`☀️ Brújula orientada con el Sol: ${solarAzimuth.azimuthDegrees}°`);
+                                                    toast.success(`Brújula orientada con el Sol: ${solarAzimuth.azimuthDegrees}°`);
                                                 }}
                                                 style={{
                                                     padding: '4px 10px', borderRadius: '6px', background: 'rgba(255,179,0,0.18)',
-                                                    color: '#FFB300', border: '1px solid #FFB300', cursor: 'pointer', fontSize: '0.70rem', fontWeight: 800
+                                                    color: '#FFB300', border: '1px solid #FFB300', cursor: 'pointer', fontSize: '0.70rem', fontWeight: 800,
+                                                    display: 'flex', alignItems: 'center', gap: '4px'
                                                 }}
                                                 title="Alinear rumbo con el acimut solar actual"
                                             >
-                                                ☀️ Alinear Sol ({solarAzimuth.azimuthDegrees}°)
+                                                <TacIcon name="sun" size={12} />
+                                                <span>Alinear Sol ({solarAzimuth.azimuthDegrees}°)</span>
                                             </button>
                                         )}
                                     </div>
@@ -1189,7 +1286,7 @@ export function OffGridCompassModal() {
                         }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{ fontSize: '1.2rem' }}>🧲</span>
+                                    <TacIcon name="radio" size={18} color="#00E5FF" />
                                     <div>
                                         <div style={{ fontSize: '0.88rem', fontWeight: 900, color: '#FFF' }}>
                                             DETECTOR DE ANOMALÍAS MAGNÉTICAS
@@ -1214,19 +1311,19 @@ export function OffGridCompassModal() {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
                                 <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
                                     <div style={{ fontSize: '0.62rem', color: '#AAA' }}>CAMPO ACTUAL</div>
-                                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#00E5FF', fontFamily: 'monospace' }}>
+                                    <div className="tabular-telemetry" style={{ fontSize: '1.15rem', fontWeight: 900, color: '#00E5FF', fontFamily: 'monospace' }}>
                                         {magTelemetry.magnitudeMicroteslas} <span style={{ fontSize: '0.7rem' }}>µT</span>
                                     </div>
                                 </div>
                                 <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
                                     <div style={{ fontSize: '0.62rem', color: '#AAA' }}>LÍNEA BASE (CERO)</div>
-                                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#AAA', fontFamily: 'monospace' }}>
+                                    <div className="tabular-telemetry" style={{ fontSize: '1.15rem', fontWeight: 900, color: '#AAA', fontFamily: 'monospace' }}>
                                         {magTelemetry.baselineMicroteslas} <span style={{ fontSize: '0.7rem' }}>µT</span>
                                     </div>
                                 </div>
                                 <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
                                     <div style={{ fontSize: '0.62rem', color: '#AAA' }}>DESVIACIÓN (Δ)</div>
-                                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: magTelemetry.isAnomalyDetected ? '#FF3355' : '#00E676', fontFamily: 'monospace' }}>
+                                    <div className="tabular-telemetry" style={{ fontSize: '1.15rem', fontWeight: 900, color: magTelemetry.isAnomalyDetected ? '#FF3355' : '#00E676', fontFamily: 'monospace' }}>
                                         {magTelemetry.deltaFromBaselineMicroteslas > 0 ? `+${magTelemetry.deltaFromBaselineMicroteslas}` : magTelemetry.deltaFromBaselineMicroteslas} <span style={{ fontSize: '0.7rem' }}>µT</span>
                                     </div>
                                 </div>
@@ -1241,25 +1338,29 @@ export function OffGridCompassModal() {
                                     style={{
                                         flex: 1, padding: '8px', borderRadius: '8px',
                                         background: 'rgba(0,229,255,0.15)', border: '1px solid rgba(0,229,255,0.4)',
-                                        color: '#00E5FF', fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer'
+                                        color: '#00E5FF', fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
                                     }}
                                 >
-                                    🎯 Calibrar Cero Táctico
+                                    <TacIcon name="crosshair" size={14} />
+                                    <span>Calibrar Cero Táctico</span>
                                 </button>
                                 <button
                                     onClick={() => {
                                         const active = magneticDetector.toggleAudioBeeps();
-                                        toast.info(active ? "🔊 Audio Geiger Activado" : "🔇 Audio Geiger Silenciado");
+                                        toast.info(active ? "Audio Geiger Activado" : "Audio Geiger Silenciado");
                                     }}
                                     style={{
                                         padding: '8px 14px', borderRadius: '8px',
                                         background: magTelemetry.isAudioBeepActive ? 'rgba(255,179,0,0.25)' : 'rgba(255,255,255,0.06)',
                                         border: `1px solid ${magTelemetry.isAudioBeepActive ? '#FFB300' : 'rgba(255,255,255,0.15)'}`,
                                         color: magTelemetry.isAudioBeepActive ? '#FFB300' : '#AAA',
-                                        fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer'
+                                        fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', gap: '6px'
                                     }}
                                 >
-                                    {magTelemetry.isAudioBeepActive ? '🔊 Geiger ON' : '🔈 Geiger OFF'}
+                                    <TacIcon name={magTelemetry.isAudioBeepActive ? "volume" : "volume-x"} size={14} />
+                                    <span>{magTelemetry.isAudioBeepActive ? 'Geiger ON' : 'Geiger OFF'}</span>
                                 </button>
                             </div>
                         </div>
@@ -1270,25 +1371,37 @@ export function OffGridCompassModal() {
                             borderRadius: '16px', padding: '16px',
                             display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box'
                         }}>
-                            <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#38BDF8', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>📍 Cuadrícula Táctica UTM</div>
-                            <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(0,230,118,0.3)', fontFamily: 'monospace', fontSize: '1.05rem', color: '#00E676', textAlign: 'center', fontWeight: 800, letterSpacing: '0.5px', overflowX: 'auto' }}>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#38BDF8', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <TacIcon name="crosshair" size={14} color="#38BDF8" />
+                                <span>Cuadrícula Táctica UTM</span>
+                            </div>
+                            <div className="tabular-telemetry" style={{ background: 'rgba(0,0,0,0.5)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(0,230,118,0.3)', fontFamily: 'monospace', fontSize: '1.05rem', color: '#00E676', textAlign: 'center', fontWeight: 800, letterSpacing: '0.5px', overflowX: 'auto' }}>
                                 {utmString}
                             </div>
-                            {userCoords ? (
-                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.78rem', color: '#AAA', display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>Lat: <strong style={{ color: '#fff' }}>{userCoords.lat.toFixed(5)}°</strong></span>
-                                    <span>Lon: <strong style={{ color: '#fff' }}>{userCoords.lon.toFixed(5)}°</strong></span>
+                            {activeCoords ? (
+                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.78rem', color: '#AAA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>Lat: <strong className="tabular-telemetry" style={{ color: '#fff' }}>{activeCoords.lat.toFixed(5)}°</strong></span>
+                                    <span>Lon: <strong className="tabular-telemetry" style={{ color: '#fff' }}>{activeCoords.lon.toFixed(5)}°</strong></span>
+                                    {pdrState.isTracking && (
+                                        <span style={{ color: '#00E676', fontSize: '0.7rem', fontWeight: 800, background: 'rgba(0,230,118,0.15)', padding: '2px 6px', borderRadius: '4px' }}>PDR</span>
+                                    )}
                                 </div>
                             ) : (
-                                <div style={{ fontSize: '0.75rem', color: '#FFB300', fontStyle: 'italic' }}>⚠️ Obteniendo fijación de satélites GPS...</div>
+                                <div style={{ fontSize: '0.75rem', color: '#FFB300', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <TacIcon name="hazard" size={14} color="#FFB300" />
+                                    <span>Obteniendo fijación de satélites GPS...</span>
+                                </div>
                             )}
 
                             <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#FFB300', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px', marginTop: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>{solarAzimuth.isNight ? "🌙 Reloj Nocturno" : "☀️ Reloj Solar"} (Norte Verdadero)</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <TacIcon name={solarAzimuth.isNight ? "moon" : "sun"} size={14} color={solarAzimuth.isNight ? "#38BDF8" : "#FFB300"} />
+                                    <span>{solarAzimuth.isNight ? "Reloj Nocturno" : "Reloj Solar"} (Norte Verdadero)</span>
+                                </span>
                             </div>
                             <div style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.78rem', color: '#DDD', display: 'flex', justifyContent: 'space-between' }}>
-                                <span>Azimut: <strong style={{ color: solarAzimuth.isNight ? '#38BDF8' : '#FFB300' }}>{solarAzimuth.azimuthDegrees}°</strong></span>
-                                <span>Elevación: <strong style={{ color: solarAzimuth.isNight ? '#38BDF8' : '#FFB300' }}>{solarAzimuth.elevationDegrees}°</strong></span>
+                                <span>Azimut: <strong className="tabular-telemetry" style={{ color: solarAzimuth.isNight ? '#38BDF8' : '#FFB300' }}>{solarAzimuth.azimuthDegrees}°</strong></span>
+                                <span>Elevación: <strong className="tabular-telemetry" style={{ color: solarAzimuth.isNight ? '#38BDF8' : '#FFB300' }}>{solarAzimuth.elevationDegrees}°</strong></span>
                             </div>
                         </div>
 
@@ -1302,7 +1415,7 @@ export function OffGridCompassModal() {
                         }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{ fontSize: '1.2rem' }}>🥾</span>
+                                    <TacIcon name="activity" size={18} color="#00E676" />
                                     <div>
                                         <div style={{ fontSize: '0.88rem', fontWeight: 900, color: '#FFF' }}>
                                             NAVEGACIÓN INERCIAL PDR (RUMBO MUERTO)
@@ -1325,33 +1438,33 @@ export function OffGridCompassModal() {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' }}>
                                 <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
                                     <div style={{ fontSize: '0.62rem', color: '#AAA' }}>PASOS</div>
-                                    <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#00E5FF', fontFamily: 'monospace' }}>
+                                    <div className="tabular-telemetry" style={{ fontSize: '1.05rem', fontWeight: 900, color: '#00E5FF', fontFamily: 'monospace' }}>
                                         {pdrState.totalSteps}
                                     </div>
                                 </div>
                                 <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
                                     <div style={{ fontSize: '0.62rem', color: '#AAA' }}>DISTANCIA</div>
-                                    <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace' }}>
+                                    <div className="tabular-telemetry" style={{ fontSize: '1.05rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace' }}>
                                         {pdrState.distanceMeters >= 1000 ? `${(pdrState.distanceMeters / 1000).toFixed(2)}km` : `${pdrState.distanceMeters}m`}
                                     </div>
                                 </div>
                                 <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
                                     <div style={{ fontSize: '0.62rem', color: '#AAA' }}>VELOCIDAD</div>
-                                    <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#FFB300', fontFamily: 'monospace' }}>
+                                    <div className="tabular-telemetry" style={{ fontSize: '1.05rem', fontWeight: 900, color: '#FFB300', fontFamily: 'monospace' }}>
                                         {(pdrState.averageSpeedMps * 3.6).toFixed(1)} <span style={{ fontSize: '0.65rem' }}>km/h</span>
                                     </div>
                                 </div>
                                 <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
                                     <div style={{ fontSize: '0.62rem', color: '#AAA' }}>CADENCIA</div>
-                                    <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#A855F7', fontFamily: 'monospace' }}>
+                                    <div className="tabular-telemetry" style={{ fontSize: '1.05rem', fontWeight: 900, color: '#A855F7', fontFamily: 'monospace' }}>
                                         {pdrState.stepFrequencyHz} <span style={{ fontSize: '0.65rem' }}>Hz</span>
                                     </div>
                                 </div>
                             </div>
 
                             <div style={{ background: 'rgba(0,0,0,0.3)', padding: '8px 12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', color: '#AAA', fontFamily: 'monospace' }}>
-                                <span>Vector Norte (ΔN): <strong style={{ color: pdrState.displacementNorthMeters >= 0 ? '#00E676' : '#FF3355' }}>{pdrState.displacementNorthMeters > 0 ? `+${pdrState.displacementNorthMeters}` : pdrState.displacementNorthMeters}m</strong></span>
-                                <span>Vector Este (ΔE): <strong style={{ color: pdrState.displacementEastMeters >= 0 ? '#00E676' : '#FF3355' }}>{pdrState.displacementEastMeters > 0 ? `+${pdrState.displacementEastMeters}` : pdrState.displacementEastMeters}m</strong></span>
+                                <span>Vector Norte (ΔN): <strong className="tabular-telemetry" style={{ color: pdrState.displacementNorthMeters >= 0 ? '#00E676' : '#FF3355' }}>{pdrState.displacementNorthMeters > 0 ? `+${pdrState.displacementNorthMeters}` : pdrState.displacementNorthMeters}m</strong></span>
+                                <span>Vector Este (ΔE): <strong className="tabular-telemetry" style={{ color: pdrState.displacementEastMeters >= 0 ? '#00E676' : '#FF3355' }}>{pdrState.displacementEastMeters > 0 ? `+${pdrState.displacementEastMeters}` : pdrState.displacementEastMeters}m</strong></span>
                             </div>
 
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -1362,31 +1475,37 @@ export function OffGridCompassModal() {
                                         background: pdrState.isTracking ? 'rgba(232,33,58,0.2)' : 'rgba(0,230,118,0.2)',
                                         border: `1px solid ${pdrState.isTracking ? '#E8213A' : '#00E676'}`,
                                         color: pdrState.isTracking ? '#FF5252' : '#00E676',
-                                        fontSize: '0.76rem', fontWeight: 800, cursor: 'pointer'
+                                        fontSize: '0.76rem', fontWeight: 800, cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
                                     }}
                                 >
-                                    {pdrState.isTracking ? '⏹️ Detener PDR' : '▶️ Iniciar PDR Inercial'}
+                                    <TacIcon name={pdrState.isTracking ? "pause" : "play"} size={12} />
+                                    <span>{pdrState.isTracking ? 'Detener PDR' : 'Iniciar PDR Inercial'}</span>
                                 </button>
                                 <button
                                     onClick={handleResetPdr}
                                     style={{
                                         padding: '9px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)',
-                                        border: '1px solid rgba(255,255,255,0.15)', color: '#AAA', fontSize: '0.76rem', fontWeight: 800, cursor: 'pointer'
+                                        border: '1px solid rgba(255,255,255,0.15)', color: '#AAA', fontSize: '0.76rem', fontWeight: 800, cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', gap: '6px'
                                     }}
                                     title="Poner a cero odometría inercial"
                                 >
-                                    🔄 Poner a Cero
+                                    <TacIcon name="refresh" size={12} />
+                                    <span>Poner a Cero</span>
                                 </button>
                                 <button
                                     onClick={handleAdoptPdrCoords}
                                     style={{
                                         padding: '9px 12px', borderRadius: '8px',
                                         background: 'rgba(56,189,248,0.2)', border: '1px solid #38BDF8',
-                                        color: '#38BDF8', fontSize: '0.76rem', fontWeight: 800, cursor: 'pointer'
+                                        color: '#38BDF8', fontSize: '0.76rem', fontWeight: 800, cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', gap: '6px'
                                     }}
                                     title="Proyectar coordenadas estimadas a la navegación general del sistema"
                                 >
-                                    📍 Proyectar a GPS
+                                    <TacIcon name="crosshair" size={12} />
+                                    <span>Proyectar a GPS</span>
                                 </button>
                             </div>
                         </div>
@@ -1394,14 +1513,17 @@ export function OffGridCompassModal() {
                         {/* Tactical Geofence Status */}
                         {(() => {
                             const validWps = waypoints.filter(w => w.lat !== 0 && w.lon !== 0);
-                            if (validWps.length < 3 || !userCoords) return null;
+                            if (validWps.length < 3 || !activeCoords) return null;
                             const polygon = validWps.map(w => ({ lat: w.lat, lon: w.lon }));
-                            const isInside = OffGridNavigationEngine.isPointInGeofence(userCoords, polygon);
+                            const isInside = OffGridNavigationEngine.isPointInGeofence(activeCoords, polygon);
                             return (
                                 <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(232,33,58,0.3)', borderRadius: '16px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#E8213A' }}>🛡️ Perímetro Geofence Defensivo</div>
-                                        <span style={{ fontSize: '0.7rem', color: '#AAA' }}>{validWps.length} Vértices</span>
+                                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#E8213A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <TacIcon name="shield" size={16} color="#E8213A" />
+                                            <span>Perímetro Geofence Defensivo</span>
+                                        </div>
+                                        <span className="tabular-telemetry" style={{ fontSize: '0.7rem', color: '#AAA' }}>{validWps.length} Vértices</span>
                                     </div>
                                     <div style={{
                                         padding: '10px 14px', borderRadius: '10px',
@@ -1409,8 +1531,9 @@ export function OffGridCompassModal() {
                                         border: `1px solid ${isInside ? 'rgba(0,230,118,0.4)' : 'rgba(232,33,58,0.5)'}`,
                                         display: 'flex', alignItems: 'center', justifyContent: 'space-between'
                                     }}>
-                                        <div style={{ fontWeight: 800, fontSize: '0.8rem', color: isInside ? '#00E676' : '#FF5252' }}>
-                                            {isInside ? '🛡️ DENTRO DEL PERÍMETRO' : '🚨 FUERA DEL PERÍMETRO'}
+                                        <div style={{ fontWeight: 800, fontSize: '0.8rem', color: isInside ? '#00E676' : '#FF5252', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <TacIcon name="shield" size={14} color={isInside ? '#00E676' : '#FF5252'} />
+                                            <span>{isInside ? 'DENTRO DEL PERÍMETRO' : 'FUERA DEL PERÍMETRO'}</span>
                                         </div>
                                         <span style={{ fontSize: '0.68rem', color: '#FFF', fontFamily: 'monospace' }}>Ray-Casting</span>
                                     </div>
@@ -1443,7 +1566,7 @@ export function OffGridCompassModal() {
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px'
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '1rem' }}>👆</span>
+                                <TacIcon name="crosshair" size={16} color="var(--accent-cyan, #00E5FF)" />
                                 <div style={{ fontSize: '0.74rem', color: 'var(--accent-cyan, #00E5FF)', fontWeight: 700 }}>
                                     Toca en cualquier punto del mapa para fijar un objetivo táctico y calcular vector de rumbo.
                                 </div>
@@ -1454,10 +1577,12 @@ export function OffGridCompassModal() {
                                     style={{
                                         background: 'rgba(0,229,255,0.15)', border: '1px solid rgba(0,229,255,0.4)',
                                         color: '#00E5FF', padding: '5px 10px', borderRadius: '8px',
-                                        fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap'
+                                        fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap',
+                                        display: 'flex', alignItems: 'center', gap: '4px'
                                     }}
                                 >
-                                    📍 Mi Posición
+                                    <TacIcon name="compass" size={12} />
+                                    <span>Mi Posición</span>
                                 </button>
                             )}
                         </div>
@@ -1474,10 +1599,10 @@ export function OffGridCompassModal() {
                             }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <span style={{ fontSize: '1.1rem' }}>🎯</span>
+                                        <TacIcon name="crosshair" size={18} color="#E8213A" />
                                         <div>
                                             <div style={{ fontSize: '0.84rem', fontWeight: 900, color: '#FFF' }}>OBJETIVO VECTORIAL FIJADO</div>
-                                            <div style={{ fontSize: '0.66rem', color: '#AAA', fontFamily: 'monospace' }}>
+                                            <div className="tabular-telemetry" style={{ fontSize: '0.66rem', color: '#AAA', fontFamily: 'monospace' }}>
                                                 {target.lat.toFixed(5)}°, {target.lon.toFixed(5)}°
                                             </div>
                                         </div>
@@ -1489,10 +1614,12 @@ export function OffGridCompassModal() {
                                             style={{
                                                 background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
                                                 color: '#FFF', padding: '5px 10px', borderRadius: '8px',
-                                                fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer'
+                                                fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', gap: '4px'
                                             }}
                                         >
-                                            🎯 Centrar
+                                            <TacIcon name="crosshair" size={12} />
+                                            <span>Centrar</span>
                                         </button>
                                         <button
                                             onClick={handleClearTarget}
@@ -1500,10 +1627,12 @@ export function OffGridCompassModal() {
                                                 background: '#E8213A', border: 'none',
                                                 color: '#FFF', padding: '5px 10px', borderRadius: '8px',
                                                 fontSize: '0.7rem', fontWeight: 900, cursor: 'pointer',
-                                                boxShadow: '0 0 12px rgba(232,33,58,0.4)'
+                                                boxShadow: '0 0 12px rgba(232,33,58,0.4)',
+                                                display: 'flex', alignItems: 'center', gap: '4px'
                                             }}
                                         >
-                                            🗑️ Borrar
+                                            <TacIcon name="trash" size={12} />
+                                            <span>Borrar</span>
                                         </button>
                                     </div>
                                 </div>
@@ -1512,13 +1641,13 @@ export function OffGridCompassModal() {
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.5)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
                                         <div>
                                             <div style={{ fontSize: '0.62rem', color: '#AAA', textTransform: 'uppercase' }}>Distancia en Metros</div>
-                                            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace' }}>
+                                            <div className="tabular-telemetry" style={{ fontSize: '1.15rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace' }}>
                                                 {tacticalGuidance.formattedDistance}
                                             </div>
                                         </div>
                                         <div>
                                             <div style={{ fontSize: '0.62rem', color: '#AAA', textTransform: 'uppercase' }}>Rumbo Requerido</div>
-                                            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#E8213A', fontFamily: 'monospace' }}>
+                                            <div className="tabular-telemetry" style={{ fontSize: '1.15rem', fontWeight: 900, color: '#E8213A', fontFamily: 'monospace' }}>
                                                 {tacticalGuidance.bearingDegrees}° {tacticalGuidance.cardinal}
                                             </div>
                                         </div>
@@ -1530,8 +1659,9 @@ export function OffGridCompassModal() {
                                         </div>
                                     </div>
                                 ) : (
-                                    <div style={{ fontSize: '0.72rem', color: '#FFB300', fontStyle: 'italic' }}>
-                                        Esperando señal GPS para trazar vector en vivo...
+                                    <div style={{ fontSize: '0.72rem', color: '#FFB300', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <TacIcon name="hazard" size={14} color="#FFB300" />
+                                        <span>Esperando señal GPS para trazar vector en vivo...</span>
                                     </div>
                                 )}
                             </div>
@@ -1551,20 +1681,26 @@ export function OffGridCompassModal() {
                     <div style={{ maxWidth: '640px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                         <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box' }}>
                             <div>
-                                <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#38BDF8' }}>📐 Triangulación por Resección (2 Puntos)</div>
+                                <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#38BDF8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <TacIcon name="crosshair" size={16} color="#38BDF8" />
+                                    <span>Triangulación por Resección (2 Puntos)</span>
+                                </div>
                                 <div style={{ fontSize: '0.72rem', color: '#AAA', marginTop: '2px' }}>Alinea 2 puntos visibles de referencia para calcular tu posición sin GPS:</div>
                             </div>
 
                             {/* Landmark 1 Card */}
                             <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', padding: '10px 12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#38BDF8' }}>📍 Punto 1 de Referencia</span>
-                                    {userCoords && (
+                                    <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#38BDF8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <TacIcon name="pin" size={12} color="#38BDF8" />
+                                        <span>Punto 1 de Referencia</span>
+                                    </span>
+                                    {activeCoords && (
                                         <button
-                                            onClick={() => updateLandmark1({ ...landmark1, lat: userCoords.lat, lon: userCoords.lon })}
+                                            onClick={() => updateLandmark1({ ...landmark1, lat: activeCoords.lat, lon: activeCoords.lon })}
                                             style={{ background: 'transparent', border: 'none', color: '#00E676', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
                                         >
-                                            Usar GPS Actual
+                                            {pdrState.isTracking ? 'Usar PDR Actual' : 'Usar GPS Actual'}
                                         </button>
                                     )}
                                 </div>
@@ -1579,13 +1715,16 @@ export function OffGridCompassModal() {
                             {/* Landmark 2 Card */}
                             <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', padding: '10px 12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#A855F7' }}>📍 Punto 2 de Referencia</span>
-                                    {userCoords && (
+                                    <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#A855F7', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <TacIcon name="pin" size={12} color="#A855F7" />
+                                        <span>Punto 2 de Referencia</span>
+                                    </span>
+                                    {activeCoords && (
                                         <button
-                                            onClick={() => updateLandmark2({ ...landmark2, lat: userCoords.lat, lon: userCoords.lon })}
+                                            onClick={() => updateLandmark2({ ...landmark2, lat: activeCoords.lat, lon: activeCoords.lon })}
                                             style={{ background: 'transparent', border: 'none', color: '#00E676', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
                                         >
-                                            Usar GPS Actual
+                                            {pdrState.isTracking ? 'Usar PDR Actual' : 'Usar GPS Actual'}
                                         </button>
                                     )}
                                 </div>
@@ -1597,20 +1736,23 @@ export function OffGridCompassModal() {
                                 </div>
                             </div>
 
-                            <button onClick={handleCalculateTriangulation} style={{ width: '100%', padding: '10px', background: '#38BDF8', color: '#000', border: 'none', borderRadius: '10px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', marginTop: '2px' }}>
-                                ⚡ CALCULAR POSICIÓN TRIANGULADA
+                            <button onClick={handleCalculateTriangulation} style={{ width: '100%', padding: '10px', background: '#38BDF8', color: '#000', border: 'none', borderRadius: '10px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', marginTop: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                <TacIcon name="zap" size={14} color="#000" />
+                                <span>CALCULAR POSICIÓN TRIANGULADA</span>
                             </button>
 
                             {triangulatedPos && (
                                 <div style={{ background: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.4)', padding: '12px', borderRadius: '10px', color: '#00E676', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <div style={{ fontWeight: 800, fontSize: '0.82rem' }}>
-                                        🎯 Posición Triangulada: Lat {triangulatedPos.lat} | Lon {triangulatedPos.lon} (Precisión Geométrica ~{triangulatedPos.accuracyMeters}m)
+                                    <div style={{ fontWeight: 800, fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <TacIcon name="crosshair" size={14} color="#00E676" />
+                                        <span className="tabular-telemetry">Posición Triangulada: Lat {triangulatedPos.lat} | Lon {triangulatedPos.lon} (Precisión Geométrica ~{triangulatedPos.accuracyMeters}m)</span>
                                     </div>
                                     <button
                                         onClick={handleAdoptTriangulatedPos}
-                                        style={{ padding: '6px 10px', background: '#00E676', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', alignSelf: 'flex-start' }}
+                                        style={{ padding: '6px 10px', background: '#00E676', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '6px' }}
                                     >
-                                        🎯 Adoptar Posición como Ubicación Actual
+                                        <TacIcon name="crosshair" size={12} color="#000" />
+                                        <span>Adoptar Posición como Ubicación Actual</span>
                                     </button>
                                 </div>
                             )}
@@ -1630,7 +1772,10 @@ export function OffGridCompassModal() {
                     <div style={{ maxWidth: '640px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                         <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box' }}>
                             <div>
-                                <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#FFF' }}>📌 Registrar Waypoint de Supervivencia</div>
+                                <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#FFF', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <TacIcon name="pin" size={16} color="#FFB300" />
+                                    <span>Registrar Waypoint de Supervivencia</span>
+                                </div>
                                 <div style={{ fontSize: '0.72rem', color: '#AAA', marginTop: '2px' }}>Calcula la posición de destino por distancia y rumbo:</div>
                             </div>
 
@@ -1639,7 +1784,10 @@ export function OffGridCompassModal() {
                                 <div style={{ display: 'flex', gap: '6px' }}>
                                     <input value={newWpDist} onChange={e => setNewWpDist(e.target.value)} style={{ flex: 1, minWidth: 0, padding: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', boxSizing: 'border-box' }} placeholder="Distancia (m)" />
                                     <input value={newWpBearing} onChange={e => setNewWpBearing(e.target.value)} style={{ flex: 1, minWidth: 0, padding: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', boxSizing: 'border-box' }} placeholder="Rumbo°" />
-                                    <button onClick={handleAddWaypoint} style={{ background: '#00E676', color: '#000', border: 'none', padding: '8px 14px', borderRadius: '8px', fontWeight: 900, cursor: 'pointer', fontSize: '0.85rem' }}>+ Agregar</button>
+                                    <button onClick={handleAddWaypoint} style={{ background: '#00E676', color: '#000', border: 'none', padding: '8px 14px', borderRadius: '8px', fontWeight: 900, cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <TacIcon name="plus" size={14} color="#000" />
+                                        <span>Agregar</span>
+                                    </button>
                                 </div>
                             </div>
 
@@ -1651,8 +1799,8 @@ export function OffGridCompassModal() {
                                         let liveBrg = wp.bearingDegrees;
                                         let liveDst = wp.distanceMeters;
 
-                                        if (userCoords && (wp.lat !== 0 || wp.lon !== 0)) {
-                                            const rel = OffGridNavigationEngine.calculateDistanceAndBearing(userCoords.lat, userCoords.lon, wp.lat, wp.lon);
+                                        if (activeCoords && (wp.lat !== 0 || wp.lon !== 0)) {
+                                            const rel = OffGridNavigationEngine.calculateDistanceAndBearing(activeCoords.lat, activeCoords.lon, wp.lat, wp.lon);
                                             liveBrg = rel.bearingDegrees;
                                             liveDst = rel.distanceMeters;
                                         }
@@ -1661,35 +1809,39 @@ export function OffGridCompassModal() {
                                             <div key={wp.id} style={{ background: 'rgba(255,255,255,0.04)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
                                                 <div>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                        <span>📍</span>
+                                                        <TacIcon name="pin" size={14} color="#00E676" />
                                                         <strong>{wp.name}</strong>
                                                     </div>
                                                     {liveDst > 0 && (
-                                                        <div style={{ fontSize: '0.68rem', color: '#38BDF8', marginTop: '2px' }}>
+                                                        <div className="tabular-telemetry" style={{ fontSize: '0.68rem', color: '#38BDF8', marginTop: '2px' }}>
                                                             📡 Fresnel 915MHz: r₁ = {OffGridNavigationEngine.calculateFresnelZone(liveDst, 915).maxRadiusMeters}m
                                                         </div>
                                                     )}
                                                 </div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <span style={{ color: '#00E676', fontWeight: 700, fontFamily: 'monospace' }}>{liveBrg}° • {liveDst}m</span>
+                                                    <span className="tabular-telemetry" style={{ color: '#00E676', fontWeight: 700, fontFamily: 'monospace' }}>{liveBrg}° • {liveDst}m</span>
                                                     <button
                                                         onClick={() => {
                                                             handleSetTarget(wp.lat, wp.lon, wp.name);
                                                             setActiveTab("map");
                                                         }}
-                                                        style={{ background: 'rgba(232,33,58,0.2)', border: '1px solid #E8213A', color: '#FFF', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer' }}
+                                                        style={{ background: 'rgba(232,33,58,0.2)', border: '1px solid #E8213A', color: '#FFF', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                                                         title="Navegar hacia este waypoint"
                                                     >
-                                                        🎯 Guiar
+                                                        <TacIcon name="crosshair" size={12} />
+                                                        <span>Guiar</span>
                                                     </button>
                                                     <button
                                                         onClick={() => handleBroadcastWaypoint(wp)}
-                                                        style={{ background: 'rgba(0,229,255,0.2)', border: '1px solid #00E5FF', color: '#00E5FF', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer' }}
+                                                        style={{ background: 'rgba(0,229,255,0.2)', border: '1px solid #00E5FF', color: '#00E5FF', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                                                         title="Transmitir waypoint a la malla del escuadrón"
                                                     >
-                                                        📡 Malla
+                                                        <TacIcon name="radio" size={12} />
+                                                        <span>Malla</span>
                                                     </button>
-                                                    <button onClick={() => handleDeleteWaypoint(wp.id)} style={{ background: 'transparent', border: 'none', color: '#E8213A', cursor: 'pointer', fontSize: '0.95rem' }}>🗑️</button>
+                                                    <button onClick={() => handleDeleteWaypoint(wp.id)} style={{ background: 'transparent', border: 'none', color: '#E8213A', cursor: 'pointer', padding: '4px' }} title="Eliminar waypoint">
+                                                        <TacIcon name="trash" size={14} color="#E8213A" />
+                                                    </button>
                                                 </div>
                                             </div>
                                         );

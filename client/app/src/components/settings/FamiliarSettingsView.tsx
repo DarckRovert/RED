@@ -15,14 +15,16 @@ import { PrivacyTab } from "./PrivacyTab";
 import { StorageTab } from "./StorageTab";
 import { MeshTab } from "./MeshTab";
 import { UpdatesTab } from "./UpdatesTab";
+import { PaymentsTab } from "./PaymentsTab";
 import { LinkedDevicesView } from "./LinkedDevicesView";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacIcon } from "../ui/TacIcon";
 
 interface FamiliarSettingsViewProps {
     onClose?: () => void;
 }
 
-type SubSection = "identity" | "linked_devices" | "appearance" | "calls" | "privacy" | "storage" | "mesh" | "updates" | null;
+type SubSection = "identity" | "linked_devices" | "payments" | "appearance" | "calls" | "privacy" | "storage" | "mesh" | "updates" | null;
 
 export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onClose }) => {
     const { t } = useTranslation();
@@ -82,11 +84,11 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             onClick={onClose}
                             style={{
                                 background: "transparent", border: "none",
-                                color: "#AEBAC1", fontSize: "1.25rem", cursor: "pointer",
+                                color: "#AEBAC1", cursor: "pointer",
                                 display: "flex", alignItems: "center", justifyContent: "center"
                             }}
                         >
-                            ←
+                            <TacIcon name="arrow-left" size={20} color="#AEBAC1" />
                         </button>
                     )}
                     <h1 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0, color: "#E9EDEF" }}>
@@ -138,13 +140,13 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             style={{
                                 width: 44, height: 44, borderRadius: "50%",
                                 background: "rgba(0, 168, 132, 0.15)", border: "1px solid rgba(0, 168, 132, 0.3)",
-                                color: "#00A884", fontSize: "1.25rem", cursor: "pointer",
+                                color: "#00A884", cursor: "pointer",
                                 display: "flex", alignItems: "center", justifyContent: "center",
                                 flexShrink: 0, marginLeft: "10px"
                             }}
                             title="Ver mi código QR de contacto"
                         >
-                            🪪
+                            <TacIcon name="qr" size={20} color="#00A884" />
                         </button>
                     </div>
 
@@ -159,10 +161,9 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             <div style={{
                                 width: 40, height: 40, borderRadius: "10px",
                                 background: "rgba(0, 168, 132, 0.18)",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.2rem", color: "#00A884"
+                                display: "flex", alignItems: "center", justifyContent: "center"
                             }}>
-                                🎛️
+                                <TacIcon name="tools" size={18} color="#00A884" />
                             </div>
                             <div>
                                 <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#E9EDEF" }}>
@@ -211,7 +212,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             }}
                         >
                             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                                <span style={{ fontSize: "1.3rem" }}>👤</span>
+                                <TacIcon name="user" size={18} color="#00A884" />
                                 <div>
                                     <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
                                         Cuenta & Identidad
@@ -221,7 +222,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                                     </div>
                                 </div>
                             </div>
-                            <span style={{ color: "#8696A0", fontSize: "0.9rem" }}>➔</span>
+                            <TacIcon name="forward" size={13} color="#8696A0" />
                         </div>
 
                         {/* 1.5. Dispositivos Vinculados (WhatsApp Web UX) */}
@@ -234,7 +235,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             }}
                         >
                             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                                <span style={{ fontSize: "1.3rem" }}>💻</span>
+                                <TacIcon name="terminal" size={18} color="#00E5FF" />
                                 <div>
                                     <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
                                         Dispositivos vinculados
@@ -244,7 +245,30 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                                     </div>
                                 </div>
                             </div>
-                            <span style={{ color: "#8696A0", fontSize: "0.9rem" }}>➔</span>
+                            <TacIcon name="forward" size={13} color="#8696A0" />
+                        </div>
+
+                        {/* 1.8. Pasaporte de Pagos Soberano Multi-Riel */}
+                        <div
+                            onClick={() => setActiveSection("payments")}
+                            style={{
+                                display: "flex", alignItems: "center", justifyContent: "space-between",
+                                padding: "14px 16px", cursor: "pointer",
+                                borderBottom: "1px solid rgba(255, 255, 255, 0.04)"
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                                <TacIcon name="card" size={18} color="#00E676" />
+                                <div>
+                                    <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
+                                        Pagos & Billeteras Soberanas
+                                    </div>
+                                    <div style={{ fontSize: "0.74rem", color: "#8696A0" }}>
+                                        USDT/USDC, Yape, Plin, Pix, Bizum y Lightning
+                                    </div>
+                                </div>
+                            </div>
+                            <TacIcon name="forward" size={13} color="#8696A0" />
                         </div>
 
                         {/* 2. Chats y Apariencia */}
@@ -257,7 +281,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             }}
                         >
                             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                                <span style={{ fontSize: "1.3rem" }}>💬</span>
+                                <TacIcon name="chats" size={18} color="#25D366" />
                                 <div>
                                     <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
                                         Chats & Apariencia
@@ -267,7 +291,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                                     </div>
                                 </div>
                             </div>
-                            <span style={{ color: "#8696A0", fontSize: "0.9rem" }}>➔</span>
+                            <TacIcon name="forward" size={13} color="#8696A0" />
                         </div>
 
                         {/* 3. Privacidad */}
@@ -280,7 +304,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             }}
                         >
                             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                                <span style={{ fontSize: "1.3rem" }}>🔒</span>
+                                <TacIcon name="shield" size={18} color="#00E5FF" />
                                 <div>
                                     <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
                                         Privacidad & Seguridad
@@ -290,7 +314,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                                     </div>
                                 </div>
                             </div>
-                            <span style={{ color: "#8696A0", fontSize: "0.9rem" }}>➔</span>
+                            <TacIcon name="forward" size={13} color="#8696A0" />
                         </div>
 
                         {/* 4. Llamadas & Audio */}
@@ -303,7 +327,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             }}
                         >
                             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                                <span style={{ fontSize: "1.3rem" }}>📞</span>
+                                <TacIcon name="calls" size={18} color="#34B7F1" />
                                 <div>
                                     <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
                                         Llamadas & Tonos
@@ -313,7 +337,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                                     </div>
                                 </div>
                             </div>
-                            <span style={{ color: "#8696A0", fontSize: "0.9rem" }}>➔</span>
+                            <TacIcon name="forward" size={13} color="#8696A0" />
                         </div>
 
                         {/* 5. Almacenamiento y Datos */}
@@ -326,7 +350,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             }}
                         >
                             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                                <span style={{ fontSize: "1.3rem" }}>💾</span>
+                                <TacIcon name="database" size={18} color="#FFB300" />
                                 <div>
                                     <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
                                         Almacenamiento y Caché
@@ -336,7 +360,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                                     </div>
                                 </div>
                             </div>
-                            <span style={{ color: "#8696A0", fontSize: "0.9rem" }}>➔</span>
+                            <TacIcon name="forward" size={13} color="#8696A0" />
                         </div>
 
                         {/* 6. Conexión de Malla */}
@@ -349,7 +373,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             }}
                         >
                             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                                <span style={{ fontSize: "1.3rem" }}>📶</span>
+                                <TacIcon name="radio" size={18} color="#E8213A" />
                                 <div>
                                     <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
                                         Red Malla P2P (Sin Internet)
@@ -359,7 +383,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                                     </div>
                                 </div>
                             </div>
-                            <span style={{ color: "#8696A0", fontSize: "0.9rem" }}>➔</span>
+                            <TacIcon name="forward" size={13} color="#8696A0" />
                         </div>
 
                         {/* 7. Ayuda & Actualizaciones */}
@@ -371,7 +395,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             }}
                         >
                             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                                <span style={{ fontSize: "1.3rem" }}>🔄</span>
+                                <TacIcon name="refresh" size={18} color="#8696A0" />
                                 <div>
                                     <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
                                         Ayuda y Actualizaciones
@@ -381,7 +405,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                                     </div>
                                 </div>
                             </div>
-                            <span style={{ color: "#8696A0", fontSize: "0.9rem" }}>➔</span>
+                            <TacIcon name="forward" size={13} color="#8696A0" />
                         </div>
                     </div>
                 </div>
@@ -416,6 +440,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "#E9EDEF" }}>
                                 {activeSection === "identity" && "Identidad & Perfil"}
                                 {activeSection === "linked_devices" && "Dispositivos vinculados"}
+                                {activeSection === "payments" && "Pasaporte de Pagos Soberano"}
                                 {activeSection === "appearance" && "Chats & Apariencia"}
                                 {activeSection === "privacy" && "Privacidad & Seguridad"}
                                 {activeSection === "calls" && "Llamadas & Audio"}
@@ -425,15 +450,16 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             </div>
                             <button
                                 onClick={() => setActiveSection(null)}
-                                style={{ background: "none", border: "none", color: "#8696A0", fontSize: "1.2rem", cursor: "pointer" }}
+                                style={{ background: "none", border: "none", color: "#8696A0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                             >
-                                ✕
+                                <TacIcon name="x" size={18} color="#8696A0" />
                             </button>
                         </div>
 
                         <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
                             {activeSection === "identity" && <IdentityTab />}
                             {activeSection === "linked_devices" && <LinkedDevicesView onClose={() => setActiveSection(null)} hideHeader={true} />}
+                            {activeSection === "payments" && <PaymentsTab />}
                             {activeSection === "appearance" && <AppearanceTab />}
                             {activeSection === "privacy" && <PrivacyTab />}
                             {activeSection === "calls" && <CallsTab />}

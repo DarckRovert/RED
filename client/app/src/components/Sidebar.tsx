@@ -17,6 +17,7 @@ import { ConversationList } from "./sidebar/ConversationList";
 import { ContactList } from "./sidebar/ContactList";
 import { NewChatModal } from "./chat/NewChatModal";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacIcon } from "./ui/TacIcon";
 
 interface TacticalHubItem {
     id: string;
@@ -439,11 +440,11 @@ export default function Sidebar() {
                                 onClick={() => setMenuOpen(false)}
                                 style={{
                                     background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)", color: "#FFFFFF",
-                                    width: "32px", height: "32px", borderRadius: "9px", cursor: "pointer", fontSize: "0.9rem",
-                                    fontWeight: 900
+                                    width: "32px", height: "32px", borderRadius: "9px", cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center"
                                 }}
                             >
-                                ✕
+                                <TacIcon name="x" size={16} />
                             </button>
                         </div>
 
@@ -454,7 +455,7 @@ export default function Sidebar() {
                                 background: "rgba(0, 0, 0, 0.5)", border: "1px solid rgba(0, 229, 255, 0.25)",
                                 borderRadius: "12px", padding: "9px 14px"
                             }}>
-                                <span style={{ fontSize: "0.9rem", color: "#00E5FF" }}>🔍</span>
+                                <TacIcon name="search" size={16} color="#00E5FF" />
                                 <input
                                     type="text"
                                     value={drawerSearch}
@@ -466,7 +467,9 @@ export default function Sidebar() {
                                     }}
                                 />
                                 {drawerSearch && (
-                                    <button onClick={() => setDrawerSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>✕</button>
+                                    <button onClick={() => setDrawerSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                                        <TacIcon name="x" size={12} color="var(--text-muted)" />
+                                    </button>
                                 )}
                             </div>
                         </div>
@@ -647,7 +650,7 @@ export default function Sidebar() {
                                     cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                                 }}
                             >
-                                <span>🌐</span> Portal Web Oficial & Descargas
+                                <TacIcon name="globe" size={14} color="var(--accent-cyan, #00E5FF)" /> Portal Web Oficial & Descargas
                             </button>
 
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px" }}>

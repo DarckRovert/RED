@@ -5,6 +5,8 @@
  * to optimize combat alertness (Gamma 40Hz), tactical focus (Beta 18Hz), and rapid recovery (Theta 6Hz).
  */
 
+import { AudioContextManager } from '../audio/AudioContextManager';
+
 export interface BinauralPreset {
     name: string;
     description: string;
@@ -45,6 +47,13 @@ export class TacticalBinauralEngine {
             beatFreqHz: 6,
             category: 'POWER_NAP'
         },
+        'DELTA_SLEEP': {
+            name: 'Delta 2.5 Hz (Sueño Profundo & Regeneración)',
+            description: 'Inducción de ondas lentas para reparación celular acelerada y recuperación de trauma físico.',
+            baseFreqHz: 100,
+            beatFreqHz: 2.5,
+            category: 'POWER_NAP'
+        },
         'SOLFEGGIO_528': {
             name: 'Solfeggio 528 Hz (Transformación)',
             description: 'Frecuencia armónica de resonancia celular y recuperación física.',
@@ -58,12 +67,20 @@ export class TacticalBinauralEngine {
             baseFreqHz: 432,
             beatFreqHz: 0,
             category: 'SOLFEGGIO'
+        },
+        'SOLFEGGIO_963': {
+            name: 'Solfeggio 963 Hz (Claridad & Conciencia)',
+            description: 'Frecuencia de lucidez mental superior, intuición y alerta perceptual pura.',
+            baseFreqHz: 963,
+            beatFreqHz: 0,
+            category: 'SOLFEGGIO'
         }
     };
 
     private audioCtx: AudioContext | null = null;
     private leftOsc: OscillatorNode | null = null;
     private rightOsc: OscillatorNode | null = null;
+    private mergerNode: ChannelMergerNode | null = null;
     private gainNode: GainNode | null = null;
     private currentPresetKey: string | null = null;
     private isRunning: boolean = false;
@@ -95,13 +112,17 @@ export class TacticalBinauralEngine {
 
     private initAudio() {
         if (!this.audioCtx || this.audioCtx.state === 'closed') {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            this.audioCtx = new AudioContextClass();
+            this.audioCtx = AudioContextManager.getSharedContext();
+        }
+        if (!this.audioCtx) return;
+
+        if (!this.gainNode) {
             this.gainNode = this.audioCtx.createGain();
             this.gainNode.gain.value = this.volume;
             this.gainNode.connect(this.audioCtx.destination);
         }
-        if (this.audioCtx.state === 'suspended') {
+
+        if (this.audioCtx && this.audioCtx.state === 'suspended') {
             this.audioCtx.resume().catch(() => {});
         }
     }
@@ -120,7 +141,11 @@ export class TacticalBinauralEngine {
         this.currentPresetKey = presetKey;
         this.isRunning = true;
 
-        const merger = this.audioCtx.createChannelMerger(2);
+        if (this.mergerNode) {
+            try { this.mergerNode.disconnect(); } catch {}
+            this.mergerNode = null;
+        }
+        this.mergerNode = this.audioCtx.createChannelMerger(2);
 
         // Canal Izquierdo (Base)
         this.leftOsc = this.audioCtx.createOscillator();
@@ -132,9 +157,9 @@ export class TacticalBinauralEngine {
         this.rightOsc.type = 'sine';
         this.rightOsc.frequency.setValueAtTime(preset.baseFreqHz + preset.beatFreqHz, this.audioCtx.currentTime);
 
-        this.leftOsc.connect(merger, 0, 0); // Canal 0
-        this.rightOsc.connect(merger, 0, 1); // Canal 1
-        merger.connect(this.gainNode);
+        this.leftOsc.connect(this.mergerNode, 0, 0); // Canal 0
+        this.rightOsc.connect(this.mergerNode, 0, 1); // Canal 1
+        this.mergerNode.connect(this.gainNode);
 
         // Rampa de entrada suave (fade-in) para evitar clicks
         const now = this.audioCtx.currentTime;
@@ -171,6 +196,13 @@ export class TacticalBinauralEngine {
                 try { r.stop(); r.disconnect(); } catch {}
             }, 35);
         }
+        if (this.mergerNode) {
+            const m = this.mergerNode;
+            this.mergerNode = null;
+            setTimeout(() => {
+                try { m.disconnect(); } catch {}
+            }, 35);
+        }
         this.isRunning = false;
         this.currentPresetKey = null;
         this.notify();
@@ -178,16 +210,16 @@ export class TacticalBinauralEngine {
 
     public destroy(): void {
         this.stopPreset();
+        if (this.mergerNode) {
+            try { this.mergerNode.disconnect(); } catch {}
+            this.mergerNode = null;
+        }
         if (this.gainNode) {
             try { this.gainNode.disconnect(); } catch {}
             this.gainNode = null;
         }
-        if (this.audioCtx) {
-            try { this.audioCtx.close(); } catch {}
-            this.audioCtx = null;
-        }
+        this.audioCtx = null;
         this.listeners.clear();
-        TacticalBinauralEngine.instance = null;
     }
 
     public setVolume(vol: number) {

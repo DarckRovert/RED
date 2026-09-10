@@ -15,57 +15,71 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
     const [moduleSearch, setModuleSearch] = useState<string>("");
     const [selectedModuleDetail, setSelectedModuleDetail] = useState<TacticalModule | null>(null);
 
-    const categoriesList = useMemo(() => {
-        const cats = Array.from(new Set(TACTICAL_MODULES_CATALOG.map((m) => m.category)));
-        return ["Todos", ...cats];
+    const categoriesWithCount = useMemo(() => {
+        const counts: Record<string, number> = {};
+        TACTICAL_MODULES_CATALOG.forEach((m) => {
+            counts[m.category] = (counts[m.category] || 0) + 1;
+        });
+        const list = Object.entries(counts).map(([name, count]) => ({ name, count }));
+        return [{ name: "Todos", count: TACTICAL_MODULES_CATALOG.length }, ...list];
     }, []);
+
+    const quickFilters = ["PQC", "LoRa", "ATAK", "rPPG", "Rust", "Sensores", "DePIN", "Off-Grid"];
 
     const filteredModules = useMemo(() => {
         return TACTICAL_MODULES_CATALOG.filter((m) => {
             const matchesCat = selectedCategory === "Todos" || m.category === selectedCategory;
+            const searchLower = moduleSearch.toLowerCase();
             const matchesSearch =
-                m.name.toLowerCase().includes(moduleSearch.toLowerCase()) ||
-                m.summary.toLowerCase().includes(moduleSearch.toLowerCase()) ||
-                m.details.toLowerCase().includes(moduleSearch.toLowerCase()) ||
-                m.techStack.toLowerCase().includes(moduleSearch.toLowerCase());
+                !moduleSearch ||
+                m.name.toLowerCase().includes(searchLower) ||
+                m.summary.toLowerCase().includes(searchLower) ||
+                m.details.toLowerCase().includes(searchLower) ||
+                m.techStack.toLowerCase().includes(searchLower) ||
+                m.category.toLowerCase().includes(searchLower) ||
+                m.badge.toLowerCase().includes(searchLower) ||
+                m.encryption.toLowerCase().includes(searchLower);
             return matchesCat && matchesSearch;
         });
     }, [selectedCategory, moduleSearch]);
 
     return (
         <section id="modules" style={{ padding: "70px 0 80px", position: "relative" }}>
+          {/* Secondary Anchor for #modules57 */}
+          <div id="modules57" style={{ position: "absolute", top: 0, left: 0, height: 1, width: 1, pointerEvents: "none" }} />
+
           <div style={{ textAlign: "center", marginBottom: "36px" }}>
             <span
               style={{
                 fontSize: "11px",
-                padding: "5px 14px",
+                padding: "6px 16px",
                 borderRadius: "20px",
                 background: "rgba(0, 229, 255, 0.12)",
                 color: "#00E5FF",
-                border: "1px solid rgba(0, 229, 255, 0.3)",
+                border: "1px solid rgba(0, 229, 255, 0.35)",
                 fontFamily: "JetBrains Mono, monospace",
                 fontWeight: 800,
-                letterSpacing: "1px"
+                letterSpacing: "1.2px"
               }}
             >
-              SUITE OPERATIVA COMPLETA • 49 MÓDULOS ACTIVOS
+              SUITE OPERATIVA COMPLETA • 57 MÓDULOS ACTIVOS EN 6 PILARES
             </span>
-            <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 900, color: "#FFF", marginTop: "14px", marginBottom: "12px", letterSpacing: "-0.5px" }}>
+            <h2 style={{ fontSize: "clamp(28px, 4.2vw, 42px)", fontWeight: 900, color: "#FFF", marginTop: "14px", marginBottom: "12px", letterSpacing: "-0.6px" }}>
               Catálogo de Módulos Tácticos & Resiliencia
             </h2>
-            <p style={{ fontSize: "16px", color: "#94A3B8", maxWidth: "800px", margin: "0 auto", lineHeight: 1.6 }}>
-              Explora e inspecciona los 49 sistemas autónomos integrados en RED OS: interoperabilidad ATAK CoT, puente LoRa Meshtastic con voz Vocoder, criptografía post-cuántica, cartografía sin conexión y sensores de silicio.
+            <p style={{ fontSize: "16px", color: "#94A3B8", maxWidth: "860px", margin: "0 auto", lineHeight: 1.65 }}>
+              Explora los 57 subsistemas integrados de RED OS: interoperabilidad ATAK CoT v2.0, enlace físico LoRa SX1262 con compresión de voz a 1.2 kbps, criptografía híbrida Post-Cuántica ML-KEM-768, triaje rPPG óptico y cartografía vectorial con fusión sensorial PDR sin conexión.
             </p>
           </div>
 
-          <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 16px" }}>
+          <div style={{ maxWidth: "1360px", margin: "0 auto", padding: "0 16px" }}>
             {/* Category Filter Pills & Search Input */}
             <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "32px", alignItems: "center" }}>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
-                {categoriesList.map((cat) => (
+                {categoriesWithCount.map((cat) => (
                   <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
+                    key={cat.name}
+                    onClick={() => setSelectedCategory(cat.name)}
                     style={{
                       padding: "8px 16px",
                       borderRadius: "20px",
@@ -73,21 +87,37 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
                       fontWeight: 800,
                       cursor: "pointer",
                       fontFamily: "JetBrains Mono, monospace",
-                      border: selectedCategory === cat ? "1.5px solid #00E5FF" : "1px solid rgba(255,255,255,0.08)",
-                      background: selectedCategory === cat ? "rgba(0, 229, 255, 0.2)" : "rgba(14, 18, 34, 0.7)",
-                      color: selectedCategory === cat ? "#FFF" : "#94A3B8",
-                      transition: "all 0.2s ease"
+                      border: selectedCategory === cat.name ? "1.5px solid #00E5FF" : "1px solid rgba(255,255,255,0.08)",
+                      background: selectedCategory === cat.name ? "rgba(0, 229, 255, 0.2)" : "rgba(14, 18, 34, 0.7)",
+                      color: selectedCategory === cat.name ? "#FFF" : "#94A3B8",
+                      transition: "all 0.2s ease",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px"
                     }}
                   >
-                    {cat}
+                    <span>{cat.name}</span>
+                    <span
+                      style={{
+                        fontSize: "10px",
+                        padding: "1px 6px",
+                        borderRadius: "10px",
+                        background: selectedCategory === cat.name ? "#00E5FF" : "rgba(255,255,255,0.1)",
+                        color: selectedCategory === cat.name ? "#040814" : "#CBD5E1",
+                        fontWeight: 900
+                      }}
+                    >
+                      {cat.count}
+                    </span>
                   </button>
                 ))}
               </div>
 
-              <div style={{ width: "100%", maxWidth: "720px", position: "relative" }}>
+              {/* Quick Search and Filter Tags */}
+              <div style={{ width: "100%", maxWidth: "780px", position: "relative" }}>
                 <input
                   type="text"
-                  placeholder="🔍 Buscar por nombre, stack técnico (Rust, BLE, LoRa, PQC) o palabra clave..."
+                  placeholder="🔍 Buscar por nombre, protocolo (Rust, LoRa, PQC, BLE, rPPG) o tecnología..."
                   value={moduleSearch}
                   onChange={(e) => setModuleSearch(e.target.value)}
                   style={{
@@ -106,10 +136,52 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
                   {filteredModules.length} de {TACTICAL_MODULES_CATALOG.length} Módulos
                 </div>
               </div>
+
+              {/* Quick Filter Tag Buttons */}
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+                <span style={{ fontSize: "11px", color: "#64748B", fontFamily: "JetBrains Mono, monospace", alignSelf: "center" }}>
+                  Filtros Rápidos:
+                </span>
+                {quickFilters.map((qf) => (
+                  <button
+                    key={qf}
+                    onClick={() => setModuleSearch(moduleSearch === qf ? "" : qf)}
+                    style={{
+                      fontSize: "11px",
+                      padding: "3px 10px",
+                      borderRadius: "8px",
+                      background: moduleSearch === qf ? "rgba(0, 230, 118, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                      border: moduleSearch === qf ? "1px solid #00E676" : "1px solid rgba(255, 255, 255, 0.1)",
+                      color: moduleSearch === qf ? "#00E676" : "#94A3B8",
+                      fontFamily: "JetBrains Mono, monospace",
+                      cursor: "pointer"
+                    }}
+                  >
+                    #{qf}
+                  </button>
+                ))}
+                {moduleSearch && (
+                  <button
+                    onClick={() => setModuleSearch("")}
+                    style={{
+                      fontSize: "11px",
+                      padding: "3px 8px",
+                      borderRadius: "8px",
+                      background: "rgba(255, 42, 81, 0.15)",
+                      border: "1px solid rgba(255, 42, 81, 0.3)",
+                      color: "#FF2A51",
+                      cursor: "pointer",
+                      fontFamily: "JetBrains Mono, monospace"
+                    }}
+                  >
+                    ✕ Limpiar
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Modules Grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "18px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: "18px" }}>
               {filteredModules.map((mod) => (
                 <div
                   key={mod.id}
@@ -140,9 +212,9 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                       <span style={{ fontSize: "10px", padding: "3px 8px", borderRadius: "6px", background: "rgba(255,255,255,0.06)", color: "#00E5FF", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                        {mod.category}
+                        {mod.category.split('&')[0]}
                       </span>
-                      <span style={{ fontSize: "16px" }}>{mod.icon || "⚙️"}</span>
+                      <span style={{ fontSize: "18px" }}>{mod.icon || "⚙️"}</span>
                     </div>
                     <div style={{ fontSize: "16px", fontWeight: 900, color: "#FFF", marginBottom: "6px" }}>
                       {mod.name}
@@ -153,7 +225,11 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
                   </div>
 
                   <div>
-                    <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace", marginBottom: "8px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", fontSize: "10.5px", fontFamily: "JetBrains Mono, monospace" }}>
+                      <span style={{ color: "#64748B" }}>Lat: <span style={{ color: "#00FF88" }}>{mod.latency}</span></span>
+                      <span style={{ color: "#64748B" }}>Cifrado: <span style={{ color: "#C084FC" }}>{mod.encryption.split(' ')[0]}</span></span>
+                    </div>
+                    <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace", marginBottom: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {mod.techStack}
                     </div>
                     <div style={{ fontSize: "12px", color: "#00FF88", fontWeight: 800, display: "flex", alignItems: "center", gap: "4px" }}>
@@ -180,7 +256,7 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
             >
               <div
                 style={{
-                  maxWidth: "600px", width: "100%",
+                  maxWidth: "640px", width: "100%",
                   background: "linear-gradient(180deg, rgba(18, 24, 44, 0.98) 0%, rgba(8, 12, 24, 0.99) 100%)",
                   borderRadius: "24px", border: "1.5px solid rgba(0, 229, 255, 0.4)",
                   padding: "32px", position: "relative",
@@ -200,18 +276,41 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
                   ✕
                 </button>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
-                  <span style={{ fontSize: "28px" }}>{selectedModuleDetail.icon || "⚙️"}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "14px" }}>
+                  <span style={{ fontSize: "32px" }}>{selectedModuleDetail.icon || "⚙️"}</span>
                   <div>
-                    <div style={{ fontSize: "20px", fontWeight: 900, color: "#FFF" }}>{selectedModuleDetail.name}</div>
+                    <div style={{ fontSize: "21px", fontWeight: 900, color: "#FFF" }}>{selectedModuleDetail.name}</div>
                     <div style={{ fontSize: "11px", color: "#00E5FF", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                      CATEGORÍA: {selectedModuleDetail.category.toUpperCase()}
+                      CATEGORÍA: {selectedModuleDetail.category.toUpperCase()} • {selectedModuleDetail.badge}
                     </div>
                   </div>
                 </div>
 
-                <div style={{ fontSize: "14px", color: "#CBD5E1", lineHeight: 1.6, marginBottom: "20px" }}>
+                <div style={{ fontSize: "14.5px", color: "#CBD5E1", lineHeight: 1.65, marginBottom: "20px" }}>
                   {selectedModuleDetail.details}
+                </div>
+
+                {/* Metrics Box */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "10px",
+                    marginBottom: "16px"
+                  }}
+                >
+                  <div style={{ padding: "10px 14px", borderRadius: "10px", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace" }}>LATENCIA OPERATIVA:</div>
+                    <div style={{ fontSize: "13px", color: "#00E676", fontWeight: 800, fontFamily: "JetBrains Mono, monospace", marginTop: "2px" }}>
+                      {selectedModuleDetail.latency}
+                    </div>
+                  </div>
+                  <div style={{ padding: "10px 14px", borderRadius: "10px", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace" }}>BLINDAJE CRIPTOGRÁFICO:</div>
+                    <div style={{ fontSize: "13px", color: "#C084FC", fontWeight: 800, fontFamily: "JetBrains Mono, monospace", marginTop: "2px" }}>
+                      {selectedModuleDetail.encryption}
+                    </div>
+                  </div>
                 </div>
 
                 <div style={{ padding: "14px", borderRadius: "14px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: "24px" }}>
@@ -234,7 +333,7 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
                       border: "none", cursor: "pointer", boxShadow: "0 4px 20px rgba(0,255,136,0.3)"
                     }}
                   >
-                    🚀 Abrir Módulo en Web App
+                    🚀 Abrir Módulo en RED OS
                   </button>
                   <button
                     onClick={() => setSelectedModuleDetail(null)}

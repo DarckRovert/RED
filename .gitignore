@@ -91,3 +91,5 @@ implementation_plan.md
 __next.*.txt
 __next.*
 index.txt
+__pycache__/
+*.pyc

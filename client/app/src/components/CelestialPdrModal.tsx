@@ -6,13 +6,29 @@ import { pedestrianDeadReckoning, PdrState } from "../lib/sensors/PedestrianDead
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacIcon } from "./ui/TacIcon";
 
 export function CelestialPdrModal() {
     const { navigate, goBack } = useRedStore();
 
     const [activeTab, setActiveTab] = useState<"celestial" | "pdr">("celestial");
-    const [coords, setCoords] = useState<{ lat: number; lon: number }>({ lat: 0, lon: 0 });
-    const [ephemeris, setEphemeris] = useState<CelestialEphemeris>(() => celestialNav.calculateEphemeris(0, 0));
+    const [coords, setCoords] = useState<{ lat: number; lon: number }>(() => {
+        if (typeof window !== "undefined") {
+            try {
+                const raw = localStorage.getItem("red_last_known_gps");
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    const lat = parsed.lat;
+                    const lon = parsed.lon ?? parsed.lng;
+                    if (typeof lat === "number" && typeof lon === "number" && isFinite(lat) && isFinite(lon) && (Math.abs(lat) > 0.0001 || Math.abs(lon) > 0.0001)) {
+                        return { lat, lon };
+                    }
+                }
+            } catch {}
+        }
+        return { lat: 0, lon: 0 };
+    });
+    const [ephemeris, setEphemeris] = useState<CelestialEphemeris>(() => celestialNav.calculateEphemeris(coords.lat, coords.lon));
     const [pdr, setPdr] = useState<PdrState>(() => pedestrianDeadReckoning.getState());
 
     // Solar Noon calculation inputs
@@ -21,6 +37,9 @@ export function CelestialPdrModal() {
         return `${d.getUTCHours().toString().padStart(2, "0")}:${d.getUTCMinutes().toString().padStart(2, "0")}`;
     });
     const [maxSunAltitude, setMaxSunAltitude] = useState<number>(() => Math.max(0, Math.round(ephemeris.sun?.altitudeDeg || 45)));
+    const [culminationDirection, setCulminationDirection] = useState<"NORTH" | "SOUTH">(() => {
+        return coords.lat < 0 ? "NORTH" : "SOUTH";
+    });
     const [estimatedCoords, setEstimatedCoords] = useState<{ estimatedLat: number; estimatedLon: number } | null>(null);
 
     // Sextante Digital (Inclinómetro de Hardware)
@@ -46,12 +65,20 @@ export function CelestialPdrModal() {
         });
     }, [isMeasuringPitch, activeTab, goBack]);
 
+    const coordsRef = useRef<{ lat: number; lon: number }>(coords);
+    coordsRef.current = coords;
+
     // ── Sincronización GPS & Efemérides en Tiempo Real ───────────────────
     useEffect(() => {
         let isMounted = true;
         let unsubGps: (() => void) | null = null;
         import("../lib/sensors/TacticalLocationEngine").then(({ TacticalLocationEngine }) => {
             if (!isMounted) return;
+            const last = TacticalLocationEngine.getLastKnownLocation();
+            if (last && TacticalLocationEngine.isValidCoordinates(last.lat, last.lon)) {
+                setCoords({ lat: last.lat!, lon: last.lon! });
+                setEphemeris(celestialNav.calculateEphemeris(last.lat!, last.lon!));
+            }
             unsubGps = TacticalLocationEngine.watchLocation((loc) => {
                 if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
                     setCoords({ lat: loc.lat!, lon: loc.lon! });
@@ -61,7 +88,8 @@ export function CelestialPdrModal() {
         });
 
         const interval = setInterval(() => {
-            setEphemeris(celestialNav.calculateEphemeris(coords.lat, coords.lon));
+            const c = coordsRef.current;
+            setEphemeris(celestialNav.calculateEphemeris(c.lat, c.lon));
         }, 4000);
         const unsubPdr = pedestrianDeadReckoning.subscribe(setPdr);
 
@@ -71,7 +99,7 @@ export function CelestialPdrModal() {
             clearInterval(interval);
             unsubPdr();
         };
-    }, [coords.lat, coords.lon]);
+    }, []);
 
     // ── Sextante Digital con Acelerómetro / Sensor Inercial ──────────────
     useEffect(() => {
@@ -109,7 +137,7 @@ export function CelestialPdrModal() {
     };
 
     const handleCalculateSolarNoon = () => {
-        const res = celestialNav.estimatePositionFromSolarNoon(transitTimeStr, maxSunAltitude);
+        const res = celestialNav.estimatePositionFromSolarNoon(transitTimeStr, maxSunAltitude, new Date(), culminationDirection);
         setEstimatedCoords(res);
         toast.success(`📍 Posición estimada: Lat ${res.estimatedLat}° · Lon ${res.estimatedLon}°`);
     };
@@ -224,9 +252,9 @@ export function CelestialPdrModal() {
                         width: 38, height: 38, borderRadius: "10px",
                         background: "linear-gradient(135deg, #FFB300 0%, #E65100 100%)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.2rem", boxShadow: "0 4px 14px rgba(255,179,0,0.35)", flexShrink: 0
+                        boxShadow: "0 4px 14px rgba(255,179,0,0.35)", flexShrink: 0
                     }}>
-                        ☀️
+                        <TacIcon name="sun" size={20} color="#000" />
                     </div>
                     <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#FFB300", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -240,10 +268,10 @@ export function CelestialPdrModal() {
                 <button
                     onClick={goBack}
                     className="btn-icon"
-                    style={{ width: 34, height: 34, flexShrink: 0 }}
+                    style={{ width: 34, height: 34, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
                     title="Cerrar ventana"
                 >
-                    ✕
+                    <TacIcon name="x" size={16} />
                 </button>
             </div>
 
@@ -258,10 +286,11 @@ export function CelestialPdrModal() {
                         flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.76rem", fontWeight: 800,
                         background: activeTab === "celestial" ? "var(--accent-amber, #FFB300)" : "transparent",
                         color: activeTab === "celestial" ? "#000" : "var(--text-muted, #AAA)", border: "none", cursor: "pointer",
-                        transition: "all 0.2s"
+                        transition: "all 0.2s", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px"
                     }}
                 >
-                    ☀️ Cúpula Celeste & Tránsito
+                    <TacIcon name="sun" size={14} color={activeTab === "celestial" ? "#000" : "#AAA"} />
+                    <span>Cúpula Celeste & Tránsito</span>
                 </button>
                 <button
                     onClick={() => setActiveTab("pdr")}
@@ -269,10 +298,11 @@ export function CelestialPdrModal() {
                         flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.76rem", fontWeight: 800,
                         background: activeTab === "pdr" ? "var(--accent-cyan, #00E5FF)" : "transparent",
                         color: activeTab === "pdr" ? "#000" : "var(--text-muted, #AAA)", border: "none", cursor: "pointer",
-                        transition: "all 0.2s"
+                        transition: "all 0.2s", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px"
                     }}
                 >
-                    🧭 Inercial PDR ({pdr.totalSteps}p)
+                    <TacIcon name="compass" size={14} color={activeTab === "pdr" ? "#000" : "#AAA"} />
+                    <span>Inercial PDR ({pdr.totalSteps}p)</span>
                 </button>
             </div>
 
@@ -331,16 +361,16 @@ export function CelestialPdrModal() {
                                     <line x1={domeCenter} y1={domeCenter} x2={sunX} y2={sunY} stroke="rgba(255, 179, 0, 0.4)" strokeWidth="1.2" />
                                 )}
 
-                                {/* Posición del Sol ☀️ */}
+                                {/* Posición del Sol (Vector Táctico) */}
                                 <g transform={`translate(${sunX}, ${sunY})`}>
                                     <circle r={ephemeris.sun.isAboveHorizon ? 9 : 6} fill={ephemeris.sun.isAboveHorizon ? "#FFB300" : "rgba(255, 179, 0, 0.25)"} stroke="#FFF" strokeWidth="1.5" />
-                                    <text y="3" textAnchor="middle" fontSize="9" fontWeight="900" fill="#000">☀️</text>
+                                    <circle r="3" fill="#FFF" />
                                 </g>
 
-                                {/* Posición de la Luna 🌙 */}
+                                {/* Posición de la Luna (Vector Táctico) */}
                                 <g transform={`translate(${moonX}, ${moonY})`}>
                                     <circle r={ephemeris.moon.isAboveHorizon ? 8 : 5} fill={ephemeris.moon.isAboveHorizon ? "#00E5FF" : "rgba(0, 229, 255, 0.2)"} stroke="#FFF" strokeWidth="1" />
-                                    <text y="3" textAnchor="middle" fontSize="8" fontWeight="900" fill="#000">🌙</text>
+                                    <path d="M -1,-3 A 3 3 0 0 0 -1,3 A 2.2 2.2 0 0 1 -1,-3" fill="#0A0E1A" />
                                 </g>
 
                                 {/* Estrella Polar (Polaris) en Norte */}
@@ -352,9 +382,9 @@ export function CelestialPdrModal() {
                                 )}
                             </svg>
 
-                            <div style={{ display: "flex", justifyContent: "space-between", width: "100%", marginTop: "6px", fontSize: "0.65rem", color: "var(--text-muted, #AAA)" }}>
-                                <span>☀️ Sol: {ephemeris.sun.azimuthDeg}° (El: {ephemeris.sun.altitudeDeg}°)</span>
-                                <span>🌙 Luna: {ephemeris.moon.azimuthDeg}° (El: {ephemeris.moon.altitudeDeg}°)</span>
+                            <div className="tabular-telemetry" style={{ display: "flex", justifyContent: "space-between", width: "100%", marginTop: "6px", fontSize: "0.65rem", color: "var(--text-muted, #AAA)" }}>
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><TacIcon name="sun" size={11} color="#FFB300" /> Sol: {ephemeris.sun.azimuthDeg}° (El: {ephemeris.sun.altitudeDeg}°)</span>
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><TacIcon name="moon" size={11} color="#00E5FF" /> Luna: {ephemeris.moon.azimuthDeg}° (El: {ephemeris.moon.altitudeDeg}°)</span>
                             </div>
                         </div>
 
@@ -368,17 +398,20 @@ export function CelestialPdrModal() {
                                 <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)", marginTop: "2px" }}>
                                     {ephemeris.tacticalLightingState.replace(/_/g, " ")}
                                 </div>
-                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted, #AAA)" }}>
-                                    {ephemeris.isDaylight ? "☀️ Operación Diurna" : "🌌 Modo Visión Nocturna / Sigilo"}
+                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted, #AAA)", display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}>
+                                    <TacIcon name={ephemeris.isDaylight ? "sun" : "moon"} size={11} color={ephemeris.isDaylight ? "#FFB300" : "#00E5FF"} />
+                                    <span>{ephemeris.isDaylight ? "Operación Diurna" : "Modo Visión Nocturna / Sigilo"}</span>
                                 </div>
                             </div>
                             <div style={{ textAlign: "right" }}>
                                 <div style={{ fontSize: "0.58rem", color: "var(--text-muted, #AAA)", fontWeight: 700 }}>VENTANA SOLAR UTC</div>
-                                <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "#FFB300", marginTop: "2px" }}>
-                                    🌅 {formatUtcTime(ephemeris.sunriseUtcHours)}
+                                <div className="tabular-telemetry" style={{ fontSize: "0.82rem", fontWeight: 900, color: "#FFB300", marginTop: "2px", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px" }}>
+                                    <TacIcon name="sun" size={11} color="#FFB300" />
+                                    <span>{formatUtcTime(ephemeris.sunriseUtcHours)}</span>
                                 </div>
-                                <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "var(--accent-crimson, #FF3355)" }}>
-                                    🌇 {formatUtcTime(ephemeris.sunsetUtcHours)}
+                                <div className="tabular-telemetry" style={{ fontSize: "0.82rem", fontWeight: 900, color: "var(--accent-crimson, #FF3355)", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px" }}>
+                                    <TacIcon name="moon" size={11} color="#FF3355" />
+                                    <span>{formatUtcTime(ephemeris.sunsetUtcHours)}</span>
                                 </div>
                             </div>
                         </div>
@@ -389,18 +422,20 @@ export function CelestialPdrModal() {
                             borderRadius: "14px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px"
                         }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div style={{ fontSize: "0.78rem", fontWeight: 900, color: "#FFB300" }}>
-                                    📐 SEXTANTE & ESTIMADOR DE MEDIODÍA SOLAR
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem", fontWeight: 900, color: "#FFB300" }}>
+                                    <TacIcon name="activity" size={14} color="#FFB300" />
+                                    <span>SEXTANTE & ESTIMADOR DE MEDIODÍA SOLAR</span>
                                 </div>
                                 <button
                                     onClick={handleSetCurrentUtcTransit}
                                     style={{
                                         background: "rgba(255, 179, 0, 0.15)", border: "1px solid rgba(255, 179, 0, 0.4)",
-                                        color: "#FFB300", padding: "3px 8px", borderRadius: "6px", fontSize: "0.65rem",
-                                        fontWeight: 800, cursor: "pointer"
+                                        color: "#FFB300", padding: "4px 8px", borderRadius: "6px", fontSize: "0.65rem",
+                                        fontWeight: 800, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px"
                                     }}
                                 >
-                                    ⏱️ Fijar UTC Actual
+                                    <TacIcon name="clock" size={12} color="#FFB300" />
+                                    <span>Fijar UTC Actual</span>
                                 </button>
                             </div>
 
@@ -449,10 +484,12 @@ export function CelestialPdrModal() {
                                         background: isMeasuringPitch ? "rgba(0, 229, 255, 0.25)" : "rgba(255, 255, 255, 0.06)",
                                         border: `1px solid ${isMeasuringPitch ? "var(--accent-cyan, #00E5FF)" : "rgba(255, 255, 255, 0.15)"}`,
                                         color: isMeasuringPitch ? "var(--accent-cyan, #00E5FF)" : "var(--text-primary, #FFF)",
-                                        fontSize: "0.72rem", fontWeight: 800, cursor: "pointer"
+                                        fontSize: "0.72rem", fontWeight: 800, cursor: "pointer",
+                                        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px"
                                     }}
                                 >
-                                    {isMeasuringPitch ? `📐 Inclinómetro: ${livePitch ?? 0}°` : "📐 Activar Sextante de Hardware"}
+                                    <TacIcon name="activity" size={13} color={isMeasuringPitch ? "var(--accent-cyan, #00E5FF)" : "#AAA"} />
+                                    <span>{isMeasuringPitch ? `Inclinómetro: ${livePitch ?? 0}°` : "Activar Sextante de Hardware"}</span>
                                 </button>
                                 {isMeasuringPitch && (
                                     <button
@@ -460,20 +497,60 @@ export function CelestialPdrModal() {
                                         style={{
                                             padding: "8px 12px", borderRadius: "8px",
                                             background: "var(--accent-emerald, #00E676)", color: "#000",
-                                            fontWeight: 900, fontSize: "0.72rem", border: "none", cursor: "pointer"
+                                            fontWeight: 900, fontSize: "0.72rem", border: "none", cursor: "pointer",
+                                            display: "inline-flex", alignItems: "center", gap: "4px"
                                         }}
                                     >
-                                        ✓ Capturar
+                                        <TacIcon name="check" size={14} color="#000" />
+                                        <span>Capturar</span>
                                     </button>
                                 )}
+                            </div>
+
+                            {/* Selector de Dirección de Culminación Solar */}
+                            <div>
+                                <label style={{ fontSize: "0.62rem", color: "var(--text-muted, #AAA)", fontWeight: 700, display: "block", marginBottom: "4px" }}>
+                                    DIRECCIÓN DE CULMINACIÓN DEL SOL AL MEDIODÍA:
+                                </label>
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCulminationDirection("NORTH")}
+                                        style={{
+                                            flex: 1, padding: "6px 8px", borderRadius: "6px", fontSize: "0.68rem", fontWeight: 800,
+                                            background: culminationDirection === "NORTH" ? "rgba(255, 179, 0, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                                            border: `1px solid ${culminationDirection === "NORTH" ? "#FFB300" : "rgba(255, 255, 255, 0.15)"}`,
+                                            color: culminationDirection === "NORTH" ? "#FFB300" : "var(--text-muted, #AAA)",
+                                            cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "4px"
+                                        }}
+                                    >
+                                        <TacIcon name="sun" size={12} color={culminationDirection === "NORTH" ? "#FFB300" : "#AAA"} />
+                                        <span>Al Norte (Hem. Sur / Trópicos)</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCulminationDirection("SOUTH")}
+                                        style={{
+                                            flex: 1, padding: "6px 8px", borderRadius: "6px", fontSize: "0.68rem", fontWeight: 800,
+                                            background: culminationDirection === "SOUTH" ? "rgba(255, 179, 0, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                                            border: `1px solid ${culminationDirection === "SOUTH" ? "#FFB300" : "rgba(255, 255, 255, 0.15)"}`,
+                                            color: culminationDirection === "SOUTH" ? "#FFB300" : "var(--text-muted, #AAA)",
+                                            cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "4px"
+                                        }}
+                                    >
+                                        <TacIcon name="sun" size={12} color={culminationDirection === "SOUTH" ? "#FFB300" : "#AAA"} />
+                                        <span>Al Sur (Hem. Norte)</span>
+                                    </button>
+                                </div>
                             </div>
 
                             <button
                                 onClick={handleCalculateSolarNoon}
                                 className="btn-tactical-primary"
-                                style={{ padding: "10px", fontSize: "0.80rem", background: "#FFB300", color: "#000", fontWeight: 900 }}
+                                style={{ padding: "10px", fontSize: "0.80rem", background: "#FFB300", color: "#000", fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                             >
-                                📍 CALCULAR LAT/LON CELESTE (SIN GPS)
+                                <TacIcon name="crosshair" size={14} color="#000" />
+                                <span>CALCULAR LAT/LON CELESTE (SIN GPS)</span>
                             </button>
 
                             {/* Resultado del Cálculo y Botón de Aplicación */}
@@ -482,7 +559,7 @@ export function CelestialPdrModal() {
                                     background: "rgba(0,230,118,0.12)", border: "1px solid var(--accent-emerald, #00E676)",
                                     padding: "10px", borderRadius: "10px", display: "flex", flexDirection: "column", gap: "8px"
                                 }}>
-                                    <div style={{ fontSize: "0.76rem", color: "var(--accent-emerald, #00E676)", fontWeight: 800, textAlign: "center" }}>
+                                    <div className="tabular-telemetry" style={{ fontSize: "0.76rem", color: "var(--accent-emerald, #00E676)", fontWeight: 800, textAlign: "center" }}>
                                         Lat: {estimatedCoords.estimatedLat}° · Lon: {estimatedCoords.estimatedLon}°
                                     </div>
                                     <div style={{ display: "flex", gap: "8px" }}>
@@ -491,17 +568,20 @@ export function CelestialPdrModal() {
                                             style={{
                                                 flex: 1, padding: "8px", fontSize: "0.74rem",
                                                 background: "rgba(0, 230, 118, 0.15)", border: "1px solid #00E676",
-                                                color: "#00E676", borderRadius: "8px", fontWeight: 800, cursor: "pointer"
+                                                color: "#00E676", borderRadius: "8px", fontWeight: 800, cursor: "pointer",
+                                                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "5px"
                                             }}
                                         >
-                                            💾 Guardar Waypoint
+                                            <TacIcon name="pin" size={13} color="#00E676" />
+                                            <span>Guardar Waypoint</span>
                                         </button>
                                         <button
                                             onClick={handleApplyCoordsToNavigation}
                                             className="btn-tactical-primary"
-                                            style={{ flex: 1, padding: "8px", fontSize: "0.74rem" }}
+                                            style={{ flex: 1, padding: "8px", fontSize: "0.74rem", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "5px" }}
                                         >
-                                            🧭 Brújula / Mapa
+                                            <TacIcon name="compass" size={13} color="#000" />
+                                            <span>Brújula / Mapa</span>
                                         </button>
                                     </div>
                                 </div>
@@ -519,10 +599,10 @@ export function CelestialPdrModal() {
                                 borderRadius: "12px", padding: "12px"
                             }}>
                                 <div style={{ fontSize: "0.62rem", color: "var(--text-muted, #AAA)", fontWeight: 700 }}>PASOS & DISTANCIA</div>
-                                <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)", marginTop: "2px" }}>
+                                <div className="tabular-telemetry" style={{ fontSize: "1.3rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)", marginTop: "2px" }}>
                                     {pdr.totalSteps} <span style={{ fontSize: "0.8rem" }}>pasos</span>
                                 </div>
-                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted, #AAA)", marginTop: "2px" }}>
+                                <div className="tabular-telemetry" style={{ fontSize: "0.68rem", color: "var(--text-muted, #AAA)", marginTop: "2px" }}>
                                     {pdr.distanceMeters}m ({pdr.averageSpeedMps} m/s)
                                 </div>
                             </div>
@@ -531,11 +611,12 @@ export function CelestialPdrModal() {
                                 borderRadius: "12px", padding: "12px"
                             }}>
                                 <div style={{ fontSize: "0.62rem", color: "var(--text-muted, #AAA)", fontWeight: 700 }}>DESPLAZAMIENTO 2D</div>
-                                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--accent-emerald, #00E676)", marginTop: "2px" }}>
+                                <div className="tabular-telemetry" style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--accent-emerald, #00E676)", marginTop: "2px" }}>
                                     N: {pdr.displacementNorthMeters}m · E: {pdr.displacementEastMeters}m
                                 </div>
-                                <div style={{ fontSize: "0.68rem", color: "#FFB300", marginTop: "2px", fontWeight: 800 }}>
-                                    🧭 Rumbo: {pdr.currentHeadingDeg}°
+                                <div className="tabular-telemetry" style={{ fontSize: "0.68rem", color: "#FFB300", marginTop: "2px", fontWeight: 800, display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <TacIcon name="compass" size={12} color="#FFB300" />
+                                    <span>Rumbo: {pdr.currentHeadingDeg}°</span>
                                 </div>
                             </div>
                         </div>
@@ -582,20 +663,24 @@ export function CelestialPdrModal() {
                                     background: pdr.isTracking ? "rgba(232,33,58,0.2)" : "rgba(0,230,118,0.2)",
                                     border: `1px solid ${pdr.isTracking ? "var(--accent-crimson, #FF3355)" : "var(--accent-emerald, #00E676)"}`,
                                     color: pdr.isTracking ? "var(--accent-crimson, #FF3355)" : "var(--accent-emerald, #00E676)",
-                                    fontWeight: 900, fontSize: "0.80rem", cursor: "pointer"
+                                    fontWeight: 900, fontSize: "0.80rem", cursor: "pointer",
+                                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px"
                                 }}
                             >
-                                {pdr.isTracking ? "⏸ PAUSAR PDR INERCIAL" : "▶ INICIAR RASTREO FÍSICO"}
+                                <TacIcon name={pdr.isTracking ? "pause" : "play"} size={14} color={pdr.isTracking ? "#FF3355" : "#00E676"} />
+                                <span>{pdr.isTracking ? "PAUSAR PDR INERCIAL" : "INICIAR RASTREO FÍSICO"}</span>
                             </button>
                             <button
                                 onClick={handleResetPdr}
                                 style={{
                                     flex: 1, padding: "12px", borderRadius: "10px",
                                     background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)",
-                                    color: "var(--text-muted, #AAA)", fontWeight: 800, fontSize: "0.75rem", cursor: "pointer"
+                                    color: "var(--text-muted, #AAA)", fontWeight: 800, fontSize: "0.75rem", cursor: "pointer",
+                                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "5px"
                                 }}
                             >
-                                ↺ RESET
+                                <TacIcon name="refresh" size={13} color="#AAA" />
+                                <span>RESET</span>
                             </button>
                         </div>
 
@@ -603,9 +688,10 @@ export function CelestialPdrModal() {
                         <button
                             onClick={() => navigate("nodemap")}
                             className="btn-tactical-secondary"
-                            style={{ padding: "10px", fontSize: "0.76rem" }}
+                            style={{ padding: "10px", fontSize: "0.76rem", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                         >
-                            🗺️ Ver Vector Inercial en Mapa Táctico Offline
+                            <TacIcon name="map" size={14} />
+                            <span>Ver Vector Inercial en Mapa Táctico Offline</span>
                         </button>
                     </div>
                 )}

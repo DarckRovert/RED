@@ -61,6 +61,17 @@ runTest('4. TacticalBinauralEngine: audioCtx.resume protegido con .catch() y sop
     assert(binContent.includes("this.audioCtx.state === 'closed'"), 'Debe comprobar estado closed');
 });
 
+runTest('4b. TacticalBinauralEngine: Desconexión de mergerNode en stopPreset() y destroy()', () => {
+    assert(binContent.includes('private mergerNode: ChannelMergerNode | null = null;'), 'Debe declarar mergerNode');
+    assert(binContent.includes('this.mergerNode = null;'), 'Debe anular referencia de mergerNode');
+    assert(binContent.includes('this.mergerNode.disconnect()'), 'Debe desconectar mergerNode');
+});
+
+runTest('4c. TacticalBinauralEngine: Cobertura completa de ondas Delta y Solfeggio 963 Hz', () => {
+    assert(binContent.includes("'DELTA_SLEEP'"), 'Debe incluir preset de ondas Delta');
+    assert(binContent.includes("'SOLFEGGIO_963'"), 'Debe incluir preset de Solfeggio 963 Hz');
+});
+
 // 4. AcousticScramblerEngine
 const scramPath = path.join(__dirname, '..', 'src', 'lib', 'security', 'AcousticScramblerEngine.ts');
 const scramContent = fs.readFileSync(scramPath, 'utf8');

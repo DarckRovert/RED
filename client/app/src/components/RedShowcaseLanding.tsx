@@ -8,11 +8,13 @@ import { copyToClipboard } from '../lib/clipboard';
 import { LandingHeader } from './showcase/LandingHeader';
 import { LandingHero } from './showcase/LandingHero';
 import { LandingHowItWorksInteractive } from './showcase/LandingHowItWorksInteractive';
+import { LandingHardwareGallery } from './showcase/LandingHardwareGallery';
 import { LandingScenariosAndUseCases } from './showcase/LandingScenariosAndUseCases';
 import { LandingResilienceCalculator } from './showcase/LandingResilienceCalculator';
 import { LandingBentoAndMatrix } from './showcase/LandingBentoAndMatrix';
 import { LandingMeshSimulator } from './showcase/LandingMeshSimulator';
 import { LandingModuleCatalog } from './showcase/LandingModuleCatalog';
+import { LandingDeploymentArchitecture } from './showcase/LandingDeploymentArchitecture';
 import { LandingInteractiveLabs } from './showcase/LandingInteractiveLabs';
 import { LandingUseCasesAndArchitecture } from './showcase/LandingUseCasesAndArchitecture';
 import { LandingSponsorSection } from './showcase/LandingSponsorSection';
@@ -97,6 +99,35 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
             el.scrollIntoView({ behavior: "smooth" });
         }
     };
+
+    // Scroll-Spy: Actualización automática de la sección activa al hacer scroll
+    useEffect(() => {
+        if (typeof window === "undefined" || !("IntersectionObserver" in window)) return;
+
+        const sectionIds = [
+            "hero", "how-it-works", "hardware", "scenarios", "calculator",
+            "bento", "matrix-comparison", "live-mesh-demo", "modules",
+            "deployment", "architecture", "contribute", "download", "faq"
+        ];
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const visible = entries.filter((e) => e.isIntersecting);
+                if (visible.length > 0) {
+                    visible.sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+                    setActiveSection(visible[0].target.id);
+                }
+            },
+            { threshold: [0.15, 0.4], rootMargin: "-70px 0px -40% 0px" }
+        );
+
+        sectionIds.forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) observer.observe(el);
+        });
+
+        return () => observer.disconnect();
+    }, []);
 
     // Background Particle Matrix Animation
     useEffect(() => {
@@ -202,6 +233,8 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
 
                     <LandingHowItWorksInteractive />
 
+                    <LandingHardwareGallery onEnterApp={handleEnter} />
+
                     <LandingScenariosAndUseCases />
 
                     <LandingResilienceCalculator />
@@ -211,6 +244,11 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
                     <LandingMeshSimulator />
 
                     <LandingModuleCatalog onEnterApp={handleEnter} />
+
+                    <LandingDeploymentArchitecture
+                        handleCopy={handleCopy}
+                        copiedText={copiedText}
+                    />
 
                     <LandingInteractiveLabs />
 

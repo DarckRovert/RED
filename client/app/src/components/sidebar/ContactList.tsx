@@ -3,6 +3,7 @@ import { useRedStore } from "../../store/useRedStore";
 import { meshRouter } from "../../lib/mesh/meshRouter";
 import { avatarStyle } from "./types";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
+import { TacIcon } from "../ui/TacIcon";
 
 interface ContactListProps {
     filteredContacts: any[];
@@ -73,7 +74,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                     alignItems: "center", justifyContent: "center", fontSize: "0.85rem"
                                 }}
                             >
-                                ✓
+                                <TacIcon name="check" size={14} color="#FFFFFF" />
                             </button>
                             <button
                                 onClick={() => rejectContactRequest(req)}
@@ -85,7 +86,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                     alignItems: "center", justifyContent: "center", fontSize: "0.85rem"
                                 }}
                             >
-                                ✕
+                                <TacIcon name="x" size={14} color="#8696A0" />
                             </button>
                             <button
                                 onClick={() => blockNode(req.senderHash)}
@@ -97,7 +98,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                     alignItems: "center", justifyContent: "center", fontSize: "0.85rem"
                                 }}
                             >
-                                🚫
+                                <TacIcon name="hazard" size={14} color="#FF5A7E" />
                             </button>
                         </div>
                     ))}
@@ -123,7 +124,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                         display: "flex", alignItems: "center", justifyContent: "center",
                         fontSize: "1.2rem", flexShrink: 0
                     }}>
-                        👤+
+                        <TacIcon name="user" size={22} color="#FFFFFF" />
                     </div>
                     <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF" }}>
                         Nuevo contacto
@@ -139,7 +140,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                         borderRadius: "var(--radius-md)"
                     }}
                 >
-                    <span>➕</span> {t('sidebar.add_contact_btn') || "AGREGAR NUEVO CONTACTO P2P"}
+                    <TacIcon name="plus" size={14} color="currentColor" /> {t('sidebar.add_contact_btn') || "AGREGAR NUEVO CONTACTO P2P"}
                 </button>
             )}
 
@@ -153,9 +154,9 @@ export const ContactList: React.FC<ContactListProps> = ({
                             width: "60px", height: "60px", borderRadius: "50%",
                             background: "rgba(0, 168, 132, 0.1)",
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: "1.6rem", marginBottom: "16px", color: "#00A884"
+                            marginBottom: "16px", color: "#00A884"
                         }}>
-                            👥
+                            <TacIcon name="users" size={28} color="#00A884" />
                         </div>
                         <div style={{ fontSize: "1rem", fontWeight: 600, color: "#E9EDEF", marginBottom: "6px" }}>
                             Sin contactos guardados
@@ -166,7 +167,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                     </div>
                 ) : (
                     <div className="empty-state-tactical animate-fade-scale">
-                        <div className="empty-state-icon">👥</div>
+                        <div className="empty-state-icon"><TacIcon name="users" size={32} color="var(--accent-cyan)" /></div>
                         <div className="empty-state-title">{t('sidebar.no_contacts') || "Sin Contactos Guardados"}</div>
                         <div className="empty-state-desc">{t('sidebar.no_contacts_desc') || "Agrega el DID o hash de un nodo para iniciar un chat cifrado E2E."}</div>
                     </div>
@@ -252,7 +253,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                         e.currentTarget.style.color = "#8696A0";
                                     }}
                                 >
-                                    🗑️
+                                    <TacIcon name="trash" size={14} color="currentColor" />
                                 </button>
                             </div>
                         );
@@ -336,7 +337,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                     onMouseEnter={e => (e.currentTarget.style.background = "rgba(245,0,87,0.18)")}
                                     onMouseLeave={e => (e.currentTarget.style.background = "rgba(245,0,87,0.08)")}
                                 >
-                                    🗑️
+                                    <TacIcon name="trash" size={14} color="currentColor" />
                                 </button>
                             </div>
                         </div>

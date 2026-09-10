@@ -7,6 +7,8 @@ import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { ContactQrModal } from "../chat/ContactQrModal";
 import { NewContactModal } from "../chat/NewContactModal";
 import { satelliteMeshGateway } from "../../lib/mesh/SatelliteMeshGatewayEngine";
+import { TacIcon } from "../ui/TacIcon";
+
 
 export type ChatFilterType = "all" | "unread" | "groups" | "contacts" | "channels";
 
@@ -118,7 +120,10 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     background: nodeOnline ? "#00A884" : "#FF3355",
                                     display: "inline-block"
                                 }} />
-                                <span>{nodeOnline ? `Malla activa (${meshRouter.peers.size})` : "Desconectado"}{satAos ? " · 🛰️ LEO AOS" : ""}</span>
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                    {nodeOnline ? `Malla activa (${meshRouter.peers.size})` : "Desconectado"}
+                                    {satAos && <> · <TacIcon name="satellite" size={11} color="#00A884" /> LEO AOS</>}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -132,13 +137,13 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                 width: 38, height: 38, borderRadius: "50%",
                                 background: "transparent", border: "none",
                                 color: "#AEBAC1", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.15rem", transition: "background 0.15s ease"
+                                transition: "background 0.15s ease"
                             }}
                             onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                             title="Mi Código QR / Escanear"
                         >
-                            🪪
+                            <TacIcon name="qr" size={19} color="#AEBAC1" />
                         </button>
 
                         {/* Status / Stories icon */}
@@ -148,13 +153,13 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                 width: 38, height: 38, borderRadius: "50%",
                                 background: "transparent", border: "none",
                                 color: "#AEBAC1", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.1rem", transition: "background 0.15s ease"
+                                transition: "background 0.15s ease"
                             }}
                             onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                             title="Estados / Historias"
                         >
-                            ⭕
+                            <TacIcon name="status" size={19} color="#AEBAC1" />
                         </button>
 
                         {/* New Chat FAB icon */}
@@ -164,13 +169,13 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                 width: 38, height: 38, borderRadius: "50%",
                                 background: "transparent", border: "none",
                                 color: "#AEBAC1", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.1rem", transition: "background 0.15s ease"
+                                transition: "background 0.15s ease"
                             }}
                             onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                             title="Nuevo Chat"
                         >
-                            💬
+                            <TacIcon name="chats" size={19} color="#AEBAC1" />
                         </button>
 
                         {/* 3-Dots Menu */}
@@ -189,7 +194,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                             }}
                             title="Más opciones"
                         >
-                            ⋮
+                            <TacIcon name="more-vertical" size={18} />
                         </button>
 
                         {/* Dropdown Menu (WhatsApp Web Style) */}
@@ -215,7 +220,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     onMouseEnter={e => e.currentTarget.style.background = "#182229"}
                                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                                 >
-                                    <span>👥</span> Nuevo grupo
+                                    <TacIcon name="users" size={16} color="#D1D7DB" />
+                                    <span>Nuevo grupo</span>
                                 </button>
                                 <button
                                     onClick={() => { setQuickMenuOpen(false); setNewContactOpen(true); }}
@@ -227,7 +233,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     onMouseEnter={e => e.currentTarget.style.background = "#182229"}
                                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                                 >
-                                    <span>👤</span> Nuevo contacto
+                                    <TacIcon name="user" size={16} color="#D1D7DB" />
+                                    <span>Nuevo contacto</span>
                                 </button>
                                 <button
                                     onClick={() => { setQuickMenuOpen(false); navigate("webCompanionLink"); }}
@@ -239,7 +246,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     onMouseEnter={e => e.currentTarget.style.background = "#182229"}
                                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                                 >
-                                    <span>💻</span> Dispositivos vinculados
+                                    <TacIcon name="terminal" size={16} color="#D1D7DB" />
+                                    <span>Dispositivos vinculados</span>
                                 </button>
                                 <button
                                     onClick={() => { setQuickMenuOpen(false); setGlobalSearchOpen(true); }}
@@ -251,7 +259,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     onMouseEnter={e => e.currentTarget.style.background = "#182229"}
                                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                                 >
-                                    <span>🔍</span> Búsqueda global
+                                    <TacIcon name="search" size={16} color="#D1D7DB" />
+                                    <span>Búsqueda global</span>
                                 </button>
                                 <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "4px 0" }} />
                                 <button
@@ -267,7 +276,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     onMouseEnter={e => e.currentTarget.style.background = "#182229"}
                                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                                 >
-                                    <span>⚡</span> Cambiar a Modo Táctico
+                                    <TacIcon name="zap" size={16} color="#00A884" />
+                                    <span>Cambiar a Modo Táctico</span>
                                 </button>
                                 <button
                                     onClick={() => { setQuickMenuOpen(false); setMenuOpen(true); }}
@@ -279,7 +289,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     onMouseEnter={e => e.currentTarget.style.background = "#182229"}
                                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                                 >
-                                    <span>🛡️</span> 8 Hubs Tácticos
+                                    <TacIcon name="shield" size={16} color="#8696A0" />
+                                    <span>8 Hubs Tácticos</span>
                                 </button>
                             </div>
                         )}
@@ -292,7 +303,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                         display: "flex", alignItems: "center", gap: "10px",
                         background: "#202C33", borderRadius: "8px", padding: "7px 12px"
                     }}>
-                        <span style={{ fontSize: "0.85rem", color: "#8696A0" }}>🔍</span>
+                        <TacIcon name="search" size={15} color="#8696A0" />
                         <input
                             type="text"
                             placeholder="Buscar un chat o iniciar uno nuevo"
@@ -306,9 +317,9 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                         {searchQuery && (
                             <button
                                 onClick={() => setSearchQuery("")}
-                                style={{ background: "transparent", border: "none", color: "#8696A0", cursor: "pointer", fontSize: "0.8rem" }}
+                                style={{ background: "transparent", border: "none", color: "#8696A0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                             >
-                                ✕
+                                <TacIcon name="x" size={13} color="#8696A0" />
                             </button>
                         )}
                     </div>
@@ -431,12 +442,11 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                         style={{
                             width: 36, height: 36, borderRadius: "10px",
                             background: "rgba(0, 230, 118, 0.12)", border: "1px solid rgba(0, 230, 118, 0.35)",
-                            color: "#00E676", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: "0.95rem"
+                            color: "#00E676", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center"
                         }} 
                         title="Vincular con RED Web Companion (PC)"
                     >
-                        💻
+                        <TacIcon name="terminal" size={16} color="#00E676" />
                     </button>
 
                     <button 
@@ -447,21 +457,19 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                             border: "1px solid rgba(255, 255, 255, 0.15)", 
                             color: "#FFFFFF", 
                             borderRadius: "10px", 
-                            fontWeight: 900, 
-                            fontSize: "1.1rem",
                             cursor: "pointer",
                             display: "flex", alignItems: "center", justifyContent: "center"
                         }} 
                         title="Opciones Rápidas"
                     >
-                        ⋮
+                        <TacIcon name="more-vertical" size={18} color="#FFFFFF" />
                     </button>
 
                     {quickMenuOpen && (
                         <div 
                             className="animate-fade-scale"
                             style={{
-                                position: "absolute", top: "44px", right: 0, width: "220px",
+                                position: "absolute", top: "44px", right: 0, width: "230px",
                                 background: "linear-gradient(180deg, #0F1428 0%, #080A18 100%)",
                                 border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "14px",
                                 boxShadow: "0 10px 30px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 229, 255, 0.2)",
@@ -479,7 +487,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     cursor: "pointer", textAlign: "left"
                                 }}
                             >
-                                <span>👥</span> Nuevo Escuadrón P2P
+                                <TacIcon name="users" size={16} color="var(--accent-cyan, #00E5FF)" /> Nuevo Escuadrón P2P
                             </button>
                             <button
                                 onClick={() => { setQuickMenuOpen(false); setNewContactOpen(true); }}
@@ -490,7 +498,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     cursor: "pointer", textAlign: "left"
                                 }}
                             >
-                                <span>➕</span> Agregar Contacto
+                                <TacIcon name="plus" size={16} color="var(--accent-cyan, #00E5FF)" /> Agregar Contacto
                             </button>
                             <button
                                 onClick={() => { setQuickMenuOpen(false); navigate("idVault"); }}
@@ -501,7 +509,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     cursor: "pointer", textAlign: "left"
                                 }}
                             >
-                                <span>🪪</span> Bóveda de Identidad DID
+                                <TacIcon name="card" size={16} color="var(--accent-cyan, #00E5FF)" /> Bóveda de Identidad DID
                             </button>
                             <button
                                 onClick={() => { setQuickMenuOpen(false); setGlobalSearchOpen(true); }}
@@ -512,7 +520,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     cursor: "pointer", textAlign: "left"
                                 }}
                             >
-                                <span>🔍</span> Búsqueda Global
+                                <TacIcon name="search" size={16} color="var(--accent-cyan, #00E5FF)" /> Búsqueda Global
                             </button>
                             <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.1)", margin: "4px 0" }} />
                             <button
@@ -527,7 +535,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     cursor: "pointer", textAlign: "left"
                                 }}
                             >
-                                <span>💬</span> Cambiar a Modo Familiar (WhatsApp)
+                                <TacIcon name="chats" size={16} color="#00A884" /> Cambiar a Modo Familiar (WhatsApp)
                             </button>
                             <button
                                 onClick={() => { setQuickMenuOpen(false); setMenuOpen(true); }}
@@ -538,7 +546,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     cursor: "pointer", textAlign: "left"
                                 }}
                             >
-                                <span>🛡️</span> Centro de Comando (8 Hubs)
+                                <TacIcon name="shield" size={16} color="var(--accent-cyan, #00E5FF)" /> Centro de Comando (8 Hubs)
                             </button>
                         </div>
                     )}

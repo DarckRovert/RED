@@ -1,6 +1,6 @@
 {
   "name": "red-app",
-  "version": "96.0.0",
+  "version": "97.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -92,6 +92,7 @@
     "test:governance": "node scripts/test-sovereign-v87-governance-resilience.js",
     "test:core-modules": "node scripts/test-core-uncovered-modules-resilience.js",
     "test:advanced-engines": "node scripts/test-tactical-advanced-engines-resilience.js",
+    "test:multirail": "node scripts/test-multirail-payments.js",
     "test:all": "node -e \"const fs=require('fs'); const {execSync}=require('child_process'); const tests=fs.readdirSync('scripts').filter(f=>f.startsWith('test-')&&(f.endsWith('.js')||f.endsWith('.mjs'))); let failed=0; for(const t of tests){ try { execSync('node scripts/'+t, {stdio:'inherit'}); } catch(e){ failed++; } } if(failed>0) process.exit(1);\"",
     "postinstall": "node scripts/copy-wasm.js",
     "copy-wasm": "node scripts/copy-wasm.js"

@@ -7,6 +7,7 @@ import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { TacIcon } from "./ui/TacIcon";
 
 export function AcousticWarfareModal() {
     const { navigate, goBack } = useRedStore();
@@ -172,19 +173,22 @@ export function AcousticWarfareModal() {
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
-                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            color: "#FFFFFF", cursor: "pointer",
                             display: "flex", alignItems: "center", justifyContent: "center"
                         }}
+                        title="Regresar"
                     >
-                        ‹
+                        <TacIcon name="chevron-left" size={16} />
                     </button>
                     <div style={{
                         width: 38, height: 38, borderRadius: "12px",
                         background: "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(200, 30, 60, 0.15) 100%)",
                         border: "1px solid rgba(255, 51, 85, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(255, 51, 85, 0.3)"
-                    }}>🔇</div>
+                        boxShadow: "0 0 15px rgba(255, 51, 85, 0.3)"
+                    }}>
+                        <TacIcon name="volume-x" size={20} color="#FF3355" />
+                    </div>
                     <div>
                         <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
                             GUERRA ACÚSTICA & BINAURAL
@@ -223,7 +227,9 @@ export function AcousticWarfareModal() {
                         fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                     }}
                 >
-                    <span>🔇</span> ANTI-MICRÓFONOS MEMS {scramblerState.isRunning && "🚨"}
+                    <TacIcon name="volume-x" size={14} color={activeTab === "scrambler" ? "#FF3355" : "var(--text-secondary)"} />
+                    <span>ANTI-MICRÓFONOS MEMS</span>
+                    {scramblerState.isRunning && <TacIcon name="hazard" size={12} color="#FF3355" />}
                 </button>
                 <button
                     onClick={() => setActiveTab("binaural")}
@@ -235,7 +241,9 @@ export function AcousticWarfareModal() {
                         fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                     }}
                 >
-                    <span>🧠</span> ONDAS BINAURALES {binauralState.isRunning && "▶"}
+                    <TacIcon name="activity" size={14} color={activeTab === "binaural" ? "#00E5FF" : "var(--text-secondary)"} />
+                    <span>ONDAS BINAURALES</span>
+                    {binauralState.isRunning && <TacIcon name="play" size={11} color="#00E5FF" />}
                 </button>
             </div>
 
@@ -309,10 +317,11 @@ export function AcousticWarfareModal() {
                                     borderRadius: "14px", padding: "14px", display: "flex", justifyContent: "space-between", alignItems: "center"
                                 }}>
                                     <div>
-                                        <div style={{ fontWeight: 900, fontSize: "0.88rem", color: "#FF3355" }}>
-                                            🚨 EMISIÓN ACTIVA: {scramblerState.mode}
+                                        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 900, fontSize: "0.88rem", color: "#FF3355" }}>
+                                            <TacIcon name="hazard" size={15} color="#FF3355" />
+                                            <span>EMISIÓN ACTIVA: {scramblerState.mode}</span>
                                         </div>
-                                        <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>
+                                        <div className="tabular-telemetry" style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
                                             Potencia de Transductor: {Math.round(scramblerState.volume * 100)}%
                                         </div>
                                     </div>
@@ -321,10 +330,12 @@ export function AcousticWarfareModal() {
                                         style={{
                                             padding: "8px 16px", borderRadius: "10px",
                                             background: "#FF3355", color: "#FFFFFF",
-                                            fontWeight: 900, fontSize: "0.78rem", border: "none", cursor: "pointer"
+                                            fontWeight: 900, fontSize: "0.78rem", border: "none", cursor: "pointer",
+                                            display: "inline-flex", alignItems: "center", gap: "5px"
                                         }}
                                     >
-                                        DETENER
+                                        <TacIcon name="pause" size={12} color="#FFF" />
+                                        <span>DETENER</span>
                                     </button>
                                 </div>
                             )}
@@ -339,8 +350,11 @@ export function AcousticWarfareModal() {
                                         color: "#FFFFFF", textAlign: "left", cursor: "pointer", transition: "all 0.2s ease"
                                     }}
                                 >
-                                    <div style={{ fontWeight: 900, fontSize: "0.85rem", color: "#FF3355" }}>🌪️ RUIDO ROSA CAÓTICO</div>
-                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>Inundación espectral multi-frecuencia en banda audible y semi-audible.</div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 900, fontSize: "0.85rem", color: "#FF3355" }}>
+                                        <TacIcon name="activity" size={14} color="#FF3355" />
+                                        <span>RUIDO ROSA CAÓTICO</span>
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>Inundación espectral multi-frecuencia en banda audible y semi-audible.</div>
                                 </button>
 
                                 <button
@@ -352,8 +366,11 @@ export function AcousticWarfareModal() {
                                         color: "#FFFFFF", textAlign: "left", cursor: "pointer", transition: "all 0.2s ease"
                                     }}
                                 >
-                                    <div style={{ fontWeight: 900, fontSize: "0.85rem", color: "var(--accent-cyan, #00E5FF)" }}>📡 ULTRASONIDO 20.5 KHZ (SILENCIOSO)</div>
-                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>Saturación de diafragma piezoeléctrico imperceptible para el oído humano.</div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 900, fontSize: "0.85rem", color: "var(--accent-cyan, #00E5FF)" }}>
+                                        <TacIcon name="radio" size={14} color="#00E5FF" />
+                                        <span>ULTRASONIDO 20.5 KHZ (SILENCIOSO)</span>
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>Saturación de diafragma piezoeléctrico imperceptible para el oído humano.</div>
                                 </button>
 
                                 <button
@@ -365,8 +382,11 @@ export function AcousticWarfareModal() {
                                         color: "#FFFFFF", textAlign: "left", cursor: "pointer", transition: "all 0.2s ease"
                                     }}
                                 >
-                                    <div style={{ fontWeight: 900, fontSize: "0.85rem", color: "#FFAA00" }}>🗣️ ENMASCARAMIENTO VOCAL (CHOPPER 1.5 KHZ)</div>
-                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>Frecuencias vocales estocásticas con filtro pasabanda para anular algoritmos de transcripción e IA espía.</div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 900, fontSize: "0.85rem", color: "#FFAA00" }}>
+                                        <TacIcon name="mic-off" size={14} color="#FFAA00" />
+                                        <span>ENMASCARAMIENTO VOCAL (CHOPPER 1.5 KHZ)</span>
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>Frecuencias vocales estocásticas con filtro pasabanda para anular algoritmos de transcripción e IA espía.</div>
                                 </button>
                             </div>
                         </div>
@@ -397,7 +417,7 @@ export function AcousticWarfareModal() {
                                     <span style={{ fontSize: "0.74rem", fontWeight: 800, color: "var(--text-secondary)" }}>
                                         AMPLITUD DE ONDA ESTÉREO
                                     </span>
-                                    <span style={{ fontSize: "0.8rem", fontWeight: 900, color: "#00E5FF" }}>
+                                    <span className="tabular-telemetry" style={{ fontSize: "0.8rem", fontWeight: 900, color: "#00E5FF" }}>
                                         {Math.round(binauralState.volume * 100)}%
                                     </span>
                                 </div>
@@ -421,10 +441,11 @@ export function AcousticWarfareModal() {
                                     borderRadius: "14px", padding: "14px", display: "flex", justifyContent: "space-between", alignItems: "center"
                                 }}>
                                     <div>
-                                        <div style={{ fontWeight: 900, fontSize: "0.88rem", color: "#00E5FF" }}>
-                                            ▶ REPRODUCIENDO: {binauralState.activePreset}
+                                        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 900, fontSize: "0.88rem", color: "#00E5FF" }}>
+                                            <TacIcon name="play" size={13} color="#00E5FF" />
+                                            <span>REPRODUCIENDO: {binauralState.activePreset ? (TacticalBinauralEngine.PRESETS[binauralState.activePreset]?.name || binauralState.activePreset) : ''}</span>
                                         </div>
-                                        <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>
+                                        <div className="tabular-telemetry" style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
                                             Volumen de Ondas: {Math.round(binauralState.volume * 100)}%
                                         </div>
                                     </div>
@@ -433,10 +454,12 @@ export function AcousticWarfareModal() {
                                         style={{
                                             padding: "8px 16px", borderRadius: "10px",
                                             background: "#00E5FF", color: "#000000",
-                                            fontWeight: 900, fontSize: "0.78rem", border: "none", cursor: "pointer"
+                                            fontWeight: 900, fontSize: "0.78rem", border: "none", cursor: "pointer",
+                                            display: "inline-flex", alignItems: "center", gap: "5px"
                                         }}
                                     >
-                                        DETENER
+                                        <TacIcon name="pause" size={12} color="#000" />
+                                        <span>DETENER</span>
                                     </button>
                                 </div>
                             )}
@@ -477,7 +500,7 @@ export function AcousticWarfareModal() {
                                                 paddingTop: "6px", borderTop: "1px solid rgba(255, 255, 255, 0.06)",
                                                 display: "flex", justifyContent: "space-between", alignItems: "center"
                                             }}>
-                                                <div style={{ fontSize: "0.64rem", color: "#00E5FF", fontWeight: 700 }}>
+                                                <div className="tabular-telemetry" style={{ fontSize: "0.64rem", color: "#00E5FF", fontWeight: 700 }}>
                                                     f₀: {preset.baseFreqHz}Hz {preset.beatFreqHz > 0 ? `· Δf: ${preset.beatFreqHz}Hz` : '· Solfeggio'}
                                                 </div>
                                                 <button
@@ -487,10 +510,12 @@ export function AcousticWarfareModal() {
                                                         background: isCurrent ? "#FF3355" : "rgba(0, 229, 255, 0.15)",
                                                         border: `1px solid ${isCurrent ? '#FF3355' : 'rgba(0, 229, 255, 0.4)'}`,
                                                         color: isCurrent ? "#FFFFFF" : "#00E5FF",
-                                                        fontSize: "0.68rem", fontWeight: 900, cursor: "pointer"
+                                                        fontSize: "0.68rem", fontWeight: 900, cursor: "pointer",
+                                                        display: "inline-flex", alignItems: "center", gap: "4px"
                                                     }}
                                                 >
-                                                    {isCurrent ? "⏹ DETENER" : "▶ ACTIVAR"}
+                                                    <TacIcon name={isCurrent ? "pause" : "play"} size={11} color={isCurrent ? "#FFF" : "#00E5FF"} />
+                                                    <span>{isCurrent ? "DETENER" : "ACTIVAR"}</span>
                                                 </button>
                                             </div>
                                         </div>

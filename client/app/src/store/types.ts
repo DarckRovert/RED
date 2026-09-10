@@ -6,6 +6,7 @@ import {
     VoiceBurst, SocialPost
 } from '../api/types';
 import { UserPreferences } from '../lib/settingsManager';
+import { SovereignPaymentPassport } from '../lib/miniapp/RedSDKTypes';
 
 // ── Live Streaming Types ──────────────────────────────────────────────────────
 export interface LiveStreamItem {
@@ -65,6 +66,8 @@ export interface RedStore {
     // 0. User Preferences & UI Customization
     preferences: UserPreferences;
     updatePreferences: (patch: Partial<UserPreferences>) => void;
+    paymentPassport: SovereignPaymentPassport;
+    updatePaymentPassport: (patch: Partial<SovereignPaymentPassport>) => void;
 
     // 1. Data Mode
     isAuthenticated: boolean;
