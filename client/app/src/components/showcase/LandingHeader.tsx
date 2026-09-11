@@ -169,20 +169,6 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
 
         {/* Right CTA Button & Mobile Toggle */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-          <div className="hidden-mobile-sponsor" style={{ display: "flex", alignItems: "center" }}>
-            <iframe
-              src="https://github.com/sponsors/DarckRovert/button"
-              title="Sponsor DarckRovert"
-              height="32"
-              width="114"
-              style={{
-                border: 0,
-                borderRadius: "6px",
-                verticalAlign: "middle",
-              }}
-            />
-          </div>
-
           <a
             href={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/pitch`}
             className="hidden-mobile-pitch"
@@ -247,8 +233,8 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
             }}
           >
             <TacIcon name="zap" size={14} color="#FFF" />
-            <span className="btn-companion-text-full">Iniciar Web Companion</span>
-            <span className="btn-companion-text-short">Web App</span>
+            <span className="btn-companion-text-full">Web Companion</span>
+            <span className="btn-companion-text-short">App</span>
           </button>
 
           <button

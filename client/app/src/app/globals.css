@@ -1454,7 +1454,7 @@ body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder
   display: none !important;
 }
 
-@media (min-width: 1400px) {
+@media (min-width: 1720px) {
   .desktop-telemetry {
     display: flex !important;
   }
