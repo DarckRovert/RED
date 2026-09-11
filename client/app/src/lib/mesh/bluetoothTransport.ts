@@ -48,10 +48,11 @@ class BluetoothTransport {
             case 'HIGH_PERFORMANCE':
                 return { activeScanMs: 1500, restMs: 3000 };
             case 'BALANCED_PATROL':
-                return { activeScanMs: 4000, restMs: 11000 };
+                return { activeScanMs: 1000, restMs: 9000 };
             case 'SURVIVAL_SENTRY':
             default:
-                return { activeScanMs: 4000, restMs: 26000 };
+                // Asymmetric ultra-low power standby (20ms scan / 980ms sleep duty cycle for >48h battery)
+                return { activeScanMs: 20, restMs: 980 };
         }
     }
 
@@ -246,8 +247,12 @@ class BluetoothTransport {
             await this.init();
             try {
                 this.isScanning = true;
+                const isBg = typeof document !== 'undefined' && document.hidden;
+                const scanOptions = isBg
+                    ? { services: [RED_BLE_SERVICE], allowDuplicates: false }
+                    : { allowDuplicates: false };
                 await BleClient.requestLEScan(
-                    { allowDuplicates: false },
+                    scanOptions,
                     (result: ScanResult) => {
                         // 1. Fan-out inmediato a escuchas crudos (SIGINT C-UAS, analizadores de espectro)
                         this.rawScanListeners.forEach((listener) => {

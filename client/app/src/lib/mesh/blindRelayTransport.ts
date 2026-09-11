@@ -11,6 +11,8 @@
  * - Full P2P WebRTC Signaling: negotiates direct DataChannels so relays only handle initial contact.
  */
 
+import { unifiedPush } from '../network/UnifiedPushManager';
+
 export interface BlindRelayMessage {
     type: 'register' | 'relay' | 'signal' | 'ping' | 'pong' | 'ack' | 'delivery' | 'signal_delivery';
     peer_id?: string;
@@ -21,6 +23,7 @@ export interface BlindRelayMessage {
     timestamp?: number;
     status?: string;
     version?: string;
+    push_endpoint?: string;
 }
 
 export class BlindRelayTransport {
@@ -79,6 +82,13 @@ export class BlindRelayTransport {
 
     constructor(myId: string = '') {
         this.myId = this.cleanId(myId);
+        if (this.myId) {
+            unifiedPush.register(this.myId);
+        }
+        unifiedPush.onWakeup(() => {
+            console.log('[BlindRelayTransport] UnifiedPush wakeup triggered — reconnecting relay');
+            this.reconnect();
+        });
     }
 
     /**
@@ -127,6 +137,7 @@ export class BlindRelayTransport {
         const clean = this.cleanId(myId);
         if (this.myId === clean) return;
         this.myId = clean;
+        unifiedPush.register(clean);
         this.registerOnAllSockets();
     }
 
@@ -214,6 +225,7 @@ export class BlindRelayTransport {
             type: 'register',
             peer_id: this.myId,
             version: '98.0.0',
+            push_endpoint: unifiedPush.getEndpoint() || undefined,
         };
         try {
             ws.send(JSON.stringify(msg));
