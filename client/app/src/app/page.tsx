@@ -512,8 +512,14 @@ export default function AppRouter() {
     return (
       <ErrorBoundary>
         <RedShowcaseLanding
-          onEnterVault={() => setShowLanding(false)}
-          onEnterApp={() => setShowLanding(false)}
+          onEnterVault={(targetScreen) => {
+            setShowLanding(false);
+            if (targetScreen) navigate(targetScreen);
+          }}
+          onEnterApp={(targetScreen) => {
+            setShowLanding(false);
+            if (targetScreen) navigate(targetScreen);
+          }}
         />
       </ErrorBoundary>
     );
@@ -659,7 +665,7 @@ export default function AppRouter() {
                   />
                 )}
                 {currentScreen === "calculator" && <CalculatorScreen onUnlock={handleCalculatorUnlock} />}
-                {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={() => navigate("sidebar")} onEnterVault={() => navigate("sidebar")} />}
+                {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={(target) => navigate(target || "sidebar")} onEnterVault={(target) => navigate(target || "sidebar")} />}
               </div>
             </div>
           ) : (
@@ -771,7 +777,7 @@ export default function AppRouter() {
                   onClose={goBack}
                 />
               )}
-              {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={() => navigate("sidebar")} onEnterVault={() => navigate("sidebar")} />}
+              {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={(target) => navigate(target || "sidebar")} onEnterVault={(target) => navigate(target || "sidebar")} />}
             </>
           )}
         </main>

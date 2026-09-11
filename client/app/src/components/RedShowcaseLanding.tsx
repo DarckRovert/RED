@@ -19,10 +19,11 @@ import { LandingInteractiveLabs } from './showcase/LandingInteractiveLabs';
 import { LandingUseCasesAndArchitecture } from './showcase/LandingUseCasesAndArchitecture';
 import { LandingSponsorSection } from './showcase/LandingSponsorSection';
 import { LandingFooterAndModals } from './showcase/LandingFooterAndModals';
+import { ScreenView } from '../store/types';
 
 interface RedShowcaseLandingProps {
-    onEnterVault?: () => void;
-    onEnterApp?: () => void;
+    onEnterVault?: (targetScreen?: ScreenView) => void;
+    onEnterApp?: (targetScreen?: ScreenView) => void;
 }
 
 export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShowcaseLandingProps) {
@@ -47,9 +48,15 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
     const basePath = isGhPages ? "/RED" : "";
     const heroBannerUrl = `${basePath}/assets/red_hero_tactical_mesh.png`;
 
-    const handleEnter = onEnterVault || onEnterApp || (() => {
-        navigate('chat');
-    });
+    const handleEnter = (targetScreen?: ScreenView) => {
+        if (onEnterVault) {
+            onEnterVault(targetScreen);
+        } else if (onEnterApp) {
+            onEnterApp(targetScreen);
+        } else {
+            navigate(targetScreen || 'chat');
+        }
+    };
 
     const handleHeroAliasChange = (newAlias: string) => {
         setHeroAlias(newAlias);

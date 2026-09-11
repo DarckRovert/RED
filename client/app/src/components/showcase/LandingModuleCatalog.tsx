@@ -4,9 +4,75 @@ import React, { useState, useMemo } from 'react';
 import { TacticalModule } from './types';
 import { TACTICAL_MODULES_CATALOG } from './catalogData';
 import { useTranslation } from '../../lib/i18n/i18nEngine';
+import { ScreenView } from '../../store/types';
+
+export const CATALOG_TO_SCREEN_MAP: Record<string, ScreenView> = {
+    nodemap: 'nodemap',
+    offGridCompass: 'offGridCompass',
+    tacticalCompass: 'compass',
+    celestialPdr: 'celestialPdr',
+    cursorOnTarget: 'c4isrEmpDrill',
+    ballistics4Dof: 'tcccBallistics',
+    tacticalFoxhunt: 'tacticalFoxhunt',
+    sonarSeismic: 'sonarSeismic',
+    canvas: 'canvas',
+    liveStream: 'liveStream',
+    weather: 'weather',
+    tacticalCadViewer: 'canvas',
+    channels: 'channels',
+    walkie: 'walkie',
+    broadcast: 'broadcast',
+    socialFeed: 'socialFeed',
+    pqcCrypto: 'crypto',
+    loraMeshtasticBridge: 'loraTransceiver',
+    loraTransceiver: 'loraTransceiver',
+    soundMeshAcoustic: 'acousticWarfare',
+    network: 'network',
+    nearby: 'nearby',
+    loraTdmaScheduler: 'loraTransceiver',
+    geohashSpatialRouting: 'nodemap',
+    esp32SolarRepeater: 'ecoMesh',
+    leoSatelliteGateway: 'cbrnSatellite',
+    globalShield: 'globalShield',
+    rfSpectrum: 'rfSpectrum',
+    acousticWarfare: 'acousticWarfare',
+    blackout: 'blackout',
+    dms: 'dms',
+    security: 'security',
+    calculator: 'calculator',
+    stegoVault: 'stegoVault',
+    zeroTrust: 'security',
+    vitalScan: 'vitalScan',
+    opticalRppgTriage: 'vitalScan',
+    cbrnRadiationCmos: 'cbrnSatellite',
+    cbrnSatellite: 'cbrnSatellite',
+    tcccBallistics: 'tcccBallistics',
+    survivalBeacon: 'survivalBeacon',
+    amber: 'amber',
+    dms_emergency: 'dms',
+    emergencyGlossary: 'survivalBeacon',
+    commercialHub: 'commercialHub',
+    depinPaymentRails: 'p2pPay',
+    p2pPay: 'p2pPay',
+    web3Vault: 'web3Vault',
+    idVault: 'idVault',
+    explorer: 'explorer',
+    appStore: 'appStore',
+    backup: 'backup',
+    webCompanionLink: 'webCompanionLink',
+    aiCopilot: 'aiCopilot',
+    guardian: 'guardian',
+    ecoMesh: 'ecoMesh',
+    swarmHealthHUD: 'swarmHealthHUD',
+    hyperBrowser: 'hyperBrowser',
+    shakePair: 'shakePair',
+    updater: 'updater',
+    health: 'health',
+    nodeLogs: 'nodeLogs'
+};
 
 interface LandingModuleCatalogProps {
-    onEnterApp: () => void;
+    onEnterApp: (targetScreen?: ScreenView) => void;
 }
 
 export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEnterApp }) => {
@@ -324,8 +390,9 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
                 <div style={{ display: "flex", gap: "12px" }}>
                   <button
                     onClick={() => {
+                      const target = CATALOG_TO_SCREEN_MAP[selectedModuleDetail.id] || 'sidebar';
                       setSelectedModuleDetail(null);
-                      onEnterApp();
+                      onEnterApp(target);
                     }}
                     style={{
                       flex: 1, padding: "14px", borderRadius: "12px",
