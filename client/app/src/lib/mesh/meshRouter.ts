@@ -41,6 +41,7 @@ import { DnsTunnelEngine } from '../network/dnsTunnelEngine';
 import { cognitiveArbiter } from './CognitiveRadioArbiter';
 import { SoundMeshEngine } from '../audio/SoundMeshEngine';
 import { globalShield } from '../network/GlobalShieldEngine';
+import { multipathBonding, MultipathBondingEngine } from './MultipathBondingEngine';
 
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
 const DEDUP_WINDOW_MSG_MS = 30 * 60 * 1000;       // 30m  — chat messages (reduces Map size ~95% in long sessions)
@@ -1078,7 +1079,74 @@ class MeshRouter {
     //   1. Doble encolada con mismo nonce (consumía ciclos IDB sin resultado)
     //   2. El contador 'attempts' se incrementaba a 1 antes de cualquier intento real
 
+    // Multi-Path Packet Bonding (Cauchy GF(256) 3-of-5 Erasure Coding):
+    // For large payloads (> 512 bytes) when multiple interfaces are active, dispatch bonded shards concurrently
+    const hasMultipleTransports = (this.peers.size > 0 && (this.wifi?.onlinePeers.size || blindRelay.isConnected || this.hasInternetAccess)) ||
+                                  (this.peers.size >= 2);
+
+    if (!isBroadcast && !isProtocol && payload.length > 512 && hasMultipleTransports) {
+      return this.sendBonded(canonicalRecipient, payload);
+    }
+
     return this.forwardPacket(packet, null);
+  }
+
+  /**
+   * Dispatches a large payload across concurrent network bearers (WiFi/BlindRelay + BLE + LoRa)
+   * using 3-of-5 Cauchy Reed-Solomon Erasure Coding (tolera 40% de pérdida total de enlaces).
+   */
+  async sendBonded(recipientHash: string, payload: Uint8Array): Promise<'sent' | 'queued' | 'failed'> {
+    const canonicalRecipient = this.getCanonicalId(recipientHash);
+    const packedShards = MultipathBondingEngine.bondAndPack(payload, 3, 2);
+
+    const baseNonce = `bond_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+    // Create 5 discrete MeshPackets, each bearing a systematic or parity shard
+    const shardPackets = packedShards.map((shardBytes, idx) => {
+      const p = createPacket(this.myIdentityHash, canonicalRecipient, shardBytes);
+      p.nonce = `${baseNonce}_s${idx}`;
+      return p;
+    });
+
+    const blePeers = Array.from(this.peers.entries()).filter(([_, p]) => p.transport === 'ble');
+    const wifiActive = this.wifi && (this.wifi.onlinePeers.size > 0 || blindRelay.isConnected || this.hasInternetAccess);
+
+    // Shards 0 & 1: High-bandwidth WAN / Sovereign Blind Relay
+    if (wifiActive) {
+      this.wifi?.send(canonicalRecipient, encode(shardPackets[0])).catch(() => {});
+      this.wifi?.send(canonicalRecipient, encode(shardPackets[1])).catch(() => {});
+    } else if (blePeers.length > 0) {
+      bluetoothTransport.send(blePeers[0][0], encode(shardPackets[0])).catch(() => {});
+      bluetoothTransport.send(blePeers[0][0], encode(shardPackets[1])).catch(() => {});
+    }
+
+    // Shard 2: Direct WebRTC DataChannel if connected, otherwise WAN or BLE
+    if (this.wifi?.onlinePeers.has(canonicalRecipient)) {
+      this.wifi.send(canonicalRecipient, encode(shardPackets[2])).catch(() => {});
+    } else if (wifiActive) {
+      this.wifi?.send(canonicalRecipient, encode(shardPackets[2])).catch(() => {});
+    } else if (blePeers.length > 0) {
+      bluetoothTransport.send(blePeers[0][0], encode(shardPackets[2])).catch(() => {});
+    }
+
+    // Shard 3: Local BLE Mesh Neighbor
+    if (blePeers.length > 0) {
+      bluetoothTransport.send(blePeers[0][0], encode(shardPackets[3])).catch(() => {});
+    } else if (wifiActive) {
+      this.wifi?.send(canonicalRecipient, encode(shardPackets[3])).catch(() => {});
+    }
+
+    // Shard 4: LoRa RF or secondary BLE neighbor / fallback
+    if (loraBridge.isConnected) {
+      loraBridge.sendPacket(encode(shardPackets[4])).catch(() => {});
+    } else if (blePeers.length > 1) {
+      bluetoothTransport.send(blePeers[1][0], encode(shardPackets[4])).catch(() => {});
+    } else if (wifiActive) {
+      this.wifi?.send(canonicalRecipient, encode(shardPackets[4])).catch(() => {});
+    }
+
+    console.log(`[MeshRouter] 🚀 Multipath Bonding: Dispatched 5 shards (3 data + 2 parity) for ${canonicalRecipient.slice(0, 8)} across available bearers`);
+    return 'sent';
   }
 
   /**
@@ -1148,6 +1216,16 @@ class MeshRouter {
   // ─── Receiving & Relaying ───────────────────────────────────────────────────
 
   private async handleRawPacket(raw: Uint8Array, fromTransportId?: string, transportType?: 'ble' | 'wifi' | 'lora') {
+    // 0. MULTIPATH BONDING: Intercept raw wire bonded shards (Magic 0xBD01)
+    if (raw.length >= 15 && raw[0] === 0xBD && raw[1] === 0x01) {
+      const reconstructed = multipathBonding.ingestShard(raw);
+      if (!reconstructed) {
+        // Awaiting additional shards over concurrent bearers to satisfy GF(256) k-of-n threshold
+        return;
+      }
+      raw = reconstructed;
+    }
+
     let packet = decode(raw);
     if (!packet) {
       // Check if raw is a JSON envelope string (e.g. from MQTT relay, Hive capacity ads, or direct Web bridge)
@@ -1195,6 +1273,22 @@ class MeshRouter {
         this.bindDeviceToCanonical(fromTransportId, packet.sender);
       }
       this.updatePeer(packet.sender, transportType || 'ble', undefined, packet.sender);
+    }
+
+    // 0.1 MULTIPATH BONDING: Intercept payload-level bonded shards (Magic 0xBD01)
+    if (packet && packet.payload && packet.payload.length >= 15 && packet.payload[0] === 0xBD && packet.payload[1] === 0x01) {
+      const isForMe = !packet.recipient ||
+        packet.recipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
+        (!!this.myIdentityHash && packet.recipient.toLowerCase() === this.myIdentityHash.toLowerCase());
+
+      if (isForMe) {
+        const reconstructedPayload = multipathBonding.ingestShard(packet.payload);
+        if (!reconstructedPayload) {
+          // Shard successfully ingested into reassembly buffer; awaiting k shards for complete reconstruction
+          return;
+        }
+        packet.payload = reconstructedPayload;
+      }
     }
 
     let isHandshakeMsg = false;

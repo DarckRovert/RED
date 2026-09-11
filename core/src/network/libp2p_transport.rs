@@ -130,7 +130,10 @@ impl Libp2pTransport {
 
                 let kad_store = kad::store::MemoryStore::new(key.public().to_peer_id());
                 let mut kademlia = kad::Behaviour::new(key.public().to_peer_id(), kad_store);
+                #[cfg(target_os = "android")]
                 kademlia.set_mode(Some(kad::Mode::Client));
+                #[cfg(not(target_os = "android"))]
+                kademlia.set_mode(Some(kad::Mode::Server));
                 let identify = identify::Behaviour::new(
                     identify::Config::new("/red/1.0.0".to_string(), key.public())
                         .with_agent_version(format!("RED-Node/{}", env!("CARGO_PKG_VERSION")))

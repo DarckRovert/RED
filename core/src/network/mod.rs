@@ -18,6 +18,7 @@ pub mod gossip;
 pub mod libp2p_transport;
 pub mod lora_bridge;
 pub mod fec;
+pub mod sybil;
 
 pub use config::NetworkConfig;
 pub use peer::{Peer, PeerId, PeerInfo};
@@ -26,6 +27,7 @@ pub use transport::Transport;
 pub use libp2p_transport::Libp2pTransport;
 pub use node::Node;
 pub use fec::{FecEncoder, FecDecoder, FecChunk};
+pub use sybil::SybilGuard;
 
 use thiserror::Error;
 

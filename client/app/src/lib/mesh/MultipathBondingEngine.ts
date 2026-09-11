@@ -130,21 +130,22 @@ export class MultipathBondingEngine {
             });
         }
 
-        // 2. Generar M fragmentos de paridad sistemática mediante Galois Field GF(256)
-        for (let p = 0; p < parityShards; p++) {
+        // 2. Generar M fragmentos de paridad sistemática mediante matriz Cauchy MDS sobre GF(256)
+        // x_i = i, y_j = 128 + j -> x_i ^ y_j >= 128 > 0 (sin singularidades en el cuerpo)
+        for (let j = 0; j < parityShards; j++) {
             const parityData = new Uint8Array(shardSize);
-            for (let byteIdx = 0; byteIdx < shardSize; byteIdx++) {
-                let acc = 0;
-                for (let d = 0; d < dataShards; d++) {
-                    const coeff = ((d + 1) * (p + 1)) % 255 || 1;
-                    acc ^= gf.mul(paddedDataShards[d][byteIdx], coeff);
+            const y_j = 128 + j;
+            for (let i = 0; i < dataShards; i++) {
+                const x_i = i;
+                const coeff = gf.inv(x_i ^ y_j);
+                for (let byteIdx = 0; byteIdx < shardSize; byteIdx++) {
+                    parityData[byteIdx] ^= gf.mul(coeff, paddedDataShards[i][byteIdx]);
                 }
-                parityData[byteIdx] = acc;
             }
 
             shards.push({
                 groupId: gid,
-                shardIndex: dataShards + p,
+                shardIndex: dataShards + j,
                 totalShards: dataShards + parityShards,
                 dataShards,
                 originalLength: payload.length,
@@ -158,8 +159,9 @@ export class MultipathBondingEngine {
     }
 
     /**
-     * Reconstruye el payload original a partir de cualquier conjunto de fragmentos que contenga
-     * al menos los K fragmentos de datos requeridos. Descarta fragmentos con checksum inválido.
+     * Reconstruye el payload original a partir de CUALQUIER conjunto de fragmentos que contenga
+     * al menos los K fragmentos de datos requeridos (tolera pérdida de hasta M fragmentos / 40% pérdida).
+     * Utiliza eliminación Gauss-Jordan sobre GF(256).
      */
     public static reconstruct(shards: BondedShard[]): Uint8Array | null {
         if (shards.length === 0) return null;
@@ -184,7 +186,7 @@ export class MultipathBondingEngine {
             }
         }
 
-        // Si tenemos los K fragmentos de datos directamente
+        // Si tenemos los K fragmentos de datos directamente: concatenación directa sin inversión matricial
         if (directData.size === dataShardsCount) {
             const reconstructed = new Uint8Array(originalLength);
             let written = 0;
@@ -197,52 +199,94 @@ export class MultipathBondingEngine {
             return reconstructed;
         }
 
-        // Si faltan fragmentos de datos pero tenemos al menos K fragmentos totales (datos + paridad)
-        if (validShards.length < dataShardsCount) {
-            return null; // Insuficientes fragmentos
+        // Deduplicar fragmentos válidos por shardIndex
+        const uniqueShardsMap = new Map<number, BondedShard>();
+        for (const s of validShards) {
+            if (!uniqueShardsMap.has(s.shardIndex)) {
+                uniqueShardsMap.set(s.shardIndex, s);
+            }
         }
 
-        // Reconstrucción sistemática para 1 fragmento faltante con paridad
-        if (directData.size === dataShardsCount - 1) {
-            // Encontrar el índice de fragmento de datos faltante
-            let missingIndex = -1;
-            for (let i = 0; i < dataShardsCount; i++) {
-                if (!directData.has(i)) {
-                    missingIndex = i;
-                    break;
+        // Si tenemos menos de K fragmentos únicos: imposible reconstruir
+        if (uniqueShardsMap.size < dataShardsCount) {
+            return null;
+        }
+
+        // Tomar exactamente K fragmentos únicos para formar el sistema K x K
+        const selectedShards = Array.from(uniqueShardsMap.values()).slice(0, dataShardsCount);
+
+        // Construir matriz K x K y vectores de datos
+        const mat: Uint8Array[] = [];
+        const dMat: Uint8Array[] = [];
+
+        for (let r = 0; r < dataShardsCount; r++) {
+            const sh = selectedShards[r];
+            dMat.push(new Uint8Array(sh.data));
+            const row = new Uint8Array(dataShardsCount);
+
+            if (sh.shardIndex < dataShardsCount) {
+                // Fragmento sistemático de datos: vector base
+                row[sh.shardIndex] = 1;
+            } else {
+                // Fragmento de paridad: fila de matriz Cauchy
+                const j = sh.shardIndex - dataShardsCount;
+                const y_j = 128 + j;
+                for (let c = 0; c < dataShardsCount; c++) {
+                    row[c] = gf.inv(c ^ y_j);
                 }
             }
+            mat.push(row);
+        }
 
-            // Buscar un fragmento de paridad p=0
-            const parityShard0 = validShards.find(s => s.isParity && s.shardIndex === dataShardsCount);
-            if (parityShard0 && missingIndex !== -1) {
-                const recovered = new Uint8Array(shardSize);
-                for (let byteIdx = 0; byteIdx < shardSize; byteIdx++) {
-                    let knownXor = parityShard0.data[byteIdx];
-                    for (let d = 0; d < dataShardsCount; d++) {
-                        if (d !== missingIndex) {
-                            const coeff = (d + 1) % 255 || 1;
-                            knownXor ^= gf.mul(directData.get(d)![byteIdx], coeff);
-                        }
+        // Eliminación Gauss-Jordan sobre GF(256)
+        for (let c = 0; c < dataShardsCount; c++) {
+            let pivot = c;
+            while (pivot < dataShardsCount && mat[pivot][c] === 0) {
+                pivot++;
+            }
+            if (pivot === dataShardsCount) {
+                return null; // Sistema singular inesperado
+            }
+
+            if (pivot !== c) {
+                const tempRow = mat[c]; mat[c] = mat[pivot]; mat[pivot] = tempRow;
+                const tempD = dMat[c]; dMat[c] = dMat[pivot]; dMat[pivot] = tempD;
+            }
+
+            const pivVal = mat[c][c];
+            const pivInv = gf.inv(pivVal);
+            for (let k = 0; k < dataShardsCount; k++) {
+                mat[c][k] = gf.mul(mat[c][k], pivInv);
+            }
+            for (let b = 0; b < shardSize; b++) {
+                dMat[c][b] = gf.mul(dMat[c][b], pivInv);
+            }
+
+            for (let r = 0; r < dataShardsCount; r++) {
+                if (r === c) continue;
+                const factor = mat[r][c];
+                if (factor !== 0) {
+                    for (let k = 0; k < dataShardsCount; k++) {
+                        mat[r][k] ^= gf.mul(factor, mat[c][k]);
                     }
-                    const missingCoeff = (missingIndex + 1) % 255 || 1;
-                    recovered[byteIdx] = gf.mul(knownXor, gf.inv(missingCoeff));
+                    for (let b = 0; b < shardSize; b++) {
+                        dMat[r][b] ^= gf.mul(factor, dMat[c][b]);
+                    }
                 }
-                directData.set(missingIndex, recovered);
-
-                const reconstructed = new Uint8Array(originalLength);
-                let written = 0;
-                for (let i = 0; i < dataShardsCount; i++) {
-                    const chunk = directData.get(i)!;
-                    const toWrite = Math.min(chunk.length, originalLength - written);
-                    reconstructed.set(chunk.slice(0, toWrite), written);
-                    written += toWrite;
-                }
-                return reconstructed;
             }
         }
 
-        return null;
+        // Reconstruir payload original
+        const reconstructed = new Uint8Array(originalLength);
+        let written = 0;
+        for (let i = 0; i < dataShardsCount; i++) {
+            const chunk = dMat[i];
+            const toWrite = Math.min(chunk.length, originalLength - written);
+            reconstructed.set(chunk.slice(0, toWrite), written);
+            written += toWrite;
+        }
+
+        return reconstructed;
     }
 
     /**
@@ -284,6 +328,117 @@ export class MultipathBondingEngine {
             }
         }
         return result;
+    }
+
+    public static readonly SHARD_MAGIC = 0xBD01; // Magic header for bonded shards (2 bytes)
+
+    /**
+     * Serializa un BondedShard a un Uint8Array binario para transmisión por cable/radio
+     */
+    public static packShard(shard: BondedShard): Uint8Array {
+        const gidBytes = new TextEncoder().encode(shard.groupId);
+        const headerLen = 2 + 1 + gidBytes.length + 1 + 1 + 1 + 4 + 4;
+        const out = new Uint8Array(headerLen + shard.data.length);
+        const view = new DataView(out.buffer);
+
+        let offset = 0;
+        view.setUint16(offset, this.SHARD_MAGIC, false); offset += 2;
+        out[offset++] = gidBytes.length;
+        out.set(gidBytes, offset); offset += gidBytes.length;
+        out[offset++] = shard.shardIndex;
+        out[offset++] = shard.totalShards;
+        out[offset++] = shard.dataShards;
+        view.setUint32(offset, shard.originalLength, false); offset += 4;
+        
+        const crcNum = parseInt(shard.integrityHash || '0', 16);
+        view.setUint32(offset, crcNum, false); offset += 4;
+
+        out.set(shard.data, offset);
+        return out;
+    }
+
+    /**
+     * Deserializa un buffer binario a un BondedShard si contiene la cabecera mágica
+     */
+    public static unpackShard(bytes: Uint8Array): BondedShard | null {
+        if (bytes.length < 15) return null;
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        if (view.getUint16(0, false) !== this.SHARD_MAGIC) return null;
+
+        let offset = 2;
+        const gidLen = bytes[offset++];
+        if (offset + gidLen + 11 > bytes.length) return null;
+
+        const gid = new TextDecoder().decode(bytes.slice(offset, offset + gidLen));
+        offset += gidLen;
+
+        const shardIndex = bytes[offset++];
+        const totalShards = bytes[offset++];
+        const dataShards = bytes[offset++];
+        const originalLength = view.getUint32(offset, false); offset += 4;
+        const crcNum = view.getUint32(offset, false); offset += 4;
+        const integrityHash = crcNum.toString(16).padStart(8, '0');
+
+        const data = bytes.slice(offset);
+        const isParity = shardIndex >= dataShards;
+
+        return {
+            groupId: gid,
+            shardIndex,
+            totalShards,
+            dataShards,
+            originalLength,
+            isParity,
+            data,
+            integrityHash,
+        };
+    }
+
+    /**
+     * Divide un payload en fragmentos systematic Reed-Solomon 3-de-5 empaquetados en binario
+     */
+    public static bondAndPack(payload: Uint8Array, dataShards = 3, parityShards = 2): Uint8Array[] {
+        const shards = this.fragment(payload, dataShards, parityShards);
+        return shards.map(s => this.packShard(s));
+    }
+
+    private pendingGroups: Map<string, { shards: BondedShard[]; createdAt: number }> = new Map();
+
+    /**
+     * Ingesta un fragmento recibido. Si con este fragmento el grupo puede ser reconstruido,
+     * retorna el payload original Uint8Array. Si aún faltan fragmentos o el shard es inválido, retorna null.
+     */
+    public ingestShard(rawOrShard: Uint8Array | BondedShard): Uint8Array | null {
+        const shard = rawOrShard instanceof Uint8Array ? MultipathBondingEngine.unpackShard(rawOrShard) : rawOrShard;
+        if (!shard) return null;
+
+        const now = Date.now();
+        // Limpiar grupos expirados (> 15 segundos)
+        for (const [gid, entry] of this.pendingGroups.entries()) {
+            if (now - entry.createdAt > 15000) {
+                this.pendingGroups.delete(gid);
+            }
+        }
+
+        let entry = this.pendingGroups.get(shard.groupId);
+        if (!entry) {
+            entry = { shards: [], createdAt: now };
+            this.pendingGroups.set(shard.groupId, entry);
+        }
+
+        if (!entry.shards.some(s => s.shardIndex === shard.shardIndex)) {
+            entry.shards.push(shard);
+        }
+
+        if (entry.shards.length >= shard.dataShards) {
+            const reconstructed = MultipathBondingEngine.reconstruct(entry.shards);
+            if (reconstructed) {
+                this.pendingGroups.delete(shard.groupId);
+                return reconstructed;
+            }
+        }
+
+        return null;
     }
 }
 

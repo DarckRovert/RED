@@ -405,6 +405,10 @@ export class LoraSerialBridgeEngine {
         return { ...this.telemetry };
     }
 
+    public get isConnected(): boolean {
+        return this.telemetry.connected;
+    }
+
     public async disconnect() {
         this.telemetry.connected = false;
         this.telemetry.transportType = 'NONE';
