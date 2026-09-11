@@ -196,7 +196,7 @@ export const ar: I18nSchema = {
         updater_title: "محدّث OTA اللاسلكي",
         updater_sub: "توزيع موقع وآمن عبر P2P",
         c4isr_title: "مركز قيادة C4ISR",
-        c4isr_sub: "مصفوفة من 57 وحدة تشغيلية ومستشعراً",
+        c4isr_sub: "مصفوفة من 62 وحدة تشغيلية ومستشعراً",
         appstore_title: "متجر تطبيقات P2P",
         appstore_sub: "تطبيقات مصغرة في بيئة معزولة",
         browser_title: "المتصفح الفائق P2P",

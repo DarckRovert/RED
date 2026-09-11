@@ -196,7 +196,7 @@ export const ru: I18nSchema = {
         updater_title: "OTA Обновление",
         updater_sub: "ПОДПИСАННОЕ P2P РАСПРОСТРАНЕНИЕ",
         c4isr_title: "Командный центр C4ISR",
-        c4isr_sub: "МАТРИЦА 57 ОПЕРАТИВНЫХ МОДУЛЕЙ И ДАТЧИКОВ",
+        c4isr_sub: "МАТРИЦА 62 ОПЕРАТИВНЫХ МОДУЛЕЙ И ДАТЧИКОВ",
         appstore_title: "P2P Магазин Приложений",
         appstore_sub: "ИЗОЛИРОВАННЫЕ МИНИ-ПРИЛОЖЕНИЯ",
         browser_title: "Гипер-Браузер P2P",

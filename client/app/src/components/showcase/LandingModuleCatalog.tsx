@@ -45,8 +45,9 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
 
     return (
         <section id="modules" style={{ padding: "70px 0 80px", position: "relative" }}>
-          {/* Secondary Anchor for #modules57 */}
+          {/* Secondary Anchor for #modules57 / #modules62 */}
           <div id="modules57" style={{ position: "absolute", top: 0, left: 0, height: 1, width: 1, pointerEvents: "none" }} />
+          <div id="modules62" style={{ position: "absolute", top: 0, left: 0, height: 1, width: 1, pointerEvents: "none" }} />
 
           <div style={{ textAlign: "center", marginBottom: "36px" }}>
             <span

@@ -196,7 +196,7 @@ export const zh: I18nSchema = {
         updater_title: "OTA 空中更新",
         updater_sub: "P2P 签名安全分发",
         c4isr_title: "C4ISR 指挥控制中心",
-        c4isr_sub: "57个作战模块与传感器矩阵",
+        c4isr_sub: "62个作战模块与传感器矩阵",
         appstore_title: "P2P 应用商店",
         appstore_sub: "沙箱微应用",
         browser_title: "P2P 超级浏览器",

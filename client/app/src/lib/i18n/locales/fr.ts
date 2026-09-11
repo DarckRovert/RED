@@ -196,7 +196,7 @@ export const fr: I18nSchema = {
         updater_title: "Mise à Jour OTA",
         updater_sub: "DISTRIBUTION P2P SIGNÉE",
         c4isr_title: "Centre de Commandement C4ISR",
-        c4isr_sub: "MATRICE DE 57 MODULES OPÉRATIONNELS & CAPTEURS",
+        c4isr_sub: "MATRICE DE 62 MODULES OPÉRATIONNELS & CAPTEURS",
         appstore_title: "Boutique d'Apps P2P",
         appstore_sub: "MINI-APPS EN BAC À SABLE",
         browser_title: "Hyper-Navigateur P2P",

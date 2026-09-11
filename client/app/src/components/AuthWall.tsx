@@ -96,6 +96,22 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
+    // Limpieza higiénica de cualquier estado de escáner residual al entrar a AuthWall
+    useEffect(() => {
+        if (typeof document !== "undefined") {
+            document.documentElement.classList.remove("scanner-active");
+            document.body.classList.remove("scanner-active");
+        }
+        import("@capacitor/core").then(({ Capacitor }) => {
+            if (Capacitor.isNativePlatform()) {
+                import("@capacitor-community/barcode-scanner").then(({ BarcodeScanner }) => {
+                    BarcodeScanner.showBackground().catch(() => {});
+                    BarcodeScanner.stopScan().catch(() => {});
+                }).catch(() => {});
+            }
+        }).catch(() => {});
+    }, []);
+
     // Live Web Companion QR Session for Desktop Onboarding
     useEffect(() => {
         if (!isDesktopWeb || mode !== "onboarding" || webOnboardingTab !== "qr_link") {

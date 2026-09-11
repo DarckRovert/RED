@@ -196,7 +196,7 @@ export const pt: I18nSchema = {
         updater_title: "Atualizador OTA",
         updater_sub: "DISTRIBUIÇÃO ASSINADA P2P",
         c4isr_title: "Central de Comando C4ISR",
-        c4isr_sub: "MATRIZ DE 57 MÓDULOS OPERACIONAIS & SENSORES",
+        c4isr_sub: "MATRIZ DE 62 MÓDULOS OPERACIONAIS & SENSORES",
         appstore_title: "Loja de Apps P2P",
         appstore_sub: "MINI-APPS EM SANDBOX",
         browser_title: "Hiper-Navegador P2P",

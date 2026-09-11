@@ -196,7 +196,7 @@ export const de: I18nSchema = {
         updater_title: "OTA-Aktualisierung",
         updater_sub: "SIGNIERTE P2P-VERTEILUNG",
         c4isr_title: "C4ISR Führungszentrum",
-        c4isr_sub: "MATRIX AUS 57 EINSATZMODULEN & SENSOREN",
+        c4isr_sub: "MATRIX AUS 62 EINSATZMODULEN & SENSOREN",
         appstore_title: "P2P App-Store",
         appstore_sub: "ISOLIERTE MINI-APPS",
         browser_title: "P2P Hyper-Browser",

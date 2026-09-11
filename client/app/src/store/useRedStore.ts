@@ -33,11 +33,15 @@ export const useRedStore = create<RedStore>()(
         {
             name: 'red_ui_state',
             storage: createJSONStorage(() => (typeof window !== 'undefined' ? localStorage : memoryStorage)),
-            partialize: (state) => ({
-                currentScreen: state.currentScreen !== 'call' && state.currentScreen !== 'updater' ? state.currentScreen : 'sidebar',
-                activeConversationId: state.activeConversationId,
-                preferences: state.preferences,
-            }),
+            partialize: (state) => {
+                // Solo persistir pantallas raíz de navegación; modales y escáneres (ej. webCompanionLink) siempre reanudan en 'sidebar'
+                const persistentScreens: typeof state.currentScreen[] = ['sidebar', 'chat', 'commandCenter'];
+                return {
+                    currentScreen: persistentScreens.includes(state.currentScreen) ? state.currentScreen : 'sidebar',
+                    activeConversationId: state.activeConversationId,
+                    preferences: state.preferences,
+                };
+            },
         }
     )
 );

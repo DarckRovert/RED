@@ -196,7 +196,7 @@ export const ko: I18nSchema = {
         updater_title: "OTA 업데이트",
         updater_sub: "P2P 서명 배포",
         c4isr_title: "C4ISR 지휘통제 센터",
-        c4isr_sub: "57개 작전 모듈 및 센서 매트릭스",
+        c4isr_sub: "62개 작전 모듈 및 센서 매트릭스",
         appstore_title: "P2P 앱 스토어",
         appstore_sub: "샌드박스 미니앱",
         browser_title: "P2P 하이퍼 브라우저",

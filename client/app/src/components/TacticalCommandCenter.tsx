@@ -154,6 +154,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
             },
             {
+                id: 'call',
+                action: 'call',
+                icon: '📞',
+                title: 'Llamadas Cifradas WebRTC',
+                subtitle: 'Audio dúplex peer-to-peer cifrado en tiempo real sin servidores ni Internet.',
+                badge: 'WEBRTC P2P',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
                 id: 'groups',
                 action: 'groups',
                 icon: '👥',
@@ -235,6 +245,16 @@ export const TacticalCommandCenter: React.FC = () => {
             }
         ],
         nav: [
+            {
+                id: 'radar',
+                action: 'radar',
+                icon: '📡',
+                title: 'Radar Swarm BLE & Wi-Fi',
+                subtitle: 'Escaneo táctico 360° en tiempo real de nodos, intensidad RSSI y distancias.',
+                badge: 'RADAR 360°',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
+            },
             {
                 id: 'nearby',
                 action: 'nearby',
@@ -324,6 +344,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: 'ULTRASONIDO',
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
+            },
+            {
+                id: 'rfSpectrum',
+                action: 'rfSpectrum',
+                icon: '🛡️',
+                title: 'Analizador Espectro RF & SIGINT',
+                subtitle: 'Detección de emisiones hostiles, interferencias e inhibidores en el espectro.',
+                badge: 'SIGINT RF',
+                badgeColor: '#FFB300',
+                accentGlow: 'rgba(255, 179, 0, 0.2)'
             }
         ],
         survival: [
@@ -548,6 +578,46 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: 'ZERO-TRUST',
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
+                id: 'security',
+                action: 'security',
+                icon: '🛡️',
+                title: 'Centro de Seguridad Zero-Trust',
+                subtitle: 'Políticas de acceso mínimo, rotación de claves de sesión y cifrado estricto.',
+                badge: 'POLICIES',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
+                id: 'secReport',
+                action: 'secReport',
+                icon: '📑',
+                title: 'Reporte de Auditoría de Seguridad',
+                subtitle: 'Evaluación integral de postura de seguridad, higiene criptográfica y exportación.',
+                badge: 'AUDIT SOC2',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
+            },
+            {
+                id: 'backup',
+                action: 'backup',
+                icon: '💾',
+                title: 'Copias de Seguridad Cifradas',
+                subtitle: 'Exportación e importación hermética de la bóveda protegida por PIN y Argon2id.',
+                badge: 'BIP-39 VAULT',
+                badgeColor: '#B388FF',
+                accentGlow: 'rgba(179, 136, 255, 0.2)'
+            },
+            {
+                id: 'network',
+                action: 'network',
+                icon: '🌐',
+                title: 'Red Mesh, DHT & DoH Encubierto',
+                subtitle: 'Configuración de canales encubiertos, tablas DHT y saltos de frecuencia de radio.',
+                badge: 'DHT MESH',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
             }
         ],
         economy: [
@@ -650,6 +720,46 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: 'LINK PC',
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
+            },
+            {
+                id: 'ecoMesh',
+                action: 'ecoMesh',
+                icon: '🔋',
+                title: 'Gobernador Eco-Mesh & Batería',
+                subtitle: 'Gestión cinemática de energía y ciclo de trabajo de radios.',
+                badge: 'ECO-POWER',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
+            },
+            {
+                id: 'swarmHealthHUD',
+                action: 'swarmHealthHUD',
+                icon: '📶',
+                title: 'Telemetría de Enlace LQS & QoS',
+                subtitle: 'Auditoría en tiempo real de SNR, RSSI, latencia RTT, pérdida de paquetes y portadores.',
+                badge: 'LQS METRICS',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
+                id: 'settings',
+                action: 'settings',
+                icon: '⚙️',
+                title: 'Ajustes del Sistema',
+                subtitle: 'Configuración integral de radios, perfiles de energía, idioma y seguridad.',
+                badge: 'CONFIG',
+                badgeColor: '#94A3B8',
+                accentGlow: 'rgba(148, 163, 184, 0.2)'
+            },
+            {
+                id: 'updater',
+                action: 'updater',
+                icon: '🚀',
+                title: 'Actualizador Binario P2P (OTA)',
+                subtitle: 'Distribución e instalación de paquetes binarios firmados a través de la malla.',
+                badge: 'MESH-OTA',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
             }
         ]
     };

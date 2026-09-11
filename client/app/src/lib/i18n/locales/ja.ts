@@ -196,7 +196,7 @@ export const ja: I18nSchema = {
         updater_title: "OTA アップデーター",
         updater_sub: "署名付きP2P配信",
         c4isr_title: "C4ISR 指揮統制センター",
-        c4isr_sub: "57の運用モジュールとセンサーマトリックス",
+        c4isr_sub: "62の運用モジュールとセンサーマトリックス",
         appstore_title: "P2P アプリストア",
         appstore_sub: "サンドボックス化されたミニアプリ",
         browser_title: "P2P ハイパーブラウザ",

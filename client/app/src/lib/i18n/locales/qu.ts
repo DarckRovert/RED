@@ -196,7 +196,7 @@ export const qu: I18nSchema = {
         updater_title: "OTA Musuqyachiq",
         updater_sub: "P2P SUT'INCHASQA RAKISQA",
         c4isr_title: "C4ISR Kamachina Wasi",
-        c4isr_sub: "57 LLAMK'ANA K'APITIYKUNA & SENSOR T'INKISQA",
+        c4isr_sub: "62 LLAMK'ANA K'APITIYKUNA & SENSOR T'INKISQA",
         appstore_title: "P2P App Qhatu",
         appstore_sub: "SANCHISQA MINI-APPS",
         browser_title: "P2P Hatun-Maskhaq",

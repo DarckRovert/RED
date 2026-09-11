@@ -83,6 +83,7 @@ const IncomingCallBanner    = dynamic(() => import("../components/IncomingCallBa
 const FloatingCallPIP       = dynamic(() => import("../components/FloatingCallPIP").then(m => ({ default: m.FloatingCallPIP })),       { ssr: false, loading: () => null });
 const LoraTransceiverModal  = dynamic(() => import("../components/LoraTransceiverModal").then(m => ({ default: m.LoraTransceiverModal })), { ssr: false, loading: () => <AppLoader /> });
 const ExtremeSurvivalHudModal = dynamic(() => import("../components/ExtremeSurvivalHudModal").then(m => ({ default: m.ExtremeSurvivalHudModal })), { ssr: false, loading: () => <AppLoader /> });
+const SwarmHealthHUD         = dynamic(() => import("../components/SwarmHealthHUD").then(m => ({ default: m.SwarmHealthHUD })),         { ssr: false, loading: () => <AppLoader /> });
 const BiometricShieldOverlay = dynamic(() => import("../components/BiometricShieldOverlay").then(m => ({ default: m.BiometricShieldOverlay })), { ssr: false, loading: () => null });
 const IncomingContactRequestModal = dynamic(() => import("../components/IncomingContactRequestModal").then(m => ({ default: m.IncomingContactRequestModal })), { ssr: false, loading: () => null });
 
@@ -563,6 +564,11 @@ export default function AppRouter() {
                 {(currentScreen === "nearby" || currentScreen === "contacts") && <NearbyDevicesPanel />}
                 {currentScreen === "security" && <SecurityPanel />}
                 {currentScreen === "status" && <StatusView />}
+                {(currentScreen === "swarmHealthHUD" || currentScreen === "swarmHealth") && (
+                  <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(2, 4, 10, 0.88)", backdropFilter: "blur(25px)", WebkitBackdropFilter: "blur(25px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
+                    <SwarmHealthHUD onClose={goBack} />
+                  </div>
+                )}
                 {currentScreen === "network" && <NetworkPanel />}
                 {currentScreen === "crypto" && <CryptoPanel />}
                 {currentScreen === "broadcast" && <BroadcastPanel />}
@@ -674,6 +680,11 @@ export default function AppRouter() {
               {currentScreen === "crypto" && <CryptoPanel />}
               {(currentScreen === "groups" || currentScreen === "squads") && <GroupsPanel />}
               {currentScreen === "status" && <StatusView />}
+              {(currentScreen === "swarmHealthHUD" || currentScreen === "swarmHealth") && (
+                <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(2, 4, 10, 0.88)", backdropFilter: "blur(25px)", WebkitBackdropFilter: "blur(25px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
+                  <SwarmHealthHUD onClose={goBack} />
+                </div>
+              )}
               {currentScreen === "explorer" && <BlockchainExplorer onClose={goBack} />}
               {currentScreen === "nodemap" && <NodeMap />}
               {currentScreen === "network" && <NetworkPanel />}

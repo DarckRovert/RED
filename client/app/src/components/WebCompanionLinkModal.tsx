@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { companionSyncEngine, CompanionSyncPayload, PairingSession } from "../lib/mesh/companionSyncEngine";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
@@ -37,7 +37,25 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
     const isScanningRef = useRef(false);
     const shouldScanRef = useRef(false);
 
-    // Detección inicial de plataforma
+    // ── Control de Cámara para Escaneo en Móvil ──────────────────────────────
+    const stopCamera = useCallback(async () => {
+        shouldScanRef.current = false;
+        if (typeof document !== "undefined") {
+            document.documentElement.classList.remove("scanner-active");
+            document.body.classList.remove("scanner-active");
+        }
+        isScanningRef.current = false;
+        try {
+            const { Capacitor } = await import("@capacitor/core");
+            if (Capacitor.isNativePlatform()) {
+                const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
+                await BarcodeScanner.showBackground().catch(() => {});
+                await BarcodeScanner.stopScan().catch(() => {});
+            }
+        } catch {}
+    }, []);
+
+    // Detección inicial de plataforma (en móvil nativo NO auto-disparamos la cámara)
     useEffect(() => {
         let isMounted = true;
         import("@capacitor/core").then(({ Capacitor }) => {
@@ -45,7 +63,7 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 const native = Capacitor.isNativePlatform();
                 setIsNativeMobile(native);
                 if (native) {
-                    setMode("send_scan");
+                    setMode("manual");
                 } else {
                     setMode("receive_qr");
                 }
@@ -61,7 +79,60 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
             isMounted = false;
             stopCamera();
         };
-    }, []);
+    }, [stopCamera]);
+
+    // ── Intercepción Jerárquica LIFO de navegación Atrás ───────────────────
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            if (mode === "send_scan") {
+                stopCamera();
+                setMode("manual");
+                return true;
+            }
+            if (mode === "manual" && !isNativeMobile) {
+                setMode("receive_qr");
+                return true;
+            }
+            stopCamera();
+            if (pairingSession) pairingSession.cleanup();
+            onClose();
+            return true;
+        });
+        return unregister;
+    }, [mode, isNativeMobile, pairingSession, onClose, stopCamera]);
+
+    // ── Suspensión Higiénica ante Bloqueo / Segundo Plano ──────────────────
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.hidden && mode === "send_scan") {
+                stopCamera();
+                setMode("manual");
+            }
+        };
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        let appStateSub: any = null;
+        import("@capacitor/core").then(({ Capacitor }) => {
+            if (Capacitor.isNativePlatform()) {
+                import("@capacitor/app").then(({ App }) => {
+                    appStateSub = App.addListener("appStateChange", ({ isActive }) => {
+                        if (!isActive && mode === "send_scan") {
+                            stopCamera();
+                            setMode("manual");
+                        }
+                    });
+                }).catch(() => {});
+            }
+        }).catch(() => {});
+
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            if (appStateSub && appStateSub.remove) {
+                appStateSub.remove();
+            }
+        };
+    }, [mode, stopCamera]);
 
     // ── Iniciar sesión receptora (Generar QR en PC) ───────────────────────────
     useEffect(() => {
@@ -161,23 +232,7 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
         };
     }, [mode, fetchData, onClose, sessionKey]);
 
-    // ── Control de Cámara para Escaneo en Móvil ──────────────────────────────
-    const stopCamera = async () => {
-        shouldScanRef.current = false;
-        if (typeof document !== "undefined") {
-            document.documentElement.classList.remove("scanner-active");
-            document.body.classList.remove("scanner-active");
-        }
-        isScanningRef.current = false;
-        try {
-            const { Capacitor } = await import("@capacitor/core");
-            if (Capacitor.isNativePlatform()) {
-                const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
-                await BarcodeScanner.showBackground().catch(() => {});
-                await BarcodeScanner.stopScan().catch(() => {});
-            }
-        } catch {}
-    };
+
 
     const startNativeScan = async () => {
         shouldScanRef.current = true;
@@ -328,20 +383,6 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
         }
     };
 
-    useEffect(() => {
-        const unregister = BackHandlerRegistry.register(() => {
-            TacticalAudioEngine.playTap();
-            if (mode === "send_scan") {
-                stopCamera();
-                setMode("manual");
-                return true;
-            }
-            handleCancel();
-            return true;
-        });
-        return unregister;
-    }, [mode, pairingSession]);
-
     const fallbackCopy = (text: string, successMsg: string) => {
         try {
             const ta = document.createElement("textarea");
@@ -480,7 +521,7 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                         className="btn-tactical-primary"
                         style={{ width: "100%", padding: "14px", fontSize: "0.92rem", borderRadius: "var(--radius-md)" }}
                     >
-                        ✕ Cancelar
+                        ✕ Cancelar y Salir
                     </button>
                 </div>
             </div>
@@ -666,6 +707,27 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 {/* ESTADO 2: ENTRADA MANUAL DE CÓDIGO Y AIR-GAP */}
                 {mode === "manual" && (
                     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "12px" }}>
+                        {isNativeMobile && (
+                            <button
+                                onClick={() => {
+                                    TacticalAudioEngine.playTap();
+                                    setMode("send_scan");
+                                }}
+                                className="btn-tactical-primary"
+                                style={{
+                                    width: "100%", padding: "14px",
+                                    fontSize: "0.88rem", fontWeight: 900,
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                                    background: "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(179, 136, 255, 0.2) 100%)",
+                                    border: "1.5px solid var(--accent-cyan)",
+                                    borderRadius: "var(--radius-md)",
+                                    boxShadow: "0 0 15px rgba(0, 229, 255, 0.3)"
+                                }}
+                            >
+                                <TacIcon name="camera" size={18} color="var(--accent-cyan)" />
+                                <span>📷 Escanear Código QR de la PC (Cámara)</span>
+                            </button>
+                        )}
                         <label style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>
                             Pega el token <code>RED_PAIR:1:...</code>, <code>RED_PAIR:2:...</code> o la cápsula <code>RED_VAULT:1:...</code>:
                         </label>

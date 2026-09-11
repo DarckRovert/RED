@@ -194,7 +194,7 @@ export const es = {
         updater_title: "Actualizador OTA",
         updater_sub: "DISTRIBUCIÓN FIRMADA P2P",
         c4isr_title: "Centro de Comando C4ISR",
-        c4isr_sub: "MATRIZ DE 57 MÓDULOS OPERATIVOS & SENSORES",
+        c4isr_sub: "MATRIZ DE 62 MÓDULOS OPERATIVOS & SENSORES",
         appstore_title: "App Store P2P",
         appstore_sub: "MINI-APPS EN SANDBOX",
         browser_title: "Hyper-Browser P2P",

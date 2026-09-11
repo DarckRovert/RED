@@ -261,6 +261,7 @@ export default function Sidebar() {
                 { icon: "🦊", label: "Radiogoniometría RDF Foxhunt", action: "tacticalFoxhunt" },
                 { icon: "📳", label: "Shake & Pair (Acelerómetro)", action: "shakePair" },
                 { icon: "🌊", label: "Ola Proximidad Ultrasónica", action: "proximityWave" },
+                { icon: "📡", label: "Ondas y Nodos Cercanos", action: "nearby" },
             ]
         },
         {
@@ -332,6 +333,7 @@ export default function Sidebar() {
                 { icon: "🛡️", label: "Centro de Seguridad Zero-Trust", action: "security" },
                 { icon: "📑", label: "Reporte de Auditoría", action: "secReport" },
                 { icon: "🧮", label: "Calculadora Señuelo (Camuflaje)", action: "calculator" },
+                { icon: "🌐", label: "Red Mesh, DHT & DoH", action: "network" },
             ]
         },
         {
@@ -350,6 +352,7 @@ export default function Sidebar() {
                 { icon: "🌤️", label: "Barómetro & Alertas CAP", action: "weather" },
                 { icon: "💨", label: "Seguridad Atmosférica AQI", action: "atmosphericSafety" },
                 { icon: "💧", label: "Recursos Vitales H2O & Batería", action: "vitalResources" },
+                { icon: "⚡", label: "HUD Supervivencia Extrema", action: "extremeSurvival" },
             ]
         },
         {
@@ -368,6 +371,8 @@ export default function Sidebar() {
                 { icon: "📋", label: "Logs del Nodo Rust SSE", action: "nodeLogs" },
                 { icon: "⚙️", label: "Ajustes del Sistema", action: "settings" },
                 { icon: "🚀", label: "Actualizador OTA", action: "updater" },
+                { icon: "🔋", label: "Batería Eco-Mesh & Cinética", action: "ecoMesh" },
+                { icon: "📶", label: "Telemetría de Enlace LQS", action: "swarmHealthHUD" },
             ]
         },
     ];
