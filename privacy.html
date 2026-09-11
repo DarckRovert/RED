@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Política de Privacidad | RED — Sovereign Mesh OS</title>
+    <link rel="icon" href="./red_icon.png" type="image/png">
+    <style>
+        :root {
+            --bg-primary: #050814;
+            --bg-card: rgba(14, 20, 38, 0.95);
+            --border-color: rgba(0, 230, 118, 0.3);
+            --text-main: #E6EDF3;
+            --text-muted: #8B949E;
+            --accent-green: #00E676;
+            --accent-cyan: #00E5FF;
+            --accent-red: #FF3355;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 24px;
+            margin-bottom: 32px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        header img {
+            width: 54px;
+            height: 54px;
+            border-radius: 14px;
+            box-shadow: 0 0 15px rgba(0, 230, 118, 0.3);
+        }
+        h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            color: #FFFFFF;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+        .version-badge {
+            font-size: 0.75rem;
+            color: var(--accent-green);
+            background: rgba(0, 230, 118, 0.1);
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            font-weight: 700;
+            font-family: monospace;
+        }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        h2 {
+            color: var(--accent-green);
+            font-size: 1.25rem;
+            margin-top: 0;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        h3 {
+            color: var(--accent-cyan);
+            font-size: 1.05rem;
+            margin-top: 16px;
+            margin-bottom: 8px;
+        }
+        p, li {
+            color: #C9D1D9;
+            font-size: 0.95rem;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .highlight {
+            color: var(--accent-cyan);
+            font-weight: 600;
+        }
+        footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 24px;
+            margin-top: 40px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+        a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <img src="./red_icon.png" alt="RED Logo">
+            <div>
+                <h1>RED — Sovereign Tactical Mesh OS</h1>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                    <span class="version-badge">PRIVACY POLICY v96.0</span>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">Última actualización: Septiembre 2026</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="card">
+            <h2>🛡️ 1. Filosofía de Soberanía Absoluta y Cero Datos (Zero-Knowledge)</h2>
+            <p>
+                <strong>RED (Sovereign Tactical Mesh OS)</strong> está concebido bajo el principio fundamental de 
+                <span class="highlight">Cero Conocimiento (Zero-Knowledge)</span> y descentralización total. 
+                Nuestra arquitectura no posee servidores centrales, no recopila telemetría, no rastrea identificadores publicitarios 
+                y jamás vende ni comparte información con terceros, corporaciones ni entidades gubernamentales.
+            </p>
+            <p>
+                Toda la computación, el procesamiento de señales de radiofrecuencia, el análisis de sensores y la inferencia de Inteligencia Artificial (Copilot LLM / GGUF) se ejecutan 
+                <strong>100% en el hardware local de su dispositivo</strong> de forma completamente aislada (Air-Gap).
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>🔐 2. Comunicaciones Cifradas P2P y Malla Descentralizada</h2>
+            <p>
+                Las comunicaciones en RED (mensajería, voz táctica, telemetría y coordenadas) se transmiten de par a par (P2P) a través de enlaces directos 
+                (Bluetooth Low Energy, Wi-Fi Direct, LoRaWAN o acústica de alta frecuencia):
+            </p>
+            <ul>
+                <li><strong>Cifrado Post-Cuántico (PQC):</strong> El intercambio de claves está blindado con algoritmos resistentes a computación cuántica (ML-KEM / Kyber-768).</li>
+                <li><strong>Cifrado Simétrico Militar:</strong> Cifrado autenticado AES-256-GCM y ChaCha20-Poly1305 para la capa de transporte de datos.</li>
+                <li><strong>Perfect Forward Secrecy (PFS):</strong> Cada mensaje genera claves efímeras independientes; la captura de una clave jamás compromete mensajes pasados ni futuros.</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>📱 3. Declaración de Permisos de Hardware en el Dispositivo</h2>
+            <p>RED solicita exclusivamente los permisos indispensables para la operación táctica fuera de línea:</p>
+            <ul>
+                <li><strong>Ubicación (GPS / GNSS):</strong> Utilizado estrictamente de forma local para la brújula táctica, navegación inercial (PDR), cartografía offline y coordenadas de rescate. Las coordenadas jamás se envían a servidores externos.</li>
+                <li><strong>Cámara:</strong> Utilizada únicamente en memoria volátil para el escaneo de códigos QR de emparejamiento criptográfico, transceptor óptico Morse / Li-Fi y visión táctica computacional. Ninguna foto ni video se almacena sin orden explícita del usuario.</li>
+                <li><strong>Micrófono:</strong> Requerido para el Walkie-Talkie táctico P2P, barrera acústica de protección anti-espía contra micrófonos MEMS (20.5 kHz) y sonar subacuático. No se realizan grabaciones en segundo plano.</li>
+                <li><strong>Bluetooth & Wi-Fi:</strong> Empleado exclusivamente para el enrutamiento de paquetes en malla local (Mesh Routing) entre dispositivos cercanos sin conexión a Internet.</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>💾 4. Almacenamiento Local y Bóveda Segura</h2>
+            <p>
+                Todas las identidades criptográficas, contactos, claves privadas y mapas offline se almacenan en el almacenamiento seguro del sistema (Android Keystore / SQLite cifrado localmente). 
+                La aplicación incluye mecanismos de autodestrucción criptográfica y PIN de coacción para eliminar instantáneamente las claves en caso de captura física del terminal.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>🌐 5. Contacto & Código Abierto</h2>
+            <p>
+                RED es un proyecto de código abierto auditado bajo licencia AGPL-3.0. Para consultas sobre seguridad, auditorías o verificación criptográfica:
+            </p>
+            <p>
+                Repositorio Oficial: <a href="https://github.com/DarckRovert/RED" target="_blank" rel="noopener noreferrer">https://github.com/DarckRovert/RED</a><br>
+                Portal Oficial: <a href="https://darckrovert.github.io/RED/" target="_blank" rel="noopener noreferrer">https://darckrovert.github.io/RED/</a>
+            </p>
+        </div>
+
+        <footer>
+            RED Sovereign Mesh OS &copy; 2026. Construido para operaciones tácticas, supervivencia extrema y soberanía digital.
+        </footer>
+    </div>
+</body>
+</html>
