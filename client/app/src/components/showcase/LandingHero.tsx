@@ -113,6 +113,22 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
                         >
                             <span>📥</span> Descargar APK (v{RED_VERSION})
                         </a>
+
+                        <a
+                            href={`${basePath}/pitch`}
+                            style={{
+                                display: "inline-flex", alignItems: "center", gap: "10px",
+                                padding: "15px 24px", borderRadius: "14px",
+                                background: "rgba(6, 182, 212, 0.15)",
+                                border: "1px solid rgba(6, 182, 212, 0.45)",
+                                color: "#22D3EE", fontWeight: 900, fontSize: "15px",
+                                textDecoration: "none",
+                                boxShadow: "0 0 25px rgba(6, 182, 212, 0.25)",
+                                transition: "all 0.2s ease"
+                            }}
+                        >
+                            <span>📊</span> Pitch Deck Interactivo
+                        </a>
                     </div>
 
                     {/* Key Technical Badges */}

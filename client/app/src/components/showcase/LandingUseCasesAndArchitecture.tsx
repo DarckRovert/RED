@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { RED_VERSION } from '../../lib/version';
 
 interface LandingUseCasesAndArchitectureProps {
     handleCopy: (text: string) => void;
@@ -270,7 +271,7 @@ public class RedNodeService extends Service {
             }}>
                 {/* Tech HUD Corner Accents */}
                 <div style={{ position: "absolute", top: "12px", left: "16px", fontSize: "10px", color: "#00E5FF", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, letterSpacing: "1px" }}>
-                    {diagramType === "network" ? "TACTICAL MESH TOPOLOGY // MESH_NET_V98_0_0" : "SYSTEM SCHEMATIC // ARCH_REF_V98_0_0"}
+                    {diagramType === "network" ? `TACTICAL MESH TOPOLOGY // MESH_NET_V${RED_VERSION.replace(/\./g, '_')}` : `SYSTEM SCHEMATIC // ARCH_REF_V${RED_VERSION.replace(/\./g, '_')}`}
                 </div>
                 <div style={{ position: "absolute", top: "12px", right: "16px", fontSize: "10px", color: "#00FF88", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
                     STATUS: VERIFIED GROUND TRUTH
@@ -773,7 +774,7 @@ public class RedNodeService extends Service {
                               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                   <span style={{ fontSize: "16px" }}>{diagramType === "network" ? "🌐" : "📐"}</span>
                                   <span style={{ color: "#FFF", fontWeight: 800, fontSize: "13px", fontFamily: "JetBrains Mono, monospace" }}>
-                                      {diagramType === "network" ? "RED OS // TOPOLOGÍA TÁCTICA MESH P2P" : "RED OS v98.0.0 // SISTEMA INTEGRAL DE CAPAS"}
+                                      {diagramType === "network" ? "RED OS // TOPOLOGÍA TÁCTICA MESH P2P" : `RED OS v${RED_VERSION} // SISTEMA INTEGRAL DE CAPAS`}
                                   </span>
                               </div>
                               <div style={{ display: "flex", gap: "6px" }}>
@@ -881,7 +882,7 @@ public class RedNodeService extends Service {
                           flexWrap: "wrap", gap: "8px"
                       }}>
                           <span>FORMATO: 4K ULTRA-HD // RENDERIZADO VECTORIAL // VERIFICADO 100% OFFLINE</span>
-                          <span>ESCALA: {Math.round(modalZoom * 100)}% • ARQUITECTURA SOBERANA RED v98.0.0</span>
+                          <span>ESCALA: {Math.round(modalZoom * 100)}% • ARQUITECTURA SOBERANA RED v{RED_VERSION}</span>
                       </div>
                   </div>
               </div>
