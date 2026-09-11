@@ -1438,7 +1438,23 @@ body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder
   display: flex !important;
 }
 
-@media (min-width: 1280px) {
+.hidden-mobile-pitch {
+  display: flex !important;
+}
+
+.hidden-mobile-apk {
+  display: flex !important;
+}
+
+.btn-companion-text-full {
+  display: inline !important;
+}
+
+.btn-companion-text-short {
+  display: none !important;
+}
+
+@media (min-width: 1400px) {
   .desktop-telemetry {
     display: flex !important;
   }
@@ -1453,6 +1469,21 @@ body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder
   }
   .hidden-mobile-sponsor {
     display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .hidden-mobile-pitch {
+    display: none !important;
+  }
+  .hidden-mobile-apk {
+    display: none !important;
+  }
+  .btn-companion-text-full {
+    display: none !important;
+  }
+  .btn-companion-text-short {
+    display: inline !important;
   }
 }
 

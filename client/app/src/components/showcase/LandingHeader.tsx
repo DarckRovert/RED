@@ -40,6 +40,16 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
         { id: "faq", label: "FAQ & Legal" },
     ];
 
+    const primaryNavItems = [
+        { id: "how-it-works", label: "¿Cómo Funciona?" },
+        { id: "hardware", label: "Hardware Real" },
+        { id: "scenarios", label: "Escenarios" },
+        { id: "live-mesh-demo", label: "Malla en Vivo" },
+        { id: "modules", label: "62 Módulos" },
+        { id: "architecture", label: "Arquitectura" },
+        { id: "faq", label: "FAQ" },
+    ];
+
     const handleEnter = onEnterApp;
 
     return (
@@ -127,25 +137,25 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
         <nav
           style={{
             display: "flex",
-            gap: "2px",
+            gap: "4px",
             alignItems: "center",
-            overflowX: "auto",
-            maxWidth: "calc(100vw - 440px)",
-            scrollbarWidth: "none"
+            justifyContent: "center",
+            flex: 1,
+            maxWidth: "720px",
           }}
           className="desktop-nav"
         >
-          {navItems.map((tab) => (
+          {primaryNavItems.map((tab) => (
             <button
               key={tab.id}
               onClick={() => scrollToSection(tab.id)}
               style={{
-                padding: "6px 9px",
+                padding: "6px 12px",
                 borderRadius: "8px",
                 border: activeSection === tab.id ? "1px solid #FF2A51" : "1px solid transparent",
                 background: activeSection === tab.id ? "rgba(255, 42, 81, 0.18)" : "transparent",
                 color: activeSection === tab.id ? "#FFF" : "#94A3B8",
-                fontSize: "11px",
+                fontSize: "12px",
                 fontWeight: 700,
                 cursor: "pointer",
                 whiteSpace: "nowrap",
@@ -158,7 +168,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
         </nav>
 
         {/* Right CTA Button & Mobile Toggle */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
           <div className="hidden-mobile-sponsor" style={{ display: "flex", alignItems: "center" }}>
             <iframe
               src="https://github.com/sponsors/DarckRovert/button"
@@ -175,6 +185,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
 
           <a
             href={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/pitch`}
+            className="hidden-mobile-pitch"
             style={{
               padding: "7px 14px",
               borderRadius: "10px",
@@ -187,6 +198,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
               display: "flex",
               alignItems: "center",
               gap: "6px",
+              whiteSpace: "nowrap",
             }}
             title="Abrir Presentación Ejecutiva / Pitch Deck"
           >
@@ -196,6 +208,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
 
           <a
             href={`https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/red-latest.apk`}
+            className="hidden-mobile-apk"
             style={{
               padding: "7px 14px",
               borderRadius: "10px",
@@ -208,6 +221,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
               display: "flex",
               alignItems: "center",
               gap: "6px",
+              whiteSpace: "nowrap",
             }}
           >
             <TacIcon name="download" size={13} color="#00FF88" />
@@ -229,10 +243,12 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
               display: "flex",
               alignItems: "center",
               gap: "8px",
+              whiteSpace: "nowrap",
             }}
           >
             <TacIcon name="zap" size={14} color="#FFF" />
-            <span>Iniciar Web Companion</span>
+            <span className="btn-companion-text-full">Iniciar Web Companion</span>
+            <span className="btn-companion-text-short">Web App</span>
           </button>
 
           <button

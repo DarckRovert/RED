@@ -342,12 +342,13 @@ export default function AppRouter() {
         }
 
         const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get("app") === "true" || (typeof window !== "undefined" && localStorage.getItem("red_landing_dismissed") === "true")) {
+        // En la web pública, solo entrar a la app si se especifica ?app=true explícitamente
+        if (urlParams.get("app") === "true") {
           setShowLanding(false);
           return;
         }
 
-        // En la web por primera vez, se muestra el Portal / Landing Page oficial
+        // En la web (navegadores de escritorio o móviles), SIEMPRE mostrar el Showcase Landing oficial por defecto
         setShowLanding(true);
       } catch {
         setShowLanding(true);
@@ -509,12 +510,10 @@ export default function AppRouter() {
   if (showLanding) {
     return (
       <ErrorBoundary>
-        <RedShowcaseLanding onEnterVault={() => {
-          if (typeof window !== "undefined") {
-            localStorage.setItem("red_landing_dismissed", "true");
-          }
-          setShowLanding(false);
-        }} />
+        <RedShowcaseLanding
+          onEnterVault={() => setShowLanding(false)}
+          onEnterApp={() => setShowLanding(false)}
+        />
       </ErrorBoundary>
     );
   }
