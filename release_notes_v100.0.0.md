@@ -43,6 +43,6 @@ Esta versión conmemorativa **v100.0.0 Centurion Edition** marca la madurez oper
 
 | Archivo | Descripción | SHA-256 | Plataforma |
 |---|---|---|---|
-| `red-v100.0.0-release.apk` | APK Oficial Firmado v100.0.0 | `F3DAAAECCB03D2DD215EFF55E7C839A35370A91C88461C3AF8281C2DD25498CA` | Android 7.0+ (ARM64/ARMv7/x86_64) |
-| `red-latest.apk` | Enlace canónico de descarga directa | `F3DAAAECCB03D2DD215EFF55E7C839A35370A91C88461C3AF8281C2DD25498CA` | Android 7.0+ |
+| `red-v100.0.0-release.apk` | APK Oficial Firmado v100.0.0 | `9D84370E5B2BBFD35599F498A8E1844EC7BBFC46B5A360C492F8585820ED1767` | Android 7.0+ (ARM64/ARMv7/x86_64) |
+| `red-latest.apk` | Enlace canónico de descarga directa | `9D84370E5B2BBFD35599F498A8E1844EC7BBFC46B5A360C492F8585820ED1767` | Android 7.0+ |
 | `SHA256SUMS.txt` | Sumas de verificación criptográficas | Ver archivo | Universal |

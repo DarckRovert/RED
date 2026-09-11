@@ -15,7 +15,6 @@ Esta versión conmemorativa **v100.0.0 Centurion Edition** marca la madurez oper
 
 ### 2. Matriz Completa de 62 Módulos Tácticos Sincronizados
 - **Paridad Absoluta 1-a-1:** Se auditó cada uno de los 62 módulos en `Sidebar.tsx` y `TacticalCommandCenter.tsx`, asegurando que cada tarjeta y acceso rápido abra exactamente la herramienta prometida por su título sin pantallas de marcador de posición ni enlaces rotos.
-- **Mapeo Directo en Catálogo:** El catálogo de la landing (`LandingModuleCatalog.tsx`) ahora enruta los 62 módulos directamente a su vista correspondiente mediante `CATALOG_TO_SCREEN_MAP`.
 - **Mapeo de Dominios Estratégicos:**
   1. **Comunicaciones & Malla (11 módulos):** Canales Mesh (#), Walkie-Talkie PTT, Llamadas Cifradas WebRTC, Escuadrones P2P, Muro Social, Live Stream Multicast, Pizarra Táctica, Difusión de Emergencia, Transceptor LoRa RF 25km, Guerra Acústica y Búfer DTN.
   2. **Navegación & Sensores (11 módulos):** Radar Swarm BLE/WiFi 360°, Radar de Proximidad Mesh, Mapa Offline GPS, Brújula Topográfica PDR, Brújula P2P Tracking, Navegación Celeste J2000, Ecosonda ToF / Sismógrafo, Radiogoniometría RDF Foxhunt, Shake & Pair Cinético, Ola de Proximidad Ultrasónica y Analizador Espectro RF SIGINT.
@@ -33,8 +32,8 @@ Esta versión conmemorativa **v100.0.0 Centurion Edition** marca la madurez oper
 
 ### 4. Certificación Empírica en Dispositivos Físicos
 - **Motorola Moto G22** (`ZT322B386P` / Android 12):
-  - Instalación limpia del APK verificado con captura de pantalla y comprobación en tiempo real.
-  - Comportamiento validado: arranque limpio en la pantalla de bienvenida y navegación táctica sin fallos.
+  - Despliegue limpio del APK firmado con verificación en caliente vía Logcat.
+  - Comportamiento validado: apertura fluida de módulos de radar, brújula topográfica y telemetría de enlace LQS sin cierres inesperados.
 - **Lenovo Tablet TB305XU** (`HA2CHKZ2` / Android 14):
   - Espacio de trabajo tablet dividido de alta resolución (`tablet-split-layout`) certificado con navegación simétrica y acceso directo a los 62 módulos.
 
@@ -44,6 +43,6 @@ Esta versión conmemorativa **v100.0.0 Centurion Edition** marca la madurez oper
 
 | Archivo | Descripción | SHA-256 | Plataforma |
 |---|---|---|---|
-| `red-v100.0.0-release.apk` | APK Oficial Firmado v100.0.0 | `EBAFE15ECF6A34CCBE98FF56FD06ADB54BA10B48B21451F5964651B3C29B6BF7` | Android 7.0+ (ARM64/ARMv7/x86_64) |
-| `red-latest.apk` | Enlace canónico de descarga directa | `EBAFE15ECF6A34CCBE98FF56FD06ADB54BA10B48B21451F5964651B3C29B6BF7` | Android 7.0+ |
+| `red-v100.0.0-release.apk` | APK Oficial Firmado v100.0.0 | `9D84370E5B2BBFD35599F498A8E1844EC7BBFC46B5A360C492F8585820ED1767` | Android 7.0+ (ARM64/ARMv7/x86_64) |
+| `red-latest.apk` | Enlace canónico de descarga directa | `9D84370E5B2BBFD35599F498A8E1844EC7BBFC46B5A360C492F8585820ED1767` | Android 7.0+ |
 | `SHA256SUMS.txt` | Sumas de verificación criptográficas | Ver archivo | Universal |
