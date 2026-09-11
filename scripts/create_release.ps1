@@ -8,5 +8,5 @@ $sums = "$releaseAssets\SHA256SUMS.txt"
 $notesPath = "d:\PROYECTO RED\release_notes_v100.0.0.md"
 
 Write-Host "Publicando release $tag en GitHub..."
-gh release create $tag $apk1 $apk2 $sums --title $title --notes-file $notesPath --clobber
+gh release create $tag $apk1 $apk2 $sums --title $title --notes-file $notesPath --latest
 Write-Host "Release $tag publicada exitosamente."
