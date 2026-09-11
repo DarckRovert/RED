@@ -160,7 +160,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
         TacticalAudioEngine.playMessageSent();
         const textLines = messages.map((m) => {
             const time = new Date((m.timestamp > 1e11 ? m.timestamp : m.timestamp * 1000)).toLocaleString();
-            const sender = m.is_mine ? "Tú" : displayName;
+            const sender = m.is_mine ? (t('chat_modals.you') || "Tú") : displayName;
             return `[${time}] ${sender}: ${m.content || `[${m.msg_type || "Medio"}]`}`;
         });
         const blob = new Blob([textLines.join("\n")], { type: "text/plain;charset=utf-8" });
@@ -542,7 +542,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                         </button>
                         <button
                             onClick={() => {
-                                if (window.confirm("¿Seguro que deseas vaciar los mensajes de este chat?")) {
+                                if (window.confirm(t('chat_modals.confirm_clear_chat') || "¿Seguro que deseas vaciar los mensajes de este chat?")) {
                                     onClearChat?.();
                                     onClose();
                                 }
@@ -559,7 +559,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                         <button
                             onClick={() => {
-                                if (window.confirm(`¿Estás seguro de eliminar a ${displayName} de tus contactos?`)) {
+                                if (window.confirm(t('chat_modals.confirm_delete_contact', { name: displayName }) || `¿Estás seguro de eliminar a ${displayName} de tus contactos?`)) {
                                     onDeleteContact?.();
                                     onClose();
                                 }
@@ -581,7 +581,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
 
                         <button
                             onClick={() => {
-                                if (window.confirm(`¿Bloquear a ${displayName}? No podrá enviarte mensajes ni solicitudes P2P.`)) {
+                                if (window.confirm(t('chat_modals.confirm_block_contact', { name: displayName }) || `¿Bloquear a ${displayName}? No podrá enviarte mensajes ni solicitudes P2P.`)) {
                                     onBlockNode?.();
                                     onClose();
                                 }

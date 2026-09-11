@@ -1,5 +1,30 @@
 # Changelog
 
+## [101.0.0-zero-mock-and-multi-language-sovereign-field-edition] - 2026-09-11
+
+### 🚀 Zero-Mock & Multi-Language Sovereign Field Edition (Release Oficial v101.0.0)
+
+- **Purga Integral de Maquetas y Conexión Directa a Hardware Real:**
+  - Erradicación de datos hardcodeados y estados falsos en 30 componentes clave.
+  - Intercambio descentralizado `zk-Barter` con selector de recursos dinámicos arbitrarios (`➕ Recurso personalizado...`) comprometiendo hashes al árbol Merkle, con emisión acústica física Web Audio VLF (25–60 Hz) y tren de pulsos hápticos (`SubsurfaceAcousticEngine`).
+  - Telemetría LQS reactiva en `SwarmHealthHUD` vía `getBearerInfoMap(t)` vinculando en tiempo real las 6 portadoras físicas (Wi-Fi Direct, BLE Mesh, LoRa Sub-GHz, SoundMesh, LiFi Óptico y Satélite LEO) con estado de transceptor y vaciado reactivo de búfer DTN.
+  - HUD de Supervivencia Extrema y Triaje Dual conectados al canal táctico PTT `#general`, baliza persistente en Rust Sled DB + malla soberana P2P, y navegación hacia punto de reunión Alfa.
+- **Sincronización Lingüística Soberana (12 Idiomas con Paridad 1:1):**
+  - Paridad exacta de 1,314 claves en Español (`es`), Inglés (`en`), Chino (`zh`), Portugués (`pt`), Francés (`fr`), Alemán (`de`), Italiano (`it`), Ruso (`ru`), Japonés (`ja`), Árabe (`ar`), Coreano (`ko`) y Quechua (`qu`).
+  - Validación automatizada con AST de TypeScript (`ts.createSourceFile`) sobre 386 archivos fuente: 0 claves literales `t()` faltantes.
+- **Gobernanza Atómica SSOT y Despliegue en Hardware Real:**
+  - Sincronización atómica de 21 archivos maestros (código de versión `101000`, caché SW `red-vault-cache-v101`).
+  - Despliegue y validación higiénica simultánea en Motorola Moto G22 (`ZT322B386P`) y Lenovo Tablet TB305XU (`HA2CHKZ2`): desinstalación limpia previa, instalación binaria de `red-latest.apk` (SHA-256: `B3E384C2...EC8D73`), y arranque en primer plano de `f.red.app/.MainActivity` sin excepciones fatales en Logcat.
+
+## [100.0.0-centurion-edition-62-tactical-modules-and-resilient-web-companion] - 2026-09-11
+
+### 🚀 Centurion Edition — 62 Tactical Modules & Resilient Web Companion (Release Oficial v100.0.0)
+
+- **Hito Centurión & Consolidación Táctica:**
+  - Despliegue de los 62 módulos tácticos integrados en el mapa interactivo y HUD de operaciones.
+  - Emparejamiento P2P con Web Companion vía escaneo de QR y túnel WebRTC / WebSocket local sin intermediarios en la nube.
+  - Gobernanza SSOT unificada y sincronización atómica en 21 archivos maestros.
+
 ## [99.0.0-geohash-spatial-dtn-and-tdma-solar-repeater-edition] - 2026-09-11
 
 ### 🚀 Geohash Spatial DTN & TDMA Solar Repeater Edition (Release Oficial v99.0.0)

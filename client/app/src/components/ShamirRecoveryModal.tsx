@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { shamirRecoveryVault, SocialRecoveryVaultState, GuardianRecord } from "../lib/crypto/ShamirSocialRecoveryVault";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
@@ -10,6 +11,7 @@ import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
 import { meshRouter } from "../lib/mesh/meshRouter";
 
 export function ShamirRecoveryModal() {
+    const { t } = useTranslation();
     const { navigate, identity, contacts, goBack } = useRedStore();
 
     const [vaultState, setVaultState] = useState<SocialRecoveryVaultState>(() => shamirRecoveryVault.getState());
@@ -205,10 +207,10 @@ export function ShamirRecoveryModal() {
                     <span style={{ fontSize: "1.2rem" }}>🧩</span>
                     <div>
                         <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF" }}>
-                            RECUPERACIÓN SOCIAL SHAMIR (SSS 3-DE-5)
+                            {t('shamir_recovery_modal.title')}
                         </div>
                         <div style={{ fontSize: "0.65rem", color: "#AAA" }}>
-                            Distribución de Claves y Restauración Umbral Descentralizada
+                            {t('shamir_recovery_modal.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -220,7 +222,7 @@ export function ShamirRecoveryModal() {
                         cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"
                     }}
                 >
-                    ✕ CERRAR
+                    ✕ {t('common.close')}
                 </button>
             </div>
 
@@ -364,7 +366,7 @@ export function ShamirRecoveryModal() {
                                 type="text"
                                 value={inputShareHex}
                                 onChange={(e) => setInputShareHex(e.target.value)}
-                                placeholder="Pega el valor hexadecimal del fragmento..."
+                                placeholder={t('shamir_recovery_modal.input_shard_placeholder')}
                                 style={{
                                     flex: 1, padding: "10px", borderRadius: "8px", background: "rgba(0,0,0,0.6)",
                                     border: "1px solid rgba(255,255,255,0.15)", color: "#FFF", fontSize: "0.78rem"
@@ -377,7 +379,7 @@ export function ShamirRecoveryModal() {
                                     color: "#000", fontWeight: 800, fontSize: "0.78rem", border: "none", cursor: "pointer"
                                 }}
                             >
-                                ＋ AÑADIR
+                                ＋ {t('shamir_recovery_modal.add_shard_btn')}
                             </button>
                         </div>
 
@@ -390,7 +392,7 @@ export function ShamirRecoveryModal() {
                                     color: "#000", fontWeight: 900, fontSize: "0.85rem", border: "none", cursor: "pointer"
                                 }}
                             >
-                                🔓 RECONSTRUIR CLAVE MAESTRA SOVERANA
+                                🔓 {t('shamir_recovery_modal.reconstruct_btn')}
                             </button>
                         )}
 
@@ -400,7 +402,7 @@ export function ShamirRecoveryModal() {
                                 border: "1.5px solid #00E676", display: "flex", flexDirection: "column", gap: "8px"
                             }}>
                                 <div style={{ fontSize: "0.8rem", fontWeight: 900, color: "#00E676" }}>
-                                    ✓ CLAVE RECUPERADA POR POLINOMIO DE LAGRANGE:
+                                    ✓ {t('shamir_recovery_modal.quorum_achieved')}
                                 </div>
                                 <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                                     <div style={{ background: "rgba(0,0,0,0.6)", padding: "10px", borderRadius: "8px", fontSize: "0.72rem", color: "#FFF", wordBreak: "break-all", flex: 1 }}>
@@ -479,7 +481,7 @@ export function ShamirRecoveryModal() {
                                     border: "none", color: "#FFF", fontWeight: 800, fontSize: "0.75rem", cursor: "pointer"
                                 }}
                             >
-                                ✕ CERRAR
+                                ✕ {t('common.close')}
                             </button>
                         </div>
                     </div>

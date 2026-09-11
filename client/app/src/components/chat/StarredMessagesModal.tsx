@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { MessageItem } from "../../lib/api";
 import { useRedStore } from "../../store/useRedStore";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
@@ -25,6 +26,7 @@ export const StarredMessagesModal: React.FC<StarredMessagesModalProps> = ({
     onUnstar,
     onJumpToMessage,
 }) => {
+    const { t } = useTranslation();
     const { preferences } = useRedStore();
     const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
     const [searchQuery, setSearchQuery] = useState("");
@@ -106,7 +108,7 @@ export const StarredMessagesModal: React.FC<StarredMessagesModalProps> = ({
                         <span style={{ fontSize: "1.3rem" }}>⭐</span>
                         <div>
                             <div style={{ fontSize: "1rem", fontWeight: 700, color: "#FFFFFF" }}>
-                                Mensajes Destacados
+                                {t('chat_modals.starred_messages_title')}
                             </div>
                             <div style={{ fontSize: "0.72rem", color: isFamiliar ? "#00A884" : "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace" }}>
                                 {starredList.length} MENSAJE{starredList.length !== 1 ? "S" : ""} CON ESTRELLA
@@ -174,10 +176,10 @@ export const StarredMessagesModal: React.FC<StarredMessagesModalProps> = ({
                         <div style={{ textAlign: "center", padding: "40px 16px", color: "#8696A0" }}>
                             <div style={{ fontSize: "2rem", marginBottom: "10px" }}>⭐</div>
                             <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "#E9EDEF", marginBottom: "4px" }}>
-                                {searchQuery ? "Sin coincidencias" : "No tienes mensajes destacados"}
+                                {searchQuery ? "Sin coincidencias" : t('chat_modals.no_starred_messages')}
                             </div>
                             <div style={{ fontSize: "0.78rem" }}>
-                                Mantén presionado cualquier mensaje en el chat y selecciona "Destacar" para guardarlo aquí.
+                                {t('chat_modals.starred_hint') || 'Mantén presionado cualquier mensaje en el chat y selecciona "Destacar" para guardarlo aquí.'}
                             </div>
                         </div>
                     ) : (
@@ -186,7 +188,7 @@ export const StarredMessagesModal: React.FC<StarredMessagesModalProps> = ({
                                 dateStyle: "short",
                                 timeStyle: "short"
                             });
-                            const senderLabel = m.is_mine ? "Tú" : peerName;
+                            const senderLabel = m.is_mine ? (t('chat_modals.you') || "Tú") : peerName;
                             return (
                                 <div
                                     key={m.id}

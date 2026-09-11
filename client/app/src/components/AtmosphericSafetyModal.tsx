@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { useRedStore } from "../store/useRedStore";
 import { opticalGasAqiEngine, AtmosphericTelemetry } from "../lib/sensors/OpticalGasAqiEngine";
 import {
@@ -18,6 +19,7 @@ import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 export function AtmosphericSafetyModal() {
+    const { t } = useTranslation();
     const { navigate, identity, goBack } = useRedStore();
 
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -259,10 +261,10 @@ export function AtmosphericSafetyModal() {
                     <span style={{ fontSize: "1.2rem" }}>💨</span>
                     <div>
                         <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF" }}>
-                            ESPECTROMETRÍA ÓPTICA DE GAS & CALIDAD DE AIRE (AQI)
+                            {t('atmospheric_safety_modal.title')}
                         </div>
                         <div style={{ fontSize: "0.65rem", color: "#AAA" }}>
-                            Detección de Humo, Densidad PM2.5/PM10 y Riesgo de Asfixia
+                            {t('atmospheric_safety_modal.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -276,7 +278,7 @@ export function AtmosphericSafetyModal() {
                         color: "#FFF", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "0.8rem"
                     }}
                 >
-                    ✕ CERRAR
+                    ✕ {t('common.close')}
                 </button>
             </div>
 
@@ -342,7 +344,7 @@ export function AtmosphericSafetyModal() {
                         </div>
 
                         <div style={{ padding: "8px", background: "rgba(255, 255, 255, 0.03)", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
-                            <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>ALTITUD HIPSOMÉTRICA</div>
+                            <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>{t('atmospheric_safety_modal.altitude_estimate')}</div>
                             <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#38BDF8", marginTop: "2px" }}>
                                 {baroAltitudeMeters !== null ? `${baroAltitudeMeters}` : "--"} <span style={{ fontSize: "0.65rem" }}>m snm</span>
                             </div>
@@ -364,7 +366,7 @@ export function AtmosphericSafetyModal() {
                     </div>
 
                     <div style={{ fontSize: "0.65rem", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between" }}>
-                        <span>Tendencia: <strong style={{ color: "#FFFFFF" }}>{pressureTrendLabel}</strong></span>
+                        <span>{t('atmospheric_safety_modal.barometric_trend')}: <strong style={{ color: "#FFFFFF" }}>{pressureTrendLabel}</strong></span>
                         <span>{baroPressure && baroPressure < 980 ? "⚠️ ALERTA: BAJA PRESIÓN / ESPACIO CONFINADO" : "Presión Atmosférica Nominal"}</span>
                     </div>
                 </div>
@@ -395,15 +397,15 @@ export function AtmosphericSafetyModal() {
                 {/* Metrics Grid */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                     <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
-                        <div style={{ fontSize: "0.68rem", color: "#AAA" }}>PARTÍCULAS PM2.5</div>
+                        <div style={{ fontSize: "0.68rem", color: "#AAA" }}>{t('atmospheric_safety_modal.particulates')} (PM2.5)</div>
                         <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#00E5FF" }}>{telemetry.pm25Ugm3} <span style={{ fontSize: "0.7rem" }}>µg/m³</span></div>
                     </div>
                     <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
-                        <div style={{ fontSize: "0.68rem", color: "#AAA" }}>PARTÍCULAS PM10</div>
+                        <div style={{ fontSize: "0.68rem", color: "#AAA" }}>{t('atmospheric_safety_modal.particulates')} (PM10)</div>
                         <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#38BDF8" }}>{telemetry.pm10Ugm3} <span style={{ fontSize: "0.7rem" }}>µg/m³</span></div>
                     </div>
                     <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
-                        <div style={{ fontSize: "0.68rem", color: "#AAA" }}>MONÓXIDO CO ESTIMADO</div>
+                        <div style={{ fontSize: "0.68rem", color: "#AAA" }}>{t('atmospheric_safety_modal.co_level')}</div>
                         <div style={{ fontSize: "1.1rem", fontWeight: 800, color: telemetry.estimatedCoPpm > 35 ? "#FF3355" : "#FFB300" }}>{telemetry.estimatedCoPpm} <span style={{ fontSize: "0.7rem" }}>PPM</span></div>
                     </div>
                     <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>

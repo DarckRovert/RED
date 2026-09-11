@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { waterPurification, WaterSourceType, DisinfectionMethod, PurificationDosageResult } from "../lib/sensors/WaterPurificationEngine";
 import { tacticalPowerGovernor, MissionPowerProfile, TacticalPowerGovernorEngine } from "../lib/sensors/TacticalPowerGovernorEngine";
 import { useRedStore } from "../store/useRedStore";
@@ -10,6 +11,7 @@ import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { meshRouter } from "../lib/mesh/meshRouter";
 
 export function VitalResourcesModal() {
+    const { t } = useTranslation();
     const { navigate, goBack } = useRedStore();
 
     const [activeTab, setActiveTab] = useState<"water" | "power">("water");
@@ -237,10 +239,10 @@ export function VitalResourcesModal() {
                     <span style={{ fontSize: "1.2rem" }}>💧</span>
                     <div>
                         <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF" }}>
-                            RECURSOS VITALES: AGUA & ENERGÍA
+                            {t('vital_resources_modal.title')}
                         </div>
                         <div style={{ fontSize: "0.65rem", color: "#AAA" }}>
-                            Dosimetría de Purificación H2O y Autonomía de Batería de Campaña
+                            {t('vital_resources_modal.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -269,7 +271,7 @@ export function VitalResourcesModal() {
                             cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"
                         }}
                     >
-                        ✕ CERRAR
+                        ✕ {t('common.close')}
                     </button>
                 </div>
             </div>
@@ -313,7 +315,7 @@ export function VitalResourcesModal() {
                         <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
                             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                    <label style={{ fontSize: "0.7rem", color: "#AAA" }}>VOLUMEN DE AGUA A POTABILIZAR:</label>
+                                    <label style={{ fontSize: "0.7rem", color: "#AAA" }}>{t('vital_resources_modal.water_treated_liters')}:</label>
                                     <span style={{ fontSize: "0.85rem", fontWeight: 900, color: "#00E5FF" }}>{liters} Litros</span>
                                 </div>
                                 <input type="range" min="1" max="50" step="1" value={liters} onChange={(e) => setLiters(parseInt(e.target.value))} style={{ width: "100%" }} />
@@ -352,7 +354,7 @@ export function VitalResourcesModal() {
                             {/* SODIS Atmospheric Settings */}
                             {method === "SOLAR_UV_SODIS" && (
                                 <div style={{ background: "rgba(255, 179, 0, 0.08)", border: "1px dashed rgba(255, 179, 0, 0.4)", borderRadius: "8px", padding: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                                    <div style={{ fontSize: "0.68rem", fontWeight: 800, color: "#FFB300" }}>☀️ CONDICIONES DE RADIACIÓN SOLAR UV (SODIS):</div>
+                                    <div style={{ fontSize: "0.68rem", fontWeight: 800, color: "#FFB300" }}>☀️ {t('vital_resources_modal.uv_exposure_guide')}:</div>
                                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                                         <div>
                                             <div style={{ fontSize: "0.62rem", color: "#AAA" }}>Índice UV Solar: {sodisUvIndex}</div>
@@ -369,7 +371,7 @@ export function VitalResourcesModal() {
 
                         {/* Dosage Result Card */}
                         <div style={{ background: "rgba(0, 229, 255, 0.08)", border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                            <div style={{ fontSize: "0.7rem", color: "#AAA" }}>DOSIS RECOMENDADA:</div>
+                            <div style={{ fontSize: "0.7rem", color: "#AAA" }}>{t('vital_resources_modal.tablets_dosage')}:</div>
                             <div style={{ fontSize: "1.15rem", fontWeight: 900, color: "#00E5FF" }}>
                                 {dosage.dosageText}
                             </div>

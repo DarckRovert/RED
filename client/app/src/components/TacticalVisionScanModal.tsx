@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import {
     tacticalEdgeVision,
     TacticalVisionFilter,
@@ -16,6 +17,7 @@ import { TacticalSpeechEngine } from "../lib/ai/TacticalSpeechEngine";
 import { meshRouter } from "../lib/mesh/meshRouter";
 
 export function TacticalVisionScanModal() {
+    const { t } = useTranslation();
     const { goBack } = useRedStore();
 
     const [filter, setFilter] = useState<TacticalVisionFilter>("NORMAL");
@@ -294,10 +296,10 @@ export function TacticalVisionScanModal() {
                     </div>
                     <div>
                         <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#00E5FF", letterSpacing: "0.5px" }}>
-                            VISIÓN TÁCTICA EDGE AI
+                            {t('tactical_vision_modal.title')}
                         </div>
                         <div style={{ fontSize: "0.65rem", color: "#94A3B8" }}>
-                            Clasificación Óptica & Detección de Amenazas Off-Grid
+                            {t('tactical_vision_modal.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -339,7 +341,7 @@ export function TacticalVisionScanModal() {
                             cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"
                         }}
                     >
-                        ✕ CERRAR
+                        ✕ {t('common.close')}
                     </button>
                 </div>
             </div>

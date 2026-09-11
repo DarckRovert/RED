@@ -3,6 +3,7 @@ import { useSquadCallMesh } from '../../lib/mesh/useSquadCallMesh';
 import { useRedStore } from '../../store/useRedStore';
 import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
 import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
+import { useTranslation } from '../../lib/i18n/i18nEngine';
 
 interface SquadVoiceRoomProps {
     groupId: string;
@@ -19,9 +20,11 @@ export const SquadVoiceRoom: React.FC<SquadVoiceRoomProps> = ({
     callType,
     onClose,
 }) => {
+    const { t } = useTranslation();
     const { identity, contacts } = useRedStore();
     const myIdentityHash = identity?.identity_hash || 'local_user';
-    const myNickname = identity?.nickname || 'Tú';
+    const youStr = t('chat_modals.you') || 'Tú';
+    const myNickname = identity?.nickname || youStr;
 
     const {
         localStream,
@@ -55,7 +58,7 @@ export const SquadVoiceRoom: React.FC<SquadVoiceRoomProps> = ({
     }, [localStream, isCamOff]);
 
     const getDisplayName = (hash: string) => {
-        if (hash === myIdentityHash) return `${myNickname} (Tú)`;
+        if (hash === myIdentityHash) return `${myNickname} (${youStr})`;
         const contact = contacts?.find(c => c.identity_hash === hash || c.identity_hash.startsWith(hash.slice(0, 8)));
         if (contact?.display_name) return contact.display_name;
         return `Operador ${hash.substring(0, 6)}`;
@@ -157,7 +160,7 @@ export const SquadVoiceRoom: React.FC<SquadVoiceRoomProps> = ({
                             }}>
                                 {myNickname[0]?.toUpperCase() || '🔴'}
                             </div>
-                            <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>{myNickname} (Tú)</span>
+                            <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>{myNickname} ({youStr})</span>
                         </div>
                     )}
 

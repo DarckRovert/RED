@@ -225,7 +225,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                         )}
                                     </div>
                                     <div style={{ fontSize: "0.78rem", color: isCtOnline ? "#00A884" : "#8696A0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                        {isCtOnline ? "En línea • Enlace Malla" : `${ct.identity_hash.substring(0, 16)}…`}
+                                        {isCtOnline ? (t('chat_modals.online_mesh_link') || "En línea • Enlace Malla") : `${ct.identity_hash.substring(0, 16)}…`}
                                     </div>
                                 </div>
                                 <button
@@ -233,7 +233,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                     title="Eliminar contacto"
                                     onClick={async (e) => {
                                         e.stopPropagation();
-                                        if (confirm(`¿Eliminar a ${ct.display_name}?`)) {
+                                        if (confirm(t('chat_modals.confirm_delete_contact', { name: ct.display_name }) || `¿Eliminar a ${ct.display_name}?`)) {
                                             await deleteContact(ct.identity_hash);
                                         }
                                     }}

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { useRedStore } from "../../store/useRedStore";
 import { meshRouter } from "../../lib/mesh/meshRouter";
 import { toast } from "../Toast";
@@ -25,6 +26,7 @@ interface NewChatModalProps {
  * - Collapsible manual input for advanced operators
  */
 export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) => {
+    const { t } = useTranslation();
     const { contacts, identity, navigate, addContact } = useRedStore();
     const [searchQuery, setSearchQuery] = useState("");
     const [qrModalTab, setQrModalTab] = useState<"my_qr" | "scan" | null>(null);
@@ -214,10 +216,10 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                         </div>
                         <div>
                             <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "#E9EDEF" }}>
-                                Nuevo chat
+                                {t('chat_modals.new_chat_title')}
                             </div>
                             <div style={{ fontSize: "0.74rem", color: "#8696A0" }}>
-                                {contacts.length} {contacts.length === 1 ? "contacto" : "contactos"} guardados
+                                {contacts.length === 1 ? t('chat_modals.contact_single') : (t('chat_modals.contacts_count') || "{count} contactos guardados").replace('{count}', String(contacts.length))}
                             </div>
                         </div>
                     </div>
@@ -254,7 +256,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                         <TacIcon name="search" size={16} color="#8696A0" />
                         <input
                             type="text"
-                            placeholder="Buscar nombre o contacto..."
+                            placeholder={t('chat_modals.search_contacts_placeholder')}
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             style={{
@@ -303,10 +305,10 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                             </div>
                             <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF" }}>
-                                    Nuevo contacto
+                                    {t('chat_modals.new_contact_title')}
                                 </div>
                                 <div style={{ fontSize: "0.74rem", color: "#8696A0" }}>
-                                    Añade con nombre + DID o código QR
+                                    {t('chat_modals.new_contact_sub')}
                                 </div>
                             </div>
                         </div>
@@ -334,7 +336,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                             </div>
                             <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF" }}>
-                                    Nuevo grupo / escuadrón
+                                    {t('chat_modals.new_group_action')}
                                 </div>
                             </div>
                         </div>
@@ -361,10 +363,10 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                             </div>
                             <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF" }}>
-                                    Escanear código QR
+                                    {t('chat_modals.scan_qr_action')}
                                 </div>
                                 <div style={{ fontSize: "0.74rem", color: "#8696A0" }}>
-                                    Añadir contacto al instante con la cámara
+                                    {t('chat_modals.scan_qr_action_sub')}
                                 </div>
                             </div>
                         </div>
@@ -391,10 +393,10 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                             </div>
                             <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF" }}>
-                                    Mi código QR
+                                    {t('chat_modals.my_qr_action')}
                                 </div>
                                 <div style={{ fontSize: "0.74rem", color: "#8696A0" }}>
-                                    Mostrar para que otro dispositivo me escanee
+                                    {t('chat_modals.my_qr_action_sub')}
                                 </div>
                             </div>
                         </div>
@@ -407,7 +409,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                                 fontSize: "0.72rem", fontWeight: 800, color: "#00A884",
                                 letterSpacing: "0.5px", textTransform: "uppercase", marginBottom: "8px"
                             }}>
-                                📡 DISPOSITIVOS CERCANOS EN RADIO FÍSICO
+                                {t('chat_modals.nearby_devices_header')}
                             </div>
                             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                                 {nearbyPeers.map(p => (
@@ -443,7 +445,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                                                 transition: "background 0.2s, opacity 0.2s"
                                             }}
                                         >
-                                            {addingPeerHash === p.hash ? "Conectando..." : "Chatear"}
+                                            {addingPeerHash === p.hash ? t('chat_modals.connecting_btn') : t('chat_modals.chat_btn')}
                                         </button>
                                     </div>
                                 ))}
@@ -462,7 +464,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
 
                         {filteredContacts.length === 0 ? (
                             <div style={{ padding: "20px 0", textAlign: "center", color: "#8696A0", fontSize: "0.85rem" }}>
-                                {searchQuery ? "No se encontraron contactos para esta búsqueda" : "No tienes contactos guardados aún. Usa el escáner QR o detecta nodos cercanos."}
+                                {searchQuery ? (t('chat_modals.no_contacts_search') || "No se encontraron contactos para esta búsqueda") : (t('chat_modals.no_contacts_yet') || "No tienes contactos guardados aún. Usa el escáner QR o detecta nodos cercanos.")}
                             </div>
                         ) : (
                             filteredContacts.map(c => {
@@ -508,7 +510,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                                 color: "#8696A0", fontSize: "0.78rem", cursor: "pointer", fontWeight: 600
                             }}
                         >
-                            {manualOpen ? "▲ Ocultar entrada manual" : "▼ Ingresar DID o Clave Pública manualmente"}
+                            {manualOpen ? (t('chat_modals.hide_manual_input') || "▲ Ocultar entrada manual") : (t('chat_modals.show_manual_input') || "▼ Ingresar DID o Clave Pública manualmente")}
                         </button>
 
                         {manualOpen && (

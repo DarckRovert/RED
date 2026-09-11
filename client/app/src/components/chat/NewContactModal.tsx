@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { useRedStore } from "../../store/useRedStore";
 import { toast } from "../Toast";
 import { ContactQrModal } from "./ContactQrModal";
@@ -24,6 +25,7 @@ interface NewContactModalProps {
  * On save: adds contact → navigates to new chat.
  */
 export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClose }) => {
+    const { t } = useTranslation();
     const { addContact, navigate } = useRedStore();
 
     const [name, setName] = useState("");
@@ -66,8 +68,8 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
         if (v.startsWith("RED_ID_VAULT:") && v.length > 13) return null;
         if (/^[0-9a-fA-F]{8,64}$/.test(v)) return null;
         if (/^[0-9a-fA-F]{8,}:.+/.test(v)) return null;
-        return "Formato no reconocido. Pega el DID, hash o usa el escáner QR.";
-    }, []);
+        return t('chat_modals.unrecognized_format') || "Formato no reconocido. Pega el DID, hash o usa el escáner QR.";
+    }, [t]);
 
     const handleDidChange = (value: string) => {
         setDid(value);
@@ -107,7 +109,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
         ) {
             TacticalAudioEngine.playTap();
             window.dispatchEvent(new CustomEvent("red:pair_web_companion", { detail: cleanDid }));
-            toast.info("💻 Código de RED Web detectado. Abriendo vinculación...");
+            toast.info(t('chat_modals.web_companion_detected') || "💻 Código de RED Web detectado. Abriendo vinculación...");
             onClose();
             return;
         }
@@ -206,10 +208,10 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                             </div>
                             <div>
                                 <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "#E9EDEF" }}>
-                                    Nuevo contacto
+                                    {t('chat_modals.new_contact_title')}
                                 </div>
                                 <div style={{ fontSize: "0.74rem", color: "#8696A0" }}>
-                                    Añade a alguien a tu RED P2P cifrada
+                                    {t('chat_modals.new_contact_sub')}
                                 </div>
                             </div>
                         </div>
@@ -239,12 +241,12 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                         {/* Name field */}
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                             <label style={{ fontSize: "0.74rem", color: "#8696A0", fontWeight: 600, letterSpacing: "0.4px", textTransform: "uppercase" }}>
-                                Nombre / Alias
+                                {t('chat_modals.name_alias_label')}
                             </label>
                             <input
                                 id="new-contact-name"
                                 type="text"
-                                placeholder="Ej. Mamá, Carlos, Compañero..."
+                                placeholder={t('chat_modals.name_alias_placeholder')}
                                 value={name}
                                 onChange={e => setName(e.target.value)}
                                 onKeyDown={e => e.key === "Enter" && isValid && handleSave()}
@@ -308,7 +310,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                                         TacticalAudioEngine.playTap();
                                         setShowQr(true);
                                     }}
-                                    title="Escanear código QR"
+                                    title={t('chat_modals.scan_qr_title') || "Escanear código QR"}
                                     style={{
                                         flexShrink: 0,
                                         width: 40, height: 40,
@@ -333,7 +335,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                             )}
                             {did.trim() && !didError && (
                                 <div style={{ fontSize: "0.72rem", color: "#00A884", marginTop: "2px", display: "flex", alignItems: "center", gap: "4px" }}>
-                                    ✓ Formato válido
+                                    ✓ {t('chat_modals.valid_format') || "Formato válido"}
                                 </div>
                             )}
                         </div>
@@ -371,7 +373,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                         </button>
 
                         <div style={{ fontSize: "0.71rem", color: "#8696A0", textAlign: "center", lineHeight: 1.4 }}>
-                            El contacto se almacena cifrado localmente. Solo tú puedes leerlo.
+                            {t('chat_modals.contact_encrypted_note') || "El contacto se almacena cifrado localmente. Solo tú puedes leerlo."}
                         </div>
                     </div>
                 </div>

@@ -14,7 +14,7 @@ export const SOSEmergencyBanner: React.FC = () => {
     const { t } = useTranslation();
     const beacons = activeSosBeacons || [];
     const [isTriggering, setIsTriggering] = useState(false);
-    const [noteText, setNoteText] = useState('Emergencia médica / Auxilio táctico');
+    const [noteText, setNoteText] = useState(() => t('sos_banner.default_note') || 'Emergencia médica / Auxilio táctico');
     const [gpsStatus, setGpsStatus] = useState<'idle' | 'locating' | 'ok' | 'error'>('idle');
     const [gpsCoords, setGpsCoords] = useState<{ lat: number; lon: number }>({ lat: 0, lon: 0 });
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -92,14 +92,14 @@ export const SOSEmergencyBanner: React.FC = () => {
                 sender_name: senderName,
                 lat: coords.lat,
                 lon: coords.lon,
-                note: noteText.trim() || 'Emergencia médica / Auxilio táctico',
+                note: noteText.trim() || (t('sos_banner.default_note') || 'Emergencia médica / Auxilio táctico'),
                 battery_level: batteryLevel
             });
 
             if (res && res.ok && res.sos) {
                 setSosBeacons([res.sos, ...beacons]);
                 TacticalAudioEngine.playEmergencyAlarm();
-                toast.error('🚨 ¡BALIZA SOS DIFUNDIDA A TODA LA MALLA P2P!');
+                toast.error(t('sos_banner.sos_broadcasted') || '🚨 ¡BALIZA SOS DIFUNDIDA A TODA LA MALLA P2P!');
                 setIsTriggering(false);
             }
         } catch (err: any) {
@@ -194,10 +194,10 @@ export const SOSEmergencyBanner: React.FC = () => {
                             }}>🚨</div>
                             <div>
                                 <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#FF3355' }}>
-                                    EMISIÓN DE AUXILIO SOS
+                                    {t('sos_banner.sos_broadcast_title') || 'EMISIÓN DE AUXILIO SOS'}
                                 </div>
                                 <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>
-                                    Propagación de emergencia por radio LoRa, BLE y SoundMesh.
+                                    {t('sos_banner.sos_broadcast_subtitle') || 'Propagación de emergencia por radio LoRa, BLE y SoundMesh.'}
                                 </div>
                             </div>
                         </div>

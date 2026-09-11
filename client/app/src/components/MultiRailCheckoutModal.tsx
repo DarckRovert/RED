@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from '../lib/i18n/i18nEngine';
 import { TacticalProduct } from '../lib/network/MonetizationEngine';
 import { PaymentReceipt, PaymentRail, SovereignPaymentPassport } from '../lib/miniapp/RedSDKTypes';
 import { redPaymentGateway, ERC20_STABLECOINS, isValidEvmAddress, buildDeepLink } from '../lib/miniapp/RedPaymentGatewayEngine';
@@ -27,6 +28,7 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
     product,
     onSuccess
 }) => {
+    const { t } = useTranslation();
     const { identity } = useRedStore();
     const passport: SovereignPaymentPassport | undefined = product.sellerPaymentPassport;
 
@@ -318,10 +320,10 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
                 }}>
                     <span style={{ color: '#00E5FF', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <TacIcon name="lock" size={14} color="#00E5FF" />
-                        <strong>Liquidación 100% No Custodial</strong>
+                        <strong>{t('multirail_modal.title')}</strong>
                     </span>
                     <span style={{ color: 'var(--text-secondary, #8A92A6)' }}>
-                        Transferencia directa entre operadores
+                        {t('multirail_modal.subtitle')}
                     </span>
                 </div>
 
@@ -352,7 +354,7 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
                         }}
                     >
                         <TacIcon name="card" size={18} color={activeTab === 'fiat' ? '#00E676' : '#8A92A6'} />
-                        <span>Fiat Local</span>
+                        <span>{t('multirail_modal.rail_fiat')}</span>
                     </button>
 
                     <button
@@ -394,7 +396,7 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
                         }}
                     >
                         <TacIcon name="zap" size={18} color={activeTab === 'lightning' ? '#FFB300' : '#8A92A6'} />
-                        <span>Lightning</span>
+                        <span>{t('multirail_modal.rail_lightning')}</span>
                     </button>
 
                     <button

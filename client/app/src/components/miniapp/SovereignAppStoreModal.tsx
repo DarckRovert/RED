@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useTranslation } from '../../lib/i18n/i18nEngine';
+import { RED_VERSION } from '../../lib/version';
 import { RedAppManifest, RedAppBundle, RedPermissionScope, RedAppCategory } from '../../lib/miniapp/RedSDKTypes';
 import { redAppRegistry, InstalledAppEntry } from '../../lib/miniapp/RedAppRegistry';
 import { RedAppBundleEngine } from '../../lib/miniapp/RedAppBundleEngine';
@@ -226,6 +228,7 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
     onClose,
     onLaunchApp,
 }) => {
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<StoreTab>('catalog');
     const [appsList, setAppsList] = useState<InstalledAppEntry[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -617,9 +620,9 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
                         <div>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                 <h2 style={{ fontSize: "1rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.5px", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-                                    SOVEREIGN APP STORE
+                                    {t('sovereign_store_modal.title')}
                                     <span style={{ fontSize: "0.65rem", padding: "2px 6px", background: "rgba(0, 230, 118, 0.15)", border: "1px solid rgba(0, 230, 118, 0.5)", color: "var(--accent-emerald)", borderRadius: "4px", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
-                                        v66.0.0
+                                        {`v${RED_VERSION}`}
                                     </span>
                                 </h2>
                             </div>

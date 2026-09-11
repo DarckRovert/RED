@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { dynamicBearerGovernor, SwarmHealthTelemetry, TacticalBearerType } from "../lib/mesh/DynamicBearerGovernor";
 import { frequencyHopping, HoppingChannel } from "../lib/mesh/FrequencyHoppingEngine";
 import { dtnStorage } from "../lib/mesh/dtnStorage";
@@ -23,77 +24,81 @@ interface BearerTacticalInfo {
     actionScreen: ScreenView;
 }
 
-const BEARER_INFO_MAP: Record<TacticalBearerType, BearerTacticalInfo> = {
-    WIFI_DIRECT: {
-        name: "Wi-Fi Direct P2P",
-        category: "Alta Velocidad / Corto Alcance",
-        summary: "Enlace punto a punto inalámbrico de alta velocidad sin depender de routers ni antenas externas.",
-        howToUse: "Se activa automáticamente al detectar otros nodos RED cercanos (<100m). Soporta streaming de video, llamadas de voz P2P y transferencia de mapas.",
-        hardwareDetails: () => "🟢 Hardware nativo integrado en Moto G22 y Lenovo Tab (Wi-Fi 802.11ac).",
-        maxRange: "50 a 100 metros (Línea de vista directa)",
-        bestFor: "Llamadas de voz en tiempo real, streaming, mapas offline y archivos grandes.",
-        actionLabel: "Abrir Mapa Táctico 🗺️",
-        actionScreen: "nodemap"
-    },
-    BLE: {
-        name: "Bluetooth Low Energy (BLE Mesh)",
-        category: "Ultra Bajo Consumo / Malla Silenciosa",
-        summary: "Malla epidémica continua con consumo mínimo de batería que opera incluso con la pantalla apagada.",
-        howToUse: "Los paquetes de datos saltan de teléfono en teléfono formando un enjambre descentralizado sin intervención del usuario.",
-        hardwareDetails: () => "🟢 Hardware nativo integrado en Moto G22 y Lenovo Tab (Bluetooth 5.0+ LE).",
-        maxRange: "10 a 25 metros por salto (extensible por múltiples saltos en el enjambre)",
-        bestFor: "Mensajería de texto cifrada, balizas SOS y sincronización de coordenadas GPS.",
-        actionLabel: "Radar de Proximidad 📡",
-        actionScreen: "proximity"
-    },
-    LORA_RF: {
-        name: "LoRa Sub-GHz (915 MHz)",
-        category: "Largo Alcance Táctico / Anti-Corte",
-        summary: "Ondas de radiofrecuencia de espectro ensanchado (CSS) con alcance de hasta 25 km, inmune a la caída celular.",
-        howToUse: "Conecta un transceptor LoRa (ej. Heltec V3, T-Beam o dongle USB-C SX1262) al puerto USB OTG o vincúlalo por Bluetooth.",
-        hardwareDetails: (hasTx) => hasTx ? "🟢 Transceptor USB/Serial Conectado y Activo" : "🟡 Requiere módulo externo LoRa USB-C OTG o Bluetooth",
-        maxRange: "Hasta 25 km en campo abierto / 3 a 5 km en entorno urbano",
-        bestFor: "Telemetría de campo, reportes de situación SITREP, balizas de emergencia a larga distancia.",
-        actionLabel: "Consola LoRa Táctica 📻",
-        actionScreen: "loraTransceiver"
-    },
-    SOUNDMESH: {
-        name: "SoundMesh Acústico",
-        category: "Anti-Inhibición / Canal Ultrasónico",
-        summary: "Modulación de datos en frecuencias audibles y near-ultrasound (18 a 20 kHz) usando altavoces y micrófonos.",
-        howToUse: "Ideal en búnkeres o durante ataques de guerra electrónica (EW/Jammers) donde todas las frecuencias de radio estén bloqueadas.",
-        hardwareDetails: () => "🟢 Utiliza los transductores de altavoz y micrófono nativos del dispositivo.",
-        maxRange: "1 a 8 metros en la misma habitación, trinchera o vehículo blindado.",
-        bestFor: "Intercambio de claves criptográficas, alertas breves y autenticación sin RF.",
-        actionLabel: "Guerra Acústica & Jammer 🔊",
-        actionScreen: "acousticWarfare"
-    },
-    LIFI_OPTICAL: {
-        name: "LiFi Óptico Esteganográfico",
-        category: "Silencio Radial Absoluto / Óptico",
-        summary: "Transmisión binaria mediante pulsos de luz del Flash LED y decodificación por sensor de cámara CMOS.",
-        howToUse: "Apunta la cámara al flash del otro teléfono. Cero emisión de radiofrecuencia: imposible de detectar o triangular con analizadores de espectro hostiles.",
-        hardwareDetails: () => "🟢 Utiliza el Flash LED trasero y la cámara CMOS nativa.",
-        maxRange: "Línea de vista directa (hasta 50 metros en oscuridad / 10 metros de día)",
-        bestFor: "Transmisiones ultra-secretas en condiciones de sigilo electromagnético estricto.",
-        actionLabel: "Consola LiFi & Morse ⚡",
-        actionScreen: "airGapStego"
-    },
-    SATELLITE_LEO: {
-        name: "Pasarela Satelital LEO",
-        category: "Cobertura Global Espacial",
-        summary: "Enlace con constelaciones orbitales de baja altitud (Iridium-NEXT, Starlink Direct-to-Cell, Orbcomm OG2) para contingencias extremas.",
-        howToUse: "Calcula los pasos satelitales sobre tus coordenadas. Cuando un satélite está a más de 25° de elevación (AOS), despacha ráfagas de datos breves (SBD). Si no hay satélite visible, los guarda en el búfer DTN cifrado.",
-        hardwareDetails: () => "🟢 Motor de cálculo orbital SGP4 integrado + Despacho de ráfagas SBD.",
-        maxRange: "Global (cobertura inter-continental e inter-malla sin fronteras)",
-        bestFor: "SITREPs de evacuación, telemetría radiológica CBRN, balizas SOS satelitales.",
-        actionLabel: "Radar SkyView Satelital 🛰️",
-        actionScreen: "cbrnSatellite"
-    }
-};
+function getBearerInfoMap(t: any): Record<TacticalBearerType, BearerTacticalInfo> {
+    return {
+        WIFI_DIRECT: {
+            name: t('swarm_health_hud.bearer_wifi_direct') || "Wi-Fi Direct P2P",
+            category: t('swarm_health_hud.bearer_wifi_category') || "Alta Velocidad / Corto Alcance",
+            summary: t('swarm_health_hud.bearer_wifi_summary') || "Enlace punto a punto inalámbrico de alta velocidad sin depender de routers ni antenas externas.",
+            howToUse: t('swarm_health_hud.bearer_wifi_how') || "Se activa automáticamente al detectar otros nodos RED cercanos (<100m). Soporta streaming de video, llamadas de voz P2P y transferencia de mapas.",
+            hardwareDetails: () => "🟢 " + (t('swarm_health_hud.hw_wifi_native') || "Hardware nativo integrado (Wi-Fi 802.11ac)."),
+            maxRange: t('swarm_health_hud.bearer_wifi_range') || "50 a 100 metros (Línea de vista directa)",
+            bestFor: t('swarm_health_hud.bearer_wifi_best') || "Llamadas de voz en tiempo real, streaming, mapas offline y archivos grandes.",
+            actionLabel: t('swarm_health_hud.bearer_wifi_action') || "Abrir Mapa Táctico 🗺️",
+            actionScreen: "nodemap"
+        },
+        BLE: {
+            name: t('swarm_health_hud.bearer_ble') || "Bluetooth Low Energy (BLE Mesh)",
+            category: t('swarm_health_hud.bearer_ble_category') || "Ultra Bajo Consumo / Malla Silenciosa",
+            summary: t('swarm_health_hud.bearer_ble_summary') || "Malla epidémica continua con consumo mínimo de batería que opera incluso con la pantalla apagada.",
+            howToUse: t('swarm_health_hud.bearer_ble_how') || "Los paquetes de datos saltan de teléfono en teléfono formando un enjambre descentralizado sin intervención del usuario.",
+            hardwareDetails: () => "🟢 " + (t('swarm_health_hud.hw_ble_native') || "Hardware nativo integrado (Bluetooth 5.0+ LE)."),
+            maxRange: t('swarm_health_hud.bearer_ble_range') || "10 a 25 metros por salto (extensible por múltiples saltos en el enjambre)",
+            bestFor: t('swarm_health_hud.bearer_ble_best') || "Mensajería de texto cifrada, balizas SOS y sincronización de coordenadas GPS.",
+            actionLabel: t('swarm_health_hud.bearer_ble_action') || "Radar de Proximidad 📡",
+            actionScreen: "proximity"
+        },
+        LORA_RF: {
+            name: t('swarm_health_hud.bearer_lora') || "LoRa Sub-GHz (915 MHz)",
+            category: t('swarm_health_hud.bearer_lora_category') || "Largo Alcance Táctico / Anti-Corte",
+            summary: t('swarm_health_hud.bearer_lora_summary') || "Ondas de radiofrecuencia de espectro ensanchado (CSS) con alcance de hasta 25 km, inmune a la caída celular.",
+            howToUse: t('swarm_health_hud.bearer_lora_how') || "Conecta un transceptor LoRa (ej. Heltec V3, T-Beam o dongle USB-C SX1262) al puerto USB OTG o vincúlalo por Bluetooth.",
+            hardwareDetails: (hasTx) => hasTx ? ("🟢 " + (t('swarm_health_hud.lora_active') || "Transceptor USB/Serial Conectado y Activo")) : ("🟡 " + (t('swarm_health_hud.lora_required') || "Requiere módulo externo LoRa USB-C OTG o Bluetooth")),
+            maxRange: t('swarm_health_hud.bearer_lora_range') || "Hasta 25 km en campo abierto / 3 a 5 km en entorno urbano",
+            bestFor: t('swarm_health_hud.bearer_lora_best') || "Telemetría de campo, reportes de situación SITREP, balizas de emergencia a larga distancia.",
+            actionLabel: t('swarm_health_hud.bearer_lora_action') || "Consola LoRa Táctica 📻",
+            actionScreen: "loraTransceiver"
+        },
+        SOUNDMESH: {
+            name: t('swarm_health_hud.bearer_soundmesh') || "SoundMesh Acústico",
+            category: t('swarm_health_hud.bearer_soundmesh_category') || "Anti-Inhibición / Canal Ultrasónico",
+            summary: t('swarm_health_hud.bearer_soundmesh_summary') || "Modulación de datos en frecuencias audibles y near-ultrasound (18 a 20 kHz) usando altavoces y micrófonos.",
+            howToUse: t('swarm_health_hud.bearer_soundmesh_how') || "Ideal en búnkeres o durante ataques de guerra electrónica (EW/Jammers) donde todas las frecuencias de radio estén bloqueadas.",
+            hardwareDetails: () => "🟢 " + (t('swarm_health_hud.hw_soundmesh_native') || "Utiliza los transductores de altavoz y micrófono nativos."),
+            maxRange: t('swarm_health_hud.bearer_soundmesh_range') || "1 a 8 metros en la misma habitación, trinchera o vehículo blindado.",
+            bestFor: t('swarm_health_hud.bearer_soundmesh_best') || "Intercambio de claves criptográficas, alertas breves y autenticación sin RF.",
+            actionLabel: t('swarm_health_hud.bearer_soundmesh_action') || "Guerra Acústica & Jammer 🔊",
+            actionScreen: "acousticWarfare"
+        },
+        LIFI_OPTICAL: {
+            name: t('swarm_health_hud.bearer_lifi') || "LiFi Óptico Esteganográfico",
+            category: t('swarm_health_hud.bearer_lifi_category') || "Silencio Radial Absoluto / Óptico",
+            summary: t('swarm_health_hud.bearer_lifi_summary') || "Transmisión binaria mediante pulsos de luz del Flash LED y decodificación por sensor de cámara CMOS.",
+            howToUse: t('swarm_health_hud.bearer_lifi_how') || "Apunta la cámara al flash del otro teléfono. Cero emisión de radiofrecuencia: imposible de detectar o triangular con analizadores de espectro hostiles.",
+            hardwareDetails: () => "🟢 " + (t('swarm_health_hud.hw_lifi_native') || "Utiliza el Flash LED trasero y la cámara CMOS nativa."),
+            maxRange: t('swarm_health_hud.bearer_lifi_range') || "Línea de vista directa (hasta 50 metros en oscuridad / 10 metros de día)",
+            bestFor: t('swarm_health_hud.bearer_lifi_best') || "Transmisiones ultra-secretas en condiciones de sigilo electromagnético estricto.",
+            actionLabel: t('swarm_health_hud.bearer_lifi_action') || "Consola LiFi & Morse ⚡",
+            actionScreen: "airGapStego"
+        },
+        SATELLITE_LEO: {
+            name: t('swarm_health_hud.bearer_satellite') || "Pasarela Satelital LEO",
+            category: t('swarm_health_hud.bearer_satellite_category') || "Cobertura Global Espacial",
+            summary: t('swarm_health_hud.bearer_satellite_summary') || "Enlace con constelaciones orbitales de baja altitud para contingencias extremas.",
+            howToUse: t('swarm_health_hud.bearer_satellite_how') || "Calcula los pasos satelitales sobre tus coordenadas. Cuando un satélite está a más de 25° de elevación (AOS), despacha ráfagas de datos breves (SBD). Si no hay satélite visible, los guarda en el búfer DTN cifrado.",
+            hardwareDetails: () => "🟢 " + (t('swarm_health_hud.hw_sat_native') || "Cálculo orbital SGP4 integrado + Despacho de ráfagas SBD."),
+            maxRange: t('swarm_health_hud.bearer_satellite_range') || "Global (cobertura inter-continental e inter-malla sin fronteras)",
+            bestFor: t('swarm_health_hud.bearer_satellite_best') || "SITREPs de evacuación, telemetría radiológica CBRN, balizas SOS satelitales.",
+            actionLabel: t('swarm_health_hud.bearer_satellite_action') || "Radar SkyView Satelital 🛰️",
+            actionScreen: "cbrnSatellite"
+        }
+    };
+}
 
 export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
+    const { t } = useTranslation();
     const { navigate } = useRedStore();
+    const bearerInfoMap = useMemo(() => getBearerInfoMap(t), [t]);
     const [telemetry, setTelemetry] = useState<SwarmHealthTelemetry>(() => dynamicBearerGovernor.getTelemetry());
     const [currentHop, setCurrentHop] = useState<HoppingChannel>(() => frequencyHopping.getCurrentChannel());
     const [dtnCount, setDtnCount] = useState<number>(() => dtnStorage.count);
@@ -146,13 +151,13 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
         }
         dynamicBearerGovernor.forceSwitchBearer(b);
         TacticalAudioEngine.playRogerBeep();
-        toast.success(`Portador de enjambre conmutado a: ${b}`);
+        toast.success(t('swarm_health_hud.bearer_switched', { bearer: b }) || `Portador de enjambre conmutado a: ${b}`);
     };
 
     const handleResumeAutoMode = () => {
         TacticalAudioEngine.playRogerBeep();
         dynamicBearerGovernor.resumeAutomaticMode();
-        toast.success("🔄 Enrutamiento Autónomo QoS Restablecido");
+        toast.success(t('swarm_health_hud.auto_qos_restored') || '🔄 Enrutamiento Autónomo QoS Restablecido');
     };
 
     const getBearerIcon = (b: string) => {
@@ -210,10 +215,10 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                     </div>
                     <div>
                         <div style={{ fontSize: "0.90rem", fontWeight: 900, color: "#00E5FF", letterSpacing: "0.5px" }}>
-                            ENJAMBRE MULTI-BEARER & REDES
+                            {t('swarm_health_hud.title')}
                         </div>
                         <div style={{ fontSize: "0.66rem", color: "var(--text-secondary, #94A3B8)" }}>
-                            Gestión Autónoma de Portadores & Enlace Satelital
+                            {t('swarm_health_hud.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -224,7 +229,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                         color: telemetry.connectedPeersCount > 0 ? "#00E676" : "#FFB300",
                         border: `1px solid ${telemetry.connectedPeersCount > 0 ? "#00E676" : "#FFB300"}`
                     }}>
-                        {telemetry.connectedPeersCount > 0 ? `🟢 ${telemetry.connectedPeersCount} NODOS` : "🟡 STANDALONE"}
+                        {telemetry.connectedPeersCount > 0 ? `🟢 ${telemetry.connectedPeersCount} ` + (t('swarm_health_hud.nodes_count', { count: telemetry.connectedPeersCount }) || 'NODOS') : `🟡 ` + (t('swarm_health_hud.standalone') || 'STANDALONE')}
                     </span>
                     {onClose && (
                         <button
@@ -261,13 +266,13 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                     }}>
                         <span>{telemetry.isManualOverride ? "⚠️" : "🛡️"}</span>
                         {telemetry.isManualOverride
-                            ? `MODO MANUAL: FORZADO EN ${telemetry.primaryBearer}`
-                            : "GOBERNANZA AUTÓNOMA DE ENJAMBRE (QoS ACTIVO)"}
+                            ? (t('swarm_health_hud.manual_mode_forced', { bearer: telemetry.primaryBearer }) || `MODO MANUAL: FORZADO EN ${telemetry.primaryBearer}`)
+                            : t('swarm_health_hud.auto_governor')}
                     </div>
                     <div style={{ fontSize: "0.62rem", color: "#94A3B8", marginTop: "2px", lineHeight: "1.3" }}>
                         {telemetry.isManualOverride
-                            ? "Has fijado este canal manualmente. RED no conmutará de forma automática en caso de pérdida."
-                            : "RED evalúa continuamente la señal, batería y alcance para conmutar automáticamente al mejor canal disponible."}
+                            ? (t('swarm_health_hud.manual_mode_desc') || 'Has fijado este canal manualmente.')
+                            : (t('swarm_health_hud.auto_mode_desc') || 'RED evalúa continuamente la señal...')}
                     </div>
                 </div>
 
@@ -295,7 +300,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#00E5FF", animation: "pulse 1.5s infinite", display: "inline-block" }} />
                         <span style={{ fontSize: "0.72rem", color: "#38BDF8", fontWeight: 900 }}>
-                            RADIOFRECUENCIA & ESPECTRO FÍSICO
+                            {t('swarm_health_hud.rf_hopping')}
                         </span>
                     </div>
                     <span style={{ fontSize: "0.62rem", color: "#AAA", background: "rgba(255,255,255,0.06)", padding: "2px 6px", borderRadius: "4px" }}>
@@ -314,10 +319,10 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                     </div>
                     <div style={{ textAlign: "right" }}>
                         <div style={{ fontSize: "0.74rem", fontWeight: 900, color: currentHop.hasHardwareTransceiver ? "#00E676" : "#94A3B8" }}>
-                            {currentHop.hasHardwareTransceiver ? "CONECTADO" : "SIN TRANSCEPTOR EXT."}
+                            {currentHop.hasHardwareTransceiver ? (t('swarm_health_hud.connected') || 'CONECTADO') : (t('swarm_health_hud.no_ext_transceiver') || 'SIN TRANSCEPTOR EXT.')}
                         </div>
                         <div style={{ fontSize: "0.58rem", color: "#64748B" }}>
-                            {currentHop.hasHardwareTransceiver ? "LoRa SX1262 Activo" : "Operando Wi-Fi / BLE"}
+                            {currentHop.hasHardwareTransceiver ? (t('swarm_health_hud.lora_active') || 'LoRa SX1262 Activo') : (t('swarm_health_hud.operating_wifi_ble') || 'Operando Wi-Fi / BLE')}
                         </div>
                     </div>
                 </div>
@@ -326,15 +331,15 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
             {/* Matriz de Portadores (Conexiones) con Guía Interactiva */}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.68rem", color: "#AAA", fontWeight: 800 }}>
-                    <span>CONEXIONES DISPONIBLES ({telemetry.bearers.length} CAPAS)</span>
-                    <span style={{ color: "var(--accent-cyan)", fontSize: "0.62rem" }}>TOCA PARA DETALLES & ACCIONES</span>
+                    <span>{t('swarm_health_hud.available_connections', { count: telemetry.bearers.length }) || `CONEXIONES DISPONIBLES (${telemetry.bearers.length} CAPAS)`}</span>
+                    <span style={{ color: 'var(--accent-cyan)', fontSize: '0.62rem' }}>{t('swarm_health_hud.tap_for_details') || 'TOCA PARA DETALLES & ACCIONES'}</span>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     {telemetry.bearers.map(b => {
                         const isPrimary = telemetry.primaryBearer === b.bearer;
                         const isExpanded = expandedBearer === b.bearer;
-                        const info = BEARER_INFO_MAP[b.bearer];
+                        const info = bearerInfoMap[b.bearer];
 
                         return (
                             <div
@@ -369,11 +374,11 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                                         <div>
                                             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                                 <span style={{ fontSize: "0.80rem", fontWeight: 900, color: isPrimary ? "#00E5FF" : b.isOnline ? "#FFFFFF" : "var(--text-muted)" }}>
-                                                    {info?.name || b.bearer}
+                                                    {(t as any)(`swarm_health_hud.bearer_${b.bearer.toLowerCase()}`) || info?.name || b.bearer}
                                                 </span>
                                                 {isPrimary && (
                                                     <span style={{ fontSize: "0.58rem", color: "#00E5FF", background: "rgba(0, 229, 255, 0.2)", padding: "1px 5px", borderRadius: "4px", fontWeight: 900 }}>
-                                                        EN USO
+                                                        {t('swarm_health_hud.in_use') || 'EN USO'}
                                                     </span>
                                                 )}
                                             </div>
@@ -389,10 +394,10 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                                                 fontSize: "0.70rem", fontWeight: 900,
                                                 color: b.isOnline ? (isPrimary ? "#00E5FF" : "#00E676") : "var(--text-muted)"
                                             }}>
-                                                {b.isOnline ? (b.throughputKbps > 0 ? `${b.throughputKbps} kbps` : "EN LÍNEA") : "STANDBY"}
+                                                {b.isOnline ? (b.throughputKbps > 0 ? `${b.throughputKbps} kbps` : (t('swarm_health_hud.online') || 'EN LÍNEA')) : (t('swarm_health_hud.standby') || 'STANDBY')}
                                             </div>
                                             <div style={{ fontSize: "0.58rem", color: "#64748B" }}>
-                                                {b.isOnline ? (b.latencyMs > 0 ? `${b.latencyMs}ms RTT` : "Listo") : "Sin tráfico"}
+                                                {b.isOnline ? (b.latencyMs > 0 ? `${b.latencyMs}ms RTT` : (t('swarm_health_hud.ready') || 'Listo')) : (t('swarm_health_hud.no_traffic') || 'Sin tráfico')}
                                             </div>
                                         </div>
                                         <span style={{ fontSize: "0.75rem", color: isExpanded ? "#00E5FF" : "#64748B", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
@@ -411,14 +416,14 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                                         fontSize: "0.68rem"
                                     }}>
                                         <div>
-                                            <span style={{ color: "#00E5FF", fontWeight: 800 }}>📖 ¿Qué es y para qué sirve?</span>
+                                            <span style={{ color: '#00E5FF', fontWeight: 800 }}>{t('swarm_health_hud.what_is_it') || '📖 ¿Qué es y para qué sirve?'}</span>
                                             <div style={{ color: "#CBD5E1", marginTop: "2px", lineHeight: "1.35" }}>
                                                 {info.summary}
                                             </div>
                                         </div>
 
                                         <div>
-                                            <span style={{ color: "#00E676", fontWeight: 800 }}>💡 ¿Cómo se usa en este dispositivo?</span>
+                                            <span style={{ color: '#00E676', fontWeight: 800 }}>{t('swarm_health_hud.how_to_use') || '💡 ¿Cómo se usa en este dispositivo?'}</span>
                                             <div style={{ color: "#CBD5E1", marginTop: "2px", lineHeight: "1.35" }}>
                                                 {info.howToUse}
                                             </div>
@@ -426,11 +431,11 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
 
                                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", background: "rgba(255,255,255,0.03)", padding: "6px 8px", borderRadius: "6px" }}>
                                             <div>
-                                                <span style={{ color: "#94A3B8", fontSize: "0.60rem" }}>ALCANCE ESTIMADO:</span>
+                                                <span style={{ color: '#94A3B8', fontSize: '0.60rem' }}>{t('swarm_health_hud.est_range') || 'ALCANCE ESTIMADO:'}</span>
                                                 <div style={{ color: "#FFFFFF", fontWeight: 700, fontSize: "0.65rem" }}>{info.maxRange}</div>
                                             </div>
                                             <div>
-                                                <span style={{ color: "#94A3B8", fontSize: "0.60rem" }}>ESTADO DE HARDWARE:</span>
+                                                <span style={{ color: '#94A3B8', fontSize: '0.60rem' }}>{t('swarm_health_hud.hw_status') || 'ESTADO DE HARDWARE:'}</span>
                                                 <div style={{ color: "#FFFFFF", fontWeight: 700, fontSize: "0.65rem" }}>
                                                     {info.hardwareDetails(currentHop.hasHardwareTransceiver)}
                                                 </div>
@@ -454,7 +459,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                                                     fontWeight: 800, fontSize: "0.66rem", cursor: isPrimary ? "default" : "pointer"
                                                 }}
                                             >
-                                                {isPrimary ? "✅ Portador Activo" : "⚡ Forzar este Portador"}
+                                                {isPrimary ? (t('swarm_health_hud.active_bearer') || '✅ Portador Activo') : (t('swarm_health_hud.force_bearer') || '⚡ Forzar este Portador')}
                                             </button>
 
                                             <button
@@ -492,10 +497,10 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                     <span style={{ fontSize: "1.1rem" }}>📦</span>
                     <div>
                         <div style={{ fontSize: "0.74rem", fontWeight: 900, color: "#FFFFFF" }}>
-                            Búfer DTN Store & Forward
+                            {t('swarm_health_hud.dtn_buffer')}
                         </div>
                         <div style={{ fontSize: "0.60rem", color: "#94A3B8" }}>
-                            PBKDF2-SHA256 (310k) · {dtnCount} en espera
+                            PBKDF2-SHA256 (310k) · {t('swarm_health_hud.dtn_waiting', { count: dtnCount }) || `${dtnCount} en espera`}
                         </div>
                     </div>
                 </div>
@@ -506,7 +511,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                         await meshRouter.flushPendingQueue();
                         setDtnCount(dtnStorage.count);
                         TacticalAudioEngine.playRogerBeep();
-                        toast.success(`⚡ Búfer DTN transmitido (${dtnStorage.count} en cola)`);
+                        toast.success(t('swarm_health_hud.dtn_flushed', { count: dtnStorage.count }) || `⚡ Búfer DTN transmitido (${dtnStorage.count} en cola)`);
                     }}
                     style={{
                         padding: "6px 12px", borderRadius: "8px", fontSize: "0.68rem", fontWeight: 900,
@@ -514,7 +519,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                         color: "#00E5FF", cursor: "pointer"
                     }}
                 >
-                    ⚡ Forzar Envío
+                    ⚡ {t('swarm_health_hud.forced_carrier')}
                 </button>
             </div>
         </div>

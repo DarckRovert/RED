@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { useRedStore } from "../../store/useRedStore";
 import { SovereignPaymentPassport } from "../../lib/miniapp/RedSDKTypes";
 import { isValidEvmAddress } from "../../lib/miniapp/RedPaymentGatewayEngine";
@@ -10,6 +11,7 @@ import { toast } from "../Toast";
 import { TacIcon } from "../ui/TacIcon";
 
 export const PaymentsTab: React.FC = () => {
+    const { t } = useTranslation();
     const { paymentPassport, updatePaymentPassport } = useRedStore();
 
     const [evmAddress, setEvmAddress] = useState<string>(paymentPassport?.evmAddress || "");
@@ -107,11 +109,11 @@ export const PaymentsTab: React.FC = () => {
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
                     <TacIcon name="card" size={18} color="var(--primary, #E8213A)" />
                     <h3 style={{ fontSize: "1rem", fontWeight: 800, color: "#FFF", margin: 0 }}>
-                        Pasaporte de Pagos Soberano Multi-Riel
+                        {t('payments_tab.title')}
                     </h3>
                 </div>
                 <p style={{ fontSize: "0.78rem", color: "var(--text-secondary, #8A92A6)", lineHeight: "1.4", margin: 0 }}>
-                    Configura tus rieles para recibir pagos de dinero real (USDT/USDC, Yape, Plin, PayPal, Pix y Lightning) directamente entre billeteras, 100% no custodial.
+                    {t('payments_tab.subtitle')}
                 </p>
             </div>
 

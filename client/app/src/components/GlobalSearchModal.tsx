@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { MessageItem } from "../lib/api";
 import { useTranslation } from "../lib/i18n/i18nEngine";
@@ -139,8 +139,27 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose })
 
     const qLower = query.trim().toLowerCase();
 
+    const localizedTools = useMemo(() => {
+        return TACTICAL_SEARCHABLE_TOOLS.map(tool => {
+            const locTitle = (t as any)(`tactical_modules.${tool.id}_title`);
+            const locHubTitle = (t as any)(`tactical_hubs.tool_${tool.id}`);
+            const locSub = (t as any)(`tactical_modules.${tool.id}_sub`);
+            return {
+                ...tool,
+                label: (locTitle && locTitle !== `tactical_modules.${tool.id}_title`)
+                    ? locTitle
+                    : (locHubTitle && locHubTitle !== `tactical_hubs.tool_${tool.id}`)
+                        ? locHubTitle
+                        : tool.label,
+                desc: (locSub && locSub !== `tactical_modules.${tool.id}_sub`)
+                    ? locSub
+                    : tool.desc,
+            };
+        });
+    }, [t]);
+
     const matchedTools = qLower.length >= 2
-        ? TACTICAL_SEARCHABLE_TOOLS.filter(tool =>
+        ? localizedTools.filter(tool =>
             tool.label.toLowerCase().includes(qLower) ||
             tool.desc.toLowerCase().includes(qLower) ||
             tool.keywords.some(k => k.toLowerCase().includes(qLower))

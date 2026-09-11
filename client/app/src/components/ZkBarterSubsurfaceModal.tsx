@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { zkBarter, ZkBarterProof } from "../lib/crypto/ZeroKnowledgeBarterEngine";
 import { subsurfaceAcoustic, SubsurfaceTelemetry } from "../lib/sensors/SubsurfaceAcousticEngine";
 import { useRedStore } from "../store/useRedStore";
@@ -27,6 +28,7 @@ function legacyCopy(text: string, label: string): void {
 }
 
 export function ZkBarterSubsurfaceModal() {
+    const { t } = useTranslation();
     const { navigate, identity, goBack } = useRedStore();
 
     const [subsurface, setSubsurface] = useState<SubsurfaceTelemetry>(() => subsurfaceAcoustic.getTelemetry());
@@ -298,10 +300,10 @@ export function ZkBarterSubsurfaceModal() {
                         maxWidth: "340px", width: "90%"
                     }}>
                         <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--accent-cyan)" }}>
-                            📷 ESCANEAR PRUEBA ZK
+                            {t('zk_barter_modal.scan_title')}
                         </div>
                         <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.75)", marginTop: "4px" }}>
-                            Apunta al código QR de la prueba de conocimiento cero
+                            {t('zk_barter_modal.scan_sub')}
                         </div>
                     </div>
 
@@ -334,7 +336,7 @@ export function ZkBarterSubsurfaceModal() {
                                 cursor: "pointer", boxShadow: "0 0 16px rgba(232,33,58,0.4)"
                             }}
                         >
-                            ✕ CANCELAR ESCANEO
+                            {t('zk_barter_modal.scan_cancel')}
                         </button>
                     </div>
                 </div>
@@ -349,10 +351,10 @@ export function ZkBarterSubsurfaceModal() {
                     <span style={{ fontSize: "1.2rem" }}>🪙</span>
                     <div>
                         <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF" }}>
-                            CANJE ANÓNIMO ZK & RESCATE SUB-ESTRUCTURAL
+                            {t('zk_barter_modal.title')}
                         </div>
                         <div style={{ fontSize: "0.65rem", color: "#AAA" }}>
-                            Pruebas Merkle en Conocimiento Cero y Baliza Sísmica VLF
+                            {t('zk_barter_modal.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -370,7 +372,7 @@ export function ZkBarterSubsurfaceModal() {
                         cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"
                     }}
                 >
-                    ✕ CERRAR
+                    ✕ {t('common.close')}
                 </button>
             </div>
 
@@ -387,7 +389,7 @@ export function ZkBarterSubsurfaceModal() {
                         color: activeTab === "zkBarter" ? "#000" : "#AAA", border: "none", cursor: "pointer"
                     }}
                 >
-                    🪙 Bóveda zk-Barter
+                    {t('zk_barter_modal.tab_zk_barter')}
                 </button>
                 <button
                     onClick={() => {
@@ -400,7 +402,7 @@ export function ZkBarterSubsurfaceModal() {
                         color: activeTab === "subsurface" ? "#000" : "#AAA", border: "none", cursor: "pointer"
                     }}
                 >
-                    🧱 Baliza Sísmica Sub-Estructural
+                    {t('zk_barter_modal.tab_subsurface')}
                 </button>
             </div>
 
@@ -411,42 +413,58 @@ export function ZkBarterSubsurfaceModal() {
                 {activeTab === "zkBarter" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                         <div style={{ background: "rgba(0, 229, 255, 0.05)", border: "1px solid rgba(0, 229, 255, 0.2)", borderRadius: "12px", padding: "12px", fontSize: "0.74rem", color: "#DDD" }}>
-                            Demuestra posesión de suministros o créditos frente al Merkle Root del ledger <strong>sin revelar tu DID ni identificadores de transacción</strong>.
+                            {t('zk_barter_modal.zk_desc')}
                         </div>
 
                         {/* Generator */}
                         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                            <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "#00E5FF" }}>1. GENERAR PRUEBA ZK ANÓNIMA:</div>
-                            <div style={{ display: "flex", gap: "8px" }}>
-                                <select
-                                    value={resourceType}
-                                    onChange={(e) => setResourceType(e.target.value)}
-                                    style={{ flex: 2, padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.74rem" }}
-                                >
-                                    <option value="RACION_TACTICA_MRE">Ración Táctica MRE</option>
-                                    <option value="ANTIBIOTICO_KIT">Kit Antibióticos</option>
-                                    <option value="COMBUSTIBLE_5L">Combustible 5L</option>
-                                    <option value="AGUA_PURIFICADA_10L">Agua Purificada 10L</option>
-                                </select>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    value={amount}
-                                    onChange={(e) => setAmount(parseInt(e.target.value) || 1)}
-                                    style={{ flex: 1, padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.74rem" }}
-                                />
+                            <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "#00E5FF" }}>1. {t('zk_barter_modal.my_offer')}:</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                    <select
+                                        value={resourceType}
+                                        onChange={(e) => setResourceType(e.target.value)}
+                                        style={{ flex: 2, padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.74rem" }}
+                                    >
+                                        <option value="RACION_TACTICA_MRE">Ración Táctica MRE</option>
+                                        <option value="ANTIBIOTICO_KIT">Kit Antibióticos</option>
+                                        <option value="COMBUSTIBLE_5L">Combustible 5L</option>
+                                        <option value="AGUA_PURIFICADA_10L">Agua Purificada 10L</option>
+                                        <option value="BATERIA_18650">Batería Li-ion 18650</option>
+                                        <option value="KIT_TRAUMA_MARCH">Kit Trauma MARCH / TCCC</option>
+                                        <option value="CUSTOM">➕ {t('zk_barter_modal.custom_resource')}</option>
+                                    </select>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={amount}
+                                        onChange={(e) => setAmount(parseInt(e.target.value) || 1)}
+                                        style={{ flex: 1, padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.74rem" }}
+                                    />
+                                </div>
+                                {resourceType === "CUSTOM" && (
+                                    <input
+                                        type="text"
+                                        placeholder={t('zk_barter_modal.custom_resource')}
+                                        onChange={(e) => {
+                                            const v = e.target.value.trim().toUpperCase().replace(/\s+/g, '_');
+                                            if (v) setResourceType(v);
+                                        }}
+                                        style={{ padding: "8px 12px", borderRadius: "8px", background: "rgba(0,0,0,0.7)", color: "#00E5FF", border: "1px solid rgba(0,229,255,0.3)", fontSize: "0.74rem", fontFamily: "monospace" }}
+                                    />
+                                )}
                             </div>
                             <button
                                 onClick={handleGenerateProof}
                                 style={{ padding: "10px", borderRadius: "8px", background: "#00E5FF", color: "#000", fontWeight: 900, fontSize: "0.78rem", border: "none", cursor: "pointer" }}
                             >
-                                ⚡ GENERAR PRUEBA CRIPTOGRÁFICA
+                                {t('zk_barter_modal.generate_btn')}
                             </button>
 
                             {generatedProof && (
                                 <div style={{ background: "rgba(0,0,0,0.6)", padding: "12px", borderRadius: "10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
                                     <div style={{ fontSize: "0.74rem", color: "#00E676", fontWeight: 800, width: "100%", textAlign: "left" }}>
-                                        ✓ COMPROMISO ZK CREADO:
+                                        {t('zk_barter_modal.commitment_created')}
                                     </div>
                                     {proofQrUrl && (
                                         <img src={proofQrUrl} alt="QR Prueba ZK" style={{ width: 180, height: 180, borderRadius: "10px", border: "1.5px solid #00E5FF" }} />
@@ -465,7 +483,7 @@ export function ZkBarterSubsurfaceModal() {
                                             }}
                                             style={{ flex: 1, padding: "8px", borderRadius: "6px", background: "rgba(255,255,255,0.1)", color: "#FFF", border: "none", fontSize: "0.68rem", cursor: "pointer" }}
                                         >
-                                            📋 COPIAR JSON
+                                            {t('zk_barter_modal.copy_json')}
                                         </button>
                                         <button
                                             onClick={() => {
@@ -475,7 +493,7 @@ export function ZkBarterSubsurfaceModal() {
                                             }}
                                             style={{ flex: 1, padding: "8px", borderRadius: "6px", background: "rgba(0,229,255,0.2)", color: "#00E5FF", border: "1px solid rgba(0,229,255,0.4)", fontSize: "0.68rem", cursor: "pointer" }}
                                         >
-                                            ⚡ COPIAR QR
+                                            {t('zk_barter_modal.copy_qr')}
                                         </button>
                                     </div>
                                     <button
@@ -488,7 +506,7 @@ export function ZkBarterSubsurfaceModal() {
                                             justifyContent: "center", gap: "6px"
                                         }}
                                     >
-                                        📡 TRANSMITIR PRUEBA ZK POR MALLA
+                                        📡 {t('zk_barter_modal.broadcast_trade')}
                                     </button>
                                 </div>
                             )}
@@ -496,7 +514,7 @@ export function ZkBarterSubsurfaceModal() {
 
                         {/* Verifier */}
                         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                            <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "#00E676" }}>2. VERIFICAR PRUEBA ZK DEL RECEPTOR:</div>
+                            <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "#00E676" }}>2. {t('zk_barter_modal.verify_commitment')}:</div>
                             
                             <button
                                 onClick={handleStartZkScan}
@@ -507,13 +525,13 @@ export function ZkBarterSubsurfaceModal() {
                                     display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
                                 }}
                             >
-                                📷 ESCANEAR QR ZK CON LA CÁMARA
+                                {t('zk_barter_modal.scan_camera_btn')}
                             </button>
 
                             <textarea
                                 value={verifyInputJson}
                                 onChange={(e) => setVerifyInputJson(e.target.value)}
-                                placeholder="Pega el JSON o la cadena ZK_PROOF:1:... de la prueba ZK aquí..."
+                                placeholder={t('zk_barter_modal.verify_placeholder')}
                                 rows={3}
                                 style={{ padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.68rem" }}
                             />
@@ -521,7 +539,7 @@ export function ZkBarterSubsurfaceModal() {
                                 onClick={handleVerifyProof}
                                 style={{ padding: "10px", borderRadius: "8px", background: "#00E676", color: "#000", fontWeight: 900, fontSize: "0.78rem", border: "none", cursor: "pointer" }}
                             >
-                                🔍 VERIFICAR VALIDEZ & NULLIFIER
+                                {t('zk_barter_modal.verify_btn')}
                             </button>
                             {verifyResult && (
                                 <div style={{ fontSize: "0.72rem", color: verifyResult.startsWith("✓") ? "#00E676" : "#FF3355", fontWeight: 800, padding: "8px", borderRadius: "6px", background: "rgba(0,0,0,0.4)" }}>
@@ -536,25 +554,25 @@ export function ZkBarterSubsurfaceModal() {
                 {activeTab === "subsurface" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                         <div style={{ background: "rgba(255, 179, 0, 0.08)", border: "1px solid rgba(255, 179, 0, 0.2)", borderRadius: "12px", padding: "12px", fontSize: "0.74rem", color: "#DDD" }}>
-                            Genera pulsos subsónicos de baja frecuencia (25-60 Hz) y vibración sísmica para rescate en estructuras colapsadas y penetración de escombros.
+                            {t('zk_barter_modal.subsurface_desc')}
                         </div>
 
                         <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
                             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                                <label style={{ fontSize: "0.7rem", color: "#AAA" }}>MEDIO DE PROPAGACIÓN FÍSICO:</label>
+                                <label style={{ fontSize: "0.7rem", color: "#AAA" }}>{t('zk_barter_modal.medium_label')}</label>
                                 <select
                                     value={medium}
                                     onChange={(e: any) => setMedium(e.target.value)}
                                     style={{ padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.74rem" }}
                                 >
-                                    <option value="REINFORCED_CONCRETE">Hormigón Armado / Estructura (hasta 24m)</option>
-                                    <option value="RUBBLE_EARTH">Escombros / Tierra Compacta (hasta 38m)</option>
-                                    <option value="WATER_FLOODED">Medio Acuoso / Inundación (hasta 65m)</option>
+                                    <option value="REINFORCED_CONCRETE">{t('zk_barter_modal.medium_concrete')}</option>
+                                    <option value="RUBBLE_EARTH">{t('zk_barter_modal.medium_rubble')}</option>
+                                    <option value="WATER_FLOODED">{t('zk_barter_modal.medium_water')}</option>
                                 </select>
                             </div>
 
                             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                                <label style={{ fontSize: "0.7rem", color: "#AAA" }}>FRECUENCIA SUBSÓNICA: {freqHz} Hz</label>
+                                <label style={{ fontSize: "0.7rem", color: "#AAA" }}>{t('zk_barter_modal.freq_label')} {freqHz} Hz</label>
                                 <input
                                     type="range"
                                     min="25"
@@ -568,13 +586,13 @@ export function ZkBarterSubsurfaceModal() {
 
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                                 <div style={{ background: "rgba(0,0,0,0.4)", padding: "10px", borderRadius: "8px" }}>
-                                    <div style={{ fontSize: "0.65rem", color: "#AAA" }}>PENETRACIÓN ESTIMADA</div>
+                                    <div style={{ fontSize: "0.65rem", color: "#AAA" }}>{t('zk_barter_modal.est_penetration')}</div>
                                     <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#00E5FF" }}>
-                                        {subsurface.estimatedPenetrationMeters} metros
+                                        {subsurface.estimatedPenetrationMeters} {t('zk_barter_modal.meters')}
                                     </div>
                                 </div>
                                 <div style={{ background: "rgba(0,0,0,0.4)", padding: "10px", borderRadius: "8px" }}>
-                                    <div style={{ fontSize: "0.65rem", color: "#AAA" }}>PULSOS EMITIDOS</div>
+                                    <div style={{ fontSize: "0.65rem", color: "#AAA" }}>{t('zk_barter_modal.pulses_emitted')}</div>
                                     <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#FFB300" }}>
                                         {subsurface.pulsesEmitted}
                                     </div>
@@ -589,7 +607,7 @@ export function ZkBarterSubsurfaceModal() {
                                     color: "#000", fontWeight: 900, fontSize: "0.85rem", border: "none", cursor: "pointer"
                                 }}
                             >
-                                {subsurface.isTransmitting ? "⏹️ DETENER BALIZA SÍSMICA" : "⚡ ACTIVAR BALIZA ACÚSTICA SUB-ESTRUCTURAL"}
+                                {subsurface.isTransmitting ? t('zk_barter_modal.stop_beacon') : t('zk_barter_modal.start_beacon')}
                             </button>
                         </div>
                     </div>

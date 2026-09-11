@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { useRedStore } from "../../store/useRedStore";
 import { ContactItem } from "../../api/types";
 import { avatarStyle } from "../sidebar/types";
@@ -19,6 +20,7 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
     onClose,
     onSelectContact,
 }) => {
+    const { t } = useTranslation();
     const { contacts, preferences, identity } = useRedStore();
     const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
     const [searchQuery, setSearchQuery] = useState("");
@@ -53,7 +55,7 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
         if (identity?.identity_hash && !list.some(c => c.identity_hash === identity.identity_hash)) {
             list.unshift({
                 identity_hash: identity.identity_hash,
-                display_name: `${identity.display_name || 'Mi Tarjeta Personal'} (Tú)`,
+                display_name: `${identity.display_name || (t('chat_modals.my_personal_card') || 'Mi Tarjeta Personal')} (${t('chat_modals.you') || 'Tú'})`,
                 public_key: identity.public_key || null,
             } as any);
         }
@@ -121,7 +123,7 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
                                 Compartir Contacto
                             </div>
                             <div style={{ fontSize: "0.72rem", color: isFamiliar ? "#00A884" : "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                                SELECCIONA UN OPERADOR
+                                {t('chat_modals.new_chat_sub')}
                             </div>
                         </div>
                     </div>

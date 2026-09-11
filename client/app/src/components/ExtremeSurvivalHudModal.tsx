@@ -6,10 +6,11 @@
  * 3 Acciones Maestras de Respuesta Inmediata 100% Funcionales:
  * 1. [🚨 SOS MÉDICO & BALIZA] — Emisión simultánea a Rust Sled DB + Malla Soberana P2P + Alerta acústica.
  * 2. [🎙️ PTT CANAL DIRECTO] — Captura de audio en tiempo real, codificación táctica y transmisión de ráfaga de voz en la malla (#general).
- * 3. [🧭 RUTA DE EVACUACIÓN] — Navegación real hacia waypoints tácticos guardados (red_offgrid_waypoints), balizas remotas o punto de reunión fijado.
+ * 3. [🧭 {t('extreme_survival_hud.evacuation_route') || 'RUTA DE EVACUACIÓN'}] — Navegación real hacia waypoints tácticos guardados (red_offgrid_waypoints), balizas remotas o punto de reunión fijado.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { useRedStore } from "../store/useRedStore";
 import { ecoMeshDutyCycleEngine, EcoMeshState } from "../lib/mesh/EcoMeshDutyCycleEngine";
 import { lamportMeshClockEngine } from "../lib/mesh/LamportMeshClockEngine";
@@ -33,6 +34,7 @@ interface TacticalWaypoint {
 }
 
 export const ExtremeSurvivalHudModal: React.FC = () => {
+    const { t } = useTranslation();
     const {
         goBack,
         status,
@@ -175,7 +177,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                     mediaStreamRef.current = null;
                 }
                 TacticalAudioEngine.playWarning();
-                toast.info("Grabación PTT cancelada");
+                toast.info(t('extreme_survival_hud.ptt_cancelled') || 'Grabación PTT cancelada');
                 return true;
             }
             if (strobeActive) {
@@ -247,7 +249,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                     latitude: gpsCoords?.lat,
                     longitude: gpsCoords?.lng,
                     battery_pct: ecoState.batteryLevel,
-                    custom_note: "🚨 [HUD SUPERVIVENCIA] Operador requiere extracción o auxilio inmediato."
+                    custom_note: t('extreme_survival_hud.sos_custom_note') || '🚨 [HUD SUPERVIVENCIA] Operador requiere extracción o auxilio inmediato.'
                 });
                 if (res?.beacon_id) {
                     setRustBeaconId(res.beacon_id);
@@ -381,7 +383,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
             }
         } catch (err) {
             console.warn("[ExtremeSurvivalHud] Error al iniciar micrófono:", err);
-            toast.error("No se pudo acceder al micrófono para PTT");
+            toast.error(t('extreme_survival_hud.mic_error') || 'No se pudo acceder al micrófono para PTT');
         }
     };
 
@@ -476,7 +478,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                     console.warn("[ExtremeSurvivalHud] Error al difundir ráfaga por malla:", meshErr);
                 }
 
-                toast.success(`🎙️ Ráfaga de voz transmitida (${durationSec}s) a #general`);
+                toast.success(t('extreme_survival_hud.voice_burst_sent', { duration: durationSec }) || `🎙️ Ráfaga de voz transmitida (${durationSec}s) a #general`);
             } catch (err: any) {
                 toast.error(`Error al transmitir audio: ${err.message || "Fallo P2P"}`);
             }
@@ -497,7 +499,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
             return {
                 lat: peerSosList[0].coords.lat,
                 lng: peerSosList[0].coords.lon,
-                name: `Baliza SOS: ${peerSosList[0].senderAlias || "Víctima"}`
+                name: t('extreme_survival_hud.sos_beacon_label', { alias: peerSosList[0].senderAlias || 'Víctima' }) || `Baliza SOS: ${peerSosList[0].senderAlias || 'Víctima'}`
             };
         }
         return null;
@@ -539,12 +541,12 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
     // Fijar posición actual como Punto de Reunión Inmediato si no hay waypoints
     const handleSetCurrentAsRallyPoint = () => {
         if (!gpsCoords) {
-            toast.warning("Esperando posición GPS para fijar punto de reunión");
+            toast.warning(t('extreme_survival_hud.waiting_gps') || 'Esperando posición GPS para fijar punto de reunión');
             return;
         }
         const newWp: TacticalWaypoint = {
             id: `rally-${Date.now()}`,
-            name: "PUNTO DE REUNIÓN ALFA",
+            name: t('extreme_survival_hud.rally_point_alpha') || 'PUNTO DE REUNIÓN ALFA',
             lat: gpsCoords.lat,
             lon: gpsCoords.lng,
             type: "RALLY_POINT"
@@ -556,7 +558,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
             localStorage.setItem("red_offgrid_waypoints", JSON.stringify(updated));
         } catch {}
         TacticalAudioEngine.playMessageSent();
-        toast.success("🚩 Coordenadas actuales fijadas como PUNTO DE REUNIÓN");
+        toast.success(t('extreme_survival_hud.rally_point_set') || '🚩 Coordenadas actuales fijadas como PUNTO DE REUNIÓN');
     };
 
     const handleCycleWaypoint = () => {
@@ -584,7 +586,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                     <span style={{ fontSize: "1.3rem" }}>⚡</span>
                     <div>
                         <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#FF1E40", letterSpacing: "1px" }}>
-                            HUD DE SUPERVIVENCIA EXTREMA
+                            {t('extreme_survival_hud.title')}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "#8892B0", fontFamily: "JetBrains Mono, monospace" }}>
                             {identity?.alias || identity?.nickname || "OPERADOR"} · LAMPORT #{lamportMeshClockEngine.getLogicalCounter()}
@@ -605,7 +607,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                             fontWeight: 800, fontSize: "0.72rem", cursor: "pointer"
                         }}
                     >
-                        {strobeActive ? "⚡ ESTROBO ON (10Hz)" : "💡 ESTROBO"}
+                        {strobeActive ? `⚡ ${t('extreme_survival_hud.btn_strobe')} (10Hz)` : `💡 ${t('extreme_survival_hud.btn_strobe')}`}
                     </button>
                     <button
                         onClick={() => {
@@ -619,7 +621,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                             fontWeight: 800, fontSize: "0.75rem", cursor: "pointer"
                         }}
                     >
-                        ✕ SALIR
+                        ✕ {t('common.close')}
                     </button>
                 </div>
             </div>
@@ -632,7 +634,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                 fontSize: "0.75rem", fontFamily: "JetBrains Mono, monospace"
             }}>
                 <div style={{ borderRight: "1px solid rgba(255, 255, 255, 0.1)" }}>
-                    <span style={{ color: "#8892B0" }}>BATERÍA: </span>
+                    <span style={{ color: "#8892B0" }}>{t('extreme_survival_hud.battery_status')}: </span>
                     <span style={{ fontWeight: 800, color: ecoState.batteryLevel < 20 ? "#FF1E40" : "#00FF88" }}>
                         {ecoState.batteryLevel}% (~{ecoState.estimatedBatteryLifeHours}h)
                     </span>
@@ -670,12 +672,12 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                 >
                     <div style={{ textAlign: "left" }}>
                         <div style={{ fontSize: "1.4rem", fontWeight: 900, letterSpacing: "1.5px" }}>
-                            {isSosActive ? "🚨 BALIZA SOS EN MALLA + SLED" : "🚨 SOS MÉDICO / RESCATE"}
+                            {isSosActive ? "🚨 BALIZA SOS EN MALLA + SLED" : `🚨 ${t('extreme_survival_hud.btn_sos')}`}
                         </div>
                         <div style={{ fontSize: "0.82rem", color: isSosActive ? "#FFF" : "#FF6680", marginTop: "4px" }}>
                             {isSosActive
-                                ? `Transmitiendo GNSS + Sirena Acústica ${rustBeaconId ? `(${rustBeaconId})` : ""}`
-                                : "Toca para activar baliza de auxilio de máxima prioridad"}
+                                ? `${t('extreme_survival_hud.transmitting_gnss') || 'Transmitiendo GNSS + Sirena Acústica'} ${rustBeaconId ? `(${rustBeaconId})` : ''}`
+                                : t('extreme_survival_hud.warning_stress')}
                         </div>
                     </div>
                     <span style={{ fontSize: "2.6rem" }}>{isSosActive ? "📡" : "🆘"}</span>
@@ -702,8 +704,8 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                         </div>
                         <div style={{ fontSize: "0.82rem", color: isPttPressed ? "#003311" : "#55FFAA", marginTop: "4px" }}>
                             {isPttPressed
-                                ? "Habla ahora · Se codificará y transmitirá a #general"
-                                : "Mantén presionado para hablar en tiempo real con la escuadra"}
+                                ? (t('extreme_survival_hud.speak_now') || 'Habla ahora · Se codificará y transmitirá a #general')
+                                : (t('extreme_survival_hud.hold_to_talk') || 'Mantén presionado para hablar en tiempo real con la escuadra')}
                         </div>
                     </div>
                     <span style={{ fontSize: "2.6rem" }}>{isPttPressed ? "🔊" : "🎙️"}</span>

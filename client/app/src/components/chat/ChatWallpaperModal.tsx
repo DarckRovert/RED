@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { useRedStore } from "../../store/useRedStore";
 import { toast } from "../Toast";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
@@ -51,6 +52,7 @@ export const ChatWallpaperModal: React.FC<ChatWallpaperModalProps> = ({
     isOpen,
     onClose,
 }) => {
+    const { t } = useTranslation();
     const { preferences, updatePreferences } = useRedStore();
     const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
     const currentWp = preferences?.chatWallpaper || "doodle_dark";
@@ -123,10 +125,10 @@ export const ChatWallpaperModal: React.FC<ChatWallpaperModalProps> = ({
                         <span style={{ fontSize: "1.3rem" }}>🎨</span>
                         <div>
                             <div style={{ fontSize: "1rem", fontWeight: 700, color: "#FFFFFF" }}>
-                                Fondo del Chat
+                                {t('chat_modals.wallpaper_title')}
                             </div>
                             <div style={{ fontSize: "0.72rem", color: isFamiliar ? "#00A884" : "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                                PERSONALIZAR PAPEL TAPIZ
+                                {t('chat_modals.wallpaper_sub')}
                             </div>
                         </div>
                     </div>

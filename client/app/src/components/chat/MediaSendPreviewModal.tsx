@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { TacticalEmojiPicker } from "./TacticalEmojiPicker";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
@@ -20,6 +21,7 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
     onSend,
     onCancel,
 }) => {
+    const { t } = useTranslation();
     const [caption, setCaption] = useState("");
     const [emojiOpen, setEmojiOpen] = useState(false);
     const [isSending, setIsSending] = useState(false);
@@ -83,7 +85,7 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
                         cursor: "pointer",
                         padding: "4px 8px"
                     }}
-                    title="Descartar"
+                    title={t('common.cancel')}
                 >
                     ✕
                 </button>
@@ -179,7 +181,7 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
                                 handleConfirmSend();
                             }
                         }}
-                        placeholder="Añade un comentario..."
+                        placeholder={t('chat_modals.add_comment_placeholder') || "Añade un comentario..."}
                         style={{
                             flex: 1,
                             background: "transparent",

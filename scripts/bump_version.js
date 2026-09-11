@@ -121,6 +121,17 @@ updateFile('client/app/package-lock.json', (content) => {
     }
 }, 'NPM Lockfile');
 
+// 3.1 signaling/package.json
+updateFile('signaling/package.json', (content) => {
+    try {
+        const pkg = JSON.parse(content);
+        pkg.version = targetVersion;
+        return JSON.stringify(pkg, null, 2) + '\n';
+    } catch {
+        return content;
+    }
+}, 'Signaling Server Package Manifest');
+
 // 4. client/app/android/app/build.gradle
 updateFile('client/app/android/app/build.gradle', (content) => {
     let updated = content.replace(/versionCode\s+\d+/, `versionCode ${versionCode}`);

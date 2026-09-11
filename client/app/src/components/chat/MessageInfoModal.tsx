@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { MessageItem } from "../../lib/api";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
@@ -23,6 +24,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
     isMine,
     onClose,
 }) => {
+    const { t } = useTranslation();
     // Intercepción LIFO (retroceso físico / Esc)
     useEffect(() => {
         if (!message) return;
@@ -57,10 +59,10 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
     const sentDateStr = formatFullDate(message.timestamp);
     const deliveredDateStr = isDelivered 
         ? ((message as any).delivered_at ? formatFullDate((message as any).delivered_at) : sentDateStr)
-        : "Esperando confirmación del receptor...";
+        : (t('chat_modals.waiting_recipient_confirm') || "Esperando confirmación del receptor...");
     const readDateStr = isRead
         ? ((message as any).read_at ? formatFullDate((message as any).read_at) : "Leído recientemente")
-        : "Aún no leído";
+        : (t('chat_modals.not_read_yet') || "Aún no leído");
 
     return (
         <div
@@ -109,7 +111,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                         <span style={{ fontSize: "1.2rem", color: "#00A884" }}>ℹ️</span>
                         <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, color: "#E9EDEF" }}>
-                            Info. del mensaje
+                            {t('chat_modals.message_info_title')}
                         </h3>
                     </div>
                     <button
@@ -185,7 +187,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                             </svg>
                         </div>
                         <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>Leído</div>
+                            <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>{t('chat_modals.read_timestamp')}</div>
                             <div style={{ fontSize: "0.78rem", color: isRead ? "#8696A0" : "#667781", marginTop: "2px" }}>
                                 {readDateStr}
                             </div>
@@ -207,7 +209,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                             </svg>
                         </div>
                         <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>Entregado</div>
+                            <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>{t('chat_modals.delivered_timestamp')}</div>
                             <div style={{ fontSize: "0.78rem", color: "#8696A0", marginTop: "2px" }}>
                                 {deliveredDateStr}
                             </div>
@@ -228,7 +230,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                             </svg>
                         </div>
                         <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>Enviado</div>
+                            <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>{t('chat_modals.sent_timestamp')}</div>
                             <div style={{ fontSize: "0.78rem", color: "#8696A0", marginTop: "2px" }}>
                                 {sentDateStr}
                             </div>
@@ -248,7 +250,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                             <span style={{ fontSize: "0.9rem" }}>🔒</span>
                             <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#00A884", textTransform: "uppercase", letterSpacing: "0.4px" }}>
-                                Cifrado Post-Cuántico Soberano
+                                {t('chat_modals.post_quantum_cipher') || "Cifrado Post-Cuántico Soberano"}
                             </span>
                         </div>
                         <div style={{ fontSize: "0.72rem", color: "#8696A0", lineHeight: 1.4 }}>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { celestialNav, CelestialEphemeris } from "../lib/sensors/CelestialNavigationEngine";
 import { pedestrianDeadReckoning, PdrState } from "../lib/sensors/PedestrianDeadReckoningEngine";
 import { useRedStore } from "../store/useRedStore";
@@ -9,6 +10,7 @@ import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacIcon } from "./ui/TacIcon";
 
 export function CelestialPdrModal() {
+    const { t } = useTranslation();
     const { navigate, goBack } = useRedStore();
 
     const [activeTab, setActiveTab] = useState<"celestial" | "pdr">("celestial");
@@ -258,10 +260,10 @@ export function CelestialPdrModal() {
                     </div>
                     <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#FFB300", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            NAVEGACIÓN CELESTE & PDR INERCIAL
+                            {t('celestial_pdr_modal.title')}
                         </div>
                         <div style={{ fontSize: "0.64rem", color: "var(--text-muted, #AAA)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            Efemérides Sol/Luna · Bóveda J2000 · Brújula Solar GPS-Denied
+                            {t('celestial_pdr_modal.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -598,7 +600,7 @@ export function CelestialPdrModal() {
                                 background: "rgba(0, 229, 255, 0.08)", border: "1px solid rgba(0, 229, 255, 0.25)",
                                 borderRadius: "12px", padding: "12px"
                             }}>
-                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted, #AAA)", fontWeight: 700 }}>PASOS & DISTANCIA</div>
+                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted, #AAA)", fontWeight: 700 }}>{t('celestial_pdr_modal.pdr_steps_count')}</div>
                                 <div className="tabular-telemetry" style={{ fontSize: "1.3rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)", marginTop: "2px" }}>
                                     {pdr.totalSteps} <span style={{ fontSize: "0.8rem" }}>pasos</span>
                                 </div>
@@ -627,7 +629,7 @@ export function CelestialPdrModal() {
                             borderRadius: "12px", padding: "12px", display: "flex", flexDirection: "column", gap: "6px"
                         }}>
                             <div style={{ fontSize: "0.65rem", color: "var(--text-muted, #AAA)", fontWeight: 700 }}>
-                                CALIBRACIÓN DE ZANCADA TÁCTICA:
+                                {t('celestial_pdr_modal.stride_length')}:
                             </div>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
                                 {[
@@ -680,7 +682,7 @@ export function CelestialPdrModal() {
                                 }}
                             >
                                 <TacIcon name="refresh" size={13} color="#AAA" />
-                                <span>RESET</span>
+                                <span>{t('celestial_pdr_modal.reset_pdr')}</span>
                             </button>
                         </div>
 

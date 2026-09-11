@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { useRedStore } from "../store/useRedStore";
 import { antiForensicPanicWipe } from "../lib/security/AntiForensicPanicWipeEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
@@ -16,6 +17,7 @@ interface CalculatorScreenProps {
  * If not matching, it behaves as a 100% real scientific & standard math calculator.
  */
 export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
+    const { t } = useTranslation();
     const { currentScreen, goBack } = useRedStore();
     const handleUnlock = onUnlock || (async () => {});
 
@@ -244,7 +246,7 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
                 padding: "0 16px",
                 opacity: 0.6
             }}>
-                <span style={{ fontSize: "0.80rem", fontWeight: 600 }}>Calculadora</span>
+                <span style={{ fontSize: "0.80rem", fontWeight: 600 }}>{t('calculator_decoy_modal.title')}</span>
                 {currentScreen === "calculator" && (
                     <button
                         onClick={() => { TacticalAudioEngine.playTap(); goBack(); }}
@@ -253,7 +255,7 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
                             fontSize: "0.80rem", cursor: "pointer", padding: "4px 8px"
                         }}
                     >
-                        Salir ✕
+                        {t('common.close')} ✕
                     </button>
                 )}
             </div>

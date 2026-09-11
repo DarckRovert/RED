@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../../lib/i18n/i18nEngine';
 import { PaymentIntentRequest, PaymentReceipt, PaymentRail } from '../../lib/miniapp/RedSDKTypes';
 import { redPaymentGateway } from '../../lib/miniapp/RedPaymentGatewayEngine';
 import { Web3BridgeEngine } from '../../lib/network/Web3BridgeEngine';
@@ -22,6 +23,7 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
     onClose,
     onSuccess,
 }) => {
+    const { t } = useTranslation();
     const supportedRails = intent.supportedRails && intent.supportedRails.length > 0
         ? intent.supportedRails
         : (['paypal', 'web3_usdt', 'lightning', 'offgrid_voucher'] as PaymentRail[]);
@@ -159,10 +161,10 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                         </div>
                         <div>
                             <h3 style={{ fontSize: "0.85rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.5px", textTransform: "uppercase", margin: 0 }}>
-                                TERMINAL DE PAGOS MULTI-RAIL
+                                {t('multirail_modal.title')}
                             </h3>
                             <p style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", margin: "2px 0 0 0" }}>
-                                RED Sovereign Checkout v66
+                                {t('multirail_modal.subtitle')}
                             </p>
                         </div>
                     </div>
@@ -195,8 +197,8 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                         </div>
 
                         <div>
-                            <h4 style={{ fontSize: "1rem", fontWeight: 900, color: "#FFFFFF", margin: 0 }}>¡PAGO VERIFICADO EN MALLA!</h4>
-                            <p style={{ fontSize: "0.75rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", margin: "4px 0 0 0" }}>Firma Ed25519 Validada</p>
+                            <h4 style={{ fontSize: "1rem", fontWeight: 900, color: "#FFFFFF", margin: 0 }}>{t('multirail_modal.payment_success')}</h4>
+                            <p style={{ fontSize: "0.75rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", margin: "4px 0 0 0" }}>{t('multirail_modal.receipt_voucher')}</p>
                         </div>
 
                         <div style={{ width: "100%", background: "rgba(0, 0, 0, 0.6)", border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "14px", padding: "12px", textAlign: "left", fontFamily: "JetBrains Mono, monospace", fontSize: "0.72rem", display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -468,7 +470,7 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                                     </>
                                 ) : (
                                     <>
-                                        <span>CONFIRMAR PAGO</span>
+                                        <span>{t('multirail_modal.confirm_payment_btn')}</span>
                                         <span>➔</span>
                                     </>
                                 )}

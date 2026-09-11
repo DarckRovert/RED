@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { LoadingSpinner } from './LoadingSpinner';
 import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
 import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
+import { useTranslation } from '../../lib/i18n/i18nEngine';
 
 interface ConfirmDialogProps {
     isOpen: boolean;
@@ -30,14 +31,17 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     isOpen,
     title,
     message,
-    confirmLabel = 'Confirmar',
-    cancelLabel = 'Cancelar',
+    confirmLabel,
+    cancelLabel,
     variant = 'danger',
     loading = false,
     icon,
     onConfirm,
     onCancel,
 }) => {
+    const { t } = useTranslation();
+    const resolvedConfirm = confirmLabel || t('common.confirm') || 'Confirmar';
+    const resolvedCancel = cancelLabel || t('common.cancel') || 'Cancelar';
     const dialogRef = useRef<HTMLDivElement>(null);
     const [mounted, setMounted] = useState(false);
     const cfg = VARIANT_CONFIG[variant];
@@ -223,7 +227,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                         onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
                     >
-                        {cancelLabel}
+                        {resolvedCancel}
                     </button>
 
                     {/* Confirm */}
@@ -251,7 +255,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                         onMouseLeave={e => { e.currentTarget.style.filter = 'none'; }}
                     >
                         {loading ? <LoadingSpinner size="xs" color="#fff" /> : null}
-                        {confirmLabel}
+                        {resolvedConfirm}
                     </button>
                 </div>
             </div>

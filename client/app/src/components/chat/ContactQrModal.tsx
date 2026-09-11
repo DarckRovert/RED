@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { useRedStore } from "../../store/useRedStore";
 import { OfflineQrEngine } from "../../lib/qr/OfflineQrEngine";
 import { meshRouter } from "../../lib/mesh/meshRouter";
@@ -23,6 +24,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
     onClose,
     initialTab = "my_qr"
 }) => {
+    const { t } = useTranslation();
     const { identity, contacts, addContact, navigate } = useRedStore();
     const [activeTab, setActiveTab] = useState<"my_qr" | "scan">(initialTab);
     const [qrDataUrl, setQrDataUrl] = useState<string>("");
@@ -559,12 +561,12 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                             alignItems: "center",
                             justifyContent: "center"
                         }}
-                        title="Cerrar"
+                        title={t('common.close') || "Cerrar"}
                     >
                         <TacIcon name="chevron-left" size={24} color="#E9EDEF" />
                     </button>
                     <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "#E9EDEF" }}>
-                        Código QR
+                        {t('chat_modals.contact_qr_title') || "Código QR"}
                     </span>
                 </div>
 
@@ -586,7 +588,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                             color: "#FFFFFF",
                             cursor: "pointer"
                         }}
-                        title="Linterna"
+                        title={t('chat_modals.torch_title') || "Linterna"}
                     >
                         <TacIcon name="zap" size={18} color="#FFFFFF" />
                     </button>
@@ -620,7 +622,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                         transition: "all 0.15s ease"
                     }}
                 >
-                    Mi código
+                    {t('chat_modals.qr_tab_my_code')}
                 </button>
                 <button
                     onClick={() => {
@@ -639,7 +641,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                         transition: "all 0.15s ease"
                     }}
                 >
-                    Escanear código
+                    {t('chat_modals.qr_tab_scan')}
                 </button>
             </div>
 
@@ -729,7 +731,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
 
                         {/* Description */}
                         <div style={{ fontSize: "0.78rem", color: "#8696A0", lineHeight: 1.45, maxWidth: "280px" }}>
-                            Tu código QR es privado. Si lo compartes con alguien, podrá escanearlo con la cámara de RED para chatear contigo sin necesidad de Internet.
+                            {t('chat_modals.qr_privacy_note') || "Tu código QR es privado. Si lo compartes con alguien, podrá escanearlo con la cámara de RED para chatear contigo sin necesidad de Internet."}
                         </div>
 
                         {/* Share Button */}

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useTranslation } from '../../lib/i18n/i18nEngine';
 import { RedAppManifest, RedAppBundle, RedPermissionScope, PaymentIntentRequest, PaymentReceipt } from '../../lib/miniapp/RedSDKTypes';
 import { RedSDKBridge, HostContext } from '../../lib/miniapp/RedSDKBridge';
 import { RedAppBundleEngine } from '../../lib/miniapp/RedAppBundleEngine';
@@ -26,6 +27,7 @@ export const MiniAppContainerModal: React.FC<MiniAppContainerModalProps> = ({
     publicKey,
     onClose,
 }) => {
+    const { t } = useTranslation();
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
     const [blobUrl, setBlobUrl] = useState<string>('');
     const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -237,7 +239,7 @@ export const MiniAppContainerModal: React.FC<MiniAppContainerModalProps> = ({
                                     v{bundle.manifest.version}
                                 </span>
                                 <span style={{ fontSize: "0.62rem", padding: "2px 6px", background: "rgba(0, 230, 118, 0.15)", border: "1px solid rgba(0, 230, 118, 0.5)", color: "var(--accent-emerald)", borderRadius: "6px", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
-                                    🛡️ ARENA AISLADA
+                                    🛡️ {t('sovereign_store_modal.sandbox_isolated')}
                                 </span>
                             </div>
                             <p 
