@@ -174,6 +174,27 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
           </div>
 
           <a
+            href={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/pitch`}
+            style={{
+              padding: "7px 14px",
+              borderRadius: "10px",
+              background: "rgba(6, 182, 212, 0.12)",
+              border: "1px solid rgba(6, 182, 212, 0.35)",
+              color: "#22D3EE",
+              fontWeight: 800,
+              fontSize: "12px",
+              textDecoration: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+            title="Abrir Presentación Ejecutiva / Pitch Deck"
+          >
+            <span>📊</span>
+            <span>Pitch Deck</span>
+          </a>
+
+          <a
             href={`https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/red-latest.apk`}
             style={{
               padding: "7px 14px",
@@ -274,6 +295,28 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
                 {tab.label}
               </button>
             ))}
+
+            <a
+              href={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/pitch`}
+              style={{
+                padding: "10px 14px",
+                borderRadius: "10px",
+                border: "1px solid rgba(6, 182, 212, 0.4)",
+                background: "rgba(6, 182, 212, 0.15)",
+                color: "#22D3EE",
+                fontSize: "13px",
+                fontWeight: 800,
+                textAlign: "center",
+                textDecoration: "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+              }}
+            >
+              <span>📊</span>
+              <span>Abrir Pitch Deck / Presentación</span>
+            </a>
 
             <div style={{ padding: "8px 0 4px", display: "flex", justifyContent: "center" }}>
               <iframe
