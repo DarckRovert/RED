@@ -36,6 +36,8 @@ pub enum RelayMessage {
         peer_id: String,
         #[serde(default)]
         version: Option<String>,
+        #[serde(default)]
+        push_endpoint: Option<String>,
     },
     /// Direct message or encrypted envelope relay
     Relay {
@@ -85,6 +87,10 @@ pub struct RelayStats {
     pub total_bytes_forwarded: u64,
     pub uptime_seconds: u64,
     pub version: String,
+    #[serde(default)]
+    pub registered_push_endpoints: usize,
+    #[serde(default)]
+    pub active_offline_mailboxes: usize,
 }
 
 /// Shared state of the Blind Relay
@@ -92,6 +98,12 @@ pub struct RelayStats {
 pub struct BlindRelayState {
     /// Active peer connections: peer_id (clean hex) -> channel sender
     peers: Arc<RwLock<HashMap<String, mpsc::Sender<WsMessage>>>>,
+    /// Registered push endpoints for offline waking: peer_id -> push URL
+    push_endpoints: Arc<RwLock<HashMap<String, String>>>,
+    /// Ephemeral in-memory mailbox for offline sleeping nodes (max 32 envelopes per peer, 600s TTL)
+    pub offline_mailbox: Arc<RwLock<HashMap<String, Vec<(RelayMessage, Instant)>>>>,
+    /// HTTP client for waking sleeping peers
+    http_client: reqwest::Client,
     /// Metrics
     active_peers_count: Arc<AtomicUsize>,
     total_messages: Arc<AtomicU64>,
@@ -105,8 +117,16 @@ pub struct BlindRelayState {
 
 impl BlindRelayState {
     pub fn new(max_peers: usize) -> Self {
+        let http_client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
         Self {
             peers: Arc::new(RwLock::new(HashMap::new())),
+            push_endpoints: Arc::new(RwLock::new(HashMap::new())),
+            offline_mailbox: Arc::new(RwLock::new(HashMap::new())),
+            http_client,
             active_peers_count: Arc::new(AtomicUsize::new(0)),
             total_messages: Arc::new(AtomicU64::new(0)),
             total_signals: Arc::new(AtomicU64::new(0)),
@@ -131,8 +151,13 @@ impl BlindRelayState {
         clean
     }
 
-    /// Register a peer connection
-    pub async fn register_peer(&self, peer_id: &str, tx: mpsc::Sender<WsMessage>) -> bool {
+    /// Register a peer connection, optionally binding a UnifiedPush endpoint and draining offline mailbox
+    pub async fn register_peer(
+        &self,
+        peer_id: &str,
+        push_endpoint: Option<String>,
+        tx: mpsc::Sender<WsMessage>,
+    ) -> bool {
         let clean = Self::clean_id(peer_id);
         if clean.is_empty() {
             return false;
@@ -145,10 +170,48 @@ impl BlindRelayState {
         }
 
         let is_new = !lock.contains_key(&clean);
-        lock.insert(clean, tx);
+        lock.insert(clean.clone(), tx.clone());
         if is_new {
             self.active_peers_count.fetch_add(1, Ordering::Relaxed);
         }
+        drop(lock);
+
+        // Store or update push endpoint if provided
+        if let Some(ep) = push_endpoint {
+            let ep_clean = ep.trim().to_string();
+            if !ep_clean.is_empty() && (ep_clean.starts_with("http://") || ep_clean.starts_with("https://")) {
+                let mut push_lock = self.push_endpoints.write().await;
+                push_lock.insert(clean.clone(), ep_clean);
+            }
+        }
+
+        // Drain any pending envelopes from offline mailbox
+        let pending = {
+            let mut mailbox_lock = self.offline_mailbox.write().await;
+            mailbox_lock.remove(&clean)
+        };
+
+        if let Some(queue) = pending {
+            let now = Instant::now();
+            let mut delivered = 0;
+            for (msg, queued_at) in queue {
+                // 10 minutes TTL
+                if now.duration_since(queued_at) <= Duration::from_secs(600) {
+                    if let Ok(json) = serde_json::to_string(&msg) {
+                        let bytes_len = json.len() as u64;
+                        if tx.send(WsMessage::Text(json)).await.is_ok() {
+                            self.total_messages.fetch_add(1, Ordering::Relaxed);
+                            self.total_bytes.fetch_add(bytes_len, Ordering::Relaxed);
+                            delivered += 1;
+                        }
+                    }
+                }
+            }
+            if delivered > 0 {
+                info!("[BlindRelay] Drained {} queued offline envelopes to peer {}", delivered, clean);
+            }
+        }
+
         true
     }
 
@@ -161,7 +224,7 @@ impl BlindRelayState {
         }
     }
 
-    /// Route a message to a specific peer
+    /// Route a message to a specific peer (or buffer in RAM mailbox and trigger UnifiedPush wake ping if offline)
     pub async fn route_message(
         &self,
         from_peer_id: &str,
@@ -172,26 +235,71 @@ impl BlindRelayState {
         let clean_target = Self::clean_id(target_peer_id);
         let clean_from = Self::clean_id(from_peer_id);
 
-        let lock = self.peers.read().await;
-        if let Some(tx) = lock.get(&clean_target) {
-            let delivery = RelayMessage::Delivery {
-                from_peer_id: clean_from,
-                payload: payload.to_string(),
-                timestamp,
-            };
-            if let Ok(json) = serde_json::to_string(&delivery) {
-                let bytes_len = json.len() as u64;
-                if tx.send(WsMessage::Text(json)).await.is_ok() {
-                    self.total_messages.fetch_add(1, Ordering::Relaxed);
-                    self.total_bytes.fetch_add(bytes_len, Ordering::Relaxed);
-                    return true;
+        let delivery = RelayMessage::Delivery {
+            from_peer_id: clean_from,
+            payload: payload.to_string(),
+            timestamp,
+        };
+
+        // 1. Direct delivery if target is actively connected
+        {
+            let lock = self.peers.read().await;
+            if let Some(tx) = lock.get(&clean_target) {
+                if let Ok(json) = serde_json::to_string(&delivery) {
+                    let bytes_len = json.len() as u64;
+                    if tx.send(WsMessage::Text(json)).await.is_ok() {
+                        self.total_messages.fetch_add(1, Ordering::Relaxed);
+                        self.total_bytes.fetch_add(bytes_len, Ordering::Relaxed);
+                        return true;
+                    }
                 }
             }
         }
+
+        // 2. Peer is offline/sleeping in Android Doze mode: buffer in ephemeral RAM mailbox
+        {
+            let mut mailbox = self.offline_mailbox.write().await;
+            let queue = mailbox.entry(clean_target.clone()).or_insert_with(Vec::new);
+            let now = Instant::now();
+            // Evict envelopes older than 10 minutes
+            queue.retain(|(_, queued_at)| now.duration_since(*queued_at) <= Duration::from_secs(600));
+            if queue.len() >= 32 {
+                queue.remove(0); // Cap queue at 32 envelopes
+            }
+            queue.push((delivery, now));
+        }
+
+        // 3. Trigger asynchronous UnifiedPush wake ping if a push endpoint is registered
+        let push_url = {
+            let push_lock = self.push_endpoints.read().await;
+            push_lock.get(&clean_target).cloned()
+        };
+
+        if let Some(url) = push_url {
+            let client = self.http_client.clone();
+            tokio::spawn(async move {
+                let body = serde_json::json!({
+                    "type": "RED_WAKEUP_PING",
+                    "ts": std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64,
+                });
+                let _ = client
+                    .post(&url)
+                    .header("Title", "RED Wakeup")
+                    .header("Priority", "urgent")
+                    .header("Tags", "shield,zap")
+                    .json(&body)
+                    .send()
+                    .await;
+            });
+        }
+
         false
     }
 
-    /// Route a WebRTC signaling message
+    /// Route a WebRTC signaling message (or wake target peer if offline)
     pub async fn route_signal(
         &self,
         from_peer_id: &str,
@@ -216,6 +324,36 @@ impl BlindRelayState {
                 }
             }
         }
+        drop(lock);
+
+        // Wake offline peer so they can reconnect and complete WebRTC negotiation
+        let push_url = {
+            let push_lock = self.push_endpoints.read().await;
+            push_lock.get(&clean_target).cloned()
+        };
+
+        if let Some(url) = push_url {
+            let client = self.http_client.clone();
+            tokio::spawn(async move {
+                let body = serde_json::json!({
+                    "type": "RED_WAKEUP_PING",
+                    "reason": "webrtc_signal",
+                    "ts": std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64,
+                });
+                let _ = client
+                    .post(&url)
+                    .header("Title", "RED Wakeup")
+                    .header("Priority", "urgent")
+                    .header("Tags", "shield,zap")
+                    .json(&body)
+                    .send()
+                    .await;
+            });
+        }
+
         false
     }
 
@@ -254,6 +392,9 @@ impl BlindRelayState {
 
     /// Fetch current operational metrics
     pub fn get_stats(&self) -> RelayStats {
+        let registered_push_endpoints = self.push_endpoints.try_read().map(|m| m.len()).unwrap_or(0);
+        let active_offline_mailboxes = self.offline_mailbox.try_read().map(|m| m.len()).unwrap_or(0);
+
         RelayStats {
             active_peers: self.active_peers_count.load(Ordering::Relaxed),
             max_peers: self.max_peers,
@@ -262,6 +403,8 @@ impl BlindRelayState {
             total_bytes_forwarded: self.total_bytes.load(Ordering::Relaxed),
             uptime_seconds: self.start_time.elapsed().as_secs(),
             version: env!("CARGO_PKG_VERSION").to_string(),
+            registered_push_endpoints,
+            active_offline_mailboxes,
         }
     }
 }
@@ -318,9 +461,9 @@ pub async fn handle_relay_socket(socket: WebSocket, state: BlindRelayState) {
                 WsMessage::Text(text) => {
                     if let Ok(relay_msg) = serde_json::from_str::<RelayMessage>(&text) {
                         match relay_msg {
-                            RelayMessage::Register { peer_id, .. } => {
+                            RelayMessage::Register { peer_id, push_endpoint, .. } => {
                                 let clean = BlindRelayState::clean_id(&peer_id);
-                                if state_clone.register_peer(&clean, tx.clone()).await {
+                                if state_clone.register_peer(&clean, push_endpoint, tx.clone()).await {
                                     registered_id = Some(clean.clone());
                                     let ack = RelayMessage::Ack {
                                         status: "registered".to_string(),
@@ -490,8 +633,8 @@ mod tests {
         let peer_a = "did:red:aaaa1111222233334444555566667777";
         let peer_b = "did:red:bbbb1111222233334444555566667777";
 
-        assert!(state.register_peer(peer_a, tx_a).await);
-        assert!(state.register_peer(peer_b, tx_b).await);
+        assert!(state.register_peer(peer_a, None, tx_a).await);
+        assert!(state.register_peer(peer_b, None, tx_b).await);
 
         let stats = state.get_stats();
         assert_eq!(stats.active_peers, 2);
@@ -523,6 +666,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_offline_mailbox_and_push_registration() {
+        let state = BlindRelayState::new(100);
+        let (tx_a, _rx_a) = mpsc::channel(10);
+        let peer_a = "did:red:sender1111222233334444555566667777";
+        let peer_b = "did:red:receiver1111222233334444555566667777";
+
+        assert!(state.register_peer(peer_a, None, tx_a).await);
+
+        // Peer B is offline. Route message from A to B
+        let routed = state.route_message(peer_a, peer_b, "offline_secret_payload", 1000).await;
+        assert!(!routed, "Should return false for offline peer");
+
+        // Verify mailbox has 1 envelope queued
+        {
+            let clean_b = BlindRelayState::clean_id(peer_b);
+            let mb = state.offline_mailbox.read().await;
+            assert_eq!(mb.get(&clean_b).map(|v| v.len()), Some(1));
+        }
+
+        // Now Peer B comes online with a push endpoint and registers
+        let (tx_b, mut rx_b) = mpsc::channel(10);
+        let registered = state.register_peer(
+            peer_b,
+            Some("https://ntfy.sh/red-test-topic".to_string()),
+            tx_b
+        ).await;
+        assert!(registered);
+
+        // Verify Peer B immediately received the queued envelope
+        let received = rx_b.recv().await.expect("Must receive drained message");
+        if let WsMessage::Text(text) = received {
+            let parsed: RelayMessage = serde_json::from_str(&text).expect("JSON valid");
+            if let RelayMessage::Delivery { from_peer_id, payload, .. } = parsed {
+                assert_eq!(from_peer_id, BlindRelayState::clean_id(peer_a));
+                assert_eq!(payload, "offline_secret_payload");
+            } else {
+                panic!("Unexpected message variant");
+            }
+        } else {
+            panic!("Unexpected websocket frame");
+        }
+
+        // Mailbox for peer_b should now be drained
+        {
+            let clean_b = BlindRelayState::clean_id(peer_b);
+            let mb = state.offline_mailbox.read().await;
+            assert!(mb.get(&clean_b).is_none() || mb.get(&clean_b).unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
     async fn test_broadcast() {
         let state = BlindRelayState::new(100);
 
@@ -530,9 +724,9 @@ mod tests {
         let (tx_b, mut rx_b) = mpsc::channel(10);
         let (tx_c, mut rx_c) = mpsc::channel(10);
 
-        state.register_peer("peer_a_1234567890", tx_a).await;
-        state.register_peer("peer_b_1234567890", tx_b).await;
-        state.register_peer("peer_c_1234567890", tx_c).await;
+        state.register_peer("peer_a_1234567890", None, tx_a).await;
+        state.register_peer("peer_b_1234567890", None, tx_b).await;
+        state.register_peer("peer_c_1234567890", None, tx_c).await;
 
         let delivered = state.broadcast_message("peer_a_1234567890", "alerta_sos_hex", 99999).await;
         assert_eq!(delivered, 2);
