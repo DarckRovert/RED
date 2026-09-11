@@ -61,7 +61,8 @@ export const SquadVoiceRoom: React.FC<SquadVoiceRoomProps> = ({
         if (hash === myIdentityHash) return `${myNickname} (${youStr})`;
         const contact = contacts?.find(c => c.identity_hash === hash || c.identity_hash.startsWith(hash.slice(0, 8)));
         if (contact?.display_name) return contact.display_name;
-        return `Operador ${hash.substring(0, 6)}`;
+        const opPrefix = t('contact_share.operator_prefix') || 'Operador';
+        return `${opPrefix} ${hash.substring(0, 6)}`;
     };
 
     const handleDisconnect = useCallback(() => {
@@ -124,7 +125,7 @@ export const SquadVoiceRoom: React.FC<SquadVoiceRoomProps> = ({
                         fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
                     }}
                 >
-                    🚪 Salir de la Sala
+                    {t('squad_voice.leave_room')}
                 </button>
             </header>
 
@@ -172,7 +173,7 @@ export const SquadVoiceRoom: React.FC<SquadVoiceRoomProps> = ({
                         padding: '6px 12px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700
                     }}>
                         <span>{myNickname} {isScreenSharing ? '🖥️' : ''}</span>
-                        <span>{isMicMuted ? '🔴 Mic Off' : '🟢 Mic On'}</span>
+                        <span>{isMicMuted ? t('squad_voice.mic_off') : t('squad_voice.mic_on')}</span>
                     </div>
                 </div>
 
@@ -197,7 +198,7 @@ export const SquadVoiceRoom: React.FC<SquadVoiceRoomProps> = ({
                         fontSize: '1.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         transition: 'all 0.2s ease'
                     }}
-                    title={isMicMuted ? 'Activar Micrófono' : 'Silenciar Micrófono'}
+                    title={isMicMuted ? t('squad_voice.unmute_mic') : t('squad_voice.mute_mic')}
                 >
                     {isMicMuted ? '🎙️❌' : '🎙️'}
                 </button>
@@ -211,7 +212,7 @@ export const SquadVoiceRoom: React.FC<SquadVoiceRoomProps> = ({
                         fontSize: '1.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         transition: 'all 0.2s ease'
                     }}
-                    title={isCamOff ? 'Encender Cámara' : 'Apagar Cámara'}
+                    title={isCamOff ? t('squad_voice.cam_on') : t('squad_voice.cam_off')}
                 >
                     {isCamOff ? '📹❌' : '📹'}
                 </button>
@@ -225,7 +226,7 @@ export const SquadVoiceRoom: React.FC<SquadVoiceRoomProps> = ({
                         fontSize: '1.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         transition: 'all 0.2s ease'
                     }}
-                    title={isDeafened ? 'Reactivar Audio Entrante' : 'Ensordecer (Deafen)'}
+                    title={isDeafened ? t('squad_voice.reactivate_incoming_audio') : t('squad_voice.deafen')}
                 >
                     {isDeafened ? '🎧❌' : '🎧'}
                 </button>
@@ -239,7 +240,7 @@ export const SquadVoiceRoom: React.FC<SquadVoiceRoomProps> = ({
                         fontSize: '1.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         transition: 'all 0.2s ease'
                     }}
-                    title={isScreenSharing ? 'Detener Pantalla Compartida' : 'Compartir Pantalla'}
+                    title={isScreenSharing ? t('squad_voice.stop_screen_share') : t('squad_voice.start_screen_share')}
                 >
                     🖥️
                 </button>
@@ -252,7 +253,7 @@ export const SquadVoiceRoom: React.FC<SquadVoiceRoomProps> = ({
                         fontSize: '1.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         boxShadow: '0 4px 16px rgba(255, 59, 48, 0.4)'
                     }}
-                    title="Colgar y salir"
+                    title={t('squad_voice.hangup')}
                 >
                     📞
                 </button>
@@ -268,6 +269,7 @@ interface RemotePeerCardProps {
 }
 
 const RemotePeerCard: React.FC<RemotePeerCardProps> = ({ peer, displayName, isDeafened }) => {
+    const { t } = useTranslation();
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -323,7 +325,7 @@ const RemotePeerCard: React.FC<RemotePeerCardProps> = ({ peer, displayName, isDe
                 padding: '6px 12px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700
             }}>
                 <span>{displayName}</span>
-                <span>{peer.isSpeaking ? '🗣️ Hablando' : '🤫 En silencio'}</span>
+                <span>{peer.isSpeaking ? t('squad_voice.speaking') : t('squad_voice.silent')}</span>
             </div>
         </div>
     );

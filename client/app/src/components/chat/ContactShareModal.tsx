@@ -120,7 +120,7 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
                         <span style={{ fontSize: "1.3rem" }}>👤</span>
                         <div>
                             <div style={{ fontSize: "1rem", fontWeight: 700, color: "#FFFFFF" }}>
-                                Compartir Contacto
+                                {t('contact_share.title')}
                             </div>
                             <div style={{ fontSize: "0.72rem", color: isFamiliar ? "#00A884" : "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
                                 {t('chat_modals.new_chat_sub')}
@@ -161,7 +161,7 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
                             type="text"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Buscar por nombre o DID..."
+                            placeholder={t('contact_share.search_placeholder')}
                             style={{
                                 flex: 1,
                                 background: "transparent",
@@ -189,7 +189,7 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
                         <div style={{ textAlign: "center", padding: "32px 16px", color: "#8696A0" }}>
                             <div style={{ fontSize: "1.5rem", marginBottom: "8px" }}>📭</div>
                             <div style={{ fontSize: "0.85rem" }}>
-                                {searchQuery ? "No se encontraron contactos coincidentes" : "No tienes contactos guardados para compartir"}
+                                {searchQuery ? t('contact_share.no_matches') : t('contact_share.no_contacts')}
                             </div>
                         </div>
                     ) : (
@@ -234,7 +234,7 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
                                         </div>
                                         <div style={{ minWidth: 0 }}>
                                             <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "#FFFFFF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                                {c.display_name || c.name || `Operador ${didShort}`}
+                                                {c.display_name || c.name || `${t('contact_share.operator_prefix')} ${didShort}`}
                                             </div>
                                             <div style={{ fontSize: "0.70rem", color: "#8696A0", fontFamily: "JetBrains Mono, monospace" }}>
                                                 DID: {didShort}
@@ -254,7 +254,7 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
                                             flexShrink: 0
                                         }}
                                     >
-                                        Enviar
+                                        {t('contact_share.send_btn')}
                                     </button>
                                 </div>
                             );

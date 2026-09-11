@@ -48,7 +48,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                             background: isFamiliar ? "#00A884" : "#FF6B00",
                             display: "inline-block"
                         }} />
-                        SOLICITUDES PENDIENTES ({pendingCount})
+                        {t('contact_list.pending_requests')} ({pendingCount})
                     </div>
                     {pendingContactRequests.map(req => (
                         <div key={req.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -62,11 +62,11 @@ export const ContactList: React.FC<ContactListProps> = ({
                             </div>
                             <div style={{ flex: 1, overflow: "hidden" }}>
                                 <div style={{ fontSize: "0.90rem", fontWeight: 600, color: "#E9EDEF" }}>{req.senderName}</div>
-                                <div style={{ fontSize: "0.70rem", color: "#8696A0" }}>{req.channel || "Enlace P2P"}</div>
+                                <div style={{ fontSize: "0.70rem", color: "#8696A0" }}>{req.channel || t('contact_list.p2p_link')}</div>
                             </div>
                             <button
                                 onClick={() => acceptContactRequest(req)}
-                                title="Aceptar solicitud"
+                                title={t('contact_list.accept_request')}
                                 style={{
                                     background: isFamiliar ? "#00A884" : "rgba(0,200,83,0.15)",
                                     border: "none", borderRadius: "50%", width: 32, height: 32,
@@ -78,7 +78,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                             </button>
                             <button
                                 onClick={() => rejectContactRequest(req)}
-                                title="Rechazar solicitud"
+                                title={t('contact_list.reject_request')}
                                 style={{
                                     background: isFamiliar ? "#2A3942" : "rgba(255,255,255,0.05)",
                                     border: "none", borderRadius: "50%", width: 32, height: 32,
@@ -90,7 +90,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                             </button>
                             <button
                                 onClick={() => blockNode(req.senderHash)}
-                                title="Bloquear nodo"
+                                title={t('contact_list.block_node')}
                                 style={{
                                     background: "transparent",
                                     border: "none", width: 32, height: 32,
@@ -127,7 +127,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                         <TacIcon name="user" size={22} color="#FFFFFF" />
                     </div>
                     <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF" }}>
-                        Nuevo contacto
+                        {t('contact_list.new_contact')}
                     </div>
                 </div>
             ) : (
@@ -159,10 +159,10 @@ export const ContactList: React.FC<ContactListProps> = ({
                             <TacIcon name="users" size={28} color="#00A884" />
                         </div>
                         <div style={{ fontSize: "1rem", fontWeight: 600, color: "#E9EDEF", marginBottom: "6px" }}>
-                            Sin contactos guardados
+                            {t('contact_list.no_contacts_saved')}
                         </div>
                         <div style={{ fontSize: "0.82rem", lineHeight: 1.4, color: "#8696A0", maxWidth: "260px" }}>
-                            Agrega el DID o escanea el código QR de un dispositivo para iniciar un chat privado.
+                            {t('contact_list.no_contacts_saved_desc')}
                         </div>
                     </div>
                 ) : (
@@ -207,7 +207,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                     {isCtOnline && (
                                         <span
                                             className="online-dot"
-                                            title="En línea en la Malla"
+                                            title={t('contact_list.online_mesh')}
                                         />
                                     )}
                                 </div>
@@ -217,7 +217,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                             {ct.display_name || ct.identity_hash.substring(0, 8)}
                                         </span>
                                         {isVerified && (
-                                            <span title="Identidad Verificada" style={{ display: "inline-flex", alignItems: "center", color: "#00A884", flexShrink: 0 }}>
+                                            <span title={t('contact_list.verified_identity')} style={{ display: "inline-flex", alignItems: "center", color: "#00A884", flexShrink: 0 }}>
                                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
                                                     <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
                                                 </svg>
@@ -225,15 +225,15 @@ export const ContactList: React.FC<ContactListProps> = ({
                                         )}
                                     </div>
                                     <div style={{ fontSize: "0.78rem", color: isCtOnline ? "#00A884" : "#8696A0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                        {isCtOnline ? (t('chat_modals.online_mesh_link') || "En línea • Enlace Malla") : `${ct.identity_hash.substring(0, 16)}…`}
+                                        {isCtOnline ? t('contact_list.online_mesh_link') : `${ct.identity_hash.substring(0, 16)}…`}
                                     </div>
                                 </div>
                                 <button
                                     id={`btn-delete-contact-${ct.identity_hash.slice(0, 8)}`}
-                                    title="Eliminar contacto"
+                                    title={t('contact_list.delete_contact')}
                                     onClick={async (e) => {
                                         e.stopPropagation();
-                                        if (confirm(t('chat_modals.confirm_delete_contact', { name: ct.display_name }) || `¿Eliminar a ${ct.display_name}?`)) {
+                                        if (confirm(t('contact_list.confirm_delete_contact', { name: ct.display_name }))) {
                                             await deleteContact(ct.identity_hash);
                                         }
                                     }}
@@ -288,7 +288,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                     {isCtOnline && (
                                         <span
                                             className="online-dot online-dot--tactical"
-                                            title="En línea en la Malla"
+                                            title={t('contact_list.online_mesh')}
                                         />
                                     )}
                                 </div>
@@ -298,7 +298,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                             {ct.display_name || ct.identity_hash.substring(0, 8)}
                                         </span>
                                         {isVerified && (
-                                            <span title="Identidad Verificada" style={{ display: "inline-flex", alignItems: "center", color: "var(--accent-emerald, #00E676)" }}>
+                                            <span title={t('contact_list.verified_identity')} style={{ display: "inline-flex", alignItems: "center", color: "var(--accent-emerald, #00E676)" }}>
                                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                                                     <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
                                                 </svg>
@@ -306,7 +306,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                         )}
                                         {isCtOnline && (
                                             <span style={{ fontSize: "0.55rem", padding: "1px 4px", borderRadius: "4px", background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.4)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                MALLA
+                                                {t('contact_list.mesh_badge')}
                                             </span>
                                         )}
                                     </div>
@@ -318,10 +318,10 @@ export const ContactList: React.FC<ContactListProps> = ({
                             <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                                 <button
                                     id={`btn-delete-contact-${ct.identity_hash.slice(0, 8)}`}
-                                    title="Eliminar"
+                                    title={t('contact_list.delete_contact_tactical')}
                                     onClick={async (e) => {
                                         e.stopPropagation();
-                                        if (confirm(`¿Eliminar a ${ct.display_name}?`)) {
+                                        if (confirm(t('contact_list.confirm_delete_contact', { name: ct.display_name }))) {
                                             await deleteContact(ct.identity_hash);
                                         }
                                     }}

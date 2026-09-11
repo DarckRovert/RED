@@ -12,18 +12,20 @@ import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
 
 /** Clipboard with textarea fallback for air-gapped / tactical WebView */
-function copyToClipboard(text: string, label = 'Dato'): void {
+function copyToClipboard(text: string, copiedMsg = 'Copiado al portapapeles'): void {
     if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text).catch(() => legacyCopy(text, label));
+        navigator.clipboard.writeText(text)
+            .then(() => toast.success(copiedMsg))
+            .catch(() => legacyCopy(text, copiedMsg));
     } else {
-        legacyCopy(text, label);
+        legacyCopy(text, copiedMsg);
     }
 }
-function legacyCopy(text: string, label: string): void {
+function legacyCopy(text: string, copiedMsg: string): void {
     const ta = document.createElement('textarea');
     ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
     document.body.appendChild(ta); ta.focus(); ta.select();
-    try { document.execCommand('copy'); toast.success(`${label} copiado`); }
+    try { document.execCommand('copy'); toast.success(copiedMsg); }
     finally { document.body.removeChild(ta); }
 }
 
@@ -123,7 +125,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
     const handleCopyDid = () => {
         if (!peerHash) return;
         TacticalAudioEngine.playTap();
-        copyToClipboard(`did:red:${peerHash}`, "DID");
+        copyToClipboard(`did:red:${peerHash}`, t('common.copied'));
         SettingsManager.triggerHaptic("light");
     };
 
@@ -147,21 +149,21 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
             TacticalAudioEngine.playRogerBeep();
         } catch {
             TacticalAudioEngine.playWarning();
-            toast.error("Error al generar QR del contacto");
+            toast.error(t('profile.qr_gen_error'));
         }
     };
 
     const handleExportChatText = () => {
         if (!messages.length) {
             TacticalAudioEngine.playWarning();
-            toast.info("No hay mensajes para exportar");
+            toast.info(t('profile.no_messages_to_export'));
             return;
         }
         TacticalAudioEngine.playMessageSent();
         const textLines = messages.map((m) => {
             const time = new Date((m.timestamp > 1e11 ? m.timestamp : m.timestamp * 1000)).toLocaleString();
             const sender = m.is_mine ? (t('chat_modals.you') || "Tú") : displayName;
-            return `[${time}] ${sender}: ${m.content || `[${m.msg_type || "Medio"}]`}`;
+            return `[${time}] ${sender}: ${m.content || `[${m.msg_type || t('profile.media_placeholder')}]`}`;
         });
         const blob = new Blob([textLines.join("\n")], { type: "text/plain;charset=utf-8" });
         const a = document.createElement("a");
@@ -170,7 +172,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        toast.success("📄 Historial exportado exitosamente");
+        toast.success(t('profile.export_history_success'));
     };
 
     return (
@@ -209,7 +211,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                 >
                     ←
                 </button>
-                <span style={{ fontSize: "1rem", fontWeight: 700, color: "#E9EDEF" }}>Info del contacto</span>
+                <span style={{ fontSize: "1rem", fontWeight: 700, color: "#E9EDEF" }}>{t('profile.contact_info_header')}</span>
                 <div style={{ width: 38 }} />
             </header>
 
@@ -260,7 +262,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                 cursor: "pointer",
                                 wordBreak: "break-all",
                             }}
-                            title="Click para copiar"
+                            title={t('profile.click_to_copy')}
                         >
                             did:red:{peerHash.substring(0, 16)}...{peerHash.substring(peerHash.length - 8)} 📋
                         </div>
@@ -287,7 +289,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                 color: isFamiliar ? "#00A884" : "#FFFFFF", cursor: "pointer", fontWeight: 700
                             }}
                         >
-                            <span>📞</span> {t.chat?.call_btn || "Voz"}
+                            <span>📞</span> {t('profile.call_voice')}
                         </button>
                         <button
                             onClick={() => { TacticalAudioEngine.playTap(); onClose(); onStartCall?.("video"); }}
@@ -299,7 +301,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                 boxShadow: isFamiliar ? "0 2px 10px rgba(0, 168, 132, 0.35)" : "none"
                             }}
                         >
-                            <span>📹</span> {t.chat?.video_btn || "Video"}
+                            <span>📹</span> {t('profile.call_video')}
                         </button>
                         <button
                             onClick={handleOpenContactQr}
@@ -309,9 +311,9 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                 background: isFamiliar ? "rgba(255, 255, 255, 0.05)" : "var(--glass-bg)",
                                 color: isFamiliar ? "#E9EDEF" : "#FFFFFF", cursor: "pointer", fontWeight: 700
                             }}
-                            title="Ficha táctica QR del contacto"
+                            title={t('profile.qr_sheet')}
                         >
-                            <span>📱</span> Ficha QR
+                            <span>📱</span> {t('profile.qr_sheet')}
                         </button>
                     </div>
                 </div>
@@ -324,19 +326,19 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                     border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid var(--glass-border)",
                 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#E9EDEF" }}>{t.chat_extended?.gallery_title || "Archivos & Medios Compartidos"}</span>
+                        <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#E9EDEF" }}>{t('profile.shared_media_title')}</span>
                         <span style={{ fontSize: "0.72rem", color: "#8696A0", fontFamily: isFamiliar ? "inherit" : "JetBrains Mono, monospace" }}>
-                            {messages.length} {t.nav?.chats ? t.nav.chats.toUpperCase() : "MENSAJES"}
+                            {messages.length} {(t('nav.chats') || "Mensajes").toUpperCase()}
                         </span>
                     </div>
 
                     {/* Media Tabs Pills */}
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px" }}>
                         {[
-                            { id: "media", label: `Fotos (${photosAndVideos.length})`, icon: "🖼️" },
-                            { id: "docs", label: `Docs (${documents.length})`, icon: "📄" },
-                            { id: "audio", label: `Voz (${voiceNotes.length})`, icon: "🎙️" },
-                            { id: "links", label: `Links (${linksAndLocations.length})`, icon: "🔗" },
+                            { id: "media", label: `${t('profile.tab_photos')} (${photosAndVideos.length})`, icon: "🖼️" },
+                            { id: "docs", label: `${t('profile.tab_docs')} (${documents.length})`, icon: "📄" },
+                            { id: "audio", label: `${t('profile.tab_voice')} (${voiceNotes.length})`, icon: "🎙️" },
+                            { id: "links", label: `${t('profile.tab_links')} (${linksAndLocations.length})`, icon: "🔗" },
                         ].map((tab) => {
                             const isSelected = activeTab === tab.id;
                             return (
@@ -394,7 +396,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                 </div>
                             ) : (
                                 <div style={{ textAlign: "center", padding: "24px", fontSize: "0.76rem", color: "var(--text-muted)" }}>
-                                    No hay fotos ni videos compartidos
+                                    {t('profile.no_photos')}
                                 </div>
                             )
                         )}
@@ -403,43 +405,43 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                             documents.length > 0 ? (
                                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                                     {documents.map((m) => (
-                                        <div
-                                            key={m.id}
-                                            style={{
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "space-between",
-                                                padding: "10px",
-                                                borderRadius: "8px",
-                                                background: "rgba(0,0,0,0.3)",
-                                                border: "1px solid var(--glass-border)",
-                                            }}
-                                        >
-                                            <div style={{ display: "flex", alignItems: "center", gap: "10px", overflow: "hidden" }}>
-                                                <span style={{ fontSize: "1.4rem" }}>📄</span>
-                                                <div style={{ overflow: "hidden" }}>
-                                                    <div style={{ fontSize: "0.80rem", fontWeight: 700, color: "#fff", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                                                        {m.file_name || "Documento sin nombre"}
-                                                    </div>
-                                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
-                                                        {m.file_size ? `${(m.file_size / 1024).toFixed(1)} KB` : "Documento"}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <a
-                                                href={m.media_data || m.content}
-                                                download={m.file_name || "document"}
-                                                className="btn-tactical-secondary"
-                                                style={{ padding: "6px 10px", fontSize: "0.72rem", textDecoration: "none" }}
-                                            >
-                                                📥
-                                            </a>
-                                        </div>
-                                    ))}
+                                         <div
+                                             key={m.id}
+                                             style={{
+                                                 display: "flex",
+                                                 alignItems: "center",
+                                                 justifyContent: "space-between",
+                                                 padding: "10px",
+                                                 borderRadius: "8px",
+                                                 background: "rgba(0,0,0,0.3)",
+                                                 border: "1px solid var(--glass-border)",
+                                             }}
+                                         >
+                                             <div style={{ display: "flex", alignItems: "center", gap: "10px", overflow: "hidden" }}>
+                                                 <span style={{ fontSize: "1.4rem" }}>📄</span>
+                                                 <div style={{ overflow: "hidden" }}>
+                                                     <div style={{ fontSize: "0.80rem", fontWeight: 700, color: "#fff", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                                                         {m.file_name || "Documento sin nombre"}
+                                                     </div>
+                                                     <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                                                         {m.file_size ? `${(m.file_size / 1024).toFixed(1)} KB` : "Documento"}
+                                                     </div>
+                                                 </div>
+                                             </div>
+                                             <a
+                                                 href={m.media_data || m.content}
+                                                 download={m.file_name || "document"}
+                                                 className="btn-tactical-secondary"
+                                                 style={{ padding: "6px 10px", fontSize: "0.72rem", textDecoration: "none" }}
+                                             >
+                                                 📥
+                                             </a>
+                                         </div>
+                                     ))}
                                 </div>
                             ) : (
                                 <div style={{ textAlign: "center", padding: "24px", fontSize: "0.76rem", color: "var(--text-muted)" }}>
-                                    No hay documentos compartidos
+                                    {t('profile.no_docs')}
                                 </div>
                             )
                         )}
@@ -467,7 +469,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                 </div>
                             ) : (
                                 <div style={{ textAlign: "center", padding: "24px", fontSize: "0.76rem", color: "var(--text-muted)" }}>
-                                    No hay notas de voz
+                                    {t('profile.no_voice')}
                                 </div>
                             )
                         )}
@@ -500,7 +502,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                 </div>
                             ) : (
                                 <div style={{ textAlign: "center", padding: "24px", fontSize: "0.76rem", color: "var(--text-muted)" }}>
-                                    No hay enlaces ni coordenadas
+                                    {t('profile.no_links')}
                                 </div>
                             )
                         )}
@@ -516,15 +518,15 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div>
-                            <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#E9EDEF" }}>Silenciar notificaciones</div>
-                            <div style={{ fontSize: "0.72rem", color: "#8696A0" }}>Desactiva alertas y sonidos de este chat</div>
+                            <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#E9EDEF" }}>{t('profile.mute_notifications')}</div>
+                            <div style={{ fontSize: "0.72rem", color: "#8696A0" }}>{t('profile.mute_desc')}</div>
                         </div>
                         <input
                             type="checkbox"
                             checked={isMuted}
                             onChange={(e) => {
                                 setIsMuted(e.target.checked);
-                                toast.info(e.target.checked ? "🔇 Chat silenciado" : "🔔 Notificaciones activadas");
+                                toast.info(e.target.checked ? t('profile.chat_muted') : t('profile.chat_unmuted'));
                             }}
                             style={{ width: 22, height: 22, accentColor: "#00A884", cursor: "pointer" }}
                         />
@@ -538,11 +540,11 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                             className="btn-tactical-secondary"
                             style={{ flex: 1, padding: "10px", fontSize: "0.75rem" }}
                         >
-                            📤 Exportar Chat
+                            {t('profile.export_chat')}
                         </button>
                         <button
                             onClick={() => {
-                                if (window.confirm(t('chat_modals.confirm_clear_chat') || "¿Seguro que deseas vaciar los mensajes de este chat?")) {
+                                if (window.confirm(t('chat_modals.confirm_clear_chat'))) {
                                     onClearChat?.();
                                     onClose();
                                 }
@@ -550,7 +552,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                             className="btn-tactical-secondary"
                             style={{ flex: 1, padding: "10px", fontSize: "0.75rem", color: "var(--accent-crimson)", borderColor: "rgba(232,33,58,0.3)" }}
                         >
-                            🧹 Vaciar Chat
+                            {t('profile.clear_chat')}
                         </button>
                     </div>
 
@@ -559,7 +561,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                         <button
                             onClick={() => {
-                                if (window.confirm(t('chat_modals.confirm_delete_contact', { name: displayName }) || `¿Estás seguro de eliminar a ${displayName} de tus contactos?`)) {
+                                if (window.confirm(t('chat_modals.confirm_delete_contact', { name: displayName }))) {
                                     onDeleteContact?.();
                                     onClose();
                                 }
@@ -581,7 +583,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
 
                         <button
                             onClick={() => {
-                                if (window.confirm(t('chat_modals.confirm_block_contact', { name: displayName }) || `¿Bloquear a ${displayName}? No podrá enviarte mensajes ni solicitudes P2P.`)) {
+                                if (window.confirm(t('chat_modals.confirm_block_contact', { name: displayName }))) {
                                     onBlockNode?.();
                                     onClose();
                                 }
@@ -650,7 +652,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                     >
                         <div style={{ textAlign: "center" }}>
                             <div style={{ fontSize: "1rem", fontWeight: 800, color: isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)" }}>
-                                FICHA DE CONTACTO P2P
+                                {t('profile.p2p_contact_sheet')}
                             </div>
                             <div style={{ fontSize: "0.85rem", color: "#E9EDEF", marginTop: "4px", fontWeight: 700 }}>
                                 {displayName}
@@ -672,7 +674,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                             />
                         ) : (
                             <div style={{ width: "240px", height: "240px", display: "flex", alignItems: "center", justifyContent: "center", color: "#8696A0" }}>
-                                Generando QR táctico...
+                                {t('profile.generating_qr')}
                             </div>
                         )}
 
@@ -691,7 +693,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                     cursor: "pointer",
                                 }}
                             >
-                                📋 Copiar DID
+                                {t('profile.copy_did')}
                             </button>
                             {qrContactDataUrl && (
                                 <a
@@ -699,7 +701,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                     download={`contacto_${displayName.replace(/\s+/g, "_")}.png`}
                                     onClick={() => {
                                         TacticalAudioEngine.playRogerBeep();
-                                        toast.success("QR guardado");
+                                        toast.success(t('profile.qr_saved_toast'));
                                     }}
                                     style={{
                                         flex: 1,
@@ -717,7 +719,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                         justifyContent: "center",
                                     }}
                                 >
-                                    💾 Guardar PNG
+                                    {t('profile.save_png')}
                                 </a>
                             )}
                         </div>
@@ -738,7 +740,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                 cursor: "pointer",
                             }}
                         >
-                            Cerrar
+                            {t('common.close')}
                         </button>
                     </div>
                 </div>

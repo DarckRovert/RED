@@ -61,7 +61,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
         ? ((message as any).delivered_at ? formatFullDate((message as any).delivered_at) : sentDateStr)
         : (t('chat_modals.waiting_recipient_confirm') || "Esperando confirmación del receptor...");
     const readDateStr = isRead
-        ? ((message as any).read_at ? formatFullDate((message as any).read_at) : "Leído recientemente")
+        ? ((message as any).read_at ? formatFullDate((message as any).read_at) : t('message_info.read_recently'))
         : (t('chat_modals.not_read_yet') || "Aún no leído");
 
     return (
@@ -153,9 +153,9 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                         wordBreak: "break-word"
                     }}>
                         {message.content?.startsWith("data:image") ? (
-                            <span>📷 [Imagen cifrada]</span>
+                            <span>{t('message_info.encrypted_image')}</span>
                         ) : message.content?.startsWith("data:audio") ? (
-                            <span>🎙️ [Nota de voz P2P]</span>
+                            <span>{t('message_info.p2p_voice_note')}</span>
                         ) : (
                             message.content
                         )}
@@ -254,7 +254,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                             </span>
                         </div>
                         <div style={{ fontSize: "0.72rem", color: "#8696A0", lineHeight: 1.4 }}>
-                            Protocolo: <strong>Noise Protocol + ML-KEM-768</strong> con trinquete doble (Double Ratchet) de extremo a extremo. Cero servidores centrales.
+                            {t('message_info.cipher_description')}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "#667781", fontFamily: "monospace", wordBreak: "break-all" }}>
                             ID: {message.id}
@@ -281,7 +281,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                             cursor: "pointer"
                         }}
                     >
-                        Cerrar
+                        {t('message_info.close_btn')}
                     </button>
                 </div>
             </div>
