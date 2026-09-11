@@ -40,8 +40,8 @@ Despliegue y validación en limpio en hardware real con **0 crashes** y **100% d
 ---
 
 ### 6. Binarios Oficiales para Descarga Directa
-- `red-v98.0.0-release.apk` (66.35 MB / 69,579,690 bytes) — SHA256: `0B8A14BA9952BCD809EE936EBE2295349EC33D1D3E1EB16997E7CD6920539AB7`
-- `red-latest.apk` (66.35 MB / 69,579,690 bytes) — SHA256: `0B8A14BA9952BCD809EE936EBE2295349EC33D1D3E1EB16997E7CD6920539AB7`
+- `red-v98.0.0-release.apk` (71.21 MB / 74,670,556 bytes) — SHA256: `32701A18A9C257A7C99470233852FBE258035CC0663434D240A1E71C27876163`
+- `red-latest.apk` (71.21 MB / 74,670,556 bytes) — SHA256: `32701A18A9C257A7C99470233852FBE258035CC0663434D240A1E71C27876163`
 - `SHA256SUMS.txt`
 
 > **Web App & Descarga Directa:** [https://darckrovert.github.io/RED/](https://darckrovert.github.io/RED/)
