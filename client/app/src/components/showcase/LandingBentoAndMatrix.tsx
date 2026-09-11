@@ -243,6 +243,9 @@ export const LandingBentoAndMatrix: React.FC = () => {
                   { feat: "Transporte Acústico (Air-Gap)", red: "✓ SoundMesh 18.5-20.5 kHz", mesh: "✗ No disponible", atak: "✗ No disponible", briar: "✗ No disponible", signal: "✗ No disponible" },
                   { feat: "Sensores Físicos (CBRN / rPPG / 4DOF)", red: "✓ CMOS + START + Balística", mesh: "✗ Solo I2C externo", atak: "⚠ Plugins pesados", briar: "✗ No disponible", signal: "✗ No disponible" },
                   { feat: "IA Local en el Borde (RAG INT8)", red: "✓ On-device (<5ms)", mesh: "✗ No disponible", atak: "✗ No disponible", briar: "✗ No disponible", signal: "✗ Requiere nube" },
+                  { feat: "Coordinación Espectral Anti-Colisiones", red: "✓ TDMA 2000ms (10 slots) + SOS", mesh: "✗ ALOHA Caótico", atak: "✗ No disponible", briar: "✗ No disponible", signal: "✗ Requiere nube" },
+                  { feat: "Poda Geoespacial DTN & Satélites", red: "✓ Cuadrantes Geohash Base32", mesh: "✗ Inundación ciega", atak: "⚠ Servidor central", briar: "✗ No disponible", signal: "✗ No disponible" },
+                  { feat: "Repetidores Solares Autónomos", red: "✓ ESP32-S3 (<12mA, ~$15-20 BOM)", mesh: "⚠ ESP32 ($40-$80)", atak: "✗ Servidor de torre", briar: "✗ No disponible", signal: "✗ Antenas celulares" },
                   { feat: "Modo Señuelo Anti-Coerción", red: "✓ Calculadora .CalculatorAlias", mesh: "✗ No disponible", atak: "✗ No disponible", briar: "✗ No disponible", signal: "✗ No disponible" }
                 ].map((row, rIdx) => (
                   <tr key={rIdx} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: rIdx % 2 === 0 ? "rgba(255,255,255,0.015)" : "transparent" }}>

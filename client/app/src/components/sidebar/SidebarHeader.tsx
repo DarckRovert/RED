@@ -430,7 +430,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                 boxShadow: nodeOnline ? "0 0 8px #00E676" : "0 0 8px #FF3355",
                                 animation: nodeOnline ? "beaconPulse 2s infinite" : "none"
                             }} />
-                            {nodeOnline ? `MALLA P2P • ${meshRouter.peers.size} ${meshRouter.peers.size === 1 ? 'NODO' : 'NODOS'}` : "NODO LOCAL OFFLINE"}
+                            {nodeOnline ? `MALLA P2P • ${meshRouter.peers.size} ${meshRouter.peers.size === 1 ? 'NODO' : 'NODOS'}` : "NODO LOCAL OFFLINE"}{satAos ? " · 🛰️ LEO AOS" : ""}
                         </div>
                     </div>
                 </div>

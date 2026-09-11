@@ -12,6 +12,8 @@
  * - Dynamic duty-cycle enforcement (EU868 / US915 / AS923 regulatory compliance)
  */
 
+import { loraTdmaScheduler } from './LoRaTdmaSchedulerEngine';
+
 export interface LoRaNodeInfo {
     nodeNum: number;
     user: {
@@ -66,7 +68,11 @@ export class LoRaMeshtasticBridge {
     private knownNodes: Map<number, LoRaNodeInfo> = new Map();
     private packetCounter: number = 1;
 
-    private constructor() {}
+    private constructor() {
+        loraTdmaScheduler.setTransmitHandler(async (framed: Uint8Array) => {
+            return await this.transmitRawFramed(framed);
+        });
+    }
 
     public static getInstance(): LoRaMeshtasticBridge {
         if (!this.instance) {
@@ -208,13 +214,53 @@ export class LoRaMeshtasticBridge {
     }
 
     /**
-     * Low-level framing and transmission of a Meshtastic packet
+     * Low-level framing and transmission of a Meshtastic packet or raw RED frame via TDMA scheduler
      */
-    public async sendPacket(packet: LoRaPacket): Promise<boolean> {
-        const framed = this.framePacket(packet);
+    public async sendPacket(packet: LoRaPacket | Uint8Array, bypassTdma = false): Promise<boolean> {
+        let loraPkt: LoRaPacket;
+        if (packet instanceof Uint8Array) {
+            loraPkt = {
+                from: this.localNodeInfo?.nodeNum || 0x12345678,
+                to: 0xFFFFFFFF,
+                channel: 0,
+                portnum: MeshtasticPortNum.RED_SOVEREIGN_MESH_APP,
+                payload: packet,
+                id: this.packetCounter++,
+                hopLimit: 3,
+                wantAck: false
+            };
+        } else {
+            loraPkt = packet;
+        }
+
+        const framed = this.framePacket(loraPkt);
+
+        if (!bypassTdma) {
+            let isEmergency = loraPkt.portnum === MeshtasticPortNum.ADMIN_APP;
+            if (!isEmergency && loraPkt.payload && loraPkt.payload.length > 0) {
+                try {
+                    const sample = new TextDecoder().decode(loraPkt.payload.slice(0, 40));
+                    if (sample.includes('SOS') || sample.includes('beacon') || sample.includes('CBRN')) {
+                        isEmergency = true;
+                    }
+                } catch {}
+            }
+            const priority = isEmergency ? 10 : 5;
+            return await loraTdmaScheduler.scheduleTransmission(framed, priority, isEmergency);
+        }
+
+        return await this.transmitRawFramed(framed, loraPkt);
+    }
+
+    private async transmitRawFramed(framed: Uint8Array, packetForLoopback?: LoRaPacket): Promise<boolean> {
         if (!this.isConnected || !this.serialPort) {
             // Virtual loopback / test mode dispatch
-            this.dispatchInbound(packet);
+            if (packetForLoopback) {
+                this.dispatchInbound(packetForLoopback);
+            } else {
+                const unframed = this.unframePacket(framed);
+                if (unframed) this.dispatchInbound(unframed);
+            }
             return true;
         }
 

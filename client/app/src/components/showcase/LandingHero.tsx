@@ -79,7 +79,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
                         lineHeight: 1.7,
                         marginBottom: "28px"
                     }}>
-                        RED conecta teléfonos inteligentes y transceptores LoRa directamente entre sí mediante <strong>Bluetooth LE 5.3, Wi-Fi Direct ad-hoc, ondas de radio 915 MHz (15–25 km) y pulsos acústicos ultrasónicos</strong>. Cero servidores en la nube, cero cables de fibra óptica y blindaje criptográfico post-cuántico <strong>NIST FIPS 203 (ML-KEM-768)</strong>.
+                        RED conecta teléfonos inteligentes y transceptores LoRa directamente entre sí mediante <strong>Bluetooth LE 5.3, Wi-Fi Direct ad-hoc, ondas de radio 915 MHz (15–25 km) coordinadas por TDMA, repetidores solares autónomos y pulsos acústicos ultrasónicos</strong>. Cero servidores en la nube, cero cables de fibra óptica, poda geoespacial Geohash y blindaje criptográfico post-cuántico <strong>NIST FIPS 203 (ML-KEM-768)</strong>.
                     </p>
 
                     {/* Primary CTAs */}

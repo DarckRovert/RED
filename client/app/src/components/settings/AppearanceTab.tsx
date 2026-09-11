@@ -36,10 +36,10 @@ export const AppearanceTab: React.FC = () => {
                         {/* ── SECCIÓN 0: MODO DE INTERFAZ (FAMILIAR VS TÁCTICO) ── */}
                         <div>
                             <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
-                                <span>📱</span> Modo de Interfaz & Ergonomía
+                                <span>📱</span> {t('settings.ui_mode_title')}
                             </h3>
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                Selecciona la experiencia visual y operativa del sistema RED.
+                                {t('settings.ui_mode_desc')}
                             </p>
                         </div>
 
@@ -49,7 +49,7 @@ export const AppearanceTab: React.FC = () => {
                                 onClick={() => {
                                     SettingsManager.triggerHaptic("medium");
                                     updatePreferences({ uiMode: 'familiar' });
-                                    toast.success("💬 Modo Familiar activado (WhatsApp / Telegram / Signal)");
+                                    toast.success(t('settings.ui_mode_familiar_toast'));
                                 }}
                                 className="card-tactical-interactive"
                                 style={{
@@ -75,10 +75,10 @@ export const AppearanceTab: React.FC = () => {
                                 </div>
                                 <div>
                                     <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "#FFFFFF" }}>
-                                        Modo Familiar
+                                        {t('settings.ui_mode_familiar')}
                                     </div>
                                     <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "3px", lineHeight: 1.3 }}>
-                                        Paridad WhatsApp/Telegram/Signal, burbujas limpias, confirmaciones de lectura y ergonomía táctil fluida.
+                                        {t('settings.ui_mode_familiar_desc')}
                                     </div>
                                 </div>
                             </div>
@@ -88,7 +88,7 @@ export const AppearanceTab: React.FC = () => {
                                 onClick={() => {
                                     SettingsManager.triggerHaptic("medium");
                                     updatePreferences({ uiMode: 'tactical' });
-                                    toast.info("⚡ Modo Táctico HUD activado (Militar / Cyberpunk)");
+                                    toast.info(t('settings.ui_mode_tactical_toast'));
                                 }}
                                 className="card-tactical-interactive"
                                 style={{
@@ -114,10 +114,10 @@ export const AppearanceTab: React.FC = () => {
                                 </div>
                                 <div>
                                     <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "#FFFFFF" }}>
-                                        Modo Táctico HUD
+                                        {t('settings.ui_mode_tactical')}
                                     </div>
                                     <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "3px", lineHeight: 1.3 }}>
-                                        Centro C4ISR de alta visibilidad militar, telemetría de radio en vivo y 8 Hubs consolidados.
+                                        {t('settings.ui_mode_tactical_desc')}
                                     </div>
                                 </div>
                             </div>
@@ -127,13 +127,13 @@ export const AppearanceTab: React.FC = () => {
                         {(preferences.uiMode ?? 'familiar') === 'familiar' && (
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                                 <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#E9EDEF" }}>
-                                    Fondo de Pantalla del Chat (Wallpaper)
+                                    {t('settings.chat_wallpaper_title')}
                                 </div>
                                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
                                     {[
-                                        { id: 'doodle_dark', label: 'Doodle Oscuro', icon: '🎨' },
-                                        { id: 'doodle_green', label: 'Doodle Verde', icon: '🌿' },
-                                        { id: 'void_black', label: 'Negro Sólido', icon: '⬛' },
+                                        { id: 'doodle_dark', label: t('settings.wallpaper_doodle_dark'), icon: '🎨' },
+                                        { id: 'doodle_green', label: t('settings.wallpaper_doodle_green'), icon: '🌿' },
+                                        { id: 'void_black', label: t('settings.wallpaper_void_black'), icon: '⬛' },
                                     ].map((wp) => {
                                         const isSelected = (preferences.chatWallpaper ?? 'doodle_dark') === wp.id;
                                         return (

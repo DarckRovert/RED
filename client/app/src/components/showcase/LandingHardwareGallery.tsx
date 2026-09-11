@@ -104,7 +104,7 @@ export const LandingHardwareGallery: React.FC<LandingHardwareGalleryProps> = ({ 
             fieldNotes: [
                 'Proyección de vector de rumbo azimutal de 45° con orientación continua en la cartografía.',
                 'Marcado de puntos tácticos seleccionados, waypoints de patrulla y fijación de objetivos.',
-                'Matriz operativa de 57 módulos con acceso directo a Ecosonda, CoT y Sismógrafo.'
+                'Matriz operativa de 62 módulos con acceso directo a Ecosonda, CoT y Sismógrafo.'
             ],
             tacticalSpecs: [
                 { label: 'Fijación Satelital', value: 'GPS FIJADO (±20m) • En tiempo real' },
@@ -138,6 +138,33 @@ export const LandingHardwareGallery: React.FC<LandingHardwareGalleryProps> = ({ 
                 { label: 'Frecuencia de Muestreo', value: '50 Hz (SensorManager.SENSOR_DELAY_GAME)' },
                 { label: 'Aguja de Rumbo', value: 'Vector Azimutal Dinámico 0° a 360°' },
                 { label: 'Fusión de Sensores', value: 'Kalman / Complementary Filter ponderado' }
+            ]
+        },
+        {
+            id: 'esp32-solar-repeater',
+            name: 'Repetidor Solar Autónomo ESP32-S3',
+            role: 'Estación de Relevo LoRa TDMA & Centinela de Cresta',
+            model: 'Heltec WiFi LoRa 32 V3 (ESP32-S3FN8 + SX1262)',
+            adbSerial: 'SOLAR-REPEATER-01',
+            androidVer: 'Firmware Embebido C++ (PlatformIO / RadioLib)',
+            arch: 'Xtensa Dual-Core LX7 @ 80 MHz',
+            radios: ['Semtech SX1262 LoRa 915/868 MHz (+22 dBm)', 'LoRa TDMA 2000ms Superframe', 'Bluetooth LE 5.0'],
+            batteryRuntime: 'Perpetua (Panel solar 5V/10W + celda 18650, >12 días sin sol a <12 mA)',
+            sensors: ['ADC Monitor Voltaje Batería', 'Telemetría Térmica SX1262', 'Filtro Bloom 2048-bit'],
+            imageSrc: `${basePath}/assets/red_hero_tactical_mesh.png`,
+            badge: 'REPETIDOR SOLAR AUTÓNOMO ($15-20 USD BOM)',
+            badgeColor: '#00E5FF',
+            description: 'Estación de retransmisión solar autónoma de bajo costo desplegable en crestas montañosas, torres y tejados. Ejecuta firmware de bajo consumo a 80 MHz con sincronización de slots TDMA de 200 ms, deduplicación ultrarrápida mediante filtro de Bloom de 2048 bits y retransmisión prioritaria de paquetes SOS.',
+            fieldNotes: [
+                'Pines SPI dedicados en placa Heltec V3: SCK=9, MISO=11, MOSI=10, NSS=8 con TCXO 1.8V.',
+                'Filtro de Bloom de 2048 bits que descarta duplicados de radio en <1ms en memoria volátil.',
+                'Bypass instantáneo de supertrama TDMA al detectar paquetes de socorro con prioridad >= 9.'
+            ],
+            tacticalSpecs: [
+                { label: 'Costo Total Hardware (BOM)', value: '~$15 - $20 USD por repetidor' },
+                { label: 'Consumo en Reposo Centinela', value: '< 12 mA @ 80 MHz (Modo Escucha)' },
+                { label: 'Topología de Ranura TDMA', value: '10 Slots de 200 ms (Supertrama 2000 ms)' },
+                { label: 'Algoritmo de Deduplicación', value: 'Filtro Bloom 2048-bit (Murmur3 + FNV-1a)' }
             ]
         }
     ];

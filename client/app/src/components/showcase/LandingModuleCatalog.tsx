@@ -62,13 +62,13 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
                 letterSpacing: "1.2px"
               }}
             >
-              SUITE OPERATIVA COMPLETA • 57 MÓDULOS ACTIVOS EN 6 PILARES
+              SUITE OPERATIVA COMPLETA • 62 MÓDULOS ACTIVOS EN 6 PILARES
             </span>
             <h2 style={{ fontSize: "clamp(28px, 4.2vw, 42px)", fontWeight: 900, color: "#FFF", marginTop: "14px", marginBottom: "12px", letterSpacing: "-0.6px" }}>
               Catálogo de Módulos Tácticos & Resiliencia
             </h2>
             <p style={{ fontSize: "16px", color: "#94A3B8", maxWidth: "860px", margin: "0 auto", lineHeight: 1.65 }}>
-              Explora los 57 subsistemas integrados de RED OS: interoperabilidad ATAK CoT v2.0, enlace físico LoRa SX1262 con compresión de voz a 1.2 kbps, criptografía híbrida Post-Cuántica ML-KEM-768, triaje rPPG óptico y cartografía vectorial con fusión sensorial PDR sin conexión.
+              Explora los 62 subsistemas integrados de RED OS: interoperabilidad ATAK CoT v2.0, planificador LoRa TDMA anti-colisiones, enrutamiento geoespacial Geohash DTN, repetidores solares autónomos ESP32-S3, pasarela satelital LEO, criptografía híbrida Post-Cuántica ML-KEM-768 y visor CAD vectorial 4K.
             </p>
           </div>
 

@@ -321,6 +321,77 @@ export const LandingDeploymentArchitecture: React.FC<LandingDeploymentArchitectu
                     badge: 'Mesh OTA'
                 }
             ]
+        },
+        {
+            id: 'tdma-geohash',
+            label: 'LoRa TDMA & Geohash DTN',
+            icon: '⏱️',
+            title: 'Coordinación Espectral LoRa TDMA & Enrutamiento Geoespacial',
+            subtitle: 'Erradicación matemática de colisiones en el aire y enrutamiento territorial por cuadrantes Geohash en IndexedDB v2.',
+            diagram: (
+                <div style={{ padding: '24px', borderRadius: '18px', background: 'rgba(6, 10, 20, 0.95)', border: '1px solid rgba(0, 229, 255, 0.3)' }}>
+                    <div style={{ marginBottom: '16px' }}>
+                        <div style={{ fontSize: '12px', color: '#00E5FF', fontFamily: 'JetBrains Mono, monospace', fontWeight: 800, marginBottom: '8px' }}>
+                            ESTRUCTURA DE SUPERTRAMA TDMA (2000 ms • 10 SLOTS DE 200 ms)
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '6px', textAlign: 'center' }}>
+                            {[0, 1, 2, 3, 4, 5, 6, 7].map((s) => (
+                                <div key={s} style={{ padding: '8px 4px', borderRadius: '8px', background: 'rgba(0, 229, 255, 0.15)', border: '1px solid rgba(0, 229, 255, 0.4)' }}>
+                                    <div style={{ fontSize: '11px', fontWeight: 900, color: '#00E5FF' }}>S{s}</div>
+                                    <div style={{ fontSize: '9px', color: '#94A3B8' }}>FNV-1a</div>
+                                </div>
+                            ))}
+                            <div style={{ padding: '8px 4px', borderRadius: '8px', background: 'rgba(255, 179, 0, 0.15)', border: '1px solid rgba(255, 179, 0, 0.4)' }}>
+                                <div style={{ fontSize: '11px', fontWeight: 900, color: '#FFB300' }}>S8</div>
+                                <div style={{ fontSize: '9px', color: '#94A3B8' }}>Beacon</div>
+                            </div>
+                            <div style={{ padding: '8px 4px', borderRadius: '8px', background: 'rgba(0, 230, 118, 0.15)', border: '1px solid rgba(0, 230, 118, 0.4)' }}>
+                                <div style={{ fontSize: '11px', fontWeight: 900, color: '#00E676' }}>S9</div>
+                                <div style={{ fontSize: '9px', color: '#94A3B8' }}>CSMA</div>
+                            </div>
+                        </div>
+                        <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#64748B', fontFamily: 'JetBrains Mono, monospace' }}>
+                            <span>Ranuras 0-7: Nodos Fijos Deterministas</span>
+                            <span>Ranura 8: Sincronización Reloj</span>
+                            <span>Ranura 9: Acceso Dinámico</span>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', paddingTop: '14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '22px' }}>🚨</span>
+                            <div>
+                                <div style={{ fontSize: '13px', fontWeight: 800, color: '#FF3355' }}>Bypass Inmediato de Emergencia SOS (Prioridad ≥ 9)</div>
+                                <div style={{ fontSize: '11px', color: '#94A3B8' }}>Transmisión en tiempo cero: suspende la espera TDMA para salvamento de vidas.</div>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '22px' }}>🗺️</span>
+                            <div>
+                                <div style={{ fontSize: '13px', fontWeight: 800, color: '#C084FC' }}>Poda Territorial Geohash (Base32)</div>
+                                <div style={{ fontSize: '11px', color: '#94A3B8' }}>IndexedDB v2: custodia selectiva y descarte de paquetes fuera del vector de viaje.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ),
+            techDetails: [
+                {
+                    title: 'Erradicación de Colisiones ALOHA',
+                    desc: 'El planificador divide el tiempo en ranuras sincronizadas. Cada nodo calcula su slot determinista (0 a 7) mediante FNV-1a(nodeId) % 8, evitando que dos operadores transmitan simultáneamente sobre la misma frecuencia.',
+                    badge: 'Zero Packet Collisions'
+                },
+                {
+                    title: 'Poda Espacial para Mulas Móviles & Satélites',
+                    desc: 'Los portadores móviles y satélites LEO evalúan el Geohash de destino del paquete mediante shouldCarrierAcceptPacket: solo aceptan transportar tráfico alineado geográficamente con su vector de desplazamiento.',
+                    badge: 'Geohash Spatial Routing'
+                },
+                {
+                    title: 'Bypass Preemptivo de Salvamento',
+                    desc: 'Los paquetes con nivel de prioridad ≥ 9 (Balizas de Socorro SOS y Triaje START Rojo) interrumpen la cola TDMA y emiten inmediatamente a máxima potencia (+22 dBm).',
+                    badge: 'Immediate SOS Override'
+                }
+            ]
         }
     ];
 

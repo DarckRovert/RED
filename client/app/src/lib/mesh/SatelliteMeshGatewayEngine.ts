@@ -9,6 +9,7 @@
 import { meshRouter } from './meshRouter';
 import { dtnStorage } from './dtnStorage';
 import { cbrnRadiation } from '../sensors/CbrnRadiationEngine';
+import { GeohashSpatialRouting } from './GeohashSpatialRouting';
 
 export type SatelliteRelayMode = 'BENT_PIPE' | 'STORE_AND_FORWARD';
 
@@ -25,6 +26,7 @@ export interface SatelliteRelayPacket {
     timestamp: number;
     payload: string;
     footprintRadiusKm: number;
+    targetGeohash?: string;
 }
 
 export interface SatellitePass {
@@ -47,6 +49,7 @@ export interface OutboundSatellitePacket {
     timestamp: number;
     priority: number;
     targetConstellation?: string;
+    targetGeohash?: string;
 }
 
 export interface SatelliteGatewayTelemetry {
@@ -236,9 +239,9 @@ export class SatelliteMeshGatewayEngine {
         this.listeners.clear();
     }
 
-    public enqueueOutboundUplink(payload: string, priority: number = 5): string {
+    public enqueueOutboundUplink(payload: string, priority: number = 5, targetGeohash?: string): string {
         const id = `SAT-UPLINK-${Date.now().toString(36)}`;
-        this.outboundQueue.push({ id, payload, timestamp: Date.now(), priority });
+        this.outboundQueue.push({ id, payload, timestamp: Date.now(), priority, targetGeohash });
         this.notify();
         return id;
     }
@@ -246,7 +249,7 @@ export class SatelliteMeshGatewayEngine {
     /**
      * Empaqueta y encola un mensaje táctico en formato Short Burst Data (SBD) con telemetría de campo
      */
-    public composeAndEnqueueSbd(message: string, priority: number = 8): { id: string; packetPayload: string } {
+    public composeAndEnqueueSbd(message: string, priority: number = 8, targetGeohash?: string): { id: string; packetPayload: string } {
         const cleanMsg = (typeof message === 'string' && message.trim().length > 0)
             ? message.trim().slice(0, 240)
             : 'SITREP CBRN DE EMERGENCIA';
@@ -256,7 +259,7 @@ export class SatelliteMeshGatewayEngine {
         const lonStr = this.observerLon.toFixed(5);
         const sbdPayload = `SBD_V1|LOC:${latStr},${lonStr}|RAD:${cbrnRate}uSv/h|TS:${Date.now()}|MSG:${cleanMsg}`;
 
-        const id = this.enqueueOutboundUplink(sbdPayload, priority);
+        const id = this.enqueueOutboundUplink(sbdPayload, priority, targetGeohash);
         return { id, packetPayload: sbdPayload };
     }
 
@@ -283,7 +286,7 @@ export class SatelliteMeshGatewayEngine {
                         timestamp: Date.now(),
                         nonce: `psat_${item.id}`,
                         payload: bytes,
-                    }, 4);
+                    }, 4, undefined, item.targetGeohash);
                 } catch {}
             }
             return false;
@@ -325,7 +328,8 @@ export class SatelliteMeshGatewayEngine {
         targetMeshId: string = 'MESH-GLOBAL-ALL',
         finalRecipient: string = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
         mode: SatelliteRelayMode = 'BENT_PIPE',
-        priority: number = 9
+        priority: number = 9,
+        targetGeohash?: string
     ): { relayId: string; packetPayload: string } {
         const best = this.satellites.find(s => s.isInAos) || this.satellites[0];
         const relayId = `RELAY-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -341,10 +345,11 @@ export class SatelliteMeshGatewayEngine {
 
         const originSender = meshRouter.myIdentityHash || 'ANON-RELAY-NODE';
 
-        // SAT_RELAY_V1|<mode>|<satId>|<constellation>|<srcMeshId>|<dstMeshId>|<origSender>|<finalRecipient>|<ttlHops>|<timestamp>|<payload>
-        const relayPayload = `SAT_RELAY_V1|${mode}|${satId}|${constel}|${this.localMeshId}|${targetMeshId}|${originSender}|${finalRecipient}|3|${Date.now()}|${cleanMsg}`;
+        // SAT_RELAY_V1|<mode>|<satId>|<constellation>|<srcMeshId>|<dstMeshId>|<origSender>|<finalRecipient>|<ttlHops>|<timestamp>|<geohash>|<payload>
+        const geoTag = targetGeohash ? targetGeohash.trim().toLowerCase() : '';
+        const relayPayload = `SAT_RELAY_V1|${mode}|${satId}|${constel}|${this.localMeshId}|${targetMeshId}|${originSender}|${finalRecipient}|3|${Date.now()}|${geoTag}|${cleanMsg}`;
 
-        this.enqueueOutboundUplink(relayPayload, priority);
+        this.enqueueOutboundUplink(relayPayload, priority, targetGeohash);
         this.totalRelaysUplinked++;
 
         const packetObj: SatelliteRelayPacket = {
@@ -359,7 +364,8 @@ export class SatelliteMeshGatewayEngine {
             ttlHops: 3,
             timestamp: Date.now(),
             payload: cleanMsg,
-            footprintRadiusKm: footprint
+            footprintRadiusKm: footprint,
+            targetGeohash
         };
 
         this.recentRelays.unshift(packetObj);
@@ -390,8 +396,25 @@ export class SatelliteMeshGatewayEngine {
             const parts = rawStr.split('SAT_RELAY_V1|')[1].split('|');
             if (parts.length < 10) return { handled: false, type: 'MALFORMED' };
 
-            const [mode, satId, constel, srcMeshId, dstMeshId, origSender, finalRecipient, ttlStr, tsStr, ...msgParts] = parts;
-            const payloadMsg = msgParts.join('|');
+            let mode: string, satId: string, constel: string, srcMeshId: string, dstMeshId: string;
+            let origSender: string, finalRecipient: string, ttlStr: string, tsStr: string;
+            let targetGeohash: string | undefined = undefined;
+            let payloadMsg = '';
+
+            if (parts.length >= 11) {
+                [mode, satId, constel, srcMeshId, dstMeshId, origSender, finalRecipient, ttlStr, tsStr] = parts.slice(0, 9);
+                const possibleGeo = parts[9];
+                if (possibleGeo && possibleGeo.length >= 2 && possibleGeo.length <= 8 && !possibleGeo.includes(' ')) {
+                    targetGeohash = possibleGeo;
+                    payloadMsg = parts.slice(10).join('|');
+                } else {
+                    payloadMsg = parts.slice(9).join('|');
+                }
+            } else {
+                [mode, satId, constel, srcMeshId, dstMeshId, origSender, finalRecipient, ttlStr, tsStr] = parts.slice(0, 9);
+                payloadMsg = parts[9];
+            }
+
             const ttlHops = parseInt(ttlStr, 10) || 1;
             const timestamp = parseInt(tsStr, 10) || Date.now();
 
@@ -401,8 +424,6 @@ export class SatelliteMeshGatewayEngine {
                 return { handled: false, type: 'DUPLICATE' };
             }
             this.processedRelayNonces.add(nonce);
-            // [RIESGO-07 FIX] Evicción por lotes: el borrado de 1 elemento por ciclo no
-            // mantenía el límite real bajo alta carga. Ahora se trunca a 1800 en una operación.
             if (this.processedRelayNonces.size > 2000) {
                 this.processedRelayNonces = new Set([...this.processedRelayNonces].slice(-1800));
             }
@@ -422,8 +443,25 @@ export class SatelliteMeshGatewayEngine {
                 ttlHops: Math.max(0, ttlHops - 1),
                 timestamp,
                 payload: payloadMsg,
-                footprintRadiusKm: footprint
+                footprintRadiusKm: footprint,
+                targetGeohash
             };
+
+            // Poda espacial: si la trama tiene un Geohash destino y conocemos nuestra ubicación,
+            // verificar si nos encontramos dentro del cono de cobertura o área relevante
+            if (targetGeohash && typeof this.observerLat === 'number' && typeof this.observerLon === 'number' &&
+                (this.observerLat !== 0 || this.observerLon !== 0)) {
+                const inZone = GeohashSpatialRouting.isWithinSpatialRadius(
+                    targetGeohash,
+                    this.observerLat,
+                    this.observerLon,
+                    footprint
+                );
+                if (!inZone && finalRecipient !== 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') {
+                    console.log(`[SatelliteGateway] ✂️ Poda espacial activa: Paquete satelital descartado por estar fuera de zona (${targetGeohash})`);
+                    return { handled: true, packet: relayPkt, type: 'SAT_RELAY_PRUNED_OUT_OF_ZONE' };
+                }
+            }
 
             this.totalRelaysDownlinked++;
             this.recentRelays.unshift(relayPkt);

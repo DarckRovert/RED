@@ -40,7 +40,7 @@ export const LandingHowItWorksInteractive: React.FC = () => {
             technicalDetails: [
                 "Bluetooth Low Energy (BLE 5.0) en modo periférico y central continuo",
                 "Wi-Fi Direct P2P para transmisión de paquetes de alto ancho de banda",
-                "Radio LoRa 915 MHz (US915 - PNAF Perú) para enlaces de 15 a 25 km",
+                "Radio LoRa 915 MHz con coordinación espectral TDMA y repetidores solares autónomos",
                 "SoundMesh: Módem acústico por ultrasonidos (18–20 kHz) entre parlante y micrófono"
             ],
             visualIcon: "📡",
@@ -52,9 +52,9 @@ export const LandingHowItWorksInteractive: React.FC = () => {
             title: "El Mensaje Salta de Teléfono en Teléfono Cifrado",
             shortDesc: "Si el destinatario está a kilómetros de distancia, tu mensaje salta de forma invisible y anónima a través de celulares intermediarios hasta encontrar al destinatario. Los nodos puente NO pueden leer tu mensaje.",
             technicalDetails: [
-                "Protocolo Gossip P2P con algoritmo anti-bucles por Hash BLAKE3",
-                "Double Ratchet Protocol: Cifrado con cambio de llave por cada mensaje",
-                "Enrutamiento DTN (Delay-Tolerant Networking) con almacenamiento en tránsito",
+                "Planificador LoRa TDMA: Supertrama de 2000 ms y slots deterministas FNV-1a anti-colisión",
+                "Enrutamiento DTN con poda espacial Geohash en IndexedDB v2 y pasarela satelital LEO",
+                "Flota de repetidores solares autónomos ESP32-S3 con filtro de Bloom de 2048 bits",
                 "Proof-of-Relay: Créditos locales para recompensar a nodos retransmisores"
             ],
             visualIcon: "⚡",

@@ -1,18 +1,18 @@
 /**
  * RED Sovereign Mesh — Single Source of Truth for System Version
- * Version: 98.0.0 RED Sovereign Mesh — Tactical Vector Architecture & Zero-Echo Sync Edition
+ * Version: 99.0.0 RED Sovereign Mesh — Geohash Spatial DTN & TDMA Solar Repeater Edition
  */
 
-export const RED_VERSION = "98.0.0";
-export const RED_VERSION_MAJOR = 98;
+export const RED_VERSION = "99.0.0";
+export const RED_VERSION_MAJOR = 99;
 export const RED_VERSION_MINOR = 0;
 export const RED_VERSION_PATCH = 0;
-export const RED_VERSION_CODE = 98000;
-export const RED_BUILD_CODE = 98000;
-export const RED_VERSION_NAME = "RED v98.0.0 Sovereign Mesh — Tactical Vector Architecture & Zero-Echo Sync Edition";
-export const RED_BUILD_DATE = "2026-09-10";
-export const RED_PROTOCOL_VERSION = "RED/98.0-NOISE-PQC";
+export const RED_VERSION_CODE = 99000;
+export const RED_BUILD_CODE = 99000;
+export const RED_VERSION_NAME = "RED v99.0.0 Sovereign Mesh — Geohash Spatial DTN & TDMA Solar Repeater Edition";
+export const RED_BUILD_DATE = "2026-09-11";
+export const RED_PROTOCOL_VERSION = "RED/99.0-NOISE-PQC";
 export const RED_RELEASE_CHANNEL = "stable-p2p";
 export const RED_APK_NAME = "red-latest.apk";
 export const RED_APK_CANONICAL = "red-latest.apk";
-export const RED_APK_SHA256 = "DAC30005D02A01752A10D59E3F6DD21345CAE0AE85307FF91B5D5DA68475A515";
+export const RED_APK_SHA256 = "CFF3E9786B7754DC0F1FB133E3CE9133BB24ABBA6EC6D2A9AF0F7756C7A80A53";

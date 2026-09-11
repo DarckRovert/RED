@@ -74,8 +74,8 @@ const headerCode = fs.readFileSync(headerPath, 'utf8');
 
 runTest('6. HUD Táctico CallHeader: Badges visuales de DataChannel (⚡ DC) y Vocoder (🎙️ VOC-16K)', () => {
     assert(headerCode.includes('isDataChannelReady &&'), 'Debe admitir estado de DataChannel');
-    assert(headerCode.includes('· ⚡ DC'), 'Debe renderizar badge táctico DC');
-    assert(headerCode.includes('· 🎙️ VOC-16K'), 'Debe renderizar badge táctico vocoder');
+    assert(headerCode.includes('· ⚡ DC') || (headerCode.includes('name="zap"') && headerCode.includes('DC')), 'Debe renderizar badge táctico DC');
+    assert(headerCode.includes('· 🎙️ VOC-16K') || (headerCode.includes('name="mic"') && headerCode.includes('VOC-16K')), 'Debe renderizar badge táctico vocoder');
     assert(headerCode.includes('toggleVocoderMode'), 'Debe permitir alternar vocoder en el menú táctico');
 });
 

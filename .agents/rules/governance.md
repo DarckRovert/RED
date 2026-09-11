@@ -1,4 +1,4 @@
-# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v98.0.0
+# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v99.0.0
 
 Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNANCE.md`.
 
@@ -70,6 +70,11 @@ Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNA
 
 13. **Nivel 13 - Verificación Empírica de Pruebas (Cero Pruebas Fantasma)**:
     - Las suites de pruebas en `client/app/scripts/` deben ejecutar lógica real en runtime, evitando pruebas que únicamente lean archivos fuente mediante `fs.readFileSync` para verificar presencia de cadenas.
+
+14. **Nivel 14 - Estándares de Escalabilidad Planetaria, TDMA LoRa y Repetidores Autónomos**:
+    - **Coordinación Espectral Obligatoria**: Toda transmisión a través de radios LoRa sub-GHz (Semtech SX1262 / Meshtastic) DEBE canalizarse a través de `LoRaTdmaSchedulerEngine` para evitar la saturación del canal ALOHA en concentraciones masivas. Únicamente se permite bypass inmediato para ráfagas críticas SOS de salvamento de vida (prioridad >= 9).
+    - **Poda Espacial en Enrutamiento DTN**: Queda prohibido el transporte ciego de paquetes transcontinentales en mulas de datos y satélites LEO. Todo paquete encolado para custodia a largo plazo debe indexarse mediante Geohash en `dtnStorage` (IndexedDB v2). Las mulas móviles y satélites deben aplicar poda espacial estricta (`GeohashSpatialRouting.shouldCarrierAcceptPacket`) descartando tráfico fuera de su vector geográfico de desplazamiento.
+    - **Estándares de Firmware Embebido (`firmware/esp32-repeater/`)**: Todo firmware para repetidores autónomos ESP32/ESP32-S3 debe operar a frecuencia reducida (80 MHz) para garantizar un consumo en reposo centinela inferior a 12 mA. En placas Heltec WiFi LoRa 32 V3 es mandatorio inicializar explícitamente los pines de bus SPI dedicados (SCK=9, MISO=11, MOSI=10, NSS=8) y configurar el oscilador TCXO a 1.8V para prevenir fallas de detección de radio en arranque frío.
 
 
 

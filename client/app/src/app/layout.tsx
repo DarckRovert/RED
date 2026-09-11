@@ -62,7 +62,7 @@ export default function RootLayout({
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="RED — Sovereign Mesh OS" />
         <meta property="og:title" content={`RED — Sovereign Mesh OS v${RED_VERSION}`} />
-        <meta property="og:description" content="Sistema operativo táctico de comunicaciones peer-to-peer y supervivencia 100% off-grid. Malla LoRa (15–25 km), Bluetooth LE, Wi-Fi Direct, voz Vocoder a 1.2 kbps y criptografía post-cuántica NIST FIPS 203." />
+        <meta property="og:description" content="Sistema operativo táctico de comunicaciones peer-to-peer y supervivencia 100% off-grid. Malla LoRa TDMA (15–25 km), repetidores solares autónomos ESP32-S3, Bluetooth LE, Wi-Fi Direct, voz Vocoder a 1.2 kbps, enrutamiento Geohash DTN y criptografía post-cuántica NIST FIPS 203." />
         <meta property="og:image" content="https://darckrovert.github.io/RED/assets/red_hero_tactical_mesh.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
@@ -73,7 +73,7 @@ export default function RootLayout({
         {/* Twitter / X Cards */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={`RED — Sovereign Mesh OS v${RED_VERSION}`} />
-        <meta name="twitter:description" content="Comunicaciones tácticas descentralizadas sin internet ni servidores centrales. Cifrado post-cuántico, interoperabilidad ATAK CoT y voz LoRa off-grid." />
+        <meta name="twitter:description" content="Comunicaciones tácticas descentralizadas sin internet ni servidores centrales. Cifrado post-cuántico, LoRa TDMA anti-colisiones, repetidores solares autónomos ESP32 e interoperabilidad ATAK CoT." />
         <meta name="twitter:image" content="https://darckrovert.github.io/RED/assets/red_hero_tactical_mesh.png" />
 
         {/* Schema.org SoftwareApplication JSON-LD */}

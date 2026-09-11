@@ -7,6 +7,8 @@
  */
 
 import { MeshPacket, bytesToHex, hexToBytes } from './meshProtocol';
+import { GeohashSpatialRouting } from './GeohashSpatialRouting';
+import { TacticalLocationEngine } from '../sensors/TacticalLocationEngine';
 
 export interface DtnQueueItem {
   id: string; // Packet nonce
@@ -26,11 +28,12 @@ export interface DtnQueueItem {
   nextRetryAfter: number;
   targetRecipient: string;
   priority: number;
+  targetGeohash?: string;
 }
 
 const DB_NAME = 'red_dtn_storage_vault';
 const STORE_NAME = 'packets';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORAGE_KEY_FALLBACK = 'red_dtn_pending_queue_v1';
 const DEFAULT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days retention for sovereign mesh DTN
 const MAX_QUEUE_SIZE = 5000;
@@ -58,11 +61,23 @@ class DtnStorage {
 
       request.onupgradeneeded = (e: any) => {
         const db = e.target.result as IDBDatabase;
+        let store: IDBObjectStore;
         if (!db.objectStoreNames.contains(STORE_NAME)) {
-          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        } else {
+          store = (e.target.transaction as IDBTransaction).objectStore(STORE_NAME);
+        }
+        if (!store.indexNames.contains('targetRecipient')) {
           store.createIndex('targetRecipient', 'targetRecipient', { unique: false });
+        }
+        if (!store.indexNames.contains('priority')) {
           store.createIndex('priority', 'priority', { unique: false });
+        }
+        if (!store.indexNames.contains('expiresAt')) {
           store.createIndex('expiresAt', 'expiresAt', { unique: false });
+        }
+        if (!store.indexNames.contains('targetGeohash')) {
+          store.createIndex('targetGeohash', 'targetGeohash', { unique: false });
         }
       };
 
@@ -342,7 +357,7 @@ class DtnStorage {
     return 4; // Standard direct message
   }
 
-  public enqueue(packet: MeshPacket, priority?: number, ttlMs = DEFAULT_RETENTION_MS): void {
+  public enqueue(packet: MeshPacket, priority?: number, ttlMs = DEFAULT_RETENTION_MS, targetGeohash?: string): void {
     if (packet.sender === 'SAT_GATEWAY' || packet.nonce.startsWith('SAT-UPLINK')) {
       // Discard recursive satellite packets from terrestrial DTN queue
       return;
@@ -358,6 +373,16 @@ class DtnStorage {
     const calculatedPriority = (priority !== undefined && priority > 0) 
       ? priority 
       : this.calculatePacketPriority(packet);
+
+    let finalGeohash = targetGeohash;
+    if (!finalGeohash) {
+      try {
+        const loc = TacticalLocationEngine.getLastKnownLocation();
+        if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number' && TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+          finalGeohash = GeohashSpatialRouting.encode(loc.lat, loc.lon, 4);
+        }
+      } catch {}
+    }
 
     const now = Date.now();
     const item: DtnQueueItem = {
@@ -378,6 +403,7 @@ class DtnStorage {
       nextRetryAfter: now,
       targetRecipient: packet.recipient,
       priority: calculatedPriority,
+      targetGeohash: finalGeohash,
     };
 
     // If queue is overflowing, prune lowest priority / oldest items without in-place array mutation
@@ -399,7 +425,23 @@ class DtnStorage {
     items.push(item);
     this.saveItems(items);
     this.saveItemToDB(item);
-    console.log(`[DtnStorage] Enqueued packet ${nonce.slice(0, 8)} (Priority: ${calculatedPriority}) for ${packet.recipient.slice(0, 8)} (queue size: ${items.length})`);
+    console.log(`[DtnStorage] Enqueued packet ${nonce.slice(0, 8)} (Priority: ${calculatedPriority}${finalGeohash ? ` | Geohash: ${finalGeohash}` : ''}) for ${packet.recipient.slice(0, 8)} (queue size: ${items.length})`);
+  }
+
+  /**
+   * Consulta paquetes en cola filtrados por cuadrante Geohash (Poda Espacial)
+   */
+  public getItemsForGeohash(geohashPrefix: string, limit = 50): DtnQueueItem[] {
+    const items = this.getItems();
+    const cleanPrefix = (geohashPrefix || '').toLowerCase().trim();
+    if (!cleanPrefix) return items.slice(0, limit);
+
+    return items
+      .filter(it => {
+        if (!it.targetGeohash) return true; // Paquetes globales sin etiqueta siempre se transmiten
+        return it.targetGeohash.toLowerCase().startsWith(cleanPrefix);
+      })
+      .slice(0, limit);
   }
 
   public forceResetRetryTimers(): void {

@@ -1,7 +1,7 @@
 import { TacticalModule } from './types';
 
 export const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
-  // ── 1. C4ISR & NAVEGACIÓN TÁCTICA (11 MÓDULOS) ──────────────────────────────
+  // ── 1. C4ISR & NAVEGACIÓN TÁCTICA (12 MÓDULOS) ──────────────────────────────
   {
     id: "nodemap",
     name: "Mapa Táctico C4ISR & Blue-Force",
@@ -134,8 +134,20 @@ export const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
     latency: "< 10ms",
     encryption: "Firma Digital CAP"
   },
+  {
+    id: "tacticalCadViewer",
+    name: "Visor CAD Táctico Vectorial & Plano 4 Capas",
+    category: "C4ISR & Navegación Táctica",
+    icon: "📐",
+    summary: "Renderizado técnico interactivo SVG 4K offline de la arquitectura física y lógica del sistema.",
+    badge: "4K CAD Architecture",
+    techStack: "React 19 Vectorial / SVG CAD / Pan-Zoom",
+    details: "Permite inspeccionar en alta fidelidad los esquemas de interconexión entre las 4 capas del sistema, el bus de eventos y la topología de red con atajos tácticos y retículas HUD.",
+    latency: "< 16ms (60 FPS)",
+    encryption: "Local Offline Render"
+  },
 
-  // ── 2. COMUNICACIONES CUÁNTICAS & MALLA SOBERANA (10 MÓDULOS) ──────────────
+  // ── 2. COMUNICACIONES CUÁNTICAS & MALLA SOBERANA (14 MÓDULOS) ──────────────
   {
     id: "channels",
     name: "Canales Mesh Gossipsub & Tópicos",
@@ -255,6 +267,54 @@ export const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
     details: "Monitorea continuamente el espectro electromagnético cercano para detectar balizas de presencia de otros terminales RED, midiendo la intensidad de señal de -30 dBm (contacto cercano) a -95 dBm (límite).",
     latency: "< 100ms",
     encryption: "HMAC Blind Beacon"
+  },
+  {
+    id: "loraTdmaScheduler",
+    name: "Planificador LoRa TDMA Determinista",
+    category: "Comunicaciones Cuánticas & Malla",
+    icon: "⏱️",
+    summary: "Supertrama periódica de 2000 ms (10 slots de 200 ms) con hash FNV-1a y contienda CSMA/CA.",
+    badge: "TDMA Anti-Colisión",
+    techStack: "LoRaTdmaSchedulerEngine / FNV-1a / CSMA-CA",
+    details: "Erradica colisiones en concentraciones masivas dividiendo el tiempo en ranuras deterministas asignadas por identidad digital. Slot 8 para balizas de red, Slot 9 para contienda y bypass instantáneo para emergencias SOS.",
+    latency: "< 200ms",
+    encryption: "RED Header v2 / Poly1305"
+  },
+  {
+    id: "geohashSpatialRouting",
+    name: "Enrutamiento Espacial Geohash DTN",
+    category: "Comunicaciones Cuánticas & Malla",
+    icon: "📍",
+    summary: "Indexación espacial en IndexedDB v2 y poda de paquetes según el vector geográfico del portador.",
+    badge: "Geohash Pruning",
+    techStack: "GeohashSpatialRouting / IndexedDB v2 / Base32",
+    details: "Previene la saturación transcontinental de colas de almacenamiento en mulas de datos móviles y satélites LEO, filtrando mensajes mediante cuadrantes Geohash (resolución 4 regional vs 6 táctica) y distancias Manhattan.",
+    latency: "DTN Espacial",
+    encryption: "Target Geohash Index"
+  },
+  {
+    id: "esp32SolarRepeater",
+    name: "Repetidor Solar Autónomo ESP32-S3",
+    category: "Comunicaciones Cuánticas & Malla",
+    icon: "☀️",
+    summary: "Firmware open-source de campo para Heltec WiFi LoRa 32 V3 con filtro de Bloom de 2048 bits.",
+    badge: "Repetidor Autónomo",
+    techStack: "ESP32-S3 / Semtech SX1262 / RadioLib / PlatformIO",
+    details: "Estación de relevo permanente para cimas y tejados alimentada por panel solar 5V y celda 18650 (~$15-20 USD BOM). Opera a 80 MHz con consumo centinela <12 mA y deduplicación en memoria volátil de alta velocidad.",
+    latency: "< 150ms",
+    encryption: "RED Wire Format v2"
+  },
+  {
+    id: "leoSatelliteGateway",
+    name: "Pasarela Satelital LEO Downlink",
+    category: "Comunicaciones Cuánticas & Malla",
+    icon: "🛰️",
+    summary: "Enlace Store-and-Forward orbital con filtrado espacial de huella terrestre para descarga en ráfaga.",
+    badge: "Orbital Gateway",
+    techStack: "SatelliteMeshGatewayEngine / SGP4 / Footprint Pruning",
+    details: "Calcula pases de constelaciones de satélites en órbita baja y sincroniza la retransmisión de balizas y mensajes críticos únicamente sobre su huella geográfica de cobertura terrestre.",
+    latency: "Pase Orbital",
+    encryption: "AEAD Downlink"
   },
 
   // ── 3. CIBERDEFENSA & GUERRA ELECTRÓNICA (9 MÓDULOS) ─────────────────────────

@@ -42,6 +42,7 @@ import { cognitiveArbiter } from './CognitiveRadioArbiter';
 import { SoundMeshEngine } from '../audio/SoundMeshEngine';
 import { globalShield } from '../network/GlobalShieldEngine';
 import { multipathBonding, MultipathBondingEngine } from './MultipathBondingEngine';
+import { loraTdmaScheduler } from './LoRaTdmaSchedulerEngine';
 
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
 const DEDUP_WINDOW_MSG_MS = 30 * 60 * 1000;       // 30m  — chat messages (reduces Map size ~95% in long sessions)
@@ -255,6 +256,13 @@ class MeshRouter {
       this.handleNetworkChange(state);
     });
 
+    loraTdmaScheduler.setNodeId(myIdentityHash);
+    loraTdmaScheduler.setTransmitHandler(async (bytes) => {
+      if (loraBridge.isConnected) {
+        return await loraBridge.sendPacket(bytes);
+      }
+      return false;
+    });
     console.log('[MeshRouter] Initialized — identity:', myIdentityHash.slice(0, 12));
   }
 
@@ -262,6 +270,7 @@ class MeshRouter {
     if (!newIdentityHash || newIdentityHash === this.myIdentityHash) return;
     console.log(`[MeshRouter] Updating identity: ${this.myIdentityHash?.slice(0, 8)} -> ${newIdentityHash.slice(0, 8)}`);
     this.myIdentityHash = newIdentityHash;
+    loraTdmaScheduler.setNodeId(newIdentityHash);
     if (this.wifi) {
       this.wifi.updateIdentity(newIdentityHash);
     } else {
@@ -1812,7 +1821,16 @@ class MeshRouter {
 
   private async sendViaLoRa(payload: Uint8Array): Promise<boolean> {
     try {
-      const okHardware = await loraBridge.sendPacket(payload);
+      let isEmergency = false;
+      try {
+        const decodedStr = new TextDecoder().decode(payload.slice(0, 40));
+        if (decodedStr.includes('SOS') || decodedStr.includes('beacon') || decodedStr.includes('CBRN')) {
+          isEmergency = true;
+        }
+      } catch {}
+
+      // Canalizar a través del planificador TDMA para mitigar colisiones ALOHA
+      const okHardware = await loraTdmaScheduler.scheduleTransmission(payload, isEmergency ? 10 : 5, isEmergency);
       const hex = Array.from(payload).map(b => b.toString(16).padStart(2, '0')).join('');
       await RedAPI.injectMeshPayload(hex, true).catch(() => {});
       return okHardware;

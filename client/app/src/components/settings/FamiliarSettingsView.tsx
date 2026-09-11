@@ -56,7 +56,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
         const nextMode = isFamiliar ? "tactical" : "familiar";
         updatePreferences({ uiMode: nextMode });
         SettingsManager.triggerHaptic("medium");
-        toast.success(nextMode === "familiar" ? "Modo Familiar activado" : "Modo Táctico C4ISR activado");
+        toast.success(nextMode === "familiar" ? t('settings.ui_mode_familiar_toast') : t('settings.ui_mode_tactical_toast'));
     };
 
     const myName = identity?.nickname || (identity?.identity_hash ? `Usuario ${identity.identity_hash.substring(0, 8)}` : "Mi Perfil");
@@ -92,7 +92,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                         </button>
                     )}
                     <h1 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0, color: "#E9EDEF" }}>
-                        Ajustes
+                        {t('settings.title')}
                     </h1>
                 </div>
             </header>

@@ -1,6 +1,6 @@
 {
   "name": "red-app",
-  "version": "98.0.0",
+  "version": "99.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -24,6 +24,8 @@
     "test:phase8": "node scripts/test-phase8-cot-meshtastic.js",
     "test:vision": "node scripts/test-phase9-vision-engine.js",
     "test:cellular": "node scripts/test-cellular-dtn-failover.js",
+    "test:tdma": "node scripts/test-lora-tdma-scheduler.js",
+    "test:geohash": "node scripts/test-geohash-spatial-pruning.js",
     "test:ai": "node scripts/test-ai-orchestrator.js",
     "test:resilience": "node scripts/test-phase10-deep-resilience.js",
     "test:qr": "node scripts/test-offline-qr.js",

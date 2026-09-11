@@ -1,4 +1,4 @@
-# 📘 Manual Operativo del Usuario — RED v98.0.0 Sovereign Tactical & Familiar Edition
+# 📘 Manual Operativo del Usuario — RED v99.0.0 Sovereign Tactical & Familiar Edition
 
 Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentralizada de comunicaciones soberanas, cifradas e inmunes a fallos de infraestructura, apagones o censura.
 
@@ -10,11 +10,12 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 2. [Llaves Biométricas Universales & Passkeys](#2-llaves-biométricas-universales--passkeys)
 3. [Gestión de Seguridad, Modo Señuelo & Anti-Coacción](#3-gestión-de-seguridad-modo-señuelo--anti-coacción)
 4. [Respaldo en 1 Toque & Restauración Instantánea](#4-respaldo-en-1-toque--restauración-instantánea)
-5. [Manual Operativo de los 42 Módulos Tácticos](#5-manual-operativo-de-los-42-módulos-tácticos)
+5. [Catálogo Operativo de los 62 Módulos & Pantallas Tácticas](#5-catálogo-operativo-de-los-62-módulos--pantallas-tácticas)
 6. [Tokenomics DePIN, Vales Criptográficos & Paridad PEN](#6-tokenomics-depin-vales-criptográficos--paridad-pen)
 7. [Actuadores de Hardware: Triaje START, SOS & SoundMesh](#7-actuadores-de-hardware-triaje-start-sos--soundmesh)
 8. [Uso de la Versión Web en PC & Vinculación con Celulares](#8-uso-de-la-versión-web-en-pc--vinculación-con-celulares)
-9. [Preguntas Frecuentes & Solución de Problemas](#9-preguntas-frecuentes--solución-de-problemas)
+9. [Uso de Radios LoRa, Slots TDMA & Repetidores Solares Autónomos](#9-uso-de-radios-lora-slots-tdma--repetidores-solares-autónomos)
+10. [Preguntas Frecuentes & Solución de Problemas](#10-preguntas-frecuentes--solución-de-problemas)
 
 ---
 
@@ -29,7 +30,7 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 
 ## 2. Llaves Biométricas Universales & Passkeys
 
-RED v65.0.1 te permite desbloquear la aplicación en 1 solo toque mediante cualquier sensor biométrico que posea tu dispositivo:
+RED te permite desbloquear la aplicación en 1 solo toque mediante cualquier sensor biométrico que posea tu dispositivo:
 
 - **En Celulares y Tablets Android:**
   - **Huella Dactilar:** Reconocimiento instantáneo mediante sensores capacitivos, ópticos o ultrasónicos en pantalla.
@@ -63,7 +64,7 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 
 ---
 
-## 5. Manual Operativo de los 42 Módulos Tácticos
+## 5. Catálogo Operativo de los 62 Módulos & Pantallas Tácticas
 
 1. **Canales Mesh Locales:** Salas temáticas abiertas para operadores cercanos con moderación por IA.
 2. **RED Social Feed P2P:** Microblogging descentralizado y resistente a la censura.
@@ -97,7 +98,7 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 30. **LowBitrateVocoder DSP:** Procesamiento de audio comprimido al -97.9% para radios lentas.
 31. **Mesh Proof-of-Work:** Sistema Hashcash que evita la saturación de la red por spam o denegación.
 32. **Web Companion QR:** Vinculación directa entre navegadores web de PC y la app del celular.
-33. **Respaldo Soberano 1-Toque:** Exportación e importación rápida de bovedas cifradas.
+33. **Respaldo Soberano 1-Toque:** Exportación e importación rápida de bóvedas cifradas.
 34. **MetaMask EIP-712:** Vinculación de identidades soberanas con firmas criptográficas de Ethereum.
 35. **Gestor de Contactos Consent-First:** Control estricto de quién puede comunicarse contigo.
 36. **Transmisión de Archivos Fragmentados:** Envío de fotos y documentos divididos en fragmentos por la malla.
@@ -107,6 +108,26 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 40. **Telemetría de Enlace LQS:** Monitoreo continuo de la calidad de señal (RSSI y SNR).
 41. **Autenticación Biométrica Universal:** Huella, rostro, iris o Passkeys integrados al hardware.
 42. **Auto-Bloqueo por Inactividad:** Cierre automático de la sesión al minimizar la aplicación.
+43. **Coordinador LoRa TDMA:** Monitor de supertrama de 2000 ms y slot asignado en tiempo real.
+44. **Selector de Cuadrante Geohash:** Configuración de granularidad espacial para enrutamiento local o regional.
+45. **Telemetría de Repetidor Solar:** Lectura en vivo de niveles de batería y paquetes retransmitidos.
+46. **Gateway Satelital LEO:** Panel de sincronización para pases de satélites de órbita baja.
+47. **Visor CAD Táctico:** Inspección de planos de 4 capas y topología vectorial 4K.
+48. **Detector CBRN & Radiación:** Sensor de radiación nuclear y contaminantes químicos.
+49. **Navegación Celeste & PDR:** Odometría de pasos y orientación estelar sin GPS.
+50. **Triangulación RDF:** Estimación de rumbo de señales de radio hostiles o amigas.
+51. **Búnker Anti-Forense:** Destrucción certificada de memoria flash y desmagnetización digital.
+52. **Túneles Encubiertos DoH:** Comunicación ofuscada en servidores DNS seguros.
+53. **Sismógrafo Táctico:** Detección de sismos y estimación de magnitud local.
+54. **Purificador de Agua:** Protocolos de potabilización y cálculo de tabletas de cloro.
+55. **Guía Balística & TCCC:** Tablas de caída de proyectil y procedimientos de primeros auxilios de combate.
+56. **Morse Óptico LiFi:** Comunicación por destellos rápidos de luz LED visible.
+57. **Sensor Óptico de Gases:** Identificación de humo y partículas tóxicas mediante la cámara.
+58. **Reportes Militares CoT/Sitrep:** Generación de formatos estándar Cursor-on-Target.
+59. **Gobernador Cinético:** Calibración de radio según el movimiento y velocidad del operador.
+60. **Bóveda de Trueque:** Catálogo de recursos offline para intercambio en emergencias.
+61. **Sigint Subterráneo:** Captación de vibraciones terrestres mediante giroscopio y acelerómetro.
+62. **Resguardo de Secretos Shamir:** Reparto de claves en fragmentos entre miembros de la escuadra.
 
 ---
 
@@ -134,10 +155,21 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 
 ---
 
-## 9. Preguntas Frecuentes & Solución de Problemas
+## 9. Uso de Radios LoRa, Slots TDMA & Repetidores Solares Autónomos
+
+RED v98.0.0 gestiona automáticamente la radio LoRa conectada (vía USB Serial, Bluetooth o repetidores autónomos de campo):
+
+1. **Operación Totalmente Transparente:** No necesitas configurar frecuencias ni tiempos de transmisión manualmente. El planificador `LoRaTdmaSchedulerEngine` sincroniza los turnos de emisión automáticamente en ranuras de 200 ms.
+2. **Visualización de Slot en Vivo:** Ve a *Ajustes $\rightarrow$ Red Mesh*. Verás un indicador animado que muestra el número de slot activo en el canal (0 a 9) y el slot que te corresponde según tu identidad digital.
+3. **Enrutamiento por Cuadrantes Geohash:** Si envías un mensaje a un operador distante, la app etiqueta el mensaje con el cuadrante geográfico de destino. Los repetidores solares instalados en montañas y techos retransmitirán el mensaje de salto en salto hasta entregarlo.
+4. **Emisión de Emergencia SOS (Prioridad Absoluta):** Al pulsar el botón rojo **SOS**, la app suspende de inmediato la cola de espera TDMA y transmite tu baliza de socorro en tiempo cero para garantizar tu localización y rescate.
+
+---
+
+## 10. Preguntas Frecuentes & Solución de Problemas
 
 **¿Por qué la app pide permisos de Bluetooth y Ubicación?**
-Android requiere el permiso de ubicación para permitir el escaneo de antenas Bluetooth LE y WiFi Direct. RED **nunca** envía tu ubicación a ningún servidor; solo se utiliza internamente para calcular distancias entre nodos en la malla.
+Android requiere el permiso de ubicación para permitir el escaneo de antenas Bluetooth LE y WiFi Direct. RED **nunca** envía tu ubicación a ningún servidor; solo se utiliza internamente para calcular distancias entre nodos en la malla y generar cuadrantes Geohash locales.
 
 **¿Qué hago si mi huella no es reconocida?**
 El sistema operativo permite hasta 5 intentos. Si el sensor se bloquea o no reconoce tu dedo, el teclado táctico de 6 dígitos permanecerá activo para que ingreses tu PIN Maestro.

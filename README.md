@@ -1,8 +1,8 @@
-# 🛡️ RED — Sovereign Mesh OS v98.0.0
+# 🛡️ RED — Sovereign Mesh OS v99.0.0
 
-> **RED** (Red Criptográfica Off-Grid & P2P Mesh) es la plataforma de comunicaciones tácticas, descentralizadas y soberanas más avanzada del mundo. Diseñada desde su origen para operar bajo escenarios de apagón tecnológico, censura estatal, desastres naturales o denegación de servicios, RED no depende de servidores centrales, infraestructuras celulares ni conexión a Internet. Ahora con el **Modo Familiar (WhatsApp UX)** integrado.
+> **RED** (Red Criptográfica Off-Grid & P2P Mesh) es la plataforma de comunicaciones tácticas, descentralizadas y soberanas más avanzada del mundo. Diseñada desde su origen para operar bajo escenarios de apagón tecnológico, censura estatal, desastres naturales o denegación de servicios, RED no depende de servidores centrales, infraestructuras celulares ni conexión a Internet. Ahora con el **Modo Familiar (WhatsApp UX)** integrado, **Coordinación Espectral LoRa TDMA**, **Enrutamiento Geoespacial Geohash** y **Repetidores Solares Autónomos ESP32-S3**.
 
-[![Descargar APK Oficial RED v98.0.0](https://img.shields.io/badge/Descargar_APK_v98.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v98.0.0)
+[![Descargar APK Oficial RED v99.0.0](https://img.shields.io/badge/Descargar_APK_v99.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v99.0.0)
 [![Página Web Oficial GitHub Pages](https://img.shields.io/badge/Web_App-GitHub_Pages-38BDF8?style=for-the-badge&logo=github)](https://darckrovert.github.io/RED/)
 [![Licencia AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-purple?style=for-the-badge&logo=gnu)](https://github.com/DarckRovert/RED/blob/main/LICENSE)
 [![TypeScript Strict](https://img.shields.io/badge/TypeScript-0_Errors_Strict-00D97E?style=for-the-badge&logo=typescript)](https://github.com/DarckRovert/RED)
@@ -15,9 +15,11 @@
 
 Accede a la documentación técnica y operativa completa del proyecto:
 
-- 📖 **[Manual de Usuario Táctico (USER_MANUAL.md)](USER_MANUAL.md)**: Guía de uso paso a paso de los 8 Hubs Tácticos Consolidados para operadores finales.
-- ⚙️ **[Manual de Administración y Nodos (ADMIN_MANUAL.md)](ADMIN_MANUAL.md)**: Configuración de nodos de escritorio en PC, relays y túneles.
-- 📐 **[Arquitectura de Protocolos (ARCHITECTURE.md)](ARCHITECTURE.md)**: Diagramas formales de ingeniería, stack de capas y matrices criptográficas.
+- 📖 **[Manual de Usuario Táctico (USER_MANUAL.md)](USER_MANUAL.md)**: Guía de uso paso a paso de los 8 Hubs Tácticos Consolidados y las 62 pantallas modales para operadores finales.
+- ⚙️ **[Manual de Administración y Nodos (ADMIN_MANUAL.md)](ADMIN_MANUAL.md)**: Configuración de nodos de escritorio en PC, repetidores solares autónomos ESP32-S3 y telemetría de slots TDMA.
+- 📐 **[Arquitectura de Protocolos (ARCHITECTURE.md)](ARCHITECTURE.md)**: Diagramas formales de ingeniería, stack de capas, supertrama TDMA y enrutamiento Geohash.
+- 🛰️ **[Firmware de Repetidores Solares (firmware/esp32-repeater/README.md)](firmware/esp32-repeater/README.md)**: Guía de montaje de hardware de bajo costo (~$15-20 USD), esquema solar TP4056 y flasheo PlatformIO.
+- 📡 **[Especificación Formal de Protocolo (docs/PROTOCOL_SPEC.md)](docs/PROTOCOL_SPEC.md)**: Formato de trama binaria RED de 96 bytes, acuerdos HPKE y filtros Bloom de deduplicación.
 - 📜 **[Historial de Versiones (CHANGELOG.md)](CHANGELOG.md)**: Registro exhaustivo de cambios y novedades de cada release.
 - 🚀 **[Guía de Inicio Rápido (GETTING_STARTED.md)](GETTING_STARTED.md)**: Instrucciones para desarrolladores y configuración de dependencias.
 
@@ -29,10 +31,10 @@ Accede a la documentación técnica y operativa completa del proyecto:
 2. [Arquitectura del Sistema & Mapa Visual](#arquitectura-sistema)
 3. [Autenticación Biométrica Universal & Seguridad Zero-Trust](#autenticacion-biometrica)
 4. [Conectividad Global & Red Malla Descentralizada](#conectividad-global)
-5. [Consolidación en 8 Hubs Tácticos Soberanos](#catalogo-modulos)
+5. [Catálogo Consolidado de 62 Módulos & Pantallas Tácticas](#catalogo-modulos)
 6. [Criptografía Post-Cuántica & Privacidad en Capas](#criptografia-post-cuantica)
 7. [Tokenomics & Proof-of-Relay](#tokenomics)
-8. [Guía de Compilación & Despliegue ADB](#guia-compilacion)
+8. [Guía de Compilación & Despliegue](#guia-compilacion)
 
 ---
 
@@ -41,11 +43,14 @@ Accede a la documentación técnica y operativa completa del proyecto:
 
 En situaciones de emergencia o denegación de red, las aplicaciones tradicionales de mensajería (WhatsApp, Telegram, Signal) fallan al depender de servidores centrales en la nube y torres de telefonía celular. **RED** rompe esta dependencia convirtiendo cada dispositivo en un **nodo de red mesh independiente** capaz de cifrar, enrutar y entregar mensajes a través de radios de hardware locales y enlazar globalmente cuando exista un puente de red.
 
-| Característica | Aplicaciones Tradicionales | RED v98.0.0 |
+| Característica | Aplicaciones Tradicionales | RED v99.0.0 |
 |---|---|---|
-| **Interfaz & UX** | Saturada y con menús dispersos | **Doble Modo Soberano: Modo Familiar (WhatsApp UX) + Modo Táctico C4ISR (8 Hubs)** |
+| **Interfaz & UX** | Saturada y con menús dispersos | **Doble Modo Soberano: Modo Familiar (WhatsApp UX) + Modo Táctico C4ISR (8 Hubs, 62 Pantallas)** |
 | **Infraestructura** | Requiere servidores en la nube y 4G/5G | **100% Descentralizado / Zero-Server** |
 | **Operación Off-Grid** | Imposible sin Internet | **Totalmente funcional mediante BLE GATT, WiFi Direct, LoRa 915MHz y SoundMesh Ultrasónico** |
+| **Coordinación LoRa** | Acceso ALOHA caótico con colisiones masivas | **Planificador LoRa TDMA: Supertrama de 2000ms (10 slots de 200ms), FNV-1a y Bypass SOS Prioridad 9** |
+| **Enrutamiento Espacial** | Inundación ciega de la red | **Poda Geoespacial Geohash-4/6 en IndexedDB v2 & Filtrado Satelital LEO Downlink** |
+| **Repetidores de Campo** | Infraestructura de antenas celulares costosas | **Repetidores Solares Autónomos ESP32-S3 de bajo costo (~$15-20 USD BOM, <12mA en reposo)** |
 | **IA Local Adaptativa** | Requiere APIs en la nube / Defaults fijos | **Asignación Dinámica de RAM (`DeviceMemoryBudget`), Inferencia WASM Qwen/SmolLM & RAG INT8 (<5ms)** |
 | **Llaves Biométricas** | Dependiente de cuenta/SMS | **Universal: Huella, Rostro, Iris, Windows Hello, Touch ID y Passkeys WebAuthn** |
 | **Aislamiento de Red** | Endpoints expuestos a LAN | **Zero-Trust: Servidor Axum estrictamente enlazado a Loopback `127.0.0.1:7333`** |
@@ -65,12 +70,12 @@ En situaciones de emergencia o denegación de red, las aplicaciones tradicionale
 <a id="arquitectura-sistema"></a>
 ## 📐 2. Arquitectura del Sistema & Mapa Visual
 
-Para una documentación exhaustiva de los 5 diagramas técnicos de ingeniería, consulta [ARCHITECTURE.md](ARCHITECTURE.md).
+Para una documentación exhaustiva de los diagramas técnicos de ingeniería, consulta [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ```mermaid
 graph TD
     subgraph FRONTEND ["1. Frontend SPA (Next.js 16 + React 19 + Zustand)"]
-        UI["42 Módulos Tácticos UI"]
+        UI["62 Módulos & Pantallas Tácticas Consolidadas"]
         STORE["Zustand Slices (Auth, Chat, Contacts, Emergency, Social)"]
         UI <--> STORE
     end
@@ -98,15 +103,20 @@ graph TD
         CORE_CRYPTO <--> CORE_MESH
     end
 
-    subgraph HARDWARE_RADIOS ["5. Radios de Hardware & Matriz Multi-Transporte"]
+    subgraph HARDWARE_RADIOS ["5. Radios de Hardware, TDMA & Repetidores"]
         BLE["Bluetooth LE 5.x GATT"]
         WIFI["WiFi Direct / WebRTC P2P DataChannels"]
-        LORA["LoRa Bridge 915 MHz / 868 MHz"]
+        TDMA_LORA["LoRa TDMA Scheduler (SX1262 915/868 MHz)"]
+        SOLAR_FLEET["ESP32-S3 Solar Repeater Fleet (Low-Power Sentinel)"]
         SOUND["SoundMesh Acústico (18-20 kHz)"]
+        SAT_GW["LEO Satellite Mesh Gateway"]
+        
         CORE_MESH <--> BLE
         CORE_MESH <--> WIFI
-        CORE_MESH <--> LORA
+        CORE_MESH <--> TDMA_LORA
+        TDMA_LORA <--> SOLAR_FLEET
         CORE_MESH <--> SOUND
+        CORE_MESH <--> SAT_GW
     end
 ```
 
@@ -115,7 +125,7 @@ graph TD
 <a id="autenticacion-biometrica"></a>
 ## 🔐 3. Autenticación Biométrica Universal & Seguridad Zero-Trust
 
-RED v98.0.0 incorpora un guardián de hardware que vincula el chip de seguridad del dispositivo a la base de datos `sled`:
+RED v99.0.0 incorpora un guardián de hardware que vincula el chip de seguridad del dispositivo a la base de datos `sled`:
 
 1. **Soporte Biométrico Completo:**
    - **Android Nativo:** Sensor de huella dactilar, reconocimiento facial 3D/IR, escáner de iris y credenciales de dispositivo mediante `BiometricPrompt` (`USE_BIOMETRIC` + `USE_FINGERPRINT`).
@@ -128,16 +138,18 @@ RED v98.0.0 incorpora un guardián de hardware que vincula el chip de seguridad 
 <a id="conectividad-global"></a>
 ## 🌐 4. Conectividad Global & Red Malla Descentralizada
 
-RED implementa una arquitectura híbrida **Offline-to-Global Gateway** de 4 niveles con tolerancia absoluta a fallos de infraestructura:
+RED implementa una arquitectura híbrida **Offline-to-Global Gateway** con tolerancia absoluta a fallos de infraestructura:
 
-1. **Observador de Transición de Red & Auto-Reconexión (`NetworkWatcher`)**: Detección en tiempo real de cambios de interfaz (WiFi $\leftrightarrow$ 4G/5G $\leftrightarrow$ Zonas sin señal).
-2. **WebRTC P2P DataChannels & `iceRestart`**: Re-negociación ICE en caliente sin pérdida de sesión y matriz de señalización multi-pool.
-3. **Cola Persistente DTN (Store-and-Forward) & ACKs Criptográficos**: Retención en disco de paquetes pendientes y purga estricta tras recibir la confirmación `DELIVERY_ACK` firmada por el receptor.
+1. **Planificador LoRa TDMA**: Sincronización en supertramas de 2000 ms divididas en 10 slots de 200 ms. Slots 0-7 asignados de forma determinista mediante hash FNV-1a del identificador de nodo, slot 8 reservado para balizas y slot 9 asignado a contienda dinámica CSMA/CA con backoff exponencial. Ráfagas de emergencia SOS (prioridad >= 9) transmiten de forma inmediata con bypass de supertrama.
+2. **Enrutamiento Espacial Geohash DTN**: Indexación por cuadrantes espaciales en IndexedDB v2. Los paquetes en tránsito se etiquetan con su Geohash de destino; las mulas móviles de datos y los satélites LEO descartan tráfico fuera de su vector geográfico de desplazamiento mediante `GeohashSpatialRouting.shouldCarrierAcceptPacket`.
+3. **Flota de Repetidores Solares Autónomos ESP32-S3**: Hardware de despliegue en campo con panel solar de 5V y celda 18650, operando a 80 MHz con un consumo centinela inferior a 12 mA, filtro Bloom de 2048 bits para descarte de duplicados y transceptor Semtech SX1262 con oscilador TCXO a 1.8V.
+4. **Observador de Transición de Red (`NetworkWatcher`)**: Detección en tiempo real de cambios de interfaz (WiFi $\leftrightarrow$ Celular $\leftrightarrow$ Off-Grid).
+5. **WebRTC P2P DataChannels & `iceRestart`**: Re-negociación ICE en caliente sin pérdida de sesión.
 
 ---
 
 <a id="catalogo-modulos"></a>
-## 🧰 5. Catálogo Completo de los 42 Módulos Tácticos
+## 🧰 5. Catálogo Consolidado de 62 Módulos & Pantallas Tácticas
 
 1. **Canales Mesh Locales:** Salas temáticas abiertas con moderación por IA.
 2. **RED Social Feed P2P:** Microblogging descentralizado sin censura.
@@ -181,6 +193,26 @@ RED implementa una arquitectura híbrida **Offline-to-Global Gateway** de 4 nive
 40. **Telemetría de Enlace LQS:** Medición continua de RSSI, SNR y pérdida de paquetes.
 41. **Autenticación Biométrica Universal:** Desbloqueo por huella, rostro, iris o Passkeys.
 42. **Auto-Bloqueo por Inactividad:** Sentinel de visibilidad y ciclo de vida de la app.
+43. **Coordinador LoRa TDMA:** Asignación y visualización en tiempo real de slots espectrales.
+44. **Cuadrantes Geohash DTN:** Selector de resolución espacial (longitudes 4 a 6) para enrutamiento.
+45. **Telemetría de Repetidor Solar:** Monitor de batería, rendimiento de retransmisión y drops de filtro Bloom.
+46. **Gateway Satelital LEO:** Panel de pases orbitales y cola de descarga bent-pipe.
+47. **Visor CAD Táctico Vectorial:** Renderizado SVG 4K de planos de 4 capas y topología de red.
+48. **Detector CBRN & Radiación:** Mapeo y alertas de radiación ambiental y gases tóxicos.
+49. **Navegación Celeste & PDR:** Navegación por estrellas y Dead Reckoning peatonal sin GPS.
+50. **Triangulación RDF:** Radio Direction Finding para búsqueda de radiobalizas enemigas o amigas.
+51. **Búnker Anti-Forense:** Borrado criptográfico multinivel conforme a estándares DoD 5220.22-M.
+52. **Túneles Encubiertos DoH:** Ofuscación de tráfico en túneles DNS-over-HTTPS.
+53. **Monitor Sísmico & Salud Estructural:** Registro acelerométrico de ondas P y S en terremotos.
+54. **Purificación de Agua Táctica:** Calculadora de dosificación química y protocolos de desinfección.
+55. **TCCC & Balística Táctica:** Registro de torniquetes, soporte vital de combate y tablas de tiro.
+56. **Escáner LiFi & Morse Óptico:** Transmisión de datos por modulación de linterna LED del teléfono.
+57. **Sensor Óptico de Gases:** Detección fotométrica de partículas en suspensión mediante cámara.
+58. **C4ISR CoT & Sitrep:** Mensajería estandarizada Cursor-on-Target militar para interoperabilidad.
+59. **Gobernador de Batería Cinético:** Gestión de energía acoplada a la actividad motriz del operador.
+60. **Bóveda de Trueque P2P:** Intercambio descentralizado de suministros y recursos en crisis.
+61. **Sigint Subterráneo:** Análisis de señales acústicas y vibraciones de suelo.
+62. **Resguardo de Secretos Shamir:** Custodia fragmentada de claves maestras entre el escuadrón.
 
 ---
 
@@ -209,12 +241,12 @@ El sistema integra una economía descentralizada autónoma para incentivar la re
 
 1. **Proof-of-Relay (PoR):** Cada nodo que actúa como repetidor de paquetes para la malla acumula créditos de retransmisión computados localmente.
 2. **Consenso Proof-of-Stake Soberano:** Motor de cadena local con árbol de Merkle real, cálculo de nonces y forja de bloques por ranuras de tiempo (`slots`).
-3. **Vales P2P Criptográficos Off-Grid:** Emisión de comprobantes de pago firmados con SHA-256 y códigos QR bidimensionales (260×260 px) para transacciones comerciales sin conexión a Internet, con prevención de doble gasto mediante libro mayor local.
+3. **Vales P2P Criptográficos Off-Grid:** Emisión de comprobantes de pago firmados con SHA-256 y códigos QR bidimensionales para transacciones comerciales sin conexión a Internet, con prevención de doble gasto mediante libro mayor local.
 
 ---
 
 <a id="guia-compilacion"></a>
-## 🛠️ 8. Guía de Compilación & Despliegue ADB
+## 🛠️ 8. Guía de Compilación & Despliegue
 
 ### 1. Compilación del Frontend Web
 ```bash
@@ -223,14 +255,36 @@ npm install
 npm run build
 ```
 
-### 2. Compilación del Nodo Rust (Workspace)
+### 2. Ejecución de Pruebas Automatizadas de Malla
+```bash
+# Validar planificador LoRa TDMA
+npm run test:tdma
+
+# Validar enrutamiento geoespacial Geohash
+npm run test:geohash
+
+# Validar suite completa de pruebas unitarias
+npm run test:all
+```
+
+### 3. Compilación del Nodo Rust (Workspace)
 ```bash
 cargo build --release --bin red-node
 cargo test --workspace
 ```
 
-### 3. Compilación Nativa y Empaquetado APK
+### 4. Compilación de Firmware para Repetidores ESP32-S3
 ```bash
+cd firmware/esp32-repeater
+pio run -e heltec_wifi_lora_32_v3
+pio run -e heltec_wifi_lora_32_v3 -t upload
+```
+
+### 5. Compilación Nativa y Empaquetado APK
+```bash
+# Sincronizar plugins de Capacitor
+npx cap sync android
+
 # Compilar bibliotecas ARM64 con NDK y generar APK de Release
 cd client/app/android
 ./gradlew assembleRelease

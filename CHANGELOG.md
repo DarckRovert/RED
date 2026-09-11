@@ -1,9 +1,52 @@
 # Changelog
 
+## [99.0.0-geohash-spatial-dtn-and-tdma-solar-repeater-edition] - 2026-09-11
+
+### 🚀 Geohash Spatial DTN & TDMA Solar Repeater Edition (Release Oficial v99.0.0)
+
+- **Gobernanza y Sincronización SSOT v99.0.0:**
+  - Actualización atómica en los 21 archivos maestros del ecosistema (`version.ts`, `build.gradle`, Cargo workspaces, service workers y documentación).
+  - Paridad estricta 100% verificada mediante `pre_build_check.js`.
+  - Integración canónica de los 62 módulos tácticos en el menú y catálogo de la vitrina web (`LandingHeader.tsx`, `LandingModuleCatalog.tsx`).
+- **Enrutamiento Geoespacial Geohash & Poda Espacial DTN:**
+  - Operación en producción del motor `GeohashSpatialRouting.ts` con indexación Base32 y distancias Manhattan.
+  - Almacén DTN IndexedDB v2 en `dtnStorage.ts` con índice `targetGeohash` y poda predictiva para mulas tácticas terrestres y pasarelas satelitales LEO.
+- **Planificador LoRa TDMA Ranurado Estricto:**
+  - Supertrama determinista de 2000 ms con 10 slots de 200 ms sincronizados con el reloj de consenso de Lamport (`LoRaTdmaSchedulerEngine.ts`).
+  - Asignación fija determinista en ranuras 0-7, balizas de sincronización en ranura 8 y ranura 9 para contienda CSMA/CA.
+  - Bypass instantáneo preemptivo para alertas de emergencia SOS (prioridad >= 9).
+- **Firmware Open-Source para Repetidores Solares ESP32-S3:**
+  - Código fuente en `firmware/esp32-repeater/` para hardware Heltec LoRa 32 V3 / LilyGO T-Beam (Semtech SX1262).
+  - Deduplicación por filtro de Bloom de 2048 bits y modo centinela de bajo consumo (<12 mA a 80 MHz, ~$15-20 USD BOM total).
+- **Certificación de Despliegue Limpio en Hardware Físico:**
+  - Validación en Motorola Moto G22 (`ZT322B386P`) vía ADB: desinstalación higiénica, instalación limpia de APK compilado v99.0.0, concesión de permisos de sensores/radio y depuración en caliente vía Logcat con 0 excepciones no controladas.
+
 ## [98.0.0-tactical-vector-architecture-and-zero-echo-sync-edition] - 2026-09-10
 
 ### 🚀 Tactical Vector Architecture & Zero-Echo Sync Edition (Release Oficial v98.0.0)
 
+- **Planificador LoRa TDMA Determinista (Supertrama 2000 ms):**
+  - Implementación de `LoRaTdmaSchedulerEngine.ts` con 10 slots de 200 ms por supertrama.
+  - Asignación fija determinista en ranuras 0-7 mediante hash `FNV-1a(nodeId) % 8` para erradicación de colisiones ALOHA.
+  - Ranura 8 reservada para balizas de reloj y sincronización de red.
+  - Ranura 9 dinámica para contienda CSMA/CA con retroceso binario exponencial para nodos transitorios.
+  - Bypass preemptivo de emergencia SOS (prioridad >= 9) transmitiendo de forma inmediata con interrupción de supertrama.
+  - Integración en `meshRouter.ts` y `LoRaMeshtasticBridge.ts` asegurando canalización obligatoria de todo paquete de radio.
+- **Enrutamiento Geoespacial Geohash & Poda DTN (IndexedDB v2):**
+  - Implementación de `GeohashSpatialRouting.ts` con codificación Base32 de 32 bits y cálculo de distancias Manhattan.
+  - Actualización de esquema IndexedDB a versión 2 en `dtnStorage.ts` incorporando índice `targetGeohash` y método `getItemsForGeohash()`.
+  - Algoritmo de decisión de custodia `GeohashSpatialRouting.shouldCarrierAcceptPacket()` para mulas móviles de datos.
+  - Integración de poda espacial en downlink satelital LEO (`SatelliteMeshGatewayEngine.ts`) filtrando paquetes por huella orbital.
+- **Firmware Open-Source para Repetidores Solares Autónomos ESP32-S3 (`firmware/esp32-repeater/`):**
+  - Firmware C++ para microcontroladores ESP32-S3 y transceptores Semtech SX1262 (Heltec WiFi LoRa 32 V3).
+  - Inicialización explícita de bus SPI dedicado (`SCK=9, MISO=11, MOSI=10, NSS=8`) y oscilador TCXO a 1.8V.
+  - Filtro de Bloom de 2048 bits con hashing dual (Murmur3 y FNV-1a) para deduplicación ultra-rápida en memoria volátil.
+  - Modo centinela de bajo consumo a 80 MHz con consumo en reposo inferior a 12 mA (>12 días de autonomía continua sin luz solar con celda 18650).
+  - Documentación de hardware y esquema de conexión con panel solar monocristalino y cargador TP4056 (~$15-20 USD BOM total).
+- **Consolidación y Auditoría Exhaustiva de 62 Módulos & Pantallas Tácticas:**
+  - 100% de paridad en botones de retroceso (Back buttons) y soporte LIFO en pila de navegación `OVERLAY_SCREENS`.
+  - Manejadores de cierre por pulsación exterior (backdrop click) estandarizados en todos los modales.
+  - 100% de paridad en traducciones internacionales (737 claves sincronizadas a través de 16 idiomas, incluyendo Quechua, Árabe, Ruso, Chino, Alemán y Japonés).
 - **Desacoplamiento Semántico de Mensajería:**
   - `deleteMessage` ("Eliminar para mí"): Eliminación local atómica, purga en `IndexedMediaVault` y `localStorage` sin emisión de paquetes destructivos hacia la contraparte.
   - `deleteMessageForEveryone` ("Eliminar para todos"): Redacción del contenido a "🚫 Eliminaste este mensaje", purga inmediata de binarios en el vault, propagación por la malla P2P (1-a-1 y escuadrones) y replicación reactiva vía `LIVE_MSG_DELETE`.

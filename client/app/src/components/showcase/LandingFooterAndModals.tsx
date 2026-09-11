@@ -85,7 +85,7 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
                   Centro de Distribución Táctico
                 </h2>
                 <p style={{ fontSize: "15px", color: "#94A3B8", lineHeight: 1.6, marginBottom: "24px" }}>
-                  Instalador nativo firmado para Android ARM64 (`arm64-v8a`). Probado y certificado en hardware físico: Motorola Moto G22, Lenovo Tab M8 y Xiaomi Redmi Note 14 con soporte para 57 subsistemas tácticos.
+                  Instalador nativo firmado para Android ARM64 (`arm64-v8a`). Probado y certificado en hardware físico: Motorola Moto G22, Lenovo Tab M8 y Xiaomi Redmi Note 14 con soporte para 62 subsistemas tácticos.
                 </p>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
@@ -379,6 +379,27 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
                 <div style={{ fontWeight: 900, color: "#FFB300", fontSize: "16px", marginBottom: "8px" }}>¿Se requiere licencia MTC para operar en 915 MHz en Perú?</div>
                 <div style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
                   No. La banda 902–928 MHz (US915) está clasificada por el MTC (Ministerio de Transportes y Comunicaciones de Perú) como banda ISM de uso libre secundario, permitiendo transmisiones de hasta 1 Watt sin necesidad de canon ni autorización gubernamental.
+                </div>
+              </div>
+
+              <div style={{ padding: "24px", borderRadius: "20px", background: "rgba(14, 18, 34, 0.8)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <div style={{ fontWeight: 900, color: "#00E5FF", fontSize: "16px", marginBottom: "8px" }}>¿Cómo evita RED las colisiones LoRa al concentrarse cientos de operadores?</div>
+                <div style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
+                  A diferencia de los protocolos ALOHA que colapsan por colisiones de paquetes en eventos masivos, RED implementa el motor <code>LoRaTdmaSchedulerEngine</code>. Este organiza el tiempo en supertramas periódicas de 2000 ms divididas en 10 slots de 200 ms: slots 0 a 7 deterministas por hash FNV-1a, slot 8 para balizas de reloj, slot 9 para contienda CSMA/CA y bypass inmediato en tiempo cero para ráfagas de emergencia SOS.
+                </div>
+              </div>
+
+              <div style={{ padding: "24px", borderRadius: "20px", background: "rgba(14, 18, 34, 0.8)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <div style={{ fontWeight: 900, color: "#00FF88", fontSize: "16px", marginBottom: "8px" }}>¿Qué es un Repetidor Solar Autónomo ESP32-S3 y cómo se despliega?</div>
+                <div style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
+                  Es una estación de retransmisión de bajo costo (~$15-20 USD BOM) basada en la placa Heltec WiFi LoRa 32 V3 con transceptor SX1262. Se instala en cumbres o azoteas conectada a un panel solar de 5V y una celda 18650. Opera con consumo centinela menor a 12 mA a 80 MHz, ofreciendo más de 12 días de autonomía continua sin sol, y deduplica paquetes mediante un filtro de Bloom de 2048 bits.
+                </div>
+              </div>
+
+              <div style={{ padding: "24px", borderRadius: "20px", background: "rgba(14, 18, 34, 0.8)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <div style={{ fontWeight: 900, color: "#C084FC", fontSize: "16px", marginBottom: "8px" }}>¿Cómo funciona la poda geoespacial Geohash en redes DTN y satélites?</div>
+                <div style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
+                  Para evitar que los dispositivos móviles y satélites LEO agoten su memoria transportando tráfico irrelevante, cada paquete se indexa con su cuadrante Geohash en IndexedDB v2. Las mulas de datos evalúan su vector de desplazamiento futuro mediante <code>shouldCarrierAcceptPacket</code> y descartan automáticamente paquetes fuera de su rumbo geográfico.
                 </div>
               </div>
             </div>
