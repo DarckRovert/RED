@@ -750,6 +750,7 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/voice/bursts",            get(handle_get_voice_bursts).post(handle_send_voice_burst))
         .route("/api/voice/bursts/:id",        delete(handle_delete_voice_burst))
         .route("/api/network/ip",          get(handle_get_network_ip))
+        .route("/api/dns/query",           post(handle_dns_query))
         .route("/api/network/vault",       get(handle_get_vault))
         .route("/api/crypto/renegotiate",  post(handle_renegotiate_crypto))
         .route("/api/blockchain/blocks",      get(handle_get_blocks))
@@ -1862,6 +1863,135 @@ async fn handle_get_network_ip(State(_state): State<ApiState>) -> impl IntoRespo
     })).into_response()
 }
 
+#[derive(Debug, Deserialize)]
+pub struct DnsQueryRequest {
+    pub query: String,
+    pub record_type: Option<String>,
+    pub port: Option<u16>,
+    pub server: Option<String>,
+}
+
+async fn handle_dns_query(
+    Json(req): Json<DnsQueryRequest>,
+) -> impl IntoResponse {
+    let query_host = req.query.trim();
+    if query_host.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "success": false,
+                "error": "Query hostname cannot be empty",
+                "answer": null
+            })),
+        )
+            .into_response();
+    }
+
+    let dns_server = req.server.unwrap_or_else(|| "1.1.1.1".to_string());
+    let dns_port = req.port.unwrap_or(53);
+    let target_addr = format!("{}:{}", dns_server, dns_port);
+
+    let start = std::time::Instant::now();
+
+    // Intento por UDP socket nativo (Proxy UDP 53)
+    let udp_res = tokio::time::timeout(std::time::Duration::from_millis(3000), async {
+        let socket = match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
+            Ok(s) => s,
+            Err(e) => return Err(format!("Socket bind error: {}", e)),
+        };
+
+        if let Err(e) = socket.connect(&target_addr).await {
+            return Err(format!("Socket connect error: {}", e));
+        }
+
+        // Construir paquete de consulta DNS estándar (Header 12 bytes + QNAME + QTYPE + QCLASS)
+        let mut packet = Vec::with_capacity(512);
+        packet.extend_from_slice(&[0x12, 0x34, 0x01, 0x00]);
+        packet.extend_from_slice(&[0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+
+        for part in query_host.split('.') {
+            if part.is_empty() { continue; }
+            let bytes = part.as_bytes();
+            if bytes.len() > 63 {
+                return Err("DNS label too long".to_string());
+            }
+            packet.push(bytes.len() as u8);
+            packet.extend_from_slice(bytes);
+        }
+        packet.push(0x00);
+
+        let qtype = match req.record_type.as_deref().unwrap_or("TXT").to_uppercase().as_str() {
+            "A" => 1u16,
+            "AAAA" => 28u16,
+            _ => 16u16,
+        };
+        packet.extend_from_slice(&qtype.to_be_bytes());
+        packet.extend_from_slice(&[0x00, 0x01]);
+
+        if let Err(e) = socket.send(&packet).await {
+            return Err(format!("Socket send error: {}", e));
+        }
+
+        let mut buf = [0u8; 1024];
+        let len = match socket.recv(&mut buf).await {
+            Ok(l) => l,
+            Err(e) => return Err(format!("Socket recv error: {}", e)),
+        };
+
+        if len < 12 {
+            return Err("DNS response too short".to_string());
+        }
+
+        let ancount = u16::from_be_bytes([buf[6], buf[7]]);
+        let rcode = buf[3] & 0x0F;
+
+        if rcode != 0 {
+            return Ok(format!("RCODE_{}", rcode));
+        }
+
+        if ancount > 0 {
+            Ok(format!("ACK_RECORDS_{}", ancount))
+        } else {
+            Ok("ACK_OK_EMPTY".to_string())
+        }
+    }).await;
+
+    let latency_ms = start.elapsed().as_millis() as u64;
+
+    match udp_res {
+        Ok(Ok(answer)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "answer": answer,
+                "latency_ms": latency_ms,
+                "server": target_addr
+            })),
+        )
+            .into_response(),
+        Ok(Err(err)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": false,
+                "error": err,
+                "latency_ms": latency_ms,
+                "server": target_addr
+            })),
+        )
+            .into_response(),
+        Err(_) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": false,
+                "error": "Timeout esperando respuesta UDP 53 del servidor DNS",
+                "latency_ms": latency_ms,
+                "server": target_addr
+            })),
+        )
+            .into_response(),
+    }
+}
+
 async fn handle_get_vault(State(state): State<ApiState>) -> impl IntoResponse {
     let node = state.node.lock().await;
     let hash = node.identity_hash();
@@ -1920,6 +2050,7 @@ pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>
         .route("/api/events",   get(handle_sse_async))
         .route("/api/logs",     get(handle_logs_async))
         .route("/api/network/outbound", get(handle_outbound_sse_async))
+        .route("/api/dns/query",        post(handle_dns_query))
         .route("/local-signal", get(handle_local_signal))
         .route("/api/ai/status", get(handle_ai_status_public).post(handle_ai_status_public))
         .route("/api/tags",      get(handle_ollama_tags_public))
@@ -2042,7 +2173,7 @@ async fn validate_auth(
     next: axum::middleware::Next,
 ) -> Response {
     let path = request.uri().path();
-    if path == "/local-signal" || path == "/api/status" || path == "/api/events" || path == "/api/network/outbound" || path == "/api/ai/status" || path == "/api/tags" || path == "/v1/models" || path == "/v1/chat/completions" || path == "/api/generate" || path == "/api/ai/copilot" {
+    if path == "/local-signal" || path == "/api/status" || path == "/api/events" || path == "/api/network/outbound" || path == "/api/dns/query" || path == "/api/ai/status" || path == "/api/tags" || path == "/v1/models" || path == "/v1/chat/completions" || path == "/api/generate" || path == "/api/ai/copilot" {
         return next.run(request).await;
     }
 
@@ -2074,7 +2205,7 @@ async fn validate_auth_async(
 ) -> Response {
     // Bypass auth for public boot and SSE discovery endpoints.
     let path = request.uri().path();
-    if path == "/api/status" || path == "/api/events" || path == "/api/network/outbound" || path == "/local-signal" || path == "/api/ai/status" || path == "/api/tags" || path == "/v1/models" || path == "/v1/chat/completions" || path == "/api/generate" || path == "/api/ai/copilot" {
+    if path == "/api/status" || path == "/api/events" || path == "/api/network/outbound" || path == "/api/dns/query" || path == "/local-signal" || path == "/api/ai/status" || path == "/api/tags" || path == "/v1/models" || path == "/v1/chat/completions" || path == "/api/generate" || path == "/api/ai/copilot" {
         return next.run(request).await;
     }
 

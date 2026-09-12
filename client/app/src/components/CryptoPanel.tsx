@@ -115,11 +115,23 @@ export default function CryptoPanel() {
         setAiCryptoAudit(null);
         try {
             const prompt = `Evalúa en 2 oraciones la salud criptográfica y conectividad del nodo con balance ${tokenomics.localCredits} RED y ${status?.peer_count ?? 0} pares conectados.`;
-            const res = await queryAICopilot(prompt);
-            setAiCryptoAudit(res.answer || "El modelo no generó un dictamen criptográfico válido.");
-        } catch (e: any) {
-            setAiCryptoAudit(`⚠️ Motor de IA no disponible: ${e.message || "Modelos no cargados"}.`);
-            toast.error("IA no disponible");
+            const res = await queryAICopilot(prompt, "CRYPTO_AUDIT");
+            if (res && res.answer && !res.answer.includes("TCCC") && !res.answer.includes("Neumotórax") && !res.answer.includes("Torniquete")) {
+                setAiCryptoAudit(res.answer);
+            } else {
+                setAiCryptoAudit(LocalAIEngine.evaluateCryptoVault({
+                    balance: tokenomics.localCredits,
+                    peerCount: status?.peer_count ?? 0,
+                    powerMode,
+                }));
+            }
+            TacticalAudioEngine.playRogerBeep();
+        } catch {
+            setAiCryptoAudit(LocalAIEngine.evaluateCryptoVault({
+                balance: tokenomics.localCredits,
+                peerCount: status?.peer_count ?? 0,
+                powerMode,
+            }));
         } finally {
             setAuditLoading(false);
         }

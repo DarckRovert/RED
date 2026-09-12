@@ -89,8 +89,13 @@ export class DnsTunnelEngine {
 
   private static DOH_PROVIDERS = [
     "https://1.1.1.1/dns-query",
+    "https://1.0.0.1/dns-query",
     "https://8.8.8.8/resolve",
-    "https://dns.quad9.net/dns-query",
+    "https://8.8.4.4/resolve",
+    "https://9.9.9.9/dns-query",
+    "https://149.112.112.112/dns-query",
+    "https://94.140.14.14/dns-query",
+    "https://dns.google/resolve",
   ];
 
   /**
@@ -134,14 +139,14 @@ export class DnsTunnelEngine {
     this.stats.packetsSent++;
     this.stats.bytesTransmitted += safeHostname.length;
 
-    // 1. Intento por DoH (Cloudflare / Google / Quad9)
+    // 1. Intento por DoH Anycast Direct IP (Cloudflare / Google / Quad9 / AdGuard)
     for (const provider of this.DOH_PROVIDERS) {
       try {
         const dohUrl = `${provider}?name=${encodeURIComponent(safeHostname)}&type=TXT`;
         const res = await fetch(dohUrl, {
           headers: { Accept: "application/dns-json" },
           cache: "no-store",
-          signal: AbortSignal.timeout(3500),
+          signal: AbortSignal.timeout(2500),
         });
 
         const latencyMs = Math.round(performance.now() - startTime);
@@ -156,25 +161,38 @@ export class DnsTunnelEngine {
       } catch {}
     }
 
-    // 2. Fallback a UDP Puerto 53 sin saldo (vía backend local RED / Native UDP Socket)
+    // 2. Fallback a UDP Puerto 53 sin saldo (vía backend local RED / Native UDP Socket Proxy)
     try {
       let nodeUrl = 'http://127.0.0.1:7333';
+      const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
       try {
-        const { getNodeUrl } = await import('../../api/core');
+        const { getNodeUrl, getSessionToken } = await import('../../api/core');
         nodeUrl = getNodeUrl();
+        const tok = await getSessionToken();
+        if (tok) {
+          authHeaders['X-API-Key'] = tok;
+          authHeaders['X-Red-Session-Token'] = tok;
+        }
       } catch {}
-      const res = await fetch(`${nodeUrl}/api/dns/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: safeHostname, record_type: 'TXT', port: 53 }),
-        signal: AbortSignal.timeout(4000),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        const latencyMs = Math.round(performance.now() - startTime);
-        this.stats.lastResponseTimeMs = latencyMs;
-        this.stats.packetsReceived++;
-        return { success: true, responseTxt: json.answer || "UDP_53_ACK", latencyMs };
+
+      for (const srv of ['1.1.1.1', '8.8.8.8', '9.9.9.9']) {
+        try {
+          const res = await fetch(`${nodeUrl}/api/dns/query`, {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify({ query: safeHostname, record_type: 'TXT', port: 53, server: srv }),
+            signal: AbortSignal.timeout(2000),
+          });
+          if (res.ok) {
+            const json = await res.json();
+            const latencyMs = Math.round(performance.now() - startTime);
+            this.stats.lastResponseTimeMs = latencyMs;
+            if (json.success) {
+              this.stats.packetsReceived++;
+              return { success: true, responseTxt: json.answer || `UDP_53_${srv}`, latencyMs };
+            }
+          }
+        } catch {}
       }
     } catch {}
 
@@ -183,7 +201,7 @@ export class DnsTunnelEngine {
         success: false,
         responseTxt: undefined,
         latencyMs,
-        reason: 'DoH y UDP 53 fallaron (red celular sin conectividad de nombres)',
+        reason: 'DoH y UDP 53 sin respuesta (sin conectividad celular/DNS en celda)',
     };
   }
 

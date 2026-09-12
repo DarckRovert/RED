@@ -61,16 +61,23 @@ export default function NetworkPanel() {
     const handleFlushDtn = async () => {
         setIsFlushingDtn(true);
         try {
-            await meshRouter.flushPendingQueue();
+            await meshRouter.flushPendingQueue(true);
             setDtnCount(dtnStorage.count);
             TacticalAudioEngine.playRogerBeep();
-            toast.success(`⚡ Búfer DTN procesado (${dtnStorage.count} paquetes en espera)`);
+            toast.success(`⚡ Búfer DTN forzado (${dtnStorage.count} paquetes restantes)`);
         } catch {
             TacticalAudioEngine.playWarning();
             toast.error("Error al forzar transmisión DTN");
         } finally {
             setIsFlushingDtn(false);
         }
+    };
+
+    const handlePurgeAllDtn = () => {
+        const removed = dtnStorage.purgeAll();
+        setDtnCount(0);
+        TacticalAudioEngine.playTap();
+        toast.success(`🧹 Búfer DTN vaciado (${removed} paquetes purgados)`);
     };
 
     const handlePurgeExpiredDtn = () => {
@@ -80,10 +87,20 @@ export default function NetworkPanel() {
         toast.info("🧹 Barrido de paquetes DTN expirados completado");
     };
 
-    const handleResetDtnTimers = () => {
-        dtnStorage.forceResetRetryTimers();
-        TacticalAudioEngine.playTap();
-        toast.info("🔄 Temporizadores de reintento DTN reiniciados a 0ms");
+    const handleResetDtnTimers = async () => {
+        setIsFlushingDtn(true);
+        try {
+            dtnStorage.forceResetRetryTimers();
+            await meshRouter.flushPendingQueue(true);
+            setDtnCount(dtnStorage.count);
+            TacticalAudioEngine.playRogerBeep();
+            toast.info(`🔄 Reintento DTN ejecutado (${dtnStorage.count} paquetes en espera)`);
+        } catch {
+            TacticalAudioEngine.playWarning();
+            toast.error("Error al reintentar transmisión DTN");
+        } finally {
+            setIsFlushingDtn(false);
+        }
     };
 
     const handleChannelHop = async () => {
@@ -113,11 +130,14 @@ export default function NetworkPanel() {
             const sniRes = await SniSpoofEngine.transmitSniBypass(testPayload);
             
             if (res.success || sniRes.success) {
-                setTestResult(`✅ Trama Base32 enviada | DNS: ${res.latencyMs}ms | SNI Fronting: ${sniRes.latencyMs}ms`);
+                const parts: string[] = [];
+                if (res.success) parts.push(`DNS Anycast: ${res.latencyMs}ms`);
+                if (sniRes.success) parts.push(`Fronting (${sniRes.provider}): ${sniRes.latencyMs}ms`);
+                setTestResult(`✅ Canal Encubierto Operativo | ${parts.join(' | ')}`);
                 TacticalAudioEngine.playRogerBeep();
-                toast.success("Prueba de canal encubierto exitosa");
+                toast.success("Evasión de censura multi-operador exitosa");
             } else {
-                setTestResult(`❌ Fallo de Túnel: DoH bloqueado | SNI: ${sniRes.reason || "Bloqueado"}`);
+                setTestResult(`❌ Canales Bloqueados | DoH/UDP: ${res.reason || "Sin respuesta"} | SNI: ${sniRes.reason || "Bloqueado"}`);
                 TacticalAudioEngine.playWarning();
                 toast.error("Canales encubiertos bloqueados");
             }
@@ -214,11 +234,31 @@ export default function NetworkPanel() {
         setAiNetworkDiag(null);
         try {
             const prompt = `Evalúa la topología de red P2P. Nodos activos por transporte: ${peersByTransport.ble} BLE, ${peersByTransport.wifi} WiFi/WS, ${peersByTransport.lorawan} LoRaWAN, ${peersByTransport.tcp} TCP, ${peersByTransport.quic} QUIC.`;
-            const res = await queryAICopilot(prompt);
-            setAiNetworkDiag(res.answer || "El modelo no generó una respuesta válida.");
-        } catch (e: any) {
-            setAiNetworkDiag(`⚠️ Error del motor de IA: ${e.message || "Motor de IA inaccesible."}`);
-            toast.error("No se pudo contactar a la IA");
+            const res = await queryAICopilot(prompt, "NETWORK_TOPOLOGY");
+            if (res && res.answer && !res.answer.includes("TCCC") && !res.answer.includes("Neumotórax") && !res.answer.includes("Torniquete")) {
+                setAiNetworkDiag(res.answer);
+            } else {
+                const directEval = LocalAIEngine.evaluateNetworkTopology({
+                    ble: peersByTransport.ble,
+                    wifi: peersByTransport.wifi,
+                    lorawan: peersByTransport.lorawan,
+                    tcp: peersByTransport.tcp,
+                    quic: peersByTransport.quic,
+                    rfMetrics,
+                });
+                setAiNetworkDiag(directEval);
+            }
+            TacticalAudioEngine.playRogerBeep();
+        } catch {
+            const directEval = LocalAIEngine.evaluateNetworkTopology({
+                ble: peersByTransport.ble,
+                wifi: peersByTransport.wifi,
+                lorawan: peersByTransport.lorawan,
+                tcp: peersByTransport.tcp,
+                quic: peersByTransport.quic,
+                rfMetrics,
+            });
+            setAiNetworkDiag(directEval);
         } finally {
             setDiagLoading(false);
         }
@@ -400,6 +440,11 @@ export default function NetworkPanel() {
                                 {dtnCount > 0 ? `${dtnCount} PAQUETES EN ESPERA` : "BÚFER VACÍO (AL DÍA)"}
                             </span>
                         </div>
+                        {dtnCount > 0 && peersByTransport.ble === 0 && peersByTransport.wifi === 0 && peersByTransport.lorawan === 0 && (
+                            <div style={{ fontSize: "0.68rem", color: "#FFB300", background: "rgba(255,179,0,0.08)", padding: "6px 8px", borderRadius: "6px", border: "1px solid rgba(255,179,0,0.2)" }}>
+                                📡 <strong>Modo Aislamiento:</strong> 0 pares en radiofrecuencia. Los paquetes se mantienen cifrados en reposo y se transmitirán automáticamente al detectar nodos.
+                            </div>
+                        )}
 
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", fontFamily: "JetBrains Mono, monospace" }}>
                             <div style={{ padding: "8px 10px", borderRadius: "8px", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -437,12 +482,12 @@ export default function NetworkPanel() {
                                 🔄 Reintentar
                             </button>
                             <button
-                                onClick={handlePurgeExpiredDtn}
+                                onClick={handlePurgeAllDtn}
                                 className="btn-tactical-secondary"
-                                style={{ padding: "8px 10px", fontSize: "0.76rem" }}
-                                title="Purgar paquetes vencidos por tiempo de vida"
+                                style={{ padding: "8px 10px", fontSize: "0.76rem", color: "#FF5252", borderColor: "rgba(255,82,82,0.4)" }}
+                                title="Purgar todos los paquetes del búfer DTN"
                             >
-                                🧹 Purgar
+                                🧹 Purgar Todo
                             </button>
                         </div>
                     </div>

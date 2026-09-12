@@ -205,6 +205,16 @@ class DtnStorage {
         if (item.packet.sender === 'SAT_GATEWAY' || item.id.startsWith('SAT-UPLINK')) {
           continue;
         }
+        // Prune ephemeral capacity ads or pings that leaked in prior sessions
+        if (item.packet.payloadHex) {
+          try {
+            const headBytes = hexToBytes(item.packet.payloadHex.slice(0, 160));
+            const txt = new TextDecoder().decode(headBytes);
+            if (txt.includes('HIVE_CAPACITY_AD') || txt.includes('PING') || txt.includes('SHAKE_PAIR') || txt.includes('BEACON_POLL')) {
+              continue;
+            }
+          } catch {}
+        }
         // Enforce valid schema & eliminate duplicates by nonce
         validMap.set(item.id, item as DtnQueueItem);
       }
@@ -267,6 +277,40 @@ class DtnStorage {
       const dropped = items.filter(it => it.priority <= 4);
       dropped.forEach(d => this.removeItemFromDB(d.id));
       console.log(`[DtnStorage] Evicted ${dropped.length} low-priority packets to recover storage quota`);
+      return dropped.length;
+    }
+    return 0;
+  }
+
+  /**
+   * Purga total manual del búfer DTN (IndexedDB + Memoria + LocalStorage fallback)
+   */
+  public purgeAll(): number {
+    const items = this.getItems();
+    const count = items.length;
+    items.forEach(it => this.removeItemFromDB(it.id));
+    this.saveItems([]);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(STORAGE_KEY_FALLBACK);
+      } catch {}
+    }
+    console.log(`[DtnStorage] Manually purged all ${count} DTN packets from vault`);
+    return count;
+  }
+
+  /**
+   * Purga selectiva que descarta todo excepto balizas de salvamento de vida (prioridad >= 9)
+   */
+  public purgeNonEmergency(): number {
+    const items = this.getItems();
+    const initialLen = items.length;
+    const preserved = items.filter(it => it.priority >= 9);
+    if (preserved.length !== initialLen) {
+      this.saveItems(preserved);
+      const dropped = items.filter(it => it.priority < 9);
+      dropped.forEach(d => this.removeItemFromDB(d.id));
+      console.log(`[DtnStorage] Evicted ${dropped.length} non-emergency packets from DTN storage`);
       return dropped.length;
     }
     return 0;
@@ -361,6 +405,15 @@ class DtnStorage {
     if (packet.sender === 'SAT_GATEWAY' || packet.nonce.startsWith('SAT-UPLINK')) {
       // Discard recursive satellite packets from terrestrial DTN queue
       return;
+    }
+    // Discard ephemeral capacity advertisements, pings and transient presence
+    if (packet.payload && packet.payload.length > 0) {
+      try {
+        const preview = new TextDecoder().decode(packet.payload.slice(0, 100));
+        if (preview.includes('HIVE_CAPACITY_AD') || preview.includes('PING') || preview.includes('SHAKE_PAIR') || preview.includes('BEACON_POLL')) {
+          return;
+        }
+      } catch {}
     }
     const items = this.getItems();
     const nonce = packet.nonce;

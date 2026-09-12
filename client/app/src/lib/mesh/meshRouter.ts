@@ -1207,14 +1207,33 @@ class MeshRouter {
       }
     } catch {}
 
-    // [BUG-08 FIX] Si no hay peers disponibles, encolar en DTN para reintento diferido.
-    // Los SOS, CBRN y beacons de emergencia no deben perderse silenciosamente.
+    // [BUG-08 FIX] Si no hay peers disponibles, encolar en DTN SOLO si es un paquete crítico de emergencia.
+    // Telemetría efímera, pings y anuncios de capacidad (HIVE_CAPACITY_AD) NUNCA deben persistirse en DTN.
     if (sent === 0) {
       try {
         const packet = decode(payload);
         if (packet) {
-          dtnStorage.enqueue(packet, 10); // priority 10 = broadcast/SOS
-          console.warn('[MeshRouter] broadcast() sin peers — guardado en DTN para reintento cuando haya conectividad');
+          let isEphemeral = false;
+          let isEmergency = false;
+          try {
+            const preview = new TextDecoder().decode(packet.payload.slice(0, 100));
+            if (preview.includes('HIVE_CAPACITY_AD') || preview.includes('PING') || preview.includes('SHAKE_PAIR') || preview.includes('BEACON_POLL')) {
+              isEphemeral = true;
+            }
+            if (preview.includes('SOS') || preview.includes('AMBER') || preview.includes('CBRN') || preview.includes('beacon')) {
+              isEmergency = true;
+            }
+          } catch {}
+
+          const lowerNonce = packet.nonce.toLowerCase();
+          if (lowerNonce.includes('sos') || lowerNonce.includes('amber') || lowerNonce.includes('cbrn') || lowerNonce.includes('beacon')) {
+            isEmergency = true;
+          }
+
+          if (!isEphemeral && isEmergency) {
+            dtnStorage.enqueue(packet, 10); // priority 10 = broadcast/SOS
+            console.warn('[MeshRouter] broadcast() de emergencia sin peers — guardado en DTN para reintento');
+          }
         }
       } catch {}
     }

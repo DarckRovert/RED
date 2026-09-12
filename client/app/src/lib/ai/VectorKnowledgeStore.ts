@@ -127,15 +127,42 @@ export class VectorKnowledgeStore {
 
     // ─── Búsqueda Semántica K-NN Offline ────────────────────────────────────────
 
-    public async search(query: string, topK = 3): Promise<SearchResult[]> {
+    public async search(query: string, topK = 3, categoryFilter?: string): Promise<SearchResult[]> {
         // Garantizar que el índice esté completamente cargado antes de buscar
         await this._ready;
 
         const t0 = performance.now();
         const queryVec = VectorKnowledgeStore.generateEmbedding(query);
+        const cleanQuery = query.toLowerCase();
 
-        const scored = this.documents.map(doc => {
-            const score = VectorKnowledgeStore.cosineSimilarityInt8(queryVec, doc.vectorInt8);
+        // Extraer palabras de la consulta para confirmación léxica contra tags
+        const queryWords = new Set(cleanQuery.split(/[^a-z0-9áéíóúñ]+/i).filter(w => w.length >= 3));
+
+        let candidateDocs = this.documents;
+        if (categoryFilter) {
+            candidateDocs = candidateDocs.filter(d => d.category === categoryFilter);
+        }
+
+        const scored = candidateDocs.map(doc => {
+            let score = VectorKnowledgeStore.cosineSimilarityInt8(queryVec, doc.vectorInt8);
+
+            // Verificación léxica estricta: en espacios INT8 de 64 dimensiones, las colisiones
+            // ortogonales ocurren con frecuencia. Comprobamos si hay al menos una etiqueta coincidente.
+            let tagHits = 0;
+            for (const tag of doc.tags) {
+                if (queryWords.has(tag.toLowerCase()) || cleanQuery.includes(tag.toLowerCase())) {
+                    tagHits++;
+                }
+            }
+
+            // Si el documento médico/táctico no tiene NINGUNA coincidencia léxica en la consulta,
+            // penalizar drásticamente para evitar que consultas técnicas de red secuestren protocolos médicos.
+            if (tagHits === 0) {
+                score *= 0.30;
+            } else {
+                score = Math.min(1.0, score + (tagHits * 0.08));
+            }
+
             return {
                 document: doc,
                 similarityScore: score,

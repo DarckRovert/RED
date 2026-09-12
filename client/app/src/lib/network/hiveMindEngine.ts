@@ -100,6 +100,7 @@ class HiveMindEngineClass {
 
         const payload = new TextEncoder().encode(JSON.stringify({
             type: 'HIVE_CAPACITY_AD',
+            isEphemeral: true,
             payload: ad
         }));
 

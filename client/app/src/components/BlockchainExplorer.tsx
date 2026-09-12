@@ -186,11 +186,23 @@ export default function BlockchainExplorer({ onClose }: BlockchainExplorerProps 
         setAiAudit(null);
         try {
             const prompt = `Evalúa en 2 oraciones la salud de la blockchain local con altura #${chainHeight} y ${blocks.length} bloques minados.`;
-            const res = await queryAICopilot(prompt);
-            setAiAudit(res.answer || "El modelo no generó una evaluación para la cadena.");
-        } catch (e: any) {
-            setAiAudit(`⚠️ Motor de IA no disponible: ${e.message || "Modelos no cargados"}.`);
-            toast.error("IA no disponible");
+            const res = await queryAICopilot(prompt, "BLOCKCHAIN_AUDIT");
+            if (res && res.answer && !res.answer.includes("TCCC") && !res.answer.includes("Neumotórax") && !res.answer.includes("Torniquete")) {
+                setAiAudit(res.answer);
+            } else {
+                setAiAudit(LocalAIEngine.evaluateBlockchainLedger({
+                    height: chainHeight,
+                    blocksCount: blocks.length,
+                    validatorsCount: validators.length,
+                }));
+            }
+            TacticalAudioEngine.playRogerBeep();
+        } catch {
+            setAiAudit(LocalAIEngine.evaluateBlockchainLedger({
+                height: chainHeight,
+                blocksCount: blocks.length,
+                validatorsCount: validators.length,
+            }));
         } finally {
             setAuditLoading(false);
         }
