@@ -34,7 +34,7 @@ foreach ($dev in $devices) {
     Write-Host "1. Desinstalando version previa..."
     & $adb -s $dev uninstall f.red.app
 
-    Write-Host "2. Instalando APK v103.0.0 limpia ($apk)..."
+    Write-Host "2. Instalando APK v104.0.0 limpia ($apk)..."
     & $adb -s $dev install -r -d $apk
 
     Write-Host "3. Otorgando permisos de sistema..."

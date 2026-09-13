@@ -219,7 +219,7 @@ export interface RedStore {
     deleteContact: (hash: string) => Promise<void>;
     dismissContactRequestModal: () => void;
 
-    // ── Tactical Target — Blanco Táctico Compartido (v103.0.0) ────────────────
+    // ── Tactical Target — Blanco Táctico Compartido (v104.0.0) ────────────────
     // Reemplaza el patrón localStorage event-driven (red_active_target /
     // red_tactical_target_point) que era inestable en Capacitor/WebView.
     // Fuente única de verdad para NodeMap, Radar, P2PCompass, OffGridCompass,

@@ -2070,7 +2070,7 @@ body.mode-defcon-survival {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   RTL (Right-to-Left) Layout Overrides — árabe (ar), v103.0.0
+   RTL (Right-to-Left) Layout Overrides — árabe (ar), v104.0.0
    Activado por: html[dir="rtl"] (asignado automáticamente por i18nEngine.tsx
    cuando el locale detectado es 'ar').
    
@@ -2174,7 +2174,7 @@ body.mode-defcon-survival {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   MODOS VISUALES: FAMILIAR (WhatsApp Style) vs TÁCTICO (C4ISR HUD) (v103.0.0+)
+   MODOS VISUALES: FAMILIAR (WhatsApp Style) vs TÁCTICO (C4ISR HUD) (v104.0.0+)
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 /* ── MODO FAMILIAR (Paleta WhatsApp Soberana) ── */

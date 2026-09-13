@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * WorkspaceScreens.tsx — RED v103.0.0
+ * WorkspaceScreens.tsx — RED v104.0.0
  *
  * Router de pantallas compartido entre mobile y tablet.
  * Elimina la duplicación de 62 condicionales `currentScreen` que existían

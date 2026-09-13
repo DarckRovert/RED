@@ -58,7 +58,7 @@ Este documento define el protocolo formal de validación y control de calidad pr
 
 ### Procedimiento de Rollback de Emergencia
 Si se detecta una vulnerabilidad crítica o fallo fatal de desincronización en la malla:
-1. Crear rama de hotfix: `git checkout -b hotfix/v103.0.1`.
+1. Crear rama de hotfix: `git checkout -b hotfix/v104.0.1`.
 2. Aplicar el parche mínimo sin refactorizaciones cosméticas.
 3. Ejecutar la suite completa `npm run test:all` + `cargo test --workspace --all-features`.
-4. Incrementar versión a `v103.0.1` y desplegar nueva release prioritaria.
+4. Incrementar versión a `v104.0.1` y desplegar nueva release prioritaria.

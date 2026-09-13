@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * page.tsx — RED v103.0.0 App Shell
+ * page.tsx — RED v104.0.0 App Shell
  *
  * Responsabilidades únicas de este archivo:
  *   1. Detección de plataforma (nativa Capacitor vs. web showcase)

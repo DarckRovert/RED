@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * TacticalQuickActionHUD.tsx — RED v103.0.0
+ * TacticalQuickActionHUD.tsx — RED v104.0.0
  * 
  * HUD Flotante de Respuesta Táctica Inmediata (1-Tap Fast Access).
  * Erradica el cuello de botella de 4 interacciones (Drawer -> Scroll -> Hub -> Tool)
