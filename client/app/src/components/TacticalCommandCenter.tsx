@@ -138,7 +138,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'channels',
                 icon: '📻',
                 title: t('tactical_modules.channels_title'),
-                subtitle: t('tactical_modules.channels_title'),
+                subtitle: t('tactical_modules.channels_sub'),
                 badge: t('tactical_modules.channels_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -148,7 +148,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'walkie',
                 icon: '🎙️',
                 title: t('tactical_modules.walkie_title'),
-                subtitle: t('tactical_modules.walkie_title'),
+                subtitle: t('tactical_modules.walkie_sub'),
                 badge: t('tactical_modules.walkie_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -158,7 +158,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'call',
                 icon: '📞',
                 title: t('tactical_modules.call_title'),
-                subtitle: t('tactical_modules.call_title'),
+                subtitle: t('tactical_modules.call_sub'),
                 badge: t('tactical_modules.call_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -168,7 +168,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'groups',
                 icon: '👥',
                 title: t('tactical_modules.groups_title'),
-                subtitle: t('tactical_modules.groups_title'),
+                subtitle: t('tactical_modules.groups_sub'),
                 badge: t('tactical_modules.groups_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -178,7 +178,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'socialFeed',
                 icon: '🌍',
                 title: t('tactical_modules.socialFeed_title'),
-                subtitle: t('tactical_modules.socialFeed_title'),
+                subtitle: t('tactical_modules.socialFeed_sub'),
                 badge: t('tactical_modules.socialFeed_badge'),
                 badgeColor: '#B388FF',
                 accentGlow: 'rgba(179, 136, 255, 0.2)'
@@ -188,7 +188,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'liveStream',
                 icon: '📺',
                 title: t('tactical_modules.liveStream_title'),
-                subtitle: t('tactical_modules.liveStream_title'),
+                subtitle: t('tactical_modules.liveStream_sub'),
                 badge: t('tactical_modules.liveStream_badge'),
                 badgeColor: '#FF3355',
                 accentGlow: 'rgba(255, 51, 85, 0.2)'
@@ -198,7 +198,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'canvas',
                 icon: '🎨',
                 title: t('tactical_modules.canvas_title'),
-                subtitle: t('tactical_modules.canvas_title'),
+                subtitle: t('tactical_modules.canvas_sub'),
                 badge: t('tactical_modules.canvas_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -208,7 +208,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'network',
                 icon: '📦',
                 title: t('tactical_modules.dtnStorage_title'),
-                subtitle: t('tactical_modules.dtnStorage_title'),
+                subtitle: t('tactical_modules.dtnStorage_sub'),
                 badge: `${dtnPacketCount} EN COLA`,
                 badgeColor: dtnPacketCount > 0 ? '#FFB300' : '#00E676',
                 accentGlow: dtnPacketCount > 0 ? 'rgba(255, 179, 0, 0.2)' : 'rgba(0, 230, 118, 0.2)'
@@ -218,7 +218,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'broadcast',
                 icon: '📢',
                 title: t('tactical_modules.broadcast_title'),
-                subtitle: t('tactical_modules.broadcast_title'),
+                subtitle: t('tactical_modules.broadcast_sub'),
                 badge: t('tactical_modules.broadcast_badge'),
                 badgeColor: '#FF3355',
                 accentGlow: 'rgba(255, 51, 85, 0.2)'
@@ -228,7 +228,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'loraTransceiver',
                 icon: '📻',
                 title: t('tactical_modules.loraTransceiver_title'),
-                subtitle: t('tactical_modules.loraTransceiver_title'),
+                subtitle: t('tactical_modules.loraTransceiver_sub'),
                 badge: t('tactical_modules.loraTransceiver_badge'),
                 badgeColor: '#FFB300',
                 accentGlow: 'rgba(255, 179, 0, 0.2)'
@@ -238,7 +238,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'acousticWarfare',
                 icon: '🔊',
                 title: t('tactical_modules.acousticWarfare_title'),
-                subtitle: t('tactical_modules.acousticWarfare_title'),
+                subtitle: t('tactical_modules.acousticWarfare_sub'),
                 badge: t('tactical_modules.acousticWarfare_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -250,7 +250,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'radar',
                 icon: '📡',
                 title: t('tactical_modules.radar_title'),
-                subtitle: t('tactical_modules.radar_title'),
+                subtitle: t('tactical_modules.radar_sub'),
                 badge: t('tactical_modules.radar_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -260,7 +260,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'nearby',
                 icon: '📡',
                 title: t('tactical_modules.nearby_title'),
-                subtitle: t('tactical_modules.nearby_title'),
+                subtitle: t('tactical_modules.nearby_sub'),
                 badge: t('tactical_modules.nearby_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -270,7 +270,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'nodemap',
                 icon: '🗺️',
                 title: t('tactical_modules.nodemap_title'),
-                subtitle: t('tactical_modules.nodemap_title'),
+                subtitle: t('tactical_modules.nodemap_sub'),
                 badge: t('tactical_modules.nodemap_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -280,7 +280,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'offGridCompass',
                 icon: '🧭',
                 title: t('tactical_modules.offGridCompass_title'),
-                subtitle: t('tactical_modules.offGridCompass_title'),
+                subtitle: t('tactical_modules.offGridCompass_sub'),
                 badge: t('tactical_modules.offGridCompass_badge'),
                 badgeColor: '#FFB300',
                 accentGlow: 'rgba(255, 179, 0, 0.2)'
@@ -290,7 +290,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'p2pCompass',
                 icon: '🎯',
                 title: t('tactical_modules.p2pCompass_title'),
-                subtitle: t('tactical_modules.p2pCompass_title'),
+                subtitle: t('tactical_modules.p2pCompass_sub'),
                 badge: t('tactical_modules.p2pCompass_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -300,7 +300,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'celestialPdr',
                 icon: '✨',
                 title: t('tactical_modules.celestialPdr_title'),
-                subtitle: t('tactical_modules.celestialPdr_title'),
+                subtitle: t('tactical_modules.celestialPdr_sub'),
                 badge: t('tactical_modules.celestialPdr_badge'),
                 badgeColor: '#B388FF',
                 accentGlow: 'rgba(179, 136, 255, 0.2)'
@@ -310,7 +310,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'sonarSeismic',
                 icon: '🦇',
                 title: t('tactical_modules.sonarSeismic_title'),
-                subtitle: t('tactical_modules.sonarSeismic_title'),
+                subtitle: t('tactical_modules.sonarSeismic_sub'),
                 badge: t('tactical_modules.sonarSeismic_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -320,7 +320,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'tacticalFoxhunt',
                 icon: '🦊',
                 title: t('tactical_modules.tacticalFoxhunt_title'),
-                subtitle: t('tactical_modules.tacticalFoxhunt_title'),
+                subtitle: t('tactical_modules.tacticalFoxhunt_sub'),
                 badge: t('tactical_modules.tacticalFoxhunt_badge'),
                 badgeColor: '#FFB300',
                 accentGlow: 'rgba(255, 179, 0, 0.2)'
@@ -330,7 +330,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'shakePair',
                 icon: '📳',
                 title: t('tactical_modules.shakePair_title'),
-                subtitle: t('tactical_modules.shakePair_title'),
+                subtitle: t('tactical_modules.shakePair_sub'),
                 badge: t('tactical_modules.shakePair_badge'),
                 badgeColor: '#B388FF',
                 accentGlow: 'rgba(179, 136, 255, 0.2)'
@@ -340,7 +340,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'proximityWave',
                 icon: '🌊',
                 title: t('tactical_modules.proximityWave_title'),
-                subtitle: t('tactical_modules.proximityWave_title'),
+                subtitle: t('tactical_modules.proximityWave_sub'),
                 badge: t('tactical_modules.proximityWave_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -350,7 +350,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'rfSpectrum',
                 icon: '🛡️',
                 title: t('tactical_modules.rfSpectrum_title'),
-                subtitle: t('tactical_modules.rfSpectrum_title'),
+                subtitle: t('tactical_modules.rfSpectrum_sub'),
                 badge: t('tactical_modules.rfSpectrum_badge'),
                 badgeColor: '#FFB300',
                 accentGlow: 'rgba(255, 179, 0, 0.2)'
@@ -362,7 +362,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'extremeSurvival',
                 icon: '⚡',
                 title: t('tactical_modules.extremeSurvival_title'),
-                subtitle: t('tactical_modules.extremeSurvival_title'),
+                subtitle: t('tactical_modules.extremeSurvival_sub'),
                 badge: t('tactical_modules.extremeSurvival_badge'),
                 badgeColor: '#FF1E40',
                 accentGlow: 'rgba(255, 30, 64, 0.35)'
@@ -372,7 +372,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'vitalScan',
                 icon: '🫀',
                 title: t('tactical_modules.vitalScan_title'),
-                subtitle: t('tactical_modules.vitalScan_title'),
+                subtitle: t('tactical_modules.vitalScan_sub'),
                 badge: t('tactical_modules.vitalScan_badge'),
                 badgeColor: '#FF3355',
                 accentGlow: 'rgba(255, 51, 85, 0.25)'
@@ -382,7 +382,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'tcccBallistics',
                 icon: '🎯',
                 title: t('tactical_modules.tcccBallistics_title'),
-                subtitle: t('tactical_modules.tcccBallistics_title'),
+                subtitle: t('tactical_modules.tcccBallistics_sub'),
                 badge: t('tactical_modules.tcccBallistics_badge'),
                 badgeColor: '#FF3355',
                 accentGlow: 'rgba(255, 51, 85, 0.25)'
@@ -392,7 +392,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'survivalBeacon',
                 icon: '🚨',
                 title: t('tactical_modules.survivalBeacon_title'),
-                subtitle: t('tactical_modules.survivalBeacon_title'),
+                subtitle: t('tactical_modules.survivalBeacon_sub'),
                 badge: t('tactical_modules.survivalBeacon_badge'),
                 badgeColor: '#FF3355',
                 accentGlow: 'rgba(255, 51, 85, 0.25)'
@@ -402,7 +402,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'weather',
                 icon: '🌤️',
                 title: t('tactical_modules.weather_title'),
-                subtitle: t('tactical_modules.weather_title'),
+                subtitle: t('tactical_modules.weather_sub'),
                 badge: t('tactical_modules.weather_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -412,7 +412,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'atmosphericSafety',
                 icon: '💨',
                 title: t('tactical_modules.atmosphericSafety_title'),
-                subtitle: t('tactical_modules.atmosphericSafety_title'),
+                subtitle: t('tactical_modules.atmosphericSafety_sub'),
                 badge: t('tactical_modules.atmosphericSafety_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -422,7 +422,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'vitalResources',
                 icon: '💧',
                 title: t('tactical_modules.vitalResources_title'),
-                subtitle: t('tactical_modules.vitalResources_title'),
+                subtitle: t('tactical_modules.vitalResources_sub'),
                 badge: t('tactical_modules.vitalResources_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -432,7 +432,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'cbrnSatellite',
                 icon: '☢️',
                 title: t('tactical_modules.cbrnSatellite_title'),
-                subtitle: t('tactical_modules.cbrnSatellite_title'),
+                subtitle: t('tactical_modules.cbrnSatellite_sub'),
                 badge: t('tactical_modules.cbrnSatellite_badge'),
                 badgeColor: '#FF9100',
                 accentGlow: 'rgba(255, 145, 0, 0.25)'
@@ -442,7 +442,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'amber',
                 icon: '🟠',
                 title: t('tactical_modules.amber_title'),
-                subtitle: t('tactical_modules.amber_title'),
+                subtitle: t('tactical_modules.amber_sub'),
                 badge: t('tactical_modules.amber_badge'),
                 badgeColor: '#FF9100',
                 accentGlow: 'rgba(255, 145, 0, 0.2)'
@@ -452,7 +452,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'zkBarterSubsurface',
                 icon: '⚖️',
                 title: t('tactical_modules.zkBarterSubsurface_title'),
-                subtitle: t('tactical_modules.zkBarterSubsurface_title'),
+                subtitle: t('tactical_modules.zkBarterSubsurface_sub'),
                 badge: t('tactical_modules.zkBarterSubsurface_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -464,7 +464,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'idVault',
                 icon: '🪪',
                 title: t('tactical_modules.idVault_title'),
-                subtitle: t('tactical_modules.idVault_title'),
+                subtitle: t('tactical_modules.idVault_sub'),
                 badge: t('tactical_modules.idVault_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -474,7 +474,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'crypto',
                 icon: '🔐',
                 title: t('tactical_modules.crypto_title'),
-                subtitle: t('tactical_modules.crypto_title'),
+                subtitle: t('tactical_modules.crypto_sub'),
                 badge: t('tactical_modules.crypto_badge'),
                 badgeColor: '#B388FF',
                 accentGlow: 'rgba(179, 136, 255, 0.2)'
@@ -484,7 +484,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'globalShield',
                 icon: '🛡️',
                 title: t('tactical_modules.globalShield_title'),
-                subtitle: t('tactical_modules.globalShield_title'),
+                subtitle: t('tactical_modules.globalShield_sub'),
                 badge: `DEFCON ${shieldTelemetry.currentDefcon}`,
                 badgeColor: shieldTelemetry.activeProfile?.color || (shieldTelemetry.currentDefcon === 1 ? 'var(--accent-crimson)' : shieldTelemetry.currentDefcon === 2 ? '#FF8008' : shieldTelemetry.currentDefcon === 3 ? '#FFB300' : shieldTelemetry.currentDefcon === 5 ? '#00E676' : '#00E5FF'),
                 accentGlow: shieldTelemetry.currentDefcon === 1 ? 'rgba(255, 51, 85, 0.2)' : shieldTelemetry.currentDefcon === 2 ? 'rgba(255, 128, 8, 0.2)' : shieldTelemetry.currentDefcon === 5 ? 'rgba(0, 230, 118, 0.2)' : 'rgba(0, 229, 255, 0.2)'
@@ -494,7 +494,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'c4isrEmpDrill',
                 icon: '⚡',
                 title: t('tactical_modules.c4isrEmpDrill_title'),
-                subtitle: t('tactical_modules.c4isrEmpDrill_title'),
+                subtitle: t('tactical_modules.c4isrEmpDrill_sub'),
                 badge: t('tactical_modules.c4isrEmpDrill_badge'),
                 badgeColor: '#FFB300',
                 accentGlow: 'rgba(255, 179, 0, 0.2)'
@@ -504,7 +504,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'tacticalVisionScan',
                 icon: '👁️',
                 title: t('tactical_modules.tacticalVisionScan_title'),
-                subtitle: t('tactical_modules.tacticalVisionScan_title'),
+                subtitle: t('tactical_modules.tacticalVisionScan_sub'),
                 badge: t('tactical_modules.tacticalVisionScan_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -514,7 +514,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'airGapStego',
                 icon: '📷',
                 title: t('tactical_modules.airGapStego_title'),
-                subtitle: t('tactical_modules.airGapStego_title'),
+                subtitle: t('tactical_modules.airGapStego_sub'),
                 badge: t('tactical_modules.airGapStego_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -524,7 +524,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'stegoVault',
                 icon: '🖼️',
                 title: t('tactical_modules.stegoVault_title'),
-                subtitle: t('tactical_modules.stegoVault_title'),
+                subtitle: t('tactical_modules.stegoVault_sub'),
                 badge: t('tactical_modules.stegoVault_badge'),
                 badgeColor: '#B388FF',
                 accentGlow: 'rgba(179, 136, 255, 0.2)'
@@ -534,7 +534,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'shamirRecovery',
                 icon: '🔑',
                 title: t('tactical_modules.shamirRecovery_title'),
-                subtitle: t('tactical_modules.shamirRecovery_title'),
+                subtitle: t('tactical_modules.shamirRecovery_sub'),
                 badge: t('tactical_modules.shamirRecovery_badge'),
                 badgeColor: '#B388FF',
                 accentGlow: 'rgba(179, 136, 255, 0.2)'
@@ -544,7 +544,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'blackout',
                 icon: '⚡',
                 title: t('tactical_modules.blackout_title'),
-                subtitle: t('tactical_modules.blackout_title'),
+                subtitle: t('tactical_modules.blackout_sub'),
                 badge: t('tactical_modules.blackout_badge'),
                 badgeColor: '#FFB300',
                 accentGlow: 'rgba(255, 179, 0, 0.2)'
@@ -554,7 +554,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'dms',
                 icon: '💀',
                 title: t('tactical_modules.dms_title'),
-                subtitle: t('tactical_modules.dms_title'),
+                subtitle: t('tactical_modules.dms_sub'),
                 badge: t('tactical_modules.dms_badge'),
                 badgeColor: '#FF3355',
                 accentGlow: 'rgba(255, 51, 85, 0.2)'
@@ -564,7 +564,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'calculator',
                 icon: '🧮',
                 title: t('tactical_modules.calculator_title'),
-                subtitle: t('tactical_modules.calculator_title'),
+                subtitle: t('tactical_modules.calculator_sub'),
                 badge: t('tactical_modules.calculator_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -574,7 +574,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'guardian',
                 icon: '🛡️',
                 title: t('tactical_modules.guardian_title'),
-                subtitle: t('tactical_modules.guardian_title'),
+                subtitle: t('tactical_modules.guardian_sub'),
                 badge: t('tactical_modules.guardian_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -584,7 +584,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'security',
                 icon: '🛡️',
                 title: t('tactical_modules.security_title'),
-                subtitle: t('tactical_modules.security_title'),
+                subtitle: t('tactical_modules.security_sub'),
                 badge: t('tactical_modules.security_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -594,7 +594,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'secReport',
                 icon: '📑',
                 title: t('tactical_modules.secReport_title'),
-                subtitle: t('tactical_modules.secReport_title'),
+                subtitle: t('tactical_modules.secReport_sub'),
                 badge: t('tactical_modules.secReport_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -604,7 +604,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'backup',
                 icon: '💾',
                 title: t('tactical_modules.backup_title'),
-                subtitle: t('tactical_modules.backup_title'),
+                subtitle: t('tactical_modules.backup_sub'),
                 badge: t('tactical_modules.backup_badge'),
                 badgeColor: '#B388FF',
                 accentGlow: 'rgba(179, 136, 255, 0.2)'
@@ -614,7 +614,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'network',
                 icon: '🌐',
                 title: t('tactical_modules.network_title'),
-                subtitle: t('tactical_modules.network_title'),
+                subtitle: t('tactical_modules.network_sub'),
                 badge: t('tactical_modules.network_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -626,7 +626,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'commercialHub',
                 icon: '⚡',
                 title: t('tactical_modules.commercialHub_title'),
-                subtitle: t('tactical_modules.commercialHub_title'),
+                subtitle: t('tactical_modules.commercialHub_sub'),
                 badge: t('tactical_modules.commercialHub_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -636,7 +636,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'p2pPay',
                 icon: '💳',
                 title: t('tactical_modules.p2pPay_title'),
-                subtitle: t('tactical_modules.p2pPay_title'),
+                subtitle: t('tactical_modules.p2pPay_sub'),
                 badge: t('tactical_modules.p2pPay_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -646,7 +646,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'web3Vault',
                 icon: '🦊',
                 title: t('tactical_modules.web3Vault_title'),
-                subtitle: t('tactical_modules.web3Vault_title'),
+                subtitle: t('tactical_modules.web3Vault_sub'),
                 badge: t('tactical_modules.web3Vault_badge'),
                 badgeColor: '#FFB300',
                 accentGlow: 'rgba(255, 179, 0, 0.2)'
@@ -656,7 +656,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'explorer',
                 icon: '⛓️',
                 title: t('tactical_modules.explorer_title'),
-                subtitle: t('tactical_modules.explorer_title'),
+                subtitle: t('tactical_modules.explorer_sub'),
                 badge: t('tactical_modules.explorer_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -666,7 +666,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'aiCopilot',
                 icon: '🧠',
                 title: t('tactical_modules.aiCopilot_title'),
-                subtitle: t('tactical_modules.aiCopilot_title'),
+                subtitle: t('tactical_modules.aiCopilot_sub'),
                 badge: t('tactical_modules.aiCopilot_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -676,7 +676,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'appStore',
                 icon: '🏪',
                 title: t('tactical_modules.appStore_title'),
-                subtitle: t('tactical_modules.appStore_title'),
+                subtitle: t('tactical_modules.appStore_sub'),
                 badge: t('tactical_modules.appStore_badge'),
                 badgeColor: '#B388FF',
                 accentGlow: 'rgba(179, 136, 255, 0.2)'
@@ -686,7 +686,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'hyperBrowser',
                 icon: '🌐',
                 title: t('tactical_modules.hyperBrowser_title'),
-                subtitle: t('tactical_modules.hyperBrowser_title'),
+                subtitle: t('tactical_modules.hyperBrowser_sub'),
                 badge: t('tactical_modules.hyperBrowser_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -696,7 +696,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'health',
                 icon: '📊',
                 title: t('tactical_modules.health_title'),
-                subtitle: t('tactical_modules.health_title'),
+                subtitle: t('tactical_modules.health_sub'),
                 badge: t('tactical_modules.health_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -706,7 +706,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'nodeLogs',
                 icon: '📋',
                 title: t('tactical_modules.nodeLogs_title'),
-                subtitle: t('tactical_modules.nodeLogs_title'),
+                subtitle: t('tactical_modules.nodeLogs_sub'),
                 badge: t('tactical_modules.nodeLogs_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -716,7 +716,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'webCompanionLink',
                 icon: '💻',
                 title: t('tactical_modules.webCompanionLink_title'),
-                subtitle: t('tactical_modules.webCompanionLink_title'),
+                subtitle: t('tactical_modules.webCompanionLink_sub'),
                 badge: t('tactical_modules.webCompanionLink_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -726,7 +726,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'ecoMesh',
                 icon: '🔋',
                 title: t('tactical_modules.ecoMesh_title'),
-                subtitle: t('tactical_modules.ecoMesh_title'),
+                subtitle: t('tactical_modules.ecoMesh_sub'),
                 badge: t('tactical_modules.ecoMesh_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
@@ -736,7 +736,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'swarmHealthHUD',
                 icon: '📶',
                 title: t('tactical_modules.swarmHealthHUD_title'),
-                subtitle: t('tactical_modules.swarmHealthHUD_title'),
+                subtitle: t('tactical_modules.swarmHealthHUD_sub'),
                 badge: t('tactical_modules.swarmHealthHUD_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
@@ -746,7 +746,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'settings',
                 icon: '⚙️',
                 title: t('tactical_modules.settings_title'),
-                subtitle: t('tactical_modules.settings_title'),
+                subtitle: t('tactical_modules.settings_sub'),
                 badge: t('tactical_modules.settings_badge'),
                 badgeColor: '#94A3B8',
                 accentGlow: 'rgba(148, 163, 184, 0.2)'
@@ -756,7 +756,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 action: 'updater',
                 icon: '🚀',
                 title: t('tactical_modules.updater_title'),
-                subtitle: t('tactical_modules.updater_title'),
+                subtitle: t('tactical_modules.updater_sub'),
                 badge: t('tactical_modules.updater_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'

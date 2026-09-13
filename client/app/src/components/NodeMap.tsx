@@ -148,11 +148,18 @@ export default function NodeMap() {
     const [compassHeading, setCompassHeading] = useState<number>(() => tacticalCompass.getTelemetry().headingDeg);
 
     useEffect(() => {
+        let lastStateUpdate = 0;
         const unsub = tacticalCompass.subscribe((telemetry) => {
-            setCompassHeading(telemetry.headingDeg);
+            // Rotación directa en DOM a 60fps sin re-renderizar React
             const coneEl = document.getElementById("tactical-self-cone");
             if (coneEl) {
                 coneEl.style.transform = `rotate(${telemetry.headingDeg}deg)`;
+            }
+            // Limitar actualización de estado React a ~3Hz para evitar re-renderizado masivo
+            const now = Date.now();
+            if (now - lastStateUpdate > 350) {
+                lastStateUpdate = now;
+                setCompassHeading(telemetry.headingDeg);
             }
         });
         return unsub;
@@ -554,18 +561,18 @@ export default function NodeMap() {
         return () => clearInterval(interval);
     }, [identity, status, contacts, gpsData.lat, gpsData.lng]);
 
-    // 3. Inicialización e Interacción del Mapa Leaflet
+    // 3. Inicialización e Interacción del Mapa Leaflet Base (Instancia Única)
     useEffect(() => {
         if (!mapContainerRef.current) return;
-        let mapInstance: any = null;
+        let isCancelled = false;
 
         const initMap = async () => {
             const L = (await import("leaflet")).default;
-            if (!mapContainerRef.current) return;
+            if (!mapContainerRef.current || isCancelled) return;
 
             if (!leafletMapRef.current) {
-                mapInstance = L.map(mapContainerRef.current, {
-                    center: [gpsData.lat, gpsData.lng],
+                const mapInstance = L.map(mapContainerRef.current, {
+                    center: [gpsData.lat || 19.4326, gpsData.lng || -99.1332],
                     zoom: 17,
                     zoomControl: false,
                     attributionControl: false
@@ -590,23 +597,20 @@ export default function NodeMap() {
                             return tile;
                         }
 
-                        // 1. Consultar primero la bóveda IndexedDB
-                        offlineTileCacheEngine.getTile(coords.z, coords.x, coords.y).then((cachedBlob) => {
-                            if (cachedBlob) {
-                                const blobUrl = URL.createObjectURL(cachedBlob);
-                                (tile as any)._blobUrl = blobUrl;
-                                tile.src = blobUrl;
-                            } else {
-                                const url = (this as any).getTileUrl(coords);
-                                tile.src = url;
-                                // Guardar en caché automáticamente si se descarga de la red
-                                fetch(url).then(res => res.ok ? res.blob() : null).then(blob => {
-                                    if (blob) offlineTileCacheEngine.saveTile(coords.z, coords.x, coords.y, blob);
-                                }).catch(() => {});
-                            }
-                        }).catch(() => {
-                            tile.src = (this as any).getTileUrl(coords);
-                        });
+                        const url = (this as any).getTileUrl(coords);
+                        offlineTileCacheEngine.getOrFetchTile(coords.z, coords.x, coords.y, url)
+                            .then((blob) => {
+                                if (blob) {
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    (tile as any)._blobUrl = blobUrl;
+                                    tile.src = blobUrl;
+                                } else {
+                                    tile.src = (this as any).options.errorTileUrl;
+                                }
+                            })
+                            .catch(() => {
+                                tile.src = (this as any).options.errorTileUrl;
+                            });
 
                         return tile;
                     },
@@ -637,20 +641,41 @@ export default function NodeMap() {
                 const markersGroup = L.layerGroup().addTo(mapInstance);
                 markersGroupRef.current = markersGroup;
                 leafletMapRef.current = mapInstance;
-            } else {
-                mapInstance = leafletMapRef.current;
+
+                // Recálculo dinámico de dimensiones (solo al montar)
+                setTimeout(() => {
+                    try {
+                        mapInstance?.invalidateSize();
+                    } catch {}
+                }, 250);
             }
+        };
 
-            // Recálculo dinámico de dimensiones
-            setTimeout(() => {
+        initMap();
+
+        return () => {
+            isCancelled = true;
+            if (leafletMapRef.current) {
                 try {
-                    mapInstance?.invalidateSize();
+                    leafletMapRef.current.remove();
                 } catch {}
-            }, 250);
+                leafletMapRef.current = null;
+                markersGroupRef.current = null;
+                osmLayerRef.current = null;
+            }
+        };
+    }, []);
 
-            // Actualizar Marcadores
-            if (markersGroupRef.current) {
-                markersGroupRef.current.clearLayers();
+    // 4. Actualización Reactiva de Marcadores Tácticos (Sin Recargar Mapa ni Teselas)
+    useEffect(() => {
+        if (!markersGroupRef.current || !leafletMapRef.current) return;
+        let isCancelled = false;
+
+        const updateMarkers = async () => {
+            const L = (await import("leaflet")).default;
+            if (isCancelled || !markersGroupRef.current) return;
+
+            markersGroupRef.current.clearLayers();
 
                 // Marcador de Ubicación Propia (GPS Real o PDR Inercial con Cono de Rumbo 3D)
                 const selfIcon = L.divIcon({
@@ -975,11 +1000,14 @@ export default function NodeMap() {
                         }
                     }
                 } catch {}
-            }
-        };
+            };
 
-        initMap();
-    }, [effectiveLat, effectiveLng, peers, target, isPdrActive, sitreps, mapMode]);
+        updateMarkers();
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [effectiveLat, effectiveLng, peers, target, isPdrActive, sitreps]);
 
     const recenterMap = () => {
         if (leafletMapRef.current) {

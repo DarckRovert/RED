@@ -693,21 +693,29 @@ export function OffGridCompassModal() {
                         tile.alt = '';
                         tile.setAttribute('role', 'presentation');
 
-                        offlineTileCacheEngine.getTile(coords.z, coords.x, coords.y).then((cachedBlob) => {
-                            if (cachedBlob) {
-                                tile.src = URL.createObjectURL(cachedBlob);
-                            } else {
-                                const url = (this as any).getTileUrl(coords);
-                                tile.src = url;
-                                fetch(url).then(res => res.ok ? res.blob() : null).then(blob => {
-                                    if (blob) offlineTileCacheEngine.saveTile(coords.z, coords.x, coords.y, blob);
-                                }).catch(() => {});
-                            }
-                        }).catch(() => {
-                            tile.src = (this as any).getTileUrl(coords);
-                        });
+                        const url = (this as any).getTileUrl(coords);
+                        offlineTileCacheEngine.getOrFetchTile(coords.z, coords.x, coords.y, url)
+                            .then((blob) => {
+                                if (blob) {
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    (tile as any)._blobUrl = blobUrl;
+                                    tile.src = blobUrl;
+                                } else {
+                                    tile.src = (this as any).options.errorTileUrl;
+                                }
+                            })
+                            .catch(() => {
+                                tile.src = (this as any).options.errorTileUrl;
+                            });
 
                         return tile;
+                    },
+                    _removeTile(key: string) {
+                        const tile = (this as any)._tiles[key]?.el;
+                        if (tile && (tile as any)._blobUrl) {
+                            try { URL.revokeObjectURL((tile as any)._blobUrl); } catch {}
+                        }
+                        (L.TileLayer.prototype as any)._removeTile?.call(this, key);
                     }
                 });
 
@@ -715,18 +723,6 @@ export function OffGridCompassModal() {
                     maxZoom: 19,
                     className: "tactical-dark-tile",
                     errorTileUrl: "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' fill='%23050812'%3E%3Crect width='256' height='256'/%3E%3Cpath d='M0 0h256v256H0z' stroke='%2300E5FF' stroke-width='0.4' stroke-opacity='0.2' fill='none'/%3E%3C/svg%3E"
-                });
-
-                // Fallback a Esri World Dark Gray Base si OSM experimenta latencia o desconexión
-                osmLayer.on("tileerror", () => {
-                    if (!mapInstance) return;
-                    try {
-                        const fallbackLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
-                            maxZoom: 16,
-                            className: "tactical-dark-tile"
-                        });
-                        fallbackLayer.addTo(mapInstance);
-                    } catch {}
                 });
 
                 osmLayer.addTo(mapInstance);
@@ -788,7 +784,7 @@ export function OffGridCompassModal() {
                     const targetMarker = L.marker([target.lat, target.lon], { icon: targetIcon }).addTo(markersGroupRef.current);
                     
                     const distText = activeCoords 
-                        ? OffGridNavigationEngine.calculateTacticalGuidance(activeCoords.lat, activeCoords.lon, target.lat, target.lon, heading).formattedDistance
+                        ? OffGridNavigationEngine.calculateTacticalGuidance(activeCoords.lat, activeCoords.lon, target.lat, target.lon, 0).formattedDistance
                         : "Calculando...";
 
                     targetMarker.bindPopup(`
@@ -849,7 +845,7 @@ export function OffGridCompassModal() {
                 markersGroupRef.current = null;
             }
         };
-    }, [activeTab, activeCoords, target, waypoints, heading, handleSetTarget, pdrState.isTracking]);
+    }, [activeTab, activeCoords?.lat, activeCoords?.lon, target?.lat, target?.lon, waypoints.length, handleSetTarget, pdrState.isTracking]);
 
     const recenterMapOnUser = () => {
         if (leafletMapRef.current && activeCoords) {

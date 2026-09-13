@@ -69,7 +69,7 @@ export type NestedKeyOf<ObjectType extends object> = {
 
 export type TranslationKey = NestedKeyOf<I18nSchema>;
 
-export type TranslationFunction = ((key: TranslationKey | string, params?: Record<string, string | number>) => string) & I18nSchema;
+export type TranslationFunction = ((key: TranslationKey | string, params?: Record<string, string | number>, defaultValue?: string) => string) & I18nSchema;
 
 interface I18nContextValue {
     lang: SupportedLanguage;
@@ -140,10 +140,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         const primaryDict = DICTIONARIES[activeLang] || DICTIONARIES.es;
         const fallbackDict = DICTIONARIES.es;
 
-        const fn = (key: TranslationKey | string, params?: Record<string, string | number>): string => {
+        const fn = (key: TranslationKey | string, params?: Record<string, string | number>, defaultValue?: string): string => {
             let translation = getNestedTranslation(primaryDict, key);
             if (!translation) {
-                translation = getNestedTranslation(fallbackDict, key) || key;
+                translation = getNestedTranslation(fallbackDict, key);
             }
 
             if (params && translation) {
@@ -152,7 +152,12 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
                 });
             }
 
-            return translation || key;
+            if (translation) return translation;
+            if (defaultValue) return defaultValue;
+            if (typeof key === 'string' && key.includes('.')) {
+                return '';
+            }
+            return key;
         };
 
         return new Proxy(fn, {
@@ -207,14 +212,19 @@ export function useTranslation() {
         const primaryDict = DICTIONARIES[detected] || DICTIONARIES.es;
         const fallbackDict = DICTIONARIES.es;
 
-        const fn = (key: string, params?: Record<string, string | number>) => {
-            let res = getNestedTranslation(primaryDict, key) || getNestedTranslation(fallbackDict, key) || key;
+        const fn = (key: string, params?: Record<string, string | number>, defaultValue?: string) => {
+            let res = getNestedTranslation(primaryDict, key) || getNestedTranslation(fallbackDict, key);
             if (params && res) {
+                let formatted = res;
                 Object.entries(params).forEach(([pk, v]) => {
-                    res = res.replace(new RegExp(`{${pk}}`, 'g'), String(v));
+                    formatted = formatted.replace(new RegExp(`{${pk}}`, 'g'), String(v));
                 });
+                res = formatted;
             }
-            return res;
+            if (res) return res;
+            if (defaultValue) return defaultValue;
+            if (typeof key === 'string' && key.includes('.')) return '';
+            return key;
         };
 
         const t = new Proxy(fn, {

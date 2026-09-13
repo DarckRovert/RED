@@ -17,8 +17,8 @@ function extractKeys(tsContent) {
             continue;
         }
         
-        // Match properties inside objects e.g. "        title: ..."
-        const propMatch = line.match(/^\s{8}([a-zA-Z0-9_]+):\s*["`]/);
+        // Match properties inside objects e.g. "        title: ..." or "        \"title\": ..."
+        const propMatch = line.match(/^\s{8}["']?([a-zA-Z0-9_]+)["']?\s*:\s*["'`]/);
         if (propMatch && currentObject) {
             keys.push(`${currentObject}.${propMatch[1]}`);
         }

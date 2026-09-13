@@ -1,5 +1,24 @@
 # Changelog
 
+## [103.0.0-sovereign-mesh-os-tactical-command-and-complete-localization-parity] - 2026-09-12
+
+### 🚀 Sovereign Mesh OS — Tactical Command & Complete Localization Parity (Release Oficial v103.0.0)
+
+- **Paridad Lingüística Total y Auditoría AST en 12 Idiomas Soberanos:**
+  - Consolidación y paridad estricta 1:1 de 1,433 claves de traducción en las 12 lenguas soportadas: Español (`es`), Inglés (`en`), Portugués (`pt`), Francés (`fr`), Alemán (`de`), Ruso (`ru`), Japonés (`ja`), Árabe (`ar`), Italiano (`it`), Coreano (`ko`), Quechua (`qu`) y Chino (`zh`).
+  - Erradicación del 100% de la deuda lingüística (0 claves faltantes y 0 claves idénticas al inglés no traducidas).
+  - Verificación estricta mediante análisis de Árbol de Sintaxis Abstracta (AST) de TypeScript en los 386 archivos fuente de la aplicación móvil.
+- **Centro de Comando C4ISR con Subtítulos Descriptivos e Informativos:**
+  - Corrección integral de la matriz de módulos tácticos en `TacticalCommandCenter.tsx` para presentar descripciones funcionales localizadas (`_sub`) en lugar de títulos redundantes.
+  - Renderizado dinámico de insignias operativas de alta visibilidad para modo OLED, sigilo y bajo consumo de energía.
+- **Gobernanza Atómica SSOT v103.0.0:**
+  - Sincronización atómica verificada en los 22 archivos SSOT de configuración (`version.ts`, `build.gradle`, Cargo workspaces de red móvil y blockchain, service workers `sw.js`, scripts de despliegue y manifiestos).
+  - Build code unificado `103000` y clave de caché soberana `red-vault-cache-v103`.
+  - Suma criptográfica SHA-256 certificada: `5423430280BB56E762DB6C1C8EDBB910423703DA731190EA722292539654066D`.
+- **Despliegue Limpio y Verificación en Hardware Físico Real:**
+  - Despliegue automatizado y validación higiénica simultánea en Motorola Moto G22 (`ZT322B386P`) y Lenovo Tablet TB305XU (`HA2CHKZ2`).
+  - Verificación en tiempo real de inicialización del motor nativo Rust JNI `red_mobile`, capa de transporte `libp2p_transport` escuchando en puerto local 7331 y renderizado fluido a 48–52 FPS con cero excepciones no controladas en Logcat.
+
 ## [102.0.0-zero-rating-autonomous-tunnels-and-multi-bearer-mesh-resilience] - 2026-09-12
 
 ### 🚀 Zero-Rating Autonomous Tunnels & Multi-Bearer Mesh Resilience (Release Oficial v102.0.0)

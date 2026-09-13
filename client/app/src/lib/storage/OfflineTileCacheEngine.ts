@@ -35,6 +35,14 @@ const DB_VERSION = 1;
 
 class OfflineTileCacheEngineClass {
     private dbPromise: Promise<IDBDatabase> | null = null;
+    private inFlightRequests: Map<string, Promise<Blob | null>> = new Map();
+    private failedTileCache: Map<string, number> = new Map();
+
+    public static readonly TILE_PROVIDERS = [
+        "https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png",
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+    ];
 
     private getDB(): Promise<IDBDatabase> {
         if (this.dbPromise) return this.dbPromise;
@@ -288,6 +296,84 @@ class OfflineTileCacheEngineClass {
     }
 
     /**
+     * Deduplicated atomic tile retriever:
+     * 1. Checks IndexedDB cache first.
+     * 2. If missing, checks negative cache (failed recently within 60s).
+     * 3. If in-flight network request exists for this key, shares the existing promise.
+     * 4. Otherwise, triggers a polite multi-provider fetch, persists to IndexedDB on success,
+     *    and returns the Blob.
+     */
+    public async getOrFetchTile(
+        z: number,
+        x: number,
+        y: number,
+        preferredUrl?: string,
+        abortSignal?: AbortSignal
+    ): Promise<Blob | null> {
+        const key = `${z}_${x}_${y}`;
+
+        // 1. Check IndexedDB
+        const cached = await this.getTile(z, x, y);
+        if (cached) return cached;
+
+        // 2. Check negative cache (recent failure throttle 60s)
+        const failedAt = this.failedTileCache.get(key);
+        if (failedAt && Date.now() - failedAt < 60000) {
+            return null;
+        }
+
+        // 3. Deduplicate in-flight requests
+        if (this.inFlightRequests.has(key)) {
+            return this.inFlightRequests.get(key)!;
+        }
+
+        // 4. Create single in-flight fetch promise
+        const fetchPromise = (async (): Promise<Blob | null> => {
+            const candidateUrls: string[] = [];
+            if (preferredUrl) candidateUrls.push(preferredUrl);
+
+            for (const tpl of OfflineTileCacheEngineClass.TILE_PROVIDERS) {
+                const built = tpl.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
+                if (!candidateUrls.includes(built)) {
+                    candidateUrls.push(built);
+                }
+            }
+
+            for (const url of candidateUrls) {
+                if (abortSignal?.aborted) break;
+                try {
+                    const res = await fetch(url, {
+                        signal: abortSignal,
+                        headers: {
+                            'Accept': 'image/avif,image/webp,image/png,image/*;q=0.8'
+                        }
+                    });
+
+                    if (res.ok) {
+                        const blob = await res.blob();
+                        if (blob && blob.size > 100) {
+                            await this.saveTile(z, x, y, blob);
+                            this.failedTileCache.delete(key);
+                            return blob;
+                        }
+                    }
+                } catch {
+                    // Try next fallback provider
+                }
+            }
+
+            // All candidates failed or network offline
+            this.failedTileCache.set(key, Date.now());
+            return null;
+        })().finally(() => {
+            this.inFlightRequests.delete(key);
+        });
+
+        this.inFlightRequests.set(key, fetchPromise);
+        return fetchPromise;
+    }
+
+    /**
      * Pre-downloads all tiles for a specified geographic region with live progress callback
      */
     public async downloadRegion(
@@ -323,8 +409,8 @@ class OfflineTileCacheEngineClass {
 
         report(false);
 
-        // Worker concurrency pool of 4
-        const concurrency = 4;
+        // Polite concurrency pool of 2 workers (OSM-friendly, prevents HTTP 429)
+        const concurrency = 2;
         let index = 0;
 
         const downloadWorker = async () => {
@@ -345,15 +431,18 @@ class OfflineTileCacheEngineClass {
                     continue;
                 }
 
-                // Fetch tile from OpenStreetMap
-                const url = `https://tile.openstreetmap.org/${currentTile.z}/${currentTile.x}/${currentTile.y}.png`;
+                // Small polite inter-request delay (50ms) to avoid server burst bans
+                await new Promise(r => setTimeout(r, 50));
+                if (abortSignal?.aborted) break;
+
                 try {
-                    const res = await fetch(url, { signal: abortSignal });
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    const blob = await res.blob();
-                    await this.saveTile(currentTile.z, currentTile.x, currentTile.y, blob);
-                    downloaded++;
-                    bytesDownloaded += blob.size;
+                    const blob = await this.getOrFetchTile(currentTile.z, currentTile.x, currentTile.y, undefined, abortSignal);
+                    if (blob) {
+                        downloaded++;
+                        bytesDownloaded += blob.size;
+                    } else {
+                        failed++;
+                    }
                 } catch (e: any) {
                     failed++;
                 }

@@ -491,8 +491,8 @@ export default function Sidebar() {
                                 }}
                             >
                                 <span style={{ fontSize: "1.3rem" }}>🚀</span>
-                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)" }}>Actualizador OTA</span>
-                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>DISTRIBUCIÓN P2P</span>
+                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)" }}>{t('tactical_modules.updater_title') || 'Actualizador OTA'}</span>
+                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>{t('tactical_modules.updater_badge') || 'P2P OTA'}</span>
                             </button>
                             <button
                                 onClick={() => { setMenuOpen(false); navigate("settings"); }}
@@ -504,8 +504,8 @@ export default function Sidebar() {
                                 }}
                             >
                                 <span style={{ fontSize: "1.3rem" }}>⚙️</span>
-                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "#FFFFFF" }}>Ajustes del Sistema</span>
-                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>CONFIGURACIÓN</span>
+                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "#FFFFFF" }}>{t('tactical_modules.settings_title') || t('sidebar.settings') || 'Ajustes'}</span>
+                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>{t('tactical_modules.settings_badge') || 'CONFIG'}</span>
                             </button>
                             <button
                                 onClick={() => { setMenuOpen(false); navigate("appStore"); }}
@@ -517,8 +517,8 @@ export default function Sidebar() {
                                 }}
                             >
                                 <span style={{ fontSize: "1.3rem" }}>🛒</span>
-                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-emerald, #00E676)" }}>App Store P2P</span>
-                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>MINI-APPS SANDBOX</span>
+                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-emerald, #00E676)" }}>{t('tactical_modules.appStore_title') || 'App Store'}</span>
+                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>{t('tactical_modules.appStore_badge') || 'MINI-APPS'}</span>
                             </button>
                             <button
                                 onClick={() => { setMenuOpen(false); navigate("hyperBrowser"); }}
@@ -530,23 +530,23 @@ export default function Sidebar() {
                                 }}
                             >
                                 <span style={{ fontSize: "1.3rem" }}>🌐</span>
-                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)" }}>Hyper-Browser</span>
-                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>P2P MESH HTTP</span>
+                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)" }}>{t('tactical_modules.hyperBrowser_title') || 'Hyper-Browser'}</span>
+                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>{t('tactical_modules.hyperBrowser_badge') || 'PROXY P2P'}</span>
                             </button>
                         </div>
 
                         {/* Operational Mode Quick Selector */}
                         <div style={{ padding: "0 18px 12px 18px", display: "flex", flexDirection: "column", gap: "6px", flexShrink: 0 }}>
                             <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, textTransform: "uppercase" }}>
-                                PERFIL OPERACIONAL MIL-STD
+                                {t('common.operational_profile') || 'PERFIL OPERACIONAL MIL-STD'}
                             </div>
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "5px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(85px, 1fr))", gap: "5px" }}>
                                 {[
-                                    { id: 'stealth', icon: '🕶️', label: 'Sigilo' },
-                                    { id: 'scotopic_red', icon: '🔴', label: 'Luz Roja' },
-                                    { id: 'solar', icon: '☀️', label: 'Solar' },
-                                    { id: 'survival', icon: '⚡', label: 'Apagón' },
-                                    { id: 'offgrid', icon: '🛒', label: 'Off-Grid' }
+                                    { id: 'stealth', icon: '🕶️', label: t('common.mode_stealth') || 'Sigilo' },
+                                    { id: 'scotopic_red', icon: '🔴', label: t('settings.mode_red_light') || 'Luz Roja' },
+                                    { id: 'solar', icon: '☀️', label: t('settings.mode_solar') || 'Solar' },
+                                    { id: 'survival', icon: '⚡', label: t('settings.mode_blackout') || 'Apagón' },
+                                    { id: 'offgrid', icon: '🛒', label: t('settings.mode_offgrid') || 'Off-Grid' }
                                 ].map(m => {
                                     const isSel = (preferences.operationalMode || 'stealth') === m.id;
                                     return (
@@ -572,7 +572,7 @@ export default function Sidebar() {
                                             }}
                                         >
                                             <span>{m.icon}</span>
-                                            <span>{m.label}</span>
+                                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.label}</span>
                                         </button>
                                     );
                                 })}
@@ -627,11 +627,12 @@ export default function Sidebar() {
                                                     background: "rgba(255, 255, 255, 0.04)",
                                                     border: "1px solid rgba(255, 255, 255, 0.1)",
                                                     borderRadius: "8px", display: "flex", alignItems: "center", gap: "5px",
-                                                    color: "#FFFFFF", cursor: "pointer", transition: "all 0.15s ease"
+                                                    color: "#FFFFFF", cursor: "pointer", transition: "all 0.15s ease",
+                                                    maxWidth: "100%"
                                                 }}
                                             >
-                                                <span>{tool.icon}</span>
-                                                <span>{tool.label}</span>
+                                                <span style={{ flexShrink: 0 }}>{tool.icon}</span>
+                                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tool.label}</span>
                                             </button>
                                         ))}
                                     </div>

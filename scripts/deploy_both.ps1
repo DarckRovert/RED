@@ -1,7 +1,21 @@
 $ErrorActionPreference = "Continue"
 $adb = "C:\Users\darck\AppData\Local\Android\Sdk\platform-tools\adb.exe"
 $apk = "d:\PROYECTO RED\release-assets\red-latest.apk"
-$devices = @("ZT322B386P", "HA2CHKZ2")
+# Obtener dispositivos conectados dinamicamente
+$rawDevices = & $adb devices
+$devices = @()
+foreach ($line in $rawDevices) {
+    if ($line -match '^([a-zA-Z0-9_-]+)\s+device$') {
+        $devices += $matches[1]
+    }
+}
+
+if ($devices.Count -eq 0) {
+    Write-Error "No se encontraron dispositivos Android conectados por ADB."
+    exit 1
+}
+
+Write-Host "Dispositivos detectados: $($devices -join ', ')"
 $perms = @(
     "android.permission.RECORD_AUDIO",
     "android.permission.ACCESS_FINE_LOCATION",
@@ -20,7 +34,7 @@ foreach ($dev in $devices) {
     Write-Host "1. Desinstalando version previa..."
     & $adb -s $dev uninstall f.red.app
 
-    Write-Host "2. Instalando APK v102.0.0 limpia ($apk)..."
+    Write-Host "2. Instalando APK v103.0.0 limpia ($apk)..."
     & $adb -s $dev install -r -d $apk
 
     Write-Host "3. Otorgando permisos de sistema..."
