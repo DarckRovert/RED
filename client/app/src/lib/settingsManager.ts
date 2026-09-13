@@ -421,6 +421,14 @@ export class SettingsManager {
             root.classList.add('mode-defcon-survival');
         }
 
+        // 4.2 Modo de Interfaz Soberana: Familiar (WhatsApp) vs Táctico (C4ISR)
+        root.classList.remove('mode-familiar', 'mode-tactical');
+        if (prefs.uiMode === 'tactical') {
+            root.classList.add('mode-tactical');
+        } else {
+            root.classList.add('mode-familiar');
+        }
+
         // 5. Protección de Privacidad Nativa (FLAG_SECURE en Android)
         if (typeof window !== 'undefined') {
             localStorage.setItem('red_privacy_screen', prefs.privacyScreen ? 'true' : 'false');

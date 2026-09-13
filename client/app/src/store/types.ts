@@ -8,6 +8,19 @@ import {
 import { UserPreferences } from '../lib/settingsManager';
 import { SovereignPaymentPassport } from '../lib/miniapp/RedSDKTypes';
 
+// ── Tactical Target (Blanco Táctico) ─────────────────────────────────────────
+// Tipo canónico importado desde OffGridNavigationEngine para consistencia.
+// Esta interfaz se replica aquí para evitar una dependencia circular de store → engine.
+export interface TacticalTargetPoint {
+    lat: number;
+    lon: number;
+    name?: string;
+    createdAt: number;
+    /** Módulo que fijó el blanco: 'NodeMap' | 'Radar' | 'P2PCompass' | 'OffGridCompass' | ... */
+    source?: string;
+}
+
+
 // ── Live Streaming Types ──────────────────────────────────────────────────────
 export interface LiveStreamItem {
     stream_id: string;
@@ -205,7 +218,17 @@ export interface RedStore {
     unblockNode: (hash: string) => void;
     deleteContact: (hash: string) => Promise<void>;
     dismissContactRequestModal: () => void;
+
+    // ── Tactical Target — Blanco Táctico Compartido (v103.0.0) ────────────────
+    // Reemplaza el patrón localStorage event-driven (red_active_target /
+    // red_tactical_target_point) que era inestable en Capacitor/WebView.
+    // Fuente única de verdad para NodeMap, Radar, P2PCompass, OffGridCompass,
+    // Foxhunt, TCCC, CelestialPDR, SonarSeismic, SurvivalBeacon, LoraTransceiver.
+    tacticalTarget: TacticalTargetPoint | null;
+    setTacticalTarget: (target: TacticalTargetPoint | null, source?: string) => void;
+    clearTacticalTarget: () => void;
 }
+
 
 /** Screens that act as overlays and must NOT clear activeConversationId */
 export const OVERLAY_SCREENS = new Set<ScreenView>([

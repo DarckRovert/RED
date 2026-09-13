@@ -189,10 +189,9 @@ export function TacticalFoxhuntModal() {
                 lat: fix.targetLat,
                 lon: fix.targetLon,
                 name: `BLANCO FOXHUNT (${fix.lobsUsed} LOBs)`,
-                type: "RDF_TARGET",
-                radiusMeters: fix.uncertaintyRadiusMeters
+                createdAt: Date.now(),
             };
-            localStorage.setItem("red_active_target", JSON.stringify(target));
+            useRedStore.getState().setTacticalTarget(target, 'Foxhunt');
             const rawWp = localStorage.getItem("red_offgrid_waypoints");
             const wps = rawWp ? JSON.parse(rawWp) : [];
             wps.unshift({

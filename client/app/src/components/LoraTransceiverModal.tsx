@@ -539,13 +539,12 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                                                 <button
                                                     onClick={() => {
                                                         try {
-                                                            localStorage.setItem('red_active_target', JSON.stringify({
+                                                            useRedStore.getState().setTacticalTarget({
                                                                 name: `NODO LORA: ${node.user.longName || node.user.shortName}`,
                                                                 lat: 0,
                                                                 lon: 0,
-                                                                type: 'LORA_NODE',
-                                                                rssi: node.rssi
-                                                            }));
+                                                                createdAt: Date.now(),
+                                                            }, 'LoraTransceiver');
                                                             toast.success(`Foxhunt apuntado a nodo 0x${node.nodeNum.toString(16)}`);
                                                             if (onClose) onClose();
                                                             useRedStore.getState().navigate('tacticalFoxhunt');

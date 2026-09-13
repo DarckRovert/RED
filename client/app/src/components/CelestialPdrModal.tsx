@@ -181,11 +181,9 @@ export function CelestialPdrModal() {
                     lat: estimatedCoords.estimatedLat,
                     lon: estimatedCoords.estimatedLon,
                     name: "FIJACIÓN CELESTE",
-                    type: "CELESTIAL",
-                    createdAt: Date.now()
+                    createdAt: Date.now(),
                 };
-                localStorage.setItem("red_active_target", JSON.stringify(target));
-                localStorage.setItem("red_tactical_target_point", JSON.stringify(target));
+                useRedStore.getState().setTacticalTarget(target, 'CelestialPDR');
                 toast.success(`🧭 Posición celeste [${estimatedCoords.estimatedLat}°, ${estimatedCoords.estimatedLon}°] fijada. Abriendo Brújula...`);
                 navigate("compass");
             } catch (e: any) {

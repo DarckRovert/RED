@@ -57,6 +57,36 @@ export function TcccBallisticsModal() {
         return null;
     });
 
+    // Incidente Médico / Triaje transferido desde VitalScan (Sinergia Inter-Módulos)
+    const [triageIncident, setTriageIncident] = useState<{
+        victimLabel: string;
+        category: string;
+        actionRequired: string;
+        bpm?: number;
+        spo2?: number;
+        respRate?: number;
+        capRefillSec?: number;
+        coords?: { lat?: number; lon?: number };
+        timestamp: number;
+    } | null>(() => {
+        if (typeof window !== "undefined") {
+            try {
+                const raw = localStorage.getItem("red_triage_transfer");
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (Date.now() - parsed.timestamp < 7200000) return parsed;
+                }
+            } catch {}
+        }
+        return null;
+    });
+
+    const handleClearTriageIncident = () => {
+        setTriageIncident(null);
+        try { localStorage.removeItem("red_triage_transfer"); } catch {}
+        TacticalAudioEngine.playTap();
+    };
+
     useEffect(() => {
         const handleVaultUpdate = (e: any) => {
             if (e.detail !== undefined) {
@@ -143,41 +173,37 @@ export function TcccBallisticsModal() {
     };
 
     const handleImportTargetDistance = () => {
-        try {
-            const rawTarget = localStorage.getItem("red_tactical_target_point") || localStorage.getItem("red_active_target");
-            if (!rawTarget) {
-                toast.warning("No hay un blanco táctico activo fijado en el sistema");
-                return;
-            }
-            const parsed = JSON.parse(rawTarget);
-            const targetLat = typeof parsed.lat === "number" ? parsed.lat : undefined;
-            const targetLon = typeof parsed.lon === "number" ? parsed.lon : (typeof parsed.lng === "number" ? parsed.lng : undefined);
-            if (targetLat === undefined || targetLon === undefined) {
-                toast.warning("El blanco táctico no posee coordenadas geográficas");
-                return;
-            }
-
-            const myLoc = TacticalLocationEngine.getLastKnownLocation();
-            if (!myLoc || !TacticalLocationEngine.isValidCoordinates(myLoc.lat, myLoc.lon)) {
-                toast.warning("Se requiere posición GPS propia para calcular la distancia al blanco");
-                return;
-            }
-
-            const dist = calculateHaversineDistanceMeters(myLoc.lat!, myLoc.lon!, targetLat, targetLon);
-            const clampedDist = Math.min(1500, Math.max(50, dist));
-            setDistance(clampedDist);
-            TacticalAudioEngine.playRogerBeep();
-            toast.success(`🎯 Distancia de [${parsed.name || "Blanco"}]: ${dist}m (Fijada en ${clampedDist}m)`);
-        } catch (e: any) {
-            toast.error("Fallo al importar distancia: " + e.message);
+        const storedTarget = useRedStore.getState().tacticalTarget;
+        if (!storedTarget) {
+            toast.warning("No hay un blanco táctico activo fijado en el sistema");
+            return;
         }
+        const targetLat = typeof storedTarget.lat === "number" ? storedTarget.lat : undefined;
+        const targetLon = typeof storedTarget.lon === "number" ? storedTarget.lon : undefined;
+        if (targetLat === undefined || targetLon === undefined) {
+            toast.warning("El blanco táctico no posee coordenadas geográficas");
+            return;
+        }
+
+        const myLoc = TacticalLocationEngine.getLastKnownLocation();
+        if (!myLoc || !TacticalLocationEngine.isValidCoordinates(myLoc.lat, myLoc.lon)) {
+            toast.warning("Se requiere posición GPS propia para calcular la distancia al blanco");
+            return;
+        }
+
+        const dist = calculateHaversineDistanceMeters(myLoc.lat!, myLoc.lon!, targetLat, targetLon);
+        const clampedDist = Math.min(1500, Math.max(50, dist));
+        setDistance(clampedDist);
+        TacticalAudioEngine.playRogerBeep();
+        toast.success(`🎯 Distancia de [${storedTarget.name || "Blanco"}]: ${dist}m (Fijada en ${clampedDist}m)`);
     };
 
+
     const handleBroadcastMedevac = async () => {
-        const name = identity?.nickname || "Operador RED";
+        const name = triageIncident?.victimLabel || identity?.nickname || "Operador RED";
         const loc = TacticalLocationEngine.getLastKnownLocation();
-        const lat = (loc && TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) ? loc.lat! : 0;
-        const lon = (loc && TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) ? loc.lon! : 0;
+        const lat = (loc && TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) ? loc.lat! : (triageIncident?.coords?.lat || 0);
+        const lon = (loc && TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) ? loc.lon! : (triageIncident?.coords?.lon || 0);
 
         try {
             const bloodInfo = medicalVault?.bloodType ? ` · Sangre: ${medicalVault.bloodType}` : "";
@@ -189,20 +215,27 @@ export function TcccBallisticsModal() {
                 threatStatus: "RED_CONTACT",
                 friendlyTroopsCount: 1,
                 casualties: {
-                    t1ImmediateRed: tourniquets.length > 0 ? tourniquets.length : 1,
-                    t2DelayedYellow: 0,
-                    t3MinimalGreen: 0,
-                    t4ExpectantBlack: 0
+                    t1ImmediateRed: triageIncident?.category === 'ROJO' ? 1 : (tourniquets.length > 0 ? tourniquets.length : 1),
+                    t2DelayedYellow: triageIncident?.category === 'AMARILLO' ? 1 : 0,
+                    t3MinimalGreen: triageIncident?.category === 'VERDE' ? 1 : 0,
+                    t4ExpectantBlack: triageIncident?.category === 'NEGRO' ? 1 : 0
                 },
                 suppliesAmmoPct: 100,
                 suppliesMedicalPct: Math.max(10, 100 - (tourniquets.length * 25)),
                 suppliesBatteryPct: 100,
-                remarks: `🚨 9-LINE MEDEVAC URGENTE: ${tourniquets.length} Torniquetes aplicados (${tourniquets.map(t => t.limb).join(', ') || 'Hemorragia Exanguinante'})${bloodInfo}${allergyInfo}`
+                remarks: `🚨 9-LINE MEDEVAC URGENTE: ${tourniquets.length} Torniquetes aplicados (${tourniquets.map(t => t.limb).join(', ') || 'Hemorragia Exanguinante'})${bloodInfo}${allergyInfo}${triageIncident ? ` [Triaje: ${triageIncident.category} - ${triageIncident.victimLabel}]` : ''}`
             });
 
             const alertPayload = new TextEncoder().encode(JSON.stringify({
                 type: "TACTICAL_MEDEVAC_9LINE",
                 sender: name,
+                triageCategory: triageIncident?.category || (tourniquets.length > 0 ? "URGENTE" : "PRIORITARIO"),
+                victimLabel: triageIncident?.victimLabel,
+                vitals: {
+                    bpm: triageIncident?.bpm,
+                    spo2: triageIncident?.spo2,
+                    respRate: triageIncident?.respRate,
+                },
                 tourniquetsCount: tourniquets.length,
                 bloodType: medicalVault?.bloodType || "DESCONOCIDO",
                 allergies: medicalVault?.allergies || "NINGUNA",
@@ -413,6 +446,51 @@ export function TcccBallisticsModal() {
                             display: "flex", flexDirection: "column", gap: "16px",
                             boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8)"
                         }}>
+                            {/* Incidente de Triaje START Recibido desde VitalScan */}
+                            {triageIncident && (
+                                <div style={{
+                                    background: triageIncident.category === 'ROJO' ? 'rgba(255, 51, 85, 0.18)' : 'rgba(255, 179, 0, 0.18)',
+                                    border: `1.5px solid ${triageIncident.category === 'ROJO' ? 'var(--accent-crimson)' : 'var(--accent-amber)'}`,
+                                    borderRadius: '14px',
+                                    padding: '12px 16px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '12px',
+                                    boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+                                    animation: 'popIn 0.2s ease-out'
+                                }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                        <div style={{ fontSize: '0.82rem', fontWeight: 900, color: triageIncident.category === 'ROJO' ? '#FF3355' : '#FFB300', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <span>🚨</span>
+                                            <span>TRIAJE VITALSCAN: {triageIncident.victimLabel}</span>
+                                        </div>
+                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontFamily: 'JetBrains Mono, monospace' }}>
+                                            {triageIncident.bpm ? `FC: ${triageIncident.bpm} BPM | ` : ''}
+                                            {triageIncident.spo2 ? `SpO2: ${triageIncident.spo2}% | ` : ''}
+                                            {triageIncident.respRate ? `FR: ${triageIncident.respRate} rpm | ` : ''}
+                                            Categoría: {triageIncident.category}
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <button
+                                            onClick={handleBroadcastMedevac}
+                                            className="btn-tactical-primary"
+                                            style={{ fontSize: '0.70rem', padding: '6px 12px', background: 'var(--accent-crimson)', color: '#FFF', whiteSpace: 'nowrap' }}
+                                        >
+                                            📡 MEDEVAC
+                                        </button>
+                                        <button
+                                            onClick={handleClearTriageIncident}
+                                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem', padding: '4px' }}
+                                            title="Descartar incidente"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Ficha Médica Soberana Sincronizada */}
                             <div style={{
                                 background: "rgba(255, 51, 85, 0.06)", border: "1px solid rgba(255, 51, 85, 0.3)",

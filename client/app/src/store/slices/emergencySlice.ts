@@ -1,6 +1,9 @@
 import { StateCreator } from 'zustand';
-import { RedStore } from '../types';
+import { RedStore, TacticalTargetPoint } from '../types';
 import { toast } from '../../components/Toast';
+
+/** Claves localStorage legacy que otros módulos aún leen como fallback */
+const LS_TARGET_KEYS = ['red_active_target', 'red_tactical_target_point'] as const;
 
 export const createEmergencySlice: StateCreator<RedStore, [], [], Partial<RedStore>> = (set, get) => ({
     activeSosBeacons: [],
@@ -64,4 +67,34 @@ export const createEmergencySlice: StateCreator<RedStore, [], [], Partial<RedSto
     },
 
     // Social Feed,
+
+    // ── Tactical Target (Blanco Táctico) ─────────────────────────────────────
+    tacticalTarget: null,
+
+    setTacticalTarget: (target: TacticalTargetPoint | null, source?: string) => {
+        const enriched: TacticalTargetPoint | null = target
+            ? { ...target, source: source ?? target.source }
+            : null;
+
+        set({ tacticalTarget: enriched });
+
+        // Backward-compat: mantener las claves legacy sincronizadas para módulos
+        // que aún leen localStorage directamente. Se migrarán de forma incremental.
+        try {
+            if (enriched) {
+                const serialized = JSON.stringify(enriched);
+                LS_TARGET_KEYS.forEach(k => localStorage.setItem(k, serialized));
+            } else {
+                LS_TARGET_KEYS.forEach(k => localStorage.removeItem(k));
+            }
+        } catch {}
+    },
+
+    clearTacticalTarget: () => {
+        set({ tacticalTarget: null });
+        try {
+            LS_TARGET_KEYS.forEach(k => localStorage.removeItem(k));
+        } catch {}
+    },
 });
+

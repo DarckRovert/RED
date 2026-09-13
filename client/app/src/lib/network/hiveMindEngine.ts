@@ -66,6 +66,22 @@ class HiveMindEngineClass {
     public async broadcastCapacity() {
         if (typeof window === 'undefined') return;
 
+        // ── Guard: conservar energía en batería crítica o modo survival ──────
+        // En estos estados, el nodo no debe consumir CPU/radio en telemetría
+        // de capacidad — solo responde peticiones entrantes si llegan.
+        try {
+            const batt = await this.getRealBattery();
+            if (!batt.isCharging && batt.level < 15) return;
+
+            const rawPrefs = localStorage.getItem('red_preferences');
+            if (rawPrefs) {
+                const prefs = JSON.parse(rawPrefs) as { operationalMode?: string };
+                if (prefs.operationalMode === 'survival') return;
+            }
+        } catch {
+            // Si no podemos leer la batería, continuamos (fail-open es seguro aquí)
+        }
+
         let availableRamMb = 2048;
         try {
             if ('deviceMemory' in navigator) {
@@ -106,6 +122,7 @@ class HiveMindEngineClass {
 
         meshRouter.broadcast(payload).catch(() => {});
     }
+
 
     /** Listens for incoming mesh protocol packets related to Hive Mind */
     private listenToMesh() {

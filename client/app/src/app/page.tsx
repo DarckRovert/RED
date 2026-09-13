@@ -1,100 +1,37 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+/**
+ * page.tsx — RED v103.0.0 App Shell
+ *
+ * Responsabilidades únicas de este archivo:
+ *   1. Detección de plataforma (nativa Capacitor vs. web showcase)
+ *   2. Flujo de onboarding / perfil de identidad
+ *   3. Layout responsivo: single-column mobile | master-detail tablet (768px)
+ *   4. Hardware back-button Android (Capacitor) + popstate web
+ *   5. Overlays globales: ToastProvider, IncomingCallBanner, FloatingCallPIP,
+ *      BiometricShieldOverlay, IncomingContactRequestModal, LiveStreamViewer
+ *
+ * El enrutamiento de las 62 pantallas modulares está delegado a WorkspaceScreens.
+ * Añadir un nuevo módulo = editar SOLO WorkspaceScreens.tsx (un lugar, no dos).
+ */
+
+import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { useRedStore } from "../store/useRedStore";
-import { useTranslation } from "../lib/i18n/i18nEngine";
+import { useRedStore, ScreenView } from "../store/useRedStore";
 import { toast } from "../components/Toast";
+import { WorkspaceScreens } from "../components/navigation/WorkspaceScreens";
 
-const MainNavigationShell   = dynamic(() => import("../components/navigation/MainNavigationShell").then(m => ({ default: m.MainNavigationShell })), { ssr: false, loading: () => <AppLoader /> });
-const Sidebar               = dynamic(() => import("../components/Sidebar"),               { ssr: false, loading: () => <AppLoader /> });
-
-const ChatWindow            = dynamic(() => import("../components/ChatWindow"),            { ssr: false, loading: () => <AppLoader /> });
-const SecurityPanel         = dynamic(() => import("../components/SecurityPanel"),         { ssr: false, loading: () => <AppLoader /> });
-const RadarWindow           = dynamic(() => import("../components/RadarWindow"),           { ssr: false, loading: () => <AppLoader /> });
-const StatusHeader          = dynamic(() => import("../components/StatusHeader"),          { ssr: false, loading: () => <div style={{ height: 44 }} /> });
-const CallScreen            = dynamic(() => import("../components/CallScreen"),            { ssr: false, loading: () => <AppLoader /> });
-const BroadcastPanel        = dynamic(() => import("../components/BroadcastPanel"),        { ssr: false, loading: () => <AppLoader /> });
-const CryptoPanel           = dynamic(() => import("../components/CryptoPanel"),           { ssr: false, loading: () => <AppLoader /> });
-const GroupsPanel           = dynamic(() => import("../components/GroupsPanel"),           { ssr: false, loading: () => <AppLoader /> });
-const StatusView            = dynamic(() => import("../components/StatusView"),            { ssr: false, loading: () => <AppLoader /> });
-const BlockchainExplorer    = dynamic(() => import("../components/BlockchainExplorer"),    { ssr: false, loading: () => <AppLoader /> });
-const AuthWall              = dynamic(() => import("../components/AuthWall"),              { ssr: false, loading: () => <FullScreenTacticalLoader /> });
-const NodeMap               = dynamic(() => import("../components/NodeMap"),               { ssr: false, loading: () => <AppLoader /> });
-const NetworkPanel          = dynamic(() => import("../components/NetworkPanel"),          { ssr: false, loading: () => <AppLoader /> });
-const OnboardingProfile     = dynamic(() => import("../components/OnboardingProfile"),     { ssr: false, loading: () => <AppLoader /> });
-const DMSSettings           = dynamic(() => import("../components/DMSSettings"),           { ssr: false, loading: () => <AppLoader /> });
-const AmberAdminPanel       = dynamic(() => import("../components/AmberAdminPanel"),       { ssr: false, loading: () => <AppLoader /> });
-const GuardianStatusPanel   = dynamic(() => import("../components/GuardianStatusPanel"),   { ssr: false, loading: () => <AppLoader /> });
-const P2PCompassModal       = dynamic(() => import("../components/P2PCompassModal").then(m => ({ default: m.P2PCompassModal })),       { ssr: false, loading: () => <AppLoader /> });
-const PublicChannelsPanel   = dynamic(() => import("../components/PublicChannelsPanel").then(m => ({ default: m.PublicChannelsPanel })),   { ssr: false, loading: () => <AppLoader /> });
-const SocialFeedPanel       = dynamic(() => import("../components/SocialFeedPanel").then(m => ({ default: m.SocialFeedPanel })),       { ssr: false, loading: () => <AppLoader /> });
-const P2PWalkieTalkieModal  = dynamic(() => import("../components/P2PWalkieTalkieModal").then(m => ({ default: m.P2PWalkieTalkieModal })),  { ssr: false, loading: () => <AppLoader /> });
-const WeatherAlertPanel     = dynamic(() => import("../components/WeatherAlertPanel").then(m => ({ default: m.WeatherAlertPanel })),     { ssr: false, loading: () => <AppLoader /> });
-const IdentityVaultModal    = dynamic(() => import("../components/IdentityVaultModal").then(m => ({ default: m.IdentityVaultModal })),    { ssr: false, loading: () => <AppLoader /> });
-const ProximityWaveModal    = dynamic(() => import("../components/ProximityWaveModal").then(m => ({ default: m.ProximityWaveModal })),    { ssr: false, loading: () => <AppLoader /> });
-const LiveCanvasModal       = dynamic(() => import("../components/LiveCanvasModal").then(m => ({ default: m.LiveCanvasModal })),       { ssr: false, loading: () => <AppLoader /> });
-const EcoMeshPanel          = dynamic(() => import("../components/EcoMeshPanel").then(m => ({ default: m.EcoMeshPanel })),          { ssr: false, loading: () => <AppLoader /> });
-const ProximitySettingsModal = dynamic(() => import("../components/ProximitySettingsModal").then(m => ({ default: m.ProximitySettingsModal })), { ssr: false, loading: () => <AppLoader /> });
-const AICopilotModal        = dynamic(() => import("../components/AICopilotModal").then(m => ({ default: m.AICopilotModal })),        { ssr: false, loading: () => <AppLoader /> });
-const NearbyDevicesPanel    = dynamic(() => import("../components/NearbyDevicesPanel"),    { ssr: false, loading: () => <AppLoader /> });
-const LiveStreamBroadcaster = dynamic(() => import("../components/LiveStreamBroadcaster").then(m => ({ default: m.LiveStreamBroadcaster })), { ssr: false, loading: () => <AppLoader /> });
-const LiveStreamViewer      = dynamic(() => import("../components/LiveStreamViewer").then(m => ({ default: m.LiveStreamViewer })),      { ssr: false, loading: () => <AppLoader /> });
-const OffGridCompassModal   = dynamic(() => import("../components/OffGridCompassModal").then(m => ({ default: m.OffGridCompassModal })), { ssr: false, loading: () => <AppLoader /> });
-const VitalScanModal       = dynamic(() => import("../components/VitalScanModal").then(m => ({ default: m.VitalScanModal })),       { ssr: false, loading: () => <AppLoader /> });
-const SurvivalBeaconModal  = dynamic(() => import("../components/SurvivalBeaconModal").then(m => ({ default: m.SurvivalBeaconModal })),  { ssr: false, loading: () => <AppLoader /> });
-const TacticalVisionScanModal = dynamic(() => import("../components/TacticalVisionScanModal").then(m => ({ default: m.TacticalVisionScanModal })), { ssr: false, loading: () => <AppLoader /> });
-const ShamirRecoveryModal   = dynamic(() => import("../components/ShamirRecoveryModal").then(m => ({ default: m.ShamirRecoveryModal })),   { ssr: false, loading: () => <AppLoader /> });
-const CbrnSatelliteModal    = dynamic(() => import("../components/CbrnSatelliteModal").then(m => ({ default: m.CbrnSatelliteModal })),    { ssr: false, loading: () => <AppLoader /> });
-const ZkBarterSubsurfaceModal = dynamic(() => import("../components/ZkBarterSubsurfaceModal").then(m => ({ default: m.ZkBarterSubsurfaceModal })), { ssr: false, loading: () => <AppLoader /> });
-const TcccBallisticsModal    = dynamic(() => import("../components/TcccBallisticsModal").then(m => ({ default: m.TcccBallisticsModal })),    { ssr: false, loading: () => <AppLoader /> });
-const C4isrEmpDrillModal     = dynamic(() => import("../components/C4isrEmpDrillModal").then(m => ({ default: m.C4isrEmpDrillModal })),     { ssr: false, loading: () => <AppLoader /> });
-const AirGapStegoModal       = dynamic(() => import("../components/AirGapStegoModal").then(m => ({ default: m.AirGapStegoModal })),       { ssr: false, loading: () => <AppLoader /> });
-const CelestialPdrModal      = dynamic(() => import("../components/CelestialPdrModal").then(m => ({ default: m.CelestialPdrModal })),      { ssr: false, loading: () => <AppLoader /> });
-const AcousticWarfareModal   = dynamic(() => import("../components/AcousticWarfareModal").then(m => ({ default: m.AcousticWarfareModal })),   { ssr: false, loading: () => <AppLoader /> });
-const VitalResourcesModal    = dynamic(() => import("../components/VitalResourcesModal").then(m => ({ default: m.VitalResourcesModal })),    { ssr: false, loading: () => <AppLoader /> });
-const SonarSeismicModal      = dynamic(() => import("../components/SonarSeismicModal").then(m => ({ default: m.SonarSeismicModal })),      { ssr: false, loading: () => <AppLoader /> });
-const TacticalFoxhuntModal   = dynamic(() => import("../components/TacticalFoxhuntModal").then(m => ({ default: m.TacticalFoxhuntModal })),   { ssr: false, loading: () => <AppLoader /> });
-const AtmosphericSafetyModal = dynamic(() => import("../components/AtmosphericSafetyModal").then(m => ({ default: m.AtmosphericSafetyModal })), { ssr: false, loading: () => <AppLoader /> });
-const RfSpectrumModal      = dynamic(() => import("../components/RfSpectrumModal").then(m => ({ default: m.RfSpectrumModal })),      { ssr: false, loading: () => <AppLoader /> });
-const StegoVaultModal      = dynamic(() => import("../components/StegoVaultModal").then(m => ({ default: m.StegoVaultModal })),      { ssr: false, loading: () => <AppLoader /> });
-const ShakePairModal       = dynamic(() => import("../components/ShakePairModal").then(m => ({ default: m.ShakePairModal })),       { ssr: false, loading: () => <AppLoader /> });
-const RedP2PPayModal       = dynamic(() => import("../components/RedP2PPayModal").then(m => ({ default: m.RedP2PPayModal })),       { ssr: false, loading: () => <AppLoader /> });
-const BlackoutSimulatorModal = dynamic(() => import("../components/BlackoutSimulatorModal").then(m => ({ default: m.BlackoutSimulatorModal })), { ssr: false, loading: () => <AppLoader /> });
-const SystemHealthModal    = dynamic(() => import("../components/SystemHealthModal").then(m => ({ default: m.SystemHealthModal })),    { ssr: false, loading: () => <AppLoader /> });
-const NodeLogsModal        = dynamic(() => import("../components/NodeLogsModal").then(m => ({ default: m.NodeLogsModal })),        { ssr: false, loading: () => <AppLoader /> });
-const CalculatorScreen     = dynamic(() => import("../components/CalculatorScreen").then(m => ({ default: m.CalculatorScreen })),     { ssr: false, loading: () => <AppLoader /> });
-const SecurityReportModal  = dynamic(() => import("../components/SecurityReportModal").then(m => ({ default: m.SecurityReportModal })),  { ssr: false, loading: () => <AppLoader /> });
-const BackupRestoreModal   = dynamic(() => import("../components/BackupRestoreModal").then(m => ({ default: m.BackupRestoreModal })),   { ssr: false, loading: () => <AppLoader /> });
-const WebCompanionLinkModal = dynamic(() => import("../components/WebCompanionLinkModal").then(m => ({ default: m.WebCompanionLinkModal })), { ssr: false, loading: () => <AppLoader /> });
-const LinkedDevicesView     = dynamic(() => import("../components/settings/LinkedDevicesView").then(m => ({ default: m.LinkedDevicesView })), { ssr: false, loading: () => <AppLoader /> });
-const SettingsModal        = dynamic(() => import("../components/SettingsModal").then(m => ({ default: m.SettingsModal })),        { ssr: false, loading: () => <AppLoader /> });
-const UpdateModal          = dynamic(() => import("../components/UpdateModal").then(m => ({ default: m.UpdateModal })),          { ssr: false, loading: () => <AppLoader /> });
-const CommercialHubModal   = dynamic(() => import("../components/CommercialHubModal").then(m => ({ default: m.CommercialHubModal })),   { ssr: false, loading: () => <AppLoader /> });
-const GlobalShieldPanel    = dynamic(() => import("../components/GlobalShieldPanel"),    { ssr: false, loading: () => <AppLoader /> });
-const Web3VaultModal       = dynamic(() => import("../components/Web3VaultModal"),       { ssr: false, loading: () => <AppLoader /> });
-const RedHyperBrowserModal = dynamic(() => import("../components/miniapp/RedHyperBrowserModal").then(m => ({ default: m.RedHyperBrowserModal })), { ssr: false, loading: () => <AppLoader /> });
-const SovereignAppStoreModal = dynamic(() => import("../components/miniapp/SovereignAppStoreModal").then(m => ({ default: m.SovereignAppStoreModal })), { ssr: false, loading: () => <AppLoader /> });
-const MiniAppContainerModal = dynamic(() => import("../components/miniapp/MiniAppContainerModal").then(m => ({ default: m.MiniAppContainerModal })), { ssr: false, loading: () => <AppLoader /> });
-const TacticalCommandCenter = dynamic(() => import("../components/TacticalCommandCenter").then(m => ({ default: m.TacticalCommandCenter })), { ssr: false, loading: () => <AppLoader /> });
-const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLanding"),    { ssr: false, loading: () => <FullScreenTacticalLoader /> });
-const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
-const IncomingCallBanner    = dynamic(() => import("../components/IncomingCallBanner").then(m => ({ default: m.IncomingCallBanner })), { ssr: false, loading: () => null });
-const FloatingCallPIP       = dynamic(() => import("../components/FloatingCallPIP").then(m => ({ default: m.FloatingCallPIP })),       { ssr: false, loading: () => null });
-const LoraTransceiverModal  = dynamic(() => import("../components/LoraTransceiverModal").then(m => ({ default: m.LoraTransceiverModal })), { ssr: false, loading: () => <AppLoader /> });
-const ExtremeSurvivalHudModal = dynamic(() => import("../components/ExtremeSurvivalHudModal").then(m => ({ default: m.ExtremeSurvivalHudModal })), { ssr: false, loading: () => <AppLoader /> });
-const SwarmHealthHUD         = dynamic(() => import("../components/SwarmHealthHUD").then(m => ({ default: m.SwarmHealthHUD })),         { ssr: false, loading: () => <AppLoader /> });
-const BiometricShieldOverlay = dynamic(() => import("../components/BiometricShieldOverlay").then(m => ({ default: m.BiometricShieldOverlay })), { ssr: false, loading: () => null });
-const IncomingContactRequestModal = dynamic(() => import("../components/IncomingContactRequestModal").then(m => ({ default: m.IncomingContactRequestModal })), { ssr: false, loading: () => null });
-
+// ── Loaders ───────────────────────────────────────────────────────────────────
 function AppLoader() {
   return (
-    <div style={{
-      display: "flex", alignItems: "center", justifyContent: "center",
-      width: "100%", height: "100%", background: "var(--bg-void)",
-      color: "var(--text-muted)", fontSize: "14px", gap: "10px",
-      fontFamily: "JetBrains Mono, monospace"
-    }}>
+    <div
+      style={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        width: "100%", height: "100%", background: "var(--bg-void)",
+        color: "var(--text-muted)", fontSize: "14px", gap: "10px",
+        fontFamily: "JetBrains Mono, monospace",
+      }}
+    >
       <span style={{ animation: "pulse 1s infinite" }}>⚙</span>
       CARGANDO BÓVEDA TÁCTICA…
     </div>
@@ -103,25 +40,54 @@ function AppLoader() {
 
 function FullScreenTacticalLoader() {
   return (
-    <div style={{
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      width: "100%", height: "100dvh", background: "#020204", color: "#fff", gap: "16px",
-    }}>
-      <div style={{
-        width: 64, height: 64, borderRadius: "20px",
-        background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: "1.8rem", fontWeight: 900, color: "white",
-        boxShadow: "0 0 32px rgba(255,51,85,0.5)",
-        animation: "pulse 1.2s ease-in-out infinite",
-      }}>R</div>
-      <div style={{ fontSize: "11px", fontWeight: 800, color: "var(--accent-cyan)", letterSpacing: "2px", fontFamily: "JetBrains Mono, monospace" }}>
+    <div
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        width: "100%", height: "100dvh", background: "#020204", color: "#fff", gap: "16px",
+      }}
+    >
+      <div
+        style={{
+          width: 64, height: 64, borderRadius: "20px",
+          background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "1.8rem", fontWeight: 900, color: "white",
+          boxShadow: "0 0 32px rgba(255,51,85,0.5)",
+          animation: "pulse 1.2s ease-in-out infinite",
+        }}
+      >
+        R
+      </div>
+      <div
+        style={{
+          fontSize: "11px", fontWeight: 800,
+          color: "var(--accent-cyan)", letterSpacing: "2px",
+          fontFamily: "JetBrains Mono, monospace",
+        }}
+      >
         INICIALIZANDO BÓVEDA RED MESH…
       </div>
     </div>
   );
 }
 
+// ── Shell-level Dynamic Imports ───────────────────────────────────────────────
+// Solo componentes que pertenecen al shell (overlays, nav, auth).
+// Los 62 módulos de pantalla viven en WorkspaceScreens.tsx.
+const MainNavigationShell         = dynamic(() => import("../components/navigation/MainNavigationShell").then(m => ({ default: m.MainNavigationShell })), { ssr: false, loading: () => <AppLoader /> });
+const StatusHeader                = dynamic(() => import("../components/StatusHeader"),               { ssr: false, loading: () => <div style={{ height: 44 }} /> });
+const AuthWall                    = dynamic(() => import("../components/AuthWall"),                   { ssr: false, loading: () => <FullScreenTacticalLoader /> });
+const OnboardingProfile           = dynamic(() => import("../components/OnboardingProfile"),          { ssr: false, loading: () => <AppLoader /> });
+const RedShowcaseLanding          = dynamic(() => import("../components/RedShowcaseLanding"),         { ssr: false, loading: () => <FullScreenTacticalLoader /> });
+const ToastProvider               = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),                        { ssr: false });
+const IncomingCallBanner          = dynamic(() => import("../components/IncomingCallBanner").then(m => ({ default: m.IncomingCallBanner })),       { ssr: false, loading: () => null });
+const FloatingCallPIP             = dynamic(() => import("../components/FloatingCallPIP").then(m => ({ default: m.FloatingCallPIP })),             { ssr: false, loading: () => null });
+const BiometricShieldOverlay      = dynamic(() => import("../components/BiometricShieldOverlay").then(m => ({ default: m.BiometricShieldOverlay })), { ssr: false, loading: () => null });
+const IncomingContactRequestModal = dynamic(() => import("../components/IncomingContactRequestModal").then(m => ({ default: m.IncomingContactRequestModal })), { ssr: false, loading: () => null });
+const LiveStreamViewer            = dynamic(() => import("../components/LiveStreamViewer").then(m => ({ default: m.LiveStreamViewer })),           { ssr: false, loading: () => null });
+const TacticalQuickActionHUD      = dynamic(() => import("../components/navigation/TacticalQuickActionHUD").then(m => ({ default: m.TacticalQuickActionHUD })), { ssr: false, loading: () => null });
+
+// ── ErrorBoundary ─────────────────────────────────────────────────────────────
 interface EBState { hasError: boolean; error: Error | null; }
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBState> {
   constructor(props: { children: React.ReactNode }) {
@@ -137,14 +103,23 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          width: "100%", height: "100dvh", background: "var(--bg-void)", color: "#fff",
-          padding: "24px", textAlign: "center", gap: "16px",
-        }}>
+        <div
+          style={{
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            width: "100%", height: "100dvh", background: "var(--bg-void)", color: "#fff",
+            padding: "24px", textAlign: "center", gap: "16px",
+          }}
+        >
           <div style={{ fontSize: "48px" }}>🛡️</div>
-          <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--accent-crimson)" }}>Recuperación de Fallo Táctico</div>
-          <div style={{ fontSize: "12px", color: "var(--text-muted)", maxWidth: "300px", fontFamily: "JetBrains Mono, monospace" }}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--accent-crimson)" }}>
+            Recuperación de Fallo Táctico
+          </div>
+          <div
+            style={{
+              fontSize: "12px", color: "var(--text-muted)",
+              maxWidth: "300px", fontFamily: "JetBrains Mono, monospace",
+            }}
+          >
             {this.state.error?.message || "Error de renderizado capturado"}
           </div>
           <button
@@ -161,204 +136,39 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
   }
 }
 
-function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => void }) {
-  const { identity } = useRedStore();
-  const { t } = useTranslation();
-  return (
-    <div style={{
-      flex: 1, height: "100%", display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "flex-start", padding: "28px 24px",
-      textAlign: "center", gap: "18px", overflowY: "auto"
-    }}>
-      {/* Header Táctico */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", maxWidth: "560px" }}>
-        <div style={{
-          width: 64, height: 64, borderRadius: "18px",
-          background: "linear-gradient(135deg, rgba(232,33,58,0.25) 0%, rgba(0,229,255,0.18) 100%)",
-          border: "1px solid rgba(0, 229, 255, 0.35)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: "2.2rem", boxShadow: "0 8px 32px rgba(0,0,0,0.6)"
-        }}>
-          🛡️
-        </div>
-        <div>
-          <h2 style={{ fontSize: "1.3rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.4px" }}>
-            {t('tablet.title')}
-          </h2>
-          <p style={{ fontSize: "0.80rem", color: "var(--text-secondary)", marginTop: "4px", lineHeight: 1.4 }}>
-            {t('tablet.subtitle')}
-          </p>
-        </div>
-      </div>
-
-      {/* Hero Card C4ISR */}
-      <div
-        onClick={() => onOpenTool("commandCenter")}
-        className="card-tactical-interactive"
-        style={{
-          width: "100%", maxWidth: "620px", padding: "16px 20px",
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: "14px",
-          background: "linear-gradient(135deg, rgba(0, 229, 255, 0.15) 0%, rgba(179, 136, 255, 0.10) 100%)",
-          border: "1.5px solid rgba(0, 229, 255, 0.45)", borderRadius: "14px", cursor: "pointer",
-          boxShadow: "0 4px 20px rgba(0, 229, 255, 0.15)"
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "14px", textAlign: "left" }}>
-          <span style={{ fontSize: "2.2rem" }}>⚡</span>
-          <div>
-            <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.5px" }}>
-              {t('tablet.c4isr_title')}
-            </div>
-            <div style={{ fontSize: "0.72rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, marginTop: "2px" }}>
-              {t('tablet.c4isr_sub')}
-            </div>
-          </div>
-        </div>
-        <span style={{ fontSize: "1.2rem", color: "var(--accent-cyan)", fontWeight: 900 }}>›</span>
-      </div>
-
-      {/* Grid de 8 Accesos Rápidos Simétricos (4x2 / 2x4) */}
-      <div style={{
-        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))",
-        gap: "12px", width: "100%", maxWidth: "620px"
-      }}>
-        <div
-          onClick={() => onOpenTool("nodemap")}
-          className="card-tactical-interactive"
-          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px" }}
-        >
-          <span style={{ fontSize: "1.6rem" }}>🗺️</span>
-          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>{t('tablet.map_title')}</span>
-          <span style={{ fontSize: "0.64rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.map_sub')}</span>
-        </div>
-
-        <div
-          onClick={() => onOpenTool("radar")}
-          className="card-tactical-interactive"
-          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px" }}
-        >
-          <span style={{ fontSize: "1.6rem" }}>📡</span>
-          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>{t('tablet.radar_title')}</span>
-          <span style={{ fontSize: "0.64rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.radar_sub')}</span>
-        </div>
-
-        <div
-          onClick={() => onOpenTool("channels")}
-          className="card-tactical-interactive"
-          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px" }}
-        >
-          <span style={{ fontSize: "1.6rem" }}>📻</span>
-          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>{t('tablet.channels_title')}</span>
-          <span style={{ fontSize: "0.64rem", color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.channels_sub')}</span>
-        </div>
-
-        <div
-          onClick={() => onOpenTool("canvas")}
-          className="card-tactical-interactive"
-          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px" }}
-        >
-          <span style={{ fontSize: "1.6rem" }}>🎨</span>
-          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>{t('tablet.canvas_title')}</span>
-          <span style={{ fontSize: "0.64rem", color: "var(--accent-purple)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.canvas_sub')}</span>
-        </div>
-
-        <div
-          onClick={() => onOpenTool("appStore")}
-          className="card-tactical-interactive"
-          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px", background: "linear-gradient(135deg, rgba(0,230,118,0.12) 0%, rgba(0,229,255,0.06) 100%)", border: "1px solid rgba(0,230,118,0.3)" }}
-        >
-          <span style={{ fontSize: "1.6rem" }}>🛒</span>
-          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-emerald)" }}>{t('tablet.appstore_title')}</span>
-          <span style={{ fontSize: "0.64rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.appstore_sub')}</span>
-        </div>
-
-        <div
-          onClick={() => onOpenTool("hyperBrowser")}
-          className="card-tactical-interactive"
-          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px", background: "linear-gradient(135deg, rgba(0,229,255,0.12) 0%, rgba(138,43,226,0.06) 100%)", border: "1px solid rgba(0,229,255,0.3)" }}
-        >
-          <span style={{ fontSize: "1.6rem" }}>🌐</span>
-          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-cyan)" }}>{t('tablet.browser_title')}</span>
-          <span style={{ fontSize: "0.64rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.browser_sub')}</span>
-        </div>
-
-        <div
-          onClick={() => onOpenTool("updater")}
-          className="card-tactical-interactive"
-          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px", background: "linear-gradient(135deg, rgba(0,229,255,0.16) 0%, rgba(0,150,255,0.08) 100%)", border: "1px solid rgba(0,229,255,0.4)" }}
-        >
-          <span style={{ fontSize: "1.6rem" }}>🚀</span>
-          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-cyan)" }}>{t('tablet.updater_title')}</span>
-          <span style={{ fontSize: "0.64rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.updater_sub')}</span>
-        </div>
-
-        <div
-          onClick={() => onOpenTool("settings")}
-          className="card-tactical-interactive"
-          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px" }}
-        >
-          <span style={{ fontSize: "1.6rem" }}>⚙️</span>
-          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>{t('tablet.settings_title')}</span>
-          <span style={{ fontSize: "0.64rem", color: "var(--primary-bright)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.settings_sub')}</span>
-        </div>
-      </div>
-
-      {/* Badge de Seguridad y Estado */}
-      <div style={{
-        padding: "6px 14px", borderRadius: "8px",
-        background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.25)",
-        color: "var(--accent-emerald)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace",
-        fontWeight: 700, marginTop: "4px"
-      }}>
-        ● NODO SOBERANO OPERACIONAL · {identity?.short_id || "OFFLINE"} · ED25519 / SLED
-      </div>
-    </div>
-  );
-}
-
+// ── AppRouter ─────────────────────────────────────────────────────────────────
 export default function AppRouter() {
-  const { currentScreen, activeConversationId, identity, activeLiveStreamId, liveStreams, goBack, navigate, activeMiniAppBundle, launchMiniApp, preferences, isCallPipMinimized } = useRedStore();
-  const [mounted, setMounted] = useState(false);
-  const [isTablet, setIsTablet] = useState(false);
+  const { currentScreen, activeLiveStreamId, navigate } = useRedStore();
+
+  const [mounted,      setMounted]      = useState(false);
+  const [isTablet,     setIsTablet]     = useState(false);
   const [needsProfile, setNeedsProfile] = useState<boolean | null>(null);
-  const [showLanding, setShowLanding] = useState<boolean>(true);
+  const [showLanding,  setShowLanding]  = useState<boolean>(true);
 
   useEffect(() => {
     setMounted(true);
 
-    const checkViewport = () => {
-      if (typeof window !== "undefined") {
-        setIsTablet(window.innerWidth >= 768);
-      }
-    };
+    // ── Viewport detection ──────────────────────────────────────────────────
+    const checkViewport = () => setIsTablet(window.innerWidth >= 768);
     checkViewport();
     window.addEventListener("resize", checkViewport);
 
+    // ── Landing detection ───────────────────────────────────────────────────
     const checkLanding = async () => {
       try {
         const { Capacitor } = await import("@capacitor/core");
-        if (Capacitor.isNativePlatform()) {
-          setShowLanding(false);
-          return;
-        }
-
+        if (Capacitor.isNativePlatform()) { setShowLanding(false); return; }
         const urlParams = new URLSearchParams(window.location.search);
-        // En la web pública, solo entrar a la app si se especifica ?app=true explícitamente
-        if (urlParams.get("app") === "true") {
-          setShowLanding(false);
-          return;
-        }
-
-        // En la web (navegadores de escritorio o móviles), SIEMPRE mostrar el Showcase Landing oficial por defecto
+        if (urlParams.get("app") === "true") { setShowLanding(false); return; }
         setShowLanding(true);
       } catch {
         setShowLanding(true);
       }
     };
-
     const handleOpenLanding = () => setShowLanding(true);
     window.addEventListener("red:open_landing", handleOpenLanding);
 
+    // ── Storage integrity self-heal ─────────────────────────────────────────
     const runIntegrityAudit = async () => {
       try {
         const { StateIntegrityEngine } = await import("../lib/StateIntegrityEngine");
@@ -369,15 +179,14 @@ export default function AppRouter() {
       } catch {}
     };
 
+    // ── Android hardware back button ────────────────────────────────────────
     let lastBackPressTime = 0;
     let removeBackHandler: (() => void) | null = null;
-
     const setupBackButton = async () => {
       try {
         const { App: CapApp } = await import("@capacitor/app");
         const backHandler = await CapApp.addListener("backButton", () => {
-          const state = useRedStore.getState();
-          const handled = state.goBack();
+          const handled = useRedStore.getState().goBack();
           if (!handled) {
             const now = Date.now();
             if (now - lastBackPressTime < 2000) {
@@ -392,140 +201,102 @@ export default function AppRouter() {
       } catch {}
     };
 
+    // ── Web popstate (browser back) ─────────────────────────────────────────
     const handlePopState = () => {
-      try {
-        const state = useRedStore.getState();
-        state.goBack({ fromPopState: true });
-      } catch {}
+      try { useRedStore.getState().goBack({ fromPopState: true }); } catch {}
     };
     window.addEventListener("popstate", handlePopState);
 
+    // ── Profile / identity check ────────────────────────────────────────────
     const checkProfile = async () => {
       try {
-        if (typeof window !== "undefined" && localStorage.getItem("profile_created") === "true") {
-          setNeedsProfile(false);
-          return;
-        }
+        if (localStorage.getItem("profile_created") === "true") { setNeedsProfile(false); return; }
         const { Capacitor } = await import("@capacitor/core");
         if (Capacitor.isNativePlatform()) {
           const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-          const getPromise = SecureStoragePlugin.get({ key: "profile_created" }).catch(() => null);
-          const timeoutPromise = new Promise<null>(r => setTimeout(() => r(null), 350));
-          const res = await Promise.race([getPromise, timeoutPromise]);
-          if (res && res.value === "true") {
-            setNeedsProfile(false);
-            return;
-          }
+          const res = await Promise.race([
+            SecureStoragePlugin.get({ key: "profile_created" }).catch(() => null),
+            new Promise<null>(r => setTimeout(() => r(null), 350)),
+          ]);
+          if (res && res.value === "true") { setNeedsProfile(false); return; }
         }
-        const hasNick = typeof window !== "undefined" && (localStorage.getItem("user_nickname") || localStorage.getItem("red_displayName"));
+        const hasNick = localStorage.getItem("user_nickname") || localStorage.getItem("red_displayName");
         setNeedsProfile(!hasNick);
       } catch {
         setNeedsProfile(false);
       }
     };
 
-    const setupNotificationClickListeners = async () => {
+    // ── Notification tap → open conversation ───────────────────────────────
+    const setupNotificationListeners = async () => {
       try {
         const { Capacitor } = await import("@capacitor/core");
-        if (Capacitor.isNativePlatform()) {
-          const { LocalNotifications } = await import("@capacitor/local-notifications");
-          LocalNotifications.addListener("localNotificationActionPerformed", (notificationAction) => {
-            try {
-              const extra = notificationAction.notification?.extra;
-              const targetPeer = extra?.peer || extra?.conversation_id || extra?.sender;
-              if (targetPeer) {
-                const store = useRedStore.getState();
-                if (store.isAuthenticated) {
-                  store.navigate("chat", targetPeer);
-                } else {
-                  useRedStore.setState({ pendingChatNavigation: targetPeer });
-                }
-              }
-            } catch (e) {
-              console.warn("[RED] Early notification action listener error:", e);
+        if (!Capacitor.isNativePlatform()) return;
+        const { LocalNotifications } = await import("@capacitor/local-notifications");
+        LocalNotifications.addListener("localNotificationActionPerformed", (action) => {
+          try {
+            const extra = action.notification?.extra;
+            const targetPeer = extra?.peer || extra?.conversation_id || extra?.sender;
+            if (!targetPeer) return;
+            const store = useRedStore.getState();
+            if (store.isAuthenticated) {
+              store.navigate("chat", targetPeer);
+            } else {
+              useRedStore.setState({ pendingChatNavigation: targetPeer });
             }
-          });
-        }
+          } catch (e) {
+            console.warn("[RED] Notification action listener error:", e);
+          }
+        });
       } catch {}
     };
 
     const handleNativeOpenConv = (event: any) => {
       try {
         const targetPeer = event?.detail;
-        if (targetPeer) {
-          const store = useRedStore.getState();
-          if (store.isAuthenticated) {
-            store.navigate("chat", targetPeer);
-          } else {
-            useRedStore.setState({ pendingChatNavigation: targetPeer } as any);
-          }
+        if (!targetPeer) return;
+        const store = useRedStore.getState();
+        if (store.isAuthenticated) {
+          store.navigate("chat", targetPeer);
+        } else {
+          useRedStore.setState({ pendingChatNavigation: targetPeer } as any);
         }
       } catch (err) {
-        console.warn("[RED] Error handling native open conversation event:", err);
+        console.warn("[RED] Native open conversation error:", err);
       }
     };
     window.addEventListener("red:open_conversation", handleNativeOpenConv);
 
+    // ── Bootstrap ───────────────────────────────────────────────────────────
     setupBackButton();
-    setupNotificationClickListeners();
+    setupNotificationListeners();
     runIntegrityAudit();
     checkLanding();
     checkProfile();
 
     return () => {
-      window.removeEventListener("resize", checkViewport);
+      window.removeEventListener("resize",              checkViewport);
       window.removeEventListener("red:open_conversation", handleNativeOpenConv);
-      window.removeEventListener("red:open_landing", handleOpenLanding);
-      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("red:open_landing",    handleOpenLanding);
+      window.removeEventListener("popstate",            handlePopState);
       if (removeBackHandler) removeBackHandler();
     };
   }, []);
 
-  const handleCalculatorUnlock = async (pin: string) => {
-    try {
-      const { verifySecurePin } = await import("../lib/crypto/BiometricLockEngine");
-      const isPanic = await verifySecurePin("panic_pin", pin);
-
-      if (isPanic) {
-        if (typeof window !== "undefined") {
-          localStorage.clear();
-          sessionStorage.clear();
-        }
-        useRedStore.setState({ isAuthenticated: false, messages: [], contacts: [] });
-        return false;
-      }
-
-      const isDecoy = await verifySecurePin("decoy_pin", pin);
-      const isMaster = await verifySecurePin("master_pin", pin);
-
-      if (isMaster || isDecoy) {
-        goBack();
-        return true;
-      }
-    } catch {}
-    return false;
-  };
-
-  if (!mounted) return <FullScreenTacticalLoader />;
+  // ── Render guards ─────────────────────────────────────────────────────────
+  if (!mounted)            return <FullScreenTacticalLoader />;
+  if (needsProfile === null) return <FullScreenTacticalLoader />;
 
   if (showLanding) {
     return (
       <ErrorBoundary>
         <RedShowcaseLanding
-          onEnterVault={(targetScreen) => {
-            setShowLanding(false);
-            if (targetScreen) navigate(targetScreen);
-          }}
-          onEnterApp={(targetScreen) => {
-            setShowLanding(false);
-            if (targetScreen) navigate(targetScreen);
-          }}
+          onEnterVault={(s) => { setShowLanding(false); if (s) navigate(s); }}
+          onEnterApp={(s)   => { setShowLanding(false); if (s) navigate(s); }}
         />
       </ErrorBoundary>
     );
   }
-
-  if (needsProfile === null) return <FullScreenTacticalLoader />;
 
   if (needsProfile) {
     return (
@@ -535,10 +306,14 @@ export default function AppRouter() {
     );
   }
 
+  const handleOpenTool = (screen: ScreenView) => navigate(screen);
+
+  // ── Main App Shell ────────────────────────────────────────────────────────
   return (
     <ErrorBoundary>
       <ToastProvider />
       <AuthWall>
+        {/* Global overlays — siempre montados por encima de cualquier pantalla */}
         <IncomingCallBanner />
         <FloatingCallPIP />
         <BiometricShieldOverlay />
@@ -549,235 +324,27 @@ export default function AppRouter() {
             onClose={() => useRedStore.getState().closeLiveStream()}
           />
         )}
+        <TacticalQuickActionHUD isTablet={isTablet} />
+
         <main className="app-main">
+          {/* StatusHeader: siempre en tablet, solo en sidebar en mobile */}
           {isTablet ? <StatusHeader /> : (currentScreen === "sidebar" && <StatusHeader />)}
-          
+
           {isTablet ? (
-            /* ── Master-Detail Tablet Layout (>= 768px) ── */
+            /* ── Master-Detail Tablet Layout (≥ 768px) ────────────────────── */
             <div className="tablet-split-layout">
               <div className="tablet-sidebar-pane">
                 <MainNavigationShell isTablet={true} />
               </div>
               <div className="tablet-workspace-pane">
-
-                {currentScreen === "commandCenter" && <TacticalCommandCenter />}
-                {currentScreen === "chat" && <ChatWindow />}
-                {currentScreen === "sidebar" && <TacticalTabletWorkspace onOpenTool={(s) => navigate(s)} />}
-                {currentScreen === "explorer" && <BlockchainExplorer onClose={goBack} />}
-                {currentScreen === "socialFeed" && <SocialFeedPanel />}
-                {(currentScreen === "channels" || currentScreen === "publicChannels") && <PublicChannelsPanel />}
-                {(currentScreen === "groups" || currentScreen === "squads") && <GroupsPanel />}
-                {(currentScreen === "nearby" || currentScreen === "contacts") && <NearbyDevicesPanel />}
-                {currentScreen === "security" && <SecurityPanel />}
-                {currentScreen === "status" && <StatusView />}
-                {(currentScreen === "swarmHealthHUD" || currentScreen === "swarmHealth") && (
-                  <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(2, 4, 10, 0.88)", backdropFilter: "blur(25px)", WebkitBackdropFilter: "blur(25px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
-                    <SwarmHealthHUD onClose={goBack} />
-                  </div>
-                )}
-                {currentScreen === "network" && <NetworkPanel />}
-                {currentScreen === "crypto" && <CryptoPanel />}
-                {currentScreen === "broadcast" && <BroadcastPanel />}
-                {currentScreen === "ecoMesh" && <EcoMeshPanel />}
-                {currentScreen === "dms" && <DMSSettings />}
-                {(currentScreen === "amber" || currentScreen === "amberAdmin") && <AmberAdminPanel onClose={goBack} />}
-                {currentScreen === "guardian" && <GuardianStatusPanel onClose={goBack} />}
-                {(currentScreen === "weather" || currentScreen === "weatherAlert") && <WeatherAlertPanel />}
-                {currentScreen === "p2pCompass" && <P2PCompassModal />}
-                {currentScreen === "walkie" && <P2PWalkieTalkieModal />}
-                {(currentScreen === "idVault" || currentScreen === "identityVault") && <IdentityVaultModal />}
-                {(currentScreen === "proximity" || currentScreen === "proximityWave") && <ProximityWaveModal />}
-                {(currentScreen === "canvas" || currentScreen === "liveCanvas") && <LiveCanvasModal />}
-                {(currentScreen === "proximitySettings" || currentScreen === "proximity_settings") && <ProximitySettingsModal />}
-                {(currentScreen === "aiCopilot" || currentScreen === "copilot") && <AICopilotModal />}
-                {currentScreen === "liveStream" && <LiveStreamBroadcaster onClose={goBack} />}
-                {(currentScreen === "offGridCompass" || currentScreen === "compass") && <OffGridCompassModal />}
-                {currentScreen === "vitalScan" && <VitalScanModal />}
-                {(currentScreen === "survivalBeacon" || currentScreen === "sos") && <SurvivalBeaconModal />}
-                {currentScreen === "tacticalVisionScan" && <TacticalVisionScanModal />}
-                {currentScreen === "shamirRecovery" && <ShamirRecoveryModal />}
-                {currentScreen === "cbrnSatellite" && <CbrnSatelliteModal />}
-                {currentScreen === "zkBarterSubsurface" && <ZkBarterSubsurfaceModal />}
-                {currentScreen === "tcccBallistics" && <TcccBallisticsModal />}
-                {currentScreen === "c4isrEmpDrill" && <C4isrEmpDrillModal />}
-                {currentScreen === "airGapStego" && <AirGapStegoModal />}
-                {currentScreen === "celestialPdr" && <CelestialPdrModal />}
-                {currentScreen === "acousticWarfare" && <AcousticWarfareModal />}
-                {currentScreen === "vitalResources" && <VitalResourcesModal />}
-                {currentScreen === "sonarSeismic" && <SonarSeismicModal />}
-                {currentScreen === "tacticalFoxhunt" && <TacticalFoxhuntModal />}
-                {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
-                {currentScreen === "atmosphericSafety" && <AtmosphericSafetyModal />}
-                {currentScreen === "loraTransceiver" && <LoraTransceiverModal onClose={goBack} />}
-                {(currentScreen === "extremeSurvival" || currentScreen === "survivalHud") && <ExtremeSurvivalHudModal />}
-                {currentScreen === "stegoVault" && <StegoVaultModal />}
-                {currentScreen === "shakePair" && <ShakePairModal />}
-                {(currentScreen === "p2pPay" || currentScreen === "redP2PPay") && <RedP2PPayModal />}
-                {currentScreen === "blackout" && <BlackoutSimulatorModal onClose={goBack} />}
-                {(currentScreen === "health" || currentScreen === "systemHealth") && <SystemHealthModal onClose={goBack} />}
-                {(currentScreen === "nodeLogs" || currentScreen === "logs") && <NodeLogsModal onClose={goBack} />}
-                {currentScreen === "secReport" && <SecurityReportModal onClose={goBack} />}
-                {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
-                {(currentScreen === "webCompanionLink" || currentScreen === "companionLink") && (
-                  (preferences?.uiMode ?? 'familiar') === 'familiar' ? (
-                    <div style={{ position: "fixed", inset: 0, zIndex: 99999 }}>
-                      <LinkedDevicesView onClose={goBack} />
-                    </div>
-                  ) : (
-                    <WebCompanionLinkModal onClose={goBack} />
-                  )
-                )}
-                {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
-                {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
-                {currentScreen === "globalShield" && <GlobalShieldPanel />}
-                {currentScreen === "web3Vault" && <Web3VaultModal onClose={goBack} />}
-                {currentScreen === "commercialHub" || currentScreen === "hub" ? <CommercialHubModal isOpen={true} onClose={goBack} /> : null}
-                {currentScreen === "nodemap" && <NodeMap />}
-                {currentScreen === "radar" && <RadarWindow />}
-                {(currentScreen === "call" || isCallPipMinimized) && (
-                  <div style={{ display: currentScreen === "call" ? "block" : "none", width: "100%", height: "100%" }}>
-                    <CallScreen />
-                  </div>
-                )}
-                {currentScreen === "hyperBrowser" && (
-                  <RedHyperBrowserModal
-                    userDid={identity?.identity_hash || 'did:red:guest'}
-                    nickname={identity?.nickname || 'Operador'}
-                    publicKey={identity?.identity_hash || 'pk_00'}
-                    onClose={goBack}
-                    onLaunchMiniApp={(bundle) => launchMiniApp(bundle)}
-                  />
-                )}
-                {currentScreen === "appStore" && (
-                  <SovereignAppStoreModal
-                    userDid={identity?.identity_hash || 'did:red:guest'}
-                    onClose={goBack}
-                    onLaunchApp={(bundle) => launchMiniApp(bundle)}
-                  />
-                )}
-                {currentScreen === "miniApp" && activeMiniAppBundle && (
-                  <MiniAppContainerModal
-                    bundle={activeMiniAppBundle}
-                    userDid={identity?.identity_hash || 'did:red:guest'}
-                    nickname={identity?.nickname || 'Operador'}
-                    publicKey={identity?.identity_hash || 'pk_00'}
-                    onClose={goBack}
-                  />
-                )}
-                {currentScreen === "calculator" && <CalculatorScreen onUnlock={handleCalculatorUnlock} />}
-                {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={(target) => navigate(target || "sidebar")} onEnterVault={(target) => navigate(target || "sidebar")} />}
+                <WorkspaceScreens isTablet={true} onOpenTool={handleOpenTool} />
               </div>
             </div>
           ) : (
-            /* ── Single-Column Mobile Layout (< 768px) ── */
+            /* ── Single-Column Mobile Layout (< 768px) ─────────────────────── */
             <>
               {currentScreen === "sidebar" && <MainNavigationShell isTablet={false} />}
-              {currentScreen === "commandCenter" && <TacticalCommandCenter />}
-
-              {currentScreen === "chat" && <ChatWindow />}
-              {currentScreen === "security" && <SecurityPanel />}
-              {currentScreen === "radar" && <RadarWindow />}
-              {(currentScreen === "call" || isCallPipMinimized) && (
-                <div style={{ display: currentScreen === "call" ? "block" : "none", width: "100%", height: "100%" }}>
-                  <CallScreen />
-                </div>
-              )}
-              {currentScreen === "broadcast" && <BroadcastPanel />}
-              {currentScreen === "crypto" && <CryptoPanel />}
-              {(currentScreen === "groups" || currentScreen === "squads") && <GroupsPanel />}
-              {currentScreen === "status" && <StatusView />}
-              {(currentScreen === "swarmHealthHUD" || currentScreen === "swarmHealth") && (
-                <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(2, 4, 10, 0.88)", backdropFilter: "blur(25px)", WebkitBackdropFilter: "blur(25px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
-                  <SwarmHealthHUD onClose={goBack} />
-                </div>
-              )}
-              {currentScreen === "explorer" && <BlockchainExplorer onClose={goBack} />}
-              {currentScreen === "nodemap" && <NodeMap />}
-              {currentScreen === "network" && <NetworkPanel />}
-              {currentScreen === "dms" && <DMSSettings />}
-              {(currentScreen === "amber" || currentScreen === "amberAdmin") && <AmberAdminPanel onClose={goBack} />}
-              {currentScreen === "guardian" && <GuardianStatusPanel onClose={goBack} />}
-              {currentScreen === "p2pCompass" && <P2PCompassModal />}
-              {(currentScreen === "channels" || currentScreen === "publicChannels") && <PublicChannelsPanel />}
-              {currentScreen === "socialFeed" && <SocialFeedPanel />}
-              {currentScreen === "walkie" && <P2PWalkieTalkieModal />}
-              {(currentScreen === "weather" || currentScreen === "weatherAlert") && <WeatherAlertPanel />}
-              {(currentScreen === "idVault" || currentScreen === "identityVault") && <IdentityVaultModal />}
-              {(currentScreen === "proximity" || currentScreen === "proximityWave") && <ProximityWaveModal />}
-              {(currentScreen === "canvas" || currentScreen === "liveCanvas") && <LiveCanvasModal />}
-              {currentScreen === "ecoMesh" && <EcoMeshPanel />}
-              {(currentScreen === "proximitySettings" || currentScreen === "proximity_settings") && <ProximitySettingsModal />}
-              {(currentScreen === "aiCopilot" || currentScreen === "copilot") && <AICopilotModal />}
-              {(currentScreen === "nearby" || currentScreen === "contacts") && <NearbyDevicesPanel />}
-              {currentScreen === "liveStream" && <LiveStreamBroadcaster onClose={goBack} />}
-              {(currentScreen === "offGridCompass" || currentScreen === "compass") && <OffGridCompassModal />}
-              {currentScreen === "vitalScan" && <VitalScanModal />}
-              {(currentScreen === "survivalBeacon" || currentScreen === "sos") && <SurvivalBeaconModal />}
-              {currentScreen === "tacticalVisionScan" && <TacticalVisionScanModal />}
-              {currentScreen === "shamirRecovery" && <ShamirRecoveryModal />}
-              {currentScreen === "cbrnSatellite" && <CbrnSatelliteModal />}
-              {currentScreen === "zkBarterSubsurface" && <ZkBarterSubsurfaceModal />}
-              {currentScreen === "tcccBallistics" && <TcccBallisticsModal />}
-              {currentScreen === "c4isrEmpDrill" && <C4isrEmpDrillModal />}
-              {currentScreen === "airGapStego" && <AirGapStegoModal />}
-              {currentScreen === "celestialPdr" && <CelestialPdrModal />}
-              {currentScreen === "acousticWarfare" && <AcousticWarfareModal />}
-              {currentScreen === "vitalResources" && <VitalResourcesModal />}
-              {currentScreen === "sonarSeismic" && <SonarSeismicModal />}
-              {currentScreen === "tacticalFoxhunt" && <TacticalFoxhuntModal />}
-              {currentScreen === "atmosphericSafety" && <AtmosphericSafetyModal />}
-              {currentScreen === "loraTransceiver" && <LoraTransceiverModal onClose={goBack} />}
-              {(currentScreen === "extremeSurvival" || currentScreen === "survivalHud") && <ExtremeSurvivalHudModal />}
-              {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
-              {currentScreen === "stegoVault" && <StegoVaultModal />}
-              {currentScreen === "shakePair" && <ShakePairModal />}
-              {(currentScreen === "p2pPay" || currentScreen === "redP2PPay") && <RedP2PPayModal />}
-              {currentScreen === "blackout" && <BlackoutSimulatorModal onClose={goBack} />}
-              {(currentScreen === "health" || currentScreen === "systemHealth") && <SystemHealthModal onClose={goBack} />}
-              {(currentScreen === "nodeLogs" || currentScreen === "logs") && <NodeLogsModal onClose={goBack} />}
-              {currentScreen === "calculator" && <CalculatorScreen onUnlock={handleCalculatorUnlock} />}
-              {currentScreen === "secReport" && <SecurityReportModal onClose={goBack} />}
-              {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
-              {(currentScreen === "webCompanionLink" || currentScreen === "companionLink") && (
-                (preferences?.uiMode ?? 'familiar') === 'familiar' ? (
-                  <div style={{ position: "fixed", inset: 0, zIndex: 99999 }}>
-                    <LinkedDevicesView onClose={goBack} />
-                  </div>
-                ) : (
-                  <WebCompanionLinkModal onClose={goBack} />
-                )
-              )}
-              {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
-              {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
-              {currentScreen === "globalShield" && <GlobalShieldPanel />}
-              {currentScreen === "web3Vault" && <Web3VaultModal onClose={goBack} />}
-              {(currentScreen === "commercialHub" || currentScreen === "hub") && <CommercialHubModal isOpen={true} onClose={goBack} />}
-              {currentScreen === "hyperBrowser" && (
-                <RedHyperBrowserModal
-                  userDid={identity?.identity_hash || 'did:red:guest'}
-                  nickname={identity?.nickname || 'Operador'}
-                  publicKey={identity?.identity_hash || 'pk_00'}
-                  onClose={goBack}
-                  onLaunchMiniApp={(bundle) => launchMiniApp(bundle)}
-                />
-              )}
-              {currentScreen === "appStore" && (
-                <SovereignAppStoreModal
-                  userDid={identity?.identity_hash || 'did:red:guest'}
-                  onClose={goBack}
-                  onLaunchApp={(bundle) => launchMiniApp(bundle)}
-                />
-              )}
-              {currentScreen === "miniApp" && activeMiniAppBundle && (
-                <MiniAppContainerModal
-                  bundle={activeMiniAppBundle}
-                  userDid={identity?.identity_hash || 'did:red:guest'}
-                  nickname={identity?.nickname || 'Operador'}
-                  publicKey={identity?.identity_hash || 'pk_00'}
-                  onClose={goBack}
-                />
-              )}
-              {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={(target) => navigate(target || "sidebar")} onEnterVault={(target) => navigate(target || "sidebar")} />}
+              <WorkspaceScreens isTablet={false} onOpenTool={handleOpenTool} />
             </>
           )}
         </main>

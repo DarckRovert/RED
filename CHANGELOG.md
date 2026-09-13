@@ -1,5 +1,29 @@
 # Changelog
 
+## [104.0.0-tactical-command-hud-and-complete-autonomous-triage-integration] - 2026-09-13
+
+### 🚀 Tactical Command HUD & Complete Autonomous Triage Integration (Release Oficial v104.0.0)
+
+- **Desacoplamiento Arquitectónico del Router de Pantallas (`WorkspaceScreens.tsx`):**
+  - Extracción modular de las 62 pantallas tácticas y el espacio de trabajo `TacticalTabletWorkspace` fuera de `page.tsx`.
+  - Reducción quirúrgica de `page.tsx` de 787 a 354 líneas (-55%), aliviando el grafo de dependencias y acelerando la compilación Turbopack.
+- **Migración Integral del Bus de Blanco Táctico Compartido a Zustand (`tacticalTargetSlice`):**
+  - Erradicación total de eventos asíncronos en `localStorage` (`red_active_target` / `red_tactical_target_point`).
+  - Migración reactiva sincrónica en los 10 módulos tácticos (`NodeMap`, `RadarWindow`, `OffGridCompassModal`, `P2PCompassModal`, `CelestialPdrModal`, `LoraTransceiverModal`, `SonarSeismicModal`, `SurvivalBeaconModal`, `TacticalFoxhuntModal`, `TcccBallisticsModal`).
+- **HUD Flotante de Acción Rápida Táctica (`TacticalQuickActionHUD.tsx`):**
+  - Barra de herramientas táctica flotante de 1-tap con perfiles operacionales conmutables (Táctico C4ISR, Médico TCCC, Reconocimiento / Malla).
+  - Acceso inmediato a telémetro láser, triaje de combate, SOS balístico, baliza de supervivencia, radar y brújula inercial.
+- **Sinergia Triage VitalScan ➔ TCCC y Evacuación Aeromédica (9-Line MEDEVAC):**
+  - Transferencia instantánea desde el escaneo biométrico `VitalScanModal` hacia el triaje de bajas en combate `TcccBallisticsModal` vía `handleTransferToTccc` con geolocalización GPS pre-cargada.
+  - Generación automatizada de tarjeta de incidente con código de triaje y difusión de mensaje táctico 9-Line MEDEVAC por la malla P2P.
+- **Paridad RTL y Tokens Semánticos de Modos Visuales:**
+  - Soporte bidireccional CSS (`[dir="rtl"]`) optimizado para idioma Árabe en cabeceras de chat, modales y tablas tácticas.
+  - Inyección dinámica de tokens CSS semánticos para alternar entre Modo Familiar (estilo WhatsApp) y Modo Táctico (C4ISR HUD).
+- **Gobernanza Atómica SSOT v104.0.0 & Verificación en Hardware Real:**
+  - Sincronización atómica verificada en los 22 archivos SSOT de configuración (`version.ts`, `build.gradle`, Cargo workspaces, service workers y documentación).
+  - Checksum SHA-256 certificado: `ECD9320D9433AE86F2C8FBCB1D658EDB09928A02C7CFD31FEFA53B78093EAF73`.
+  - Desinstalación higiénica, instalación limpia y validación de telemetría de sensores reales (GPS topográfico, brújula magnética, acelerómetros PDR, radar BLE P2P y motor JNI Rust `red_mobile`) en Motorola Moto G22 con cero excepciones no controladas en Logcat.
+
 ## [103.0.0-sovereign-mesh-os-tactical-command-and-complete-localization-parity] - 2026-09-12
 
 ### 🚀 Sovereign Mesh OS — Tactical Command & Complete Localization Parity (Release Oficial v103.0.0)

@@ -972,9 +972,9 @@ export function SurvivalBeaconModal() {
                                                                         name: b.is_mine ? "Tu Baliza SOS" : `SOS: ${b.sender_hash?.slice(0, 8) || "Víctima"}`,
                                                                         lat: b.latitude,
                                                                         lon: b.longitude,
-                                                                        type: "SOS_BEACON"
+                                                                        createdAt: Date.now(),
                                                                     };
-                                                                    localStorage.setItem("red_active_target", JSON.stringify(target));
+                                                                    useRedStore.getState().setTacticalTarget(target, 'SurvivalBeacon');
                                                                     const rawWps = localStorage.getItem("red_offgrid_waypoints");
                                                                     const wps = rawWps ? JSON.parse(rawWps) : [];
                                                                     if (!wps.some((w: any) => Math.abs(w.lat - b.latitude!) < 0.0001 && Math.abs(w.lon - b.longitude!) < 0.0001)) {

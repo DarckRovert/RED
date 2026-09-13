@@ -44,20 +44,17 @@ export const P2PCompassModal: React.FC = () => {
     const [isScanning, setIsScanning] = useState<boolean>(false);
     const [myCoords, setMyCoords] = useState<{ lat: number; lon: number } | null>(null);
 
-    // Inicialización del par rastreado desde el blanco táctico del sistema
+    // Inicialización del par rastreado desde el store Zustand (v103.0.0)
+    const { tacticalTarget: storedTarget, setTacticalTarget } = useRedStore();
+
     useEffect(() => {
-        try {
-            const raw = localStorage.getItem("red_active_target") || localStorage.getItem("red_tactical_target_point");
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (parsed.peerId) {
-                    setTrackedPeerId(parsed.peerId);
-                } else if (parsed.deviceId) {
-                    setTrackedPeerId(parsed.deviceId);
-                }
-            }
-        } catch {}
-    }, []);
+        const t = storedTarget as any;
+        if (t?.peerId) {
+            setTrackedPeerId(t.peerId);
+        } else if (t?.deviceId) {
+            setTrackedPeerId(t.deviceId);
+        }
+    }, [storedTarget]);
 
     // Sincronización continua de posición GNSS de alta precisión
     useEffect(() => {
@@ -137,29 +134,25 @@ export const P2PCompassModal: React.FC = () => {
         const found = nodes.find(n => (n.peer_id || n.identity_hash) === trackedPeerId);
         if (found) return found;
 
-        try {
-            const raw = localStorage.getItem("red_active_target") || localStorage.getItem("red_tactical_target_point");
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (parsed.peerId === trackedPeerId || parsed.deviceId === trackedPeerId) {
-                    return {
-                        identity_hash: trackedPeerId,
-                        peer_id: trackedPeerId,
-                        display_name: parsed.name || "Blanco Táctico",
-                        nickname: parsed.name || "Blanco Táctico",
-                        latitude: parsed.lat,
-                        longitude: parsed.lon,
-                        rssi: parsed.rssi ?? -65,
-                        rssi_dbm: parsed.rssi ?? -65,
-                        distance_meters: null,
-                        last_seen: Date.now(),
-                        transport: "MESH"
-                    } as ProximityNode;
-                }
-            }
-        } catch {}
+        // Fallback: reconstruir desde el blanco táctico del store
+        const t = storedTarget as any;
+        if (t && (t.peerId === trackedPeerId || t.deviceId === trackedPeerId)) {
+            return {
+                identity_hash: trackedPeerId,
+                peer_id: trackedPeerId,
+                display_name: t.name || "Blanco Táctico",
+                nickname: t.name || "Blanco Táctico",
+                latitude: t.lat,
+                longitude: t.lon,
+                rssi: t.rssi ?? -65,
+                rssi_dbm: t.rssi ?? -65,
+                distance_meters: null,
+                last_seen: Date.now(),
+                transport: "MESH"
+            } as ProximityNode;
+        }
         return null;
-    }, [nodes, trackedPeerId]);
+    }, [nodes, trackedPeerId, storedTarget]);
 
     // Derivación de azimut: Great-Circle real si hay coordenadas, hardware bearing si existe, o hash determinista como fallback
     const getNodeBearing = useCallback((n: ProximityNode, index: number) => {
@@ -198,12 +191,10 @@ export const P2PCompassModal: React.FC = () => {
                 lat: targetLat,
                 lon: targetLon,
                 name: `PAR: ${name}`,
-                type: "PEER",
                 peerId: peer.peer_id || peer.identity_hash,
                 createdAt: Date.now()
             };
-            localStorage.setItem("red_active_target", JSON.stringify(target));
-            localStorage.setItem("red_tactical_target_point", JSON.stringify(target));
+            setTacticalTarget(target, 'P2PCompass');
             toast.success(`🎯 ${name} fijado como blanco táctico`);
         } else {
             toast.warning("Se requieren coordenadas GNSS para fijar el blanco");

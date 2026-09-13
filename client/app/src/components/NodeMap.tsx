@@ -303,67 +303,20 @@ export default function NodeMap() {
         toast.info("Bóveda de mapas offline vaciada");
     };
 
-    // Tactical Target Navigation State (Synchronized with OffGridCompassModal, Foxhunt & Sonar)
-    const [target, setTarget] = useState<TacticalTarget | null>(() => {
-        if (typeof window !== "undefined") {
-            try {
-                const saved = localStorage.getItem("red_tactical_target_point") || localStorage.getItem("red_active_target");
-                if (saved) {
-                    const parsed = JSON.parse(saved);
-                    const targetLat = typeof parsed.lat === "number" ? parsed.lat : undefined;
-                    const targetLon = typeof parsed.lon === "number" ? parsed.lon : (typeof parsed.lng === "number" ? parsed.lng : undefined);
-                    if (targetLat !== undefined && targetLon !== undefined) {
-                        return {
-                            lat: targetLat,
-                            lon: targetLon,
-                            name: parsed.name || "Blanco Táctico Activo",
-                            createdAt: parsed.createdAt || Date.now()
-                        };
-                    }
-                }
-            } catch {}
-        }
-        return null;
-    });
-
-    useEffect(() => {
-        const checkTarget = () => {
-            try {
-                const saved = localStorage.getItem("red_tactical_target_point") || localStorage.getItem("red_active_target");
-                if (saved) {
-                    const parsed = JSON.parse(saved);
-                    const targetLat = typeof parsed.lat === "number" ? parsed.lat : undefined;
-                    const targetLon = typeof parsed.lon === "number" ? parsed.lon : (typeof parsed.lng === "number" ? parsed.lng : undefined);
-                    if (targetLat !== undefined && targetLon !== undefined) {
-                        setTarget({
-                            lat: targetLat,
-                            lon: targetLon,
-                            name: parsed.name || "Blanco Táctico Activo",
-                            createdAt: parsed.createdAt || Date.now()
-                        });
-                    }
-                } else {
-                    setTarget(null);
-                }
-            } catch {}
-        };
-
-        window.addEventListener("storage", checkTarget);
-        return () => window.removeEventListener("storage", checkTarget);
-    }, []);
+    // ── Tactical Target — consumido desde Zustand (v103.0.0) ─────────────────
+    // Reemplaza el patrón localStorage + window.storage event que era inestable
+    // en Capacitor/WebView. La suscripción reactiva de Zustand garantiza sincronía
+    // inmediata con Radar, Foxhunt, Compass y demás módulos sin eventos DOM.
+    const { tacticalTarget: target, setTacticalTarget, clearTacticalTarget } = useRedStore();
 
     const handleSetTarget = (lat: number, lon: number, name?: string) => {
-        const newTarget: TacticalTarget = {
+        const newTarget = {
             lat: Math.round(lat * 100000) / 100000,
             lon: Math.round(lon * 100000) / 100000,
             name: name || "Punto Objetivo Táctico",
-            createdAt: Date.now()
+            createdAt: Date.now(),
         };
-        setTarget(newTarget);
-        try {
-            localStorage.setItem("red_tactical_target_point", JSON.stringify(newTarget));
-            localStorage.setItem("red_active_target", JSON.stringify(newTarget));
-        } catch {}
+        setTacticalTarget(newTarget, 'NodeMap');
 
         if (gpsData.lat !== 0 && gpsData.lng !== 0) {
             const g = OffGridNavigationEngine.calculateTacticalGuidance(gpsData.lat, gpsData.lng, newTarget.lat, newTarget.lon, effectiveHeading);
@@ -374,11 +327,7 @@ export default function NodeMap() {
     };
 
     const handleClearTarget = () => {
-        setTarget(null);
-        try {
-            localStorage.removeItem("red_tactical_target_point");
-            localStorage.removeItem("red_active_target");
-        } catch {}
+        clearTacticalTarget();
         toast.info("Objetivo táctico cancelado");
     };
 

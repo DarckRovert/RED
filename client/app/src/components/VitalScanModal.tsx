@@ -78,6 +78,11 @@ export function VitalScanModal() {
         let unsubGps: (() => void) | null = null;
         import("../lib/sensors/TacticalLocationEngine").then(({ TacticalLocationEngine }) => {
             if (!isMounted) return;
+            const last = TacticalLocationEngine.getLastKnownLocation();
+            if (last && TacticalLocationEngine.isValidCoordinates(last.lat, last.lon)) {
+                setCoords({ lat: last.lat!, lon: last.lon! });
+                if (last.alt !== undefined) setAltitudeMeters(last.alt.toString());
+            }
             unsubGps = TacticalLocationEngine.watchLocation((loc) => {
                 if (loc.alt !== undefined) {
                     setAltitudeMeters(loc.alt.toString());
@@ -364,6 +369,48 @@ export function VitalScanModal() {
         store.sendMessage(vitalsPayload, { msg_type: 'vital_sign' });
         toast.success("🫀 Ficha médica transmitida al chat con cifrado E2E");
         navigate("chat", activeChat);
+    };
+
+    const handleTransferToTccc = async () => {
+        if (!triageResult) return;
+        const label = victimLabelInput.trim() || `Víctima #${triageRecords.length + 1} [${triageResult.category}]`;
+        let effectiveCoords = { ...coords };
+        if (!effectiveCoords.lat || !effectiveCoords.lon) {
+            try {
+                const { TacticalLocationEngine } = await import("../lib/sensors/TacticalLocationEngine");
+                const last = TacticalLocationEngine.getLastKnownLocation();
+                if (last && TacticalLocationEngine.isValidCoordinates(last.lat, last.lon)) {
+                    effectiveCoords = { lat: last.lat!, lon: last.lon! };
+                }
+            } catch {}
+        }
+        const transferPayload = {
+            victimLabel: label,
+            category: triageResult.category,
+            actionRequired: triageResult.actionRequired,
+            bpm: (scanResult && scanResult.bpm > 0) ? scanResult.bpm : undefined,
+            spo2: (scanResult && scanResult.spo2 > 0) ? scanResult.spo2 : undefined,
+            respRate,
+            capRefillSec,
+            coords: effectiveCoords,
+            timestamp: Date.now()
+        };
+        try {
+            localStorage.setItem("red_triage_transfer", JSON.stringify(transferPayload));
+            if (effectiveCoords.lat && effectiveCoords.lon) {
+                useRedStore.getState().setTacticalTarget({
+                    name: `MEDEVAC: ${label}`,
+                    lat: effectiveCoords.lat,
+                    lon: effectiveCoords.lon,
+                    createdAt: Date.now()
+                });
+            }
+            TacticalAudioEngine.playRogerBeep();
+            toast.success("🚑 Víctima transferida a TCCC & Blanco Táctico MEDEVAC fijado");
+            navigate("tcccBallistics");
+        } catch (e: any) {
+            toast.error("Error al transferir a TCCC: " + e?.message);
+        }
     };
 
     const handleSaveTriageRecord = async () => {
@@ -879,6 +926,19 @@ export function VitalScanModal() {
                                             >
                                                 <span>📤</span>
                                                 <span>Enviar a Chat</span>
+                                            </button>
+                                            <button
+                                                onClick={handleTransferToTccc}
+                                                className="btn-tactical-primary"
+                                                style={{
+                                                    padding: "10px 16px", fontSize: "0.85rem",
+                                                    background: "linear-gradient(135deg, #FF3355 0%, #B71C1C 100%)",
+                                                    color: "#FFF", display: "flex", alignItems: "center", gap: "6px"
+                                                }}
+                                                title="Transferir víctima al módulo TCCC y fijar blanco de evacuación médica"
+                                            >
+                                                <span>🩸</span>
+                                                <span>TCCC / MEDEVAC</span>
                                             </button>
                                         </div>
                                     </div>

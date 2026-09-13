@@ -280,13 +280,12 @@ export function SonarSeismicModal() {
             };
             wps.unshift(newWp);
             localStorage.setItem("red_offgrid_waypoints", JSON.stringify(wps.slice(0, 30)));
-            localStorage.setItem("red_active_target", JSON.stringify({
+            useRedStore.getState().setTacticalTarget({
                 name: newWp.name,
                 lat: 0,
                 lon: 0,
-                type: "SURVIVOR_TDOA",
-                depthMeters: seismicResult.estimatedDepthMeters
-            }));
+                createdAt: Date.now(),
+            }, 'SonarSeismic');
             toast.success("🧭 Posición de víctima fijada. Abriendo navegación.");
             navigate("compass");
         } catch {

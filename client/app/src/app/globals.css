@@ -2068,3 +2068,141 @@ body.mode-defcon-survival {
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   RTL (Right-to-Left) Layout Overrides — árabe (ar), v103.0.0
+   Activado por: html[dir="rtl"] (asignado automáticamente por i18nEngine.tsx
+   cuando el locale detectado es 'ar').
+   
+   Principio: invertir únicamente los ejes horizontales.
+   Propiedades seguras: text-align, flex-direction en filas, margin-inline,
+   padding-inline, left/right en posicionados. NO invertir colores ni sombras.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+[dir="rtl"] {
+  /* ── Texto base ── */
+  text-align: right;
+  letter-spacing: 0; /* El árabe no usa letter-spacing positivo */
+}
+
+/* Elementos de fila flex → dirección espejada */
+[dir="rtl"] .app-main,
+[dir="rtl"] .tablet-split-layout {
+  flex-direction: row-reverse;
+}
+
+/* Layout tablet: sidebar a la derecha en RTL */
+[dir="rtl"] .tablet-sidebar-pane {
+  border-right: none;
+  border-left: 1px solid rgba(0, 229, 255, 0.08);
+}
+
+/* Navegación: items de lista horizontal */
+[dir="rtl"] .nav-item-row,
+[dir="rtl"] .contact-item,
+[dir="rtl"] .message-bubble-row {
+  flex-direction: row-reverse;
+}
+
+/* Burbujas de chat: alineación espejada */
+[dir="rtl"] .bubble-outgoing {
+  align-self: flex-start;
+  border-radius: 18px 18px 18px 4px;
+}
+[dir="rtl"] .bubble-incoming {
+  align-self: flex-end;
+  border-radius: 18px 18px 4px 18px;
+}
+
+/* Inputs y textareas */
+[dir="rtl"] input,
+[dir="rtl"] textarea {
+  text-align: right;
+  direction: rtl;
+}
+
+/* Botones con iconos a la izquierda en LTR → derecha en RTL */
+[dir="rtl"] .btn-with-icon {
+  flex-direction: row-reverse;
+}
+
+/* StatusHeader badges: alineación invertida */
+[dir="rtl"] .status-header-inner {
+  flex-direction: row-reverse;
+}
+
+/* Sidebar en mobile: slide desde la derecha (si usa transform) */
+[dir="rtl"] .sidebar-slide-in {
+  transform-origin: right center;
+}
+
+/* Iconos de chevron/flecha direccional */
+[dir="rtl"] .icon-chevron-right::before { content: "‹"; }
+[dir="rtl"] .icon-chevron-left::before  { content: "›"; }
+
+/* Scrollbar: en escritorio mostrar a la izquierda */
+@media (min-width: 768px) {
+  [dir="rtl"] ::-webkit-scrollbar {
+    /* El propio browser mueve la scrollbar en RTL — no override necesario */
+  }
+}
+
+/* Tipografía: usar fuente con soporte árabe cuando dir=rtl.
+   JetBrains Mono no tiene árabe — fallback al sistema. */
+[dir="rtl"] body,
+[dir="rtl"] .app-main {
+  font-family: 'Segoe UI', 'Tahoma', 'Arabic Transparent', system-ui, sans-serif;
+}
+
+/* Excepciones: los HUDs tácticos y monitores de código mantienen LTR
+   porque son coordenadas, hex y datos numéricos — dirección LTR invariante */
+[dir="rtl"] .hud-tactical,
+[dir="rtl"] .mono-data,
+[dir="rtl"] code,
+[dir="rtl"] pre,
+[dir="rtl"] .font-mono {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: embed;
+}
+
+/* Posicionamiento espejado del HUD táctico flotante en RTL */
+[dir="rtl"] .tactical-quick-hud {
+  right: auto;
+  left: 16px;
+  align-items: flex-start;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MODOS VISUALES: FAMILIAR (WhatsApp Style) vs TÁCTICO (C4ISR HUD) (v103.0.0+)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── MODO FAMILIAR (Paleta WhatsApp Soberana) ── */
+html.mode-familiar,
+body.mode-familiar {
+  --chat-panel-bg: #0B141A;
+  --chat-bubble-out: #005C4B;
+  --chat-bubble-in: #202C33;
+  --chat-bubble-text: #E9EDEF;
+  --chat-bubble-meta: #8696A0;
+  --chat-accent: #00A884;
+  --chat-accent-glow: rgba(0, 168, 132, 0.35);
+  --chat-input-bg: #2A3942;
+  --chat-border: rgba(134, 150, 160, 0.15);
+  --chat-active-indicator: #25D366;
+}
+
+/* ── MODO TÁCTICO (C4ISR / Estilo Militar ATAK) ── */
+html.mode-tactical,
+body.mode-tactical {
+  --chat-panel-bg: var(--bg-void);
+  --chat-bubble-out: rgba(232, 33, 58, 0.30);
+  --chat-bubble-in: rgba(18, 18, 32, 0.85);
+  --chat-bubble-text: #FFFFFF;
+  --chat-bubble-meta: rgba(255, 255, 255, 0.58);
+  --chat-accent: var(--accent-cyan);
+  --chat-accent-glow: rgba(0, 229, 255, 0.35);
+  --chat-input-bg: rgba(14, 14, 26, 0.85);
+  --chat-border: rgba(0, 229, 255, 0.25);
+  --chat-active-indicator: var(--accent-emerald);
+}

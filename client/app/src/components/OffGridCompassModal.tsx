@@ -114,10 +114,9 @@ export function OffGridCompassModal() {
 
     const [solarAzimuth, setSolarAzimuth] = useState<{ azimuthDegrees: number; elevationDegrees: number; isNight: boolean }>({ azimuthDegrees: 0, elevationDegrees: 0, isNight: false });
 
-    // Tactical Target Navigation State (Persisted in memory & localStorage)
-    const [target, setTarget] = useState<TacticalTarget | null>(null);
-    
+
     const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
+
     const [newWpName, setNewWpName] = useState("");
     const [newWpDist, setNewWpDist] = useState("500");
     const [newWpBearing, setNewWpBearing] = useState("45");
@@ -141,26 +140,16 @@ export function OffGridCompassModal() {
     const hasInitializedLandmarks = useRef<boolean>(false);
     const ephemCacheRef = useRef<{ data: any; ts: number; lat: number; lon: number } | null>(null);
 
-    // Load initial stored values from localStorage
+    // Load initial stored values
+    // El target táctico viene del store Zustand (v103.0.0) — ya no se lee localStorage aquí.
+    // El componente padre WorkspaceScreens inyecta el estado reactivo vía useRedStore.
+    const { tacticalTarget: target, setTacticalTarget, clearTacticalTarget } = useRedStore();
+
     useEffect(() => {
         let hasStoredLm1 = false;
         let hasStoredLm2 = false;
 
         try {
-            const savedTarget = localStorage.getItem("red_tactical_target_point") || localStorage.getItem("red_active_target");
-            if (savedTarget) {
-                const parsed = JSON.parse(savedTarget);
-                const targetLat = typeof parsed.lat === "number" ? parsed.lat : undefined;
-                const targetLon = typeof parsed.lon === "number" ? parsed.lon : (typeof parsed.lng === "number" ? parsed.lng : undefined);
-                if (targetLat !== undefined && targetLon !== undefined) {
-                    setTarget({
-                        lat: targetLat,
-                        lon: targetLon,
-                        name: parsed.name || "Blanco Táctico Activo",
-                        createdAt: parsed.createdAt || Date.now()
-                    });
-                }
-            }
 
             const savedWps = localStorage.getItem("red_offgrid_waypoints");
             if (savedWps) setWaypoints(JSON.parse(savedWps));
@@ -277,19 +266,15 @@ export function OffGridCompassModal() {
         ? OffGridNavigationEngine.calculateTacticalGuidance(activeCoords.lat, activeCoords.lon, target.lat, target.lon, heading)
         : null;
 
-    // Set or update tactical target point (synchronized across all navigation modals)
+    // Set or update tactical target point — Zustand store (v103.0.0)
     const handleSetTarget = useCallback((lat: number, lon: number, name?: string) => {
-        const newTarget: TacticalTarget = {
+        const newTarget = {
             lat: Math.round(lat * 100000) / 100000,
             lon: Math.round(lon * 100000) / 100000,
             name: name || "Punto Objetivo Táctico",
-            createdAt: Date.now()
+            createdAt: Date.now(),
         };
-        setTarget(newTarget);
-        try {
-            localStorage.setItem("red_tactical_target_point", JSON.stringify(newTarget));
-            localStorage.setItem("red_active_target", JSON.stringify(newTarget));
-        } catch {}
+        setTacticalTarget(newTarget, 'OffGridCompass');
 
         if (activeCoords) {
             const g = OffGridNavigationEngine.calculateTacticalGuidance(activeCoords.lat, activeCoords.lon, newTarget.lat, newTarget.lon, heading);
@@ -297,17 +282,13 @@ export function OffGridCompassModal() {
         } else {
             toast.success(`🎯 Objetivo Fijado: [${newTarget.lat.toFixed(5)}, ${newTarget.lon.toFixed(5)}]`);
         }
-    }, [activeCoords, heading]);
+    }, [activeCoords, heading, setTacticalTarget]);
 
     // Clear tactical target point
     const handleClearTarget = useCallback(() => {
-        setTarget(null);
-        try {
-            localStorage.removeItem("red_tactical_target_point");
-            localStorage.removeItem("red_active_target");
-        } catch {}
+        clearTacticalTarget();
         toast.info("Objetivo táctico cancelado");
-    }, []);
+    }, [clearTacticalTarget]);
 
     // Proyectar posición estimada PDR (Dead Reckoning) hacia el sistema de coordenadas
     const handleAdoptPdrCoords = useCallback(() => {

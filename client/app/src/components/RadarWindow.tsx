@@ -187,10 +187,7 @@ export default function RadarWindow() {
                 type: "P2P_PEER",
                 createdAt: Date.now()
             };
-            try {
-                localStorage.setItem("red_active_target", JSON.stringify(targetPayload));
-                localStorage.setItem("red_tactical_target_point", JSON.stringify(targetPayload));
-            } catch {}
+            useRedStore.getState().setTacticalTarget(targetPayload, 'Radar');
             toast.success(`🧭 Rastreando a ${peer.name} en Brújula P2P`);
             navigate("p2pCompass");
         }
@@ -208,10 +205,7 @@ export default function RadarWindow() {
                 type: "RADAR_SIGINT",
                 createdAt: Date.now()
             };
-            try {
-                localStorage.setItem("red_active_target", JSON.stringify(targetPayload));
-                localStorage.setItem("red_tactical_target_point", JSON.stringify(targetPayload));
-            } catch {}
+            useRedStore.getState().setTacticalTarget(targetPayload, 'Radar');
             toast.success(`🦊 Blanco fijado para Foxhunt: ${peer.name}`);
             navigate("tacticalFoxhunt");
         }
