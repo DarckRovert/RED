@@ -1,6 +1,7 @@
 # Node / Web Dependencies
 node_modules/
 .next/
+_next/
 dist/
 out/
 build/
