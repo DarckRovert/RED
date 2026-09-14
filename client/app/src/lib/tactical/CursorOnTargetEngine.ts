@@ -7,6 +7,9 @@
  */
 
 import { TacticalAffiliation, TacticalRole } from './MilStd2525Engine';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const RedNode = registerPlugin<any>('RedNode');
 
 export interface CotPoint {
     lat: number;
@@ -36,12 +39,16 @@ export interface CotEvent {
         remarks?: string;
         group?: { name: string; role: string };
         status?: { battery?: number; readiness?: string };
+        emergency?: { type?: string; cancel?: boolean };
         color?: string;
     };
 }
 
 export class CursorOnTargetEngine {
     private static instance: CursorOnTargetEngine | null = null;
+
+    public static readonly DEFAULT_TAK_MULTICAST_GROUP = '239.2.3.1';
+    public static readonly DEFAULT_TAK_MULTICAST_PORT = 6969;
 
     private constructor() {}
 
@@ -142,6 +149,11 @@ export class CursorOnTargetEngine {
         if (event.detail?.status?.battery !== undefined && isFinite(event.detail.status.battery)) {
             const safeBat = Math.max(0, Math.min(100, Math.round(event.detail.status.battery)));
             detailXml += `<status battery="${safeBat}"/>`;
+        }
+        if (event.detail?.emergency) {
+            const emType = this.escapeXml(event.detail.emergency.type || '911');
+            const emCancel = event.detail.emergency.cancel ? 'true' : 'false';
+            detailXml += `<emergency type="${emType}" cancel="${emCancel}"/>`;
         }
         detailXml += '</detail>';
 
@@ -257,6 +269,44 @@ export class CursorOnTargetEngine {
                 status: (batteryPct !== undefined && isFinite(batteryPct))
                     ? { battery: Math.max(0, Math.min(100, Math.round(batteryPct))) }
                     : undefined
+            }
+        };
+    }
+
+    /**
+     * Creates an emergency SOS CotEvent for instant military beacon alert (ATAK 911)
+     */
+    public createEmergencyEvent(
+        operatorDid: string,
+        lat: number,
+        lon: number,
+        message: string = 'SOS EMERGENCY BROADCAST'
+    ): CotEvent {
+        const now = new Date();
+        const stale = new Date(now.getTime() + 600000); // 10 minutes validity
+        const safeDid = operatorDid ? operatorDid.slice(0, 12) : 'ANON';
+        const safeLat = (typeof lat === 'number' && isFinite(lat)) ? Math.max(-90, Math.min(90, lat)) : 0;
+        const safeLon = (typeof lon === 'number' && isFinite(lon)) ? Math.max(-180, Math.min(180, lon)) : 0;
+
+        return {
+            version: '2.0',
+            uid: `RED-EMERGENCY-${safeDid}`,
+            type: 'b-a-o-tbl', // CoT 911 distress beacon
+            time: now.toISOString(),
+            start: now.toISOString(),
+            stale: stale.toISOString(),
+            how: 'm-g',
+            point: {
+                lat: safeLat,
+                lon: safeLon,
+                hae: 0,
+                ce: 10.0,
+                le: 10.0
+            },
+            detail: {
+                contact: { callsign: `SOS-${safeDid.toUpperCase()}` },
+                remarks: `[EMERGENCIA RED SOS] ${message}`,
+                emergency: { type: '911', cancel: false }
             }
         };
     }
@@ -443,7 +493,115 @@ export class CursorOnTargetEngine {
         return crc & 0xFFFF;
     }
 
+    // ─── ATAK / CivTAK / WinTAK Multicast UDP Gateway (239.2.3.1:6969) ─────────
+
+    private isMulticastActive = false;
+    private multicastListenerHandle: any = null;
+    private takContactListeners: Set<(event: CotEvent, sourceIp?: string) => void> = new Set();
+    private bftIntervalTimer: any = null;
+
+    /**
+     * Inicia el Gateway Nativo Multicast UDP CoT (239.2.3.1:6969) para recepción de contactos ATAK
+     */
+    public async initMulticastGateway(): Promise<boolean> {
+        if (this.isMulticastActive) return true;
+        if (!Capacitor.isNativePlatform()) return false;
+
+        try {
+            const res = await RedNode.startCotMulticast();
+            if (!res || !res.active) return false;
+
+            if (this.multicastListenerHandle) {
+                try { await this.multicastListenerHandle.remove(); } catch {}
+                this.multicastListenerHandle = null;
+            }
+
+            this.multicastListenerHandle = await RedNode.addListener('cotMulticastData', (data: { xml: string; sourceIp?: string }) => {
+                if (data && data.xml) {
+                    const parsed = this.parseFromXml(data.xml);
+                    if (parsed) {
+                        for (const cb of this.takContactListeners) {
+                            try { cb(parsed, data.sourceIp); } catch {}
+                        }
+                    }
+                }
+            });
+
+            this.isMulticastActive = true;
+            console.log('[CoT] ✅ Gateway Multicast UDP activo en 239.2.3.1:6969');
+            return true;
+        } catch (e) {
+            console.error('[CoT] Error initializing Multicast Gateway:', e);
+            return false;
+        }
+    }
+
+    public async stopMulticastGateway(): Promise<void> {
+        this.stopAutoBft();
+        if (this.multicastListenerHandle) {
+            try { await this.multicastListenerHandle.remove(); } catch {}
+            this.multicastListenerHandle = null;
+        }
+        if (Capacitor.isNativePlatform()) {
+            try { await RedNode.stopCotMulticast(); } catch {}
+        }
+        this.isMulticastActive = false;
+    }
+
+    public isGatewayActive(): boolean {
+        return this.isMulticastActive;
+    }
+
+    public onTakContact(callback: (event: CotEvent, sourceIp?: string) => void): () => void {
+        this.takContactListeners.add(callback);
+        return () => this.takContactListeners.delete(callback);
+    }
+
+    public async broadcastToTak(event: CotEvent): Promise<boolean> {
+        const xml = this.serializeToXml(event);
+        if (Capacitor.isNativePlatform()) {
+            try {
+                await RedNode.sendCotMulticast({ xml });
+                return true;
+            } catch (e) {
+                console.error('[CoT] Error broadcasting to TAK:', e);
+                return false;
+            }
+        }
+        return false;
+    }
+
+    public async broadcastBftToTak(nodeId: string, callsign: string, lat: number, lon: number, role: TacticalRole = 'INFANTRY', battery?: number): Promise<boolean> {
+        const evt = this.createBftEvent(nodeId, callsign, lat, lon, role, battery);
+        return await this.broadcastToTak(evt);
+    }
+
+    public async broadcastEmergencyToTak(id: string, lat: number, lon: number, message: string): Promise<boolean> {
+        const evt = this.createEmergencyEvent(id, lat, lon, message);
+        return await this.broadcastToTak(evt);
+    }
+
+    public startAutoBft(nodeId: string, callsign: string, getCoords: () => { lat: number; lon: number; battery?: number }, intervalMs = 5000): void {
+        this.stopAutoBft();
+        this.bftIntervalTimer = setInterval(async () => {
+            const coords = getCoords();
+            if (coords && coords.lat && coords.lon) {
+                await this.broadcastBftToTak(nodeId, callsign, coords.lat, coords.lon, 'INFANTRY', coords.battery);
+            }
+        }, intervalMs);
+    }
+
+    public stopAutoBft(): void {
+        if (this.bftIntervalTimer) {
+            clearInterval(this.bftIntervalTimer);
+            this.bftIntervalTimer = null;
+        }
+    }
+
     public destroy(): void {
+        this.stopAutoBft();
+        this.stopMulticastGateway();
+        this.takContactListeners.clear();
         CursorOnTargetEngine.instance = null;
     }
 }

@@ -49,6 +49,7 @@
     <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
     <uses-feature android:name="android.hardware.biometrics.face" android:required="false" />
     <uses-feature android:name="android.hardware.biometrics.iris" android:required="false" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
     <!-- Package visibility queries for Android 11+ (API 30+) speech recognition service -->
@@ -123,5 +124,27 @@
             android:name=".RedReplyReceiver"
             android:enabled="true"
             android:exported="false" />
+
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".RedActionReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="f.red.app.ACTION_PANIC_SOS" />
+                <action android:name="f.red.app.ACTION_SILENCE" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

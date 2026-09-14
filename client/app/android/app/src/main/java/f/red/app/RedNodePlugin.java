@@ -16,6 +16,16 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import androidx.core.content.FileProvider;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbDeviceConnection;
+import android.hardware.usb.UsbManager;
+import com.hoho.android.usbserial.driver.UsbSerialDriver;
+import com.hoho.android.usbserial.driver.UsbSerialPort;
+import com.hoho.android.usbserial.driver.UsbSerialProber;
+import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -25,9 +35,19 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.DatagramPacket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.MulticastSocket;
+import java.net.NetworkInterface;
 import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import android.util.Base64;
 
 @CapacitorPlugin(name = "RedNode")
 public class RedNodePlugin extends Plugin {
@@ -79,6 +99,16 @@ public class RedNodePlugin extends Plugin {
                 speechRecognizer.destroy();
             } catch (Exception ignored) {}
             speechRecognizer = null;
+        }
+        closeCurrentUsbPort();
+        if (usbPermissionReceiver != null) {
+            try { getContext().unregisterReceiver(usbPermissionReceiver); } catch (Exception ignored) {}
+            usbPermissionReceiver = null;
+        }
+        stopCotMulticastInternal();
+        if (activeMbtilesReader != null) {
+            try { activeMbtilesReader.close(); } catch (Exception ignored) {}
+            activeMbtilesReader = null;
         }
         super.handleOnDestroy();
     }
@@ -440,6 +470,77 @@ public class RedNodePlugin extends Plugin {
         } catch (Exception e) {
             com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
             ret.put("available", false);
+            call.resolve(ret);
+        }
+    }
+
+    /** Consulta el sensor magnetómetro triaxial de hardware (Sensor.TYPE_MAGNETIC_FIELD) en microteslas (uT). */
+    @PluginMethod
+    public void getMagnetometerSensor(PluginCall call) {
+        try {
+            SensorManager sm = (SensorManager) getContext().getSystemService(Context.SENSOR_SERVICE);
+            if (sm == null) {
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("available", false);
+                ret.put("reason", "SensorManager no disponible");
+                call.resolve(ret);
+                return;
+            }
+            Sensor magSensor = sm.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+            if (magSensor == null) {
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("available", false);
+                ret.put("reason", "Sensor magnetómetro no presente en este hardware");
+                call.resolve(ret);
+                return;
+            }
+            final boolean[] resolved = {false};
+            SensorEventListener listener = new SensorEventListener() {
+                @Override
+                public void onSensorChanged(SensorEvent event) {
+                    if (!resolved[0] && event.values != null && event.values.length >= 3) {
+                        resolved[0] = true;
+                        sm.unregisterListener(this);
+                        float x = event.values[0];
+                        float y = event.values[1];
+                        float z = event.values[2];
+                        double magnitude = Math.sqrt(x * x + y * y + z * z);
+                        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                        ret.put("available", true);
+                        ret.put("x", (double) x);
+                        ret.put("y", (double) y);
+                        ret.put("z", (double) z);
+                        ret.put("magnitude", magnitude);
+                        ret.put("accuracy", event.accuracy);
+                        ret.put("sensor_name", magSensor.getName());
+                        ret.put("vendor", magSensor.getVendor());
+                        call.resolve(ret);
+                    }
+                }
+                @Override
+                public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+            };
+            if (!sm.registerListener(listener, magSensor, SensorManager.SENSOR_DELAY_GAME)) {
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("available", false);
+                ret.put("reason", "No se pudo registrar el listener del sensor magnético");
+                call.resolve(ret);
+                return;
+            }
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                if (!resolved[0]) {
+                    resolved[0] = true;
+                    sm.unregisterListener(listener);
+                    com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                    ret.put("available", false);
+                    ret.put("reason", "Timeout al obtener lectura del sensor magnético");
+                    try { call.resolve(ret); } catch (Exception ignored) {}
+                }
+            }, 800);
+        } catch (Exception e) {
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("available", false);
+            ret.put("reason", "Error accediendo al magnetómetro: " + e.getMessage());
             call.resolve(ret);
         }
     }
@@ -986,5 +1087,608 @@ public class RedNodePlugin extends Plugin {
             case SpeechRecognizer.ERROR_SPEECH_TIMEOUT: return "Silencio prolongado";
             default: return "Error de reconocimiento (" + error + ")";
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // NATIVE USB-OTG SERIAL DRIVER (LoRa Semtech / Meshtastic / FTDI / CP210x / CH340)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    private static final String ACTION_USB_PERMISSION = "f.red.app.USB_PERMISSION";
+    private UsbSerialPort currentUsbPort = null;
+    private UsbDeviceConnection currentUsbConnection = null;
+    private SerialInputOutputManager currentUsbIoManager = null;
+    private BroadcastReceiver usbPermissionReceiver = null;
+
+    private synchronized void closeCurrentUsbPort() {
+        if (currentUsbIoManager != null) {
+            try {
+                currentUsbIoManager.setListener(null);
+                currentUsbIoManager.stop();
+            } catch (Exception ignored) {}
+            currentUsbIoManager = null;
+        }
+        if (currentUsbPort != null) {
+            try {
+                currentUsbPort.close();
+            } catch (Exception ignored) {}
+            currentUsbPort = null;
+        }
+        if (currentUsbConnection != null) {
+            try {
+                currentUsbConnection.close();
+            } catch (Exception ignored) {}
+            currentUsbConnection = null;
+        }
+    }
+
+    /**
+     * Lista todos los puertos serie USB-OTG disponibles actualmente conectados al dispositivo Android.
+     */
+    @PluginMethod
+    public void listUsbSerialDevices(PluginCall call) {
+        try {
+            UsbManager usbManager = (UsbManager) getContext().getSystemService(Context.USB_SERVICE);
+            if (usbManager == null) {
+                call.reject("UsbManager no disponible en este dispositivo");
+                return;
+            }
+
+            java.util.List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager);
+            com.getcapacitor.JSArray devicesArray = new com.getcapacitor.JSArray();
+
+            for (UsbSerialDriver driver : availableDrivers) {
+                UsbDevice device = driver.getDevice();
+                com.getcapacitor.JSObject devObj = new com.getcapacitor.JSObject();
+                devObj.put("deviceId", device.getDeviceId());
+                devObj.put("deviceName", device.getDeviceName());
+                devObj.put("vendorId", device.getVendorId());
+                devObj.put("productId", device.getProductId());
+                devObj.put("driverClass", driver.getClass().getSimpleName());
+                devObj.put("portsCount", driver.getPorts().size());
+                devObj.put("hasPermission", usbManager.hasPermission(device));
+                
+                String manufacturer = "";
+                String product = "";
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    try { manufacturer = device.getManufacturerName(); } catch (Exception ignored) {}
+                    try { product = device.getProductName(); } catch (Exception ignored) {}
+                }
+                devObj.put("manufacturer", manufacturer != null ? manufacturer : "");
+                devObj.put("productName", product != null ? product : "");
+
+                devicesArray.put(devObj);
+            }
+
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("devices", devicesArray);
+            ret.put("connected", currentUsbPort != null && currentUsbPort.isOpen());
+            call.resolve(ret);
+        } catch (Exception e) {
+            android.util.Log.e("RedNodePlugin", "Error listando dispositivos USB: " + e.getMessage(), e);
+            call.reject("Error al listar dispositivos USB: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Abre la conexión con el transceptor LoRa / conversor UART conectado por cable USB-C OTG.
+     * Si no tiene permiso concedido, solicita al usuario el diálogo del sistema Android.
+     */
+    @PluginMethod
+    public void openUsbSerial(PluginCall call) {
+        try {
+            UsbManager usbManager = (UsbManager) getContext().getSystemService(Context.USB_SERVICE);
+            if (usbManager == null) {
+                call.reject("UsbManager no disponible");
+                return;
+            }
+
+            java.util.List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager);
+            if (availableDrivers.isEmpty()) {
+                call.reject("No se detectó ningún dispositivo USB Serial (CP210x, CH340, FTDI, CDC-ACM) conectado vía OTG");
+                return;
+            }
+
+            Integer targetDeviceId = call.getInt("deviceId", null);
+            int baudRate = call.getInt("baudRate", 115200);
+            int dataBits = call.getInt("dataBits", 8);
+            int stopBits = call.getInt("stopBits", UsbSerialPort.STOPBITS_1);
+            int parity = call.getInt("parity", UsbSerialPort.PARITY_NONE);
+
+            UsbSerialDriver targetDriver = null;
+            if (targetDeviceId != null) {
+                for (UsbSerialDriver driver : availableDrivers) {
+                    if (driver.getDevice().getDeviceId() == targetDeviceId) {
+                        targetDriver = driver;
+                        break;
+                    }
+                }
+            }
+            if (targetDriver == null) {
+                targetDriver = availableDrivers.get(0); // Tomar el primer transceptor disponible
+            }
+
+            final UsbSerialDriver selectedDriver = targetDriver;
+            final UsbDevice usbDevice = selectedDriver.getDevice();
+
+            if (!usbManager.hasPermission(usbDevice)) {
+                android.util.Log.i("RedNodePlugin", "Solicitando permiso USB al usuario para: " + usbDevice.getDeviceName());
+
+                if (usbPermissionReceiver != null) {
+                    try { getContext().unregisterReceiver(usbPermissionReceiver); } catch (Exception ignored) {}
+                }
+
+                usbPermissionReceiver = new BroadcastReceiver() {
+                    @Override
+                    public void onReceive(Context context, Intent intent) {
+                        if (ACTION_USB_PERMISSION.equals(intent.getAction())) {
+                            try { context.unregisterReceiver(this); } catch (Exception ignored) {}
+                            usbPermissionReceiver = null;
+
+                            synchronized (this) {
+                                UsbDevice dev = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                                boolean granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false);
+                                if (granted && dev != null) {
+                                    android.util.Log.i("RedNodePlugin", "Permiso USB concedido por el usuario");
+                                    initUsbPort(usbManager, selectedDriver, baudRate, dataBits, stopBits, parity, call);
+                                } else {
+                                    android.util.Log.w("RedNodePlugin", "Permiso USB denegado por el usuario");
+                                    call.reject("Permiso USB denegado por el usuario");
+                                }
+                            }
+                        }
+                    }
+                };
+
+                int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_MUTABLE : 0;
+                PendingIntent permissionIntent = PendingIntent.getBroadcast(getContext(), 0, new Intent(ACTION_USB_PERMISSION), flags);
+                IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    getContext().registerReceiver(usbPermissionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+                } else {
+                    getContext().registerReceiver(usbPermissionReceiver, filter);
+                }
+
+                usbManager.requestPermission(usbDevice, permissionIntent);
+            } else {
+                initUsbPort(usbManager, selectedDriver, baudRate, dataBits, stopBits, parity, call);
+            }
+        } catch (Exception e) {
+            android.util.Log.e("RedNodePlugin", "Error abriendo puerto serie USB: " + e.getMessage(), e);
+            call.reject("Error al abrir puerto serie USB: " + e.getMessage());
+        }
+    }
+
+    private void initUsbPort(UsbManager usbManager, UsbSerialDriver driver, int baudRate, int dataBits, int stopBits, int parity, PluginCall call) {
+        try {
+            closeCurrentUsbPort();
+
+            UsbDeviceConnection connection = usbManager.openDevice(driver.getDevice());
+            if (connection == null) {
+                call.reject("No se pudo abrir UsbDeviceConnection. Verifique cable OTG o permiso");
+                return;
+            }
+            currentUsbConnection = connection;
+
+            if (driver.getPorts().isEmpty()) {
+                call.reject("El controlador USB no expone ningún puerto serie");
+                return;
+            }
+
+            UsbSerialPort port = driver.getPorts().get(0);
+            port.open(currentUsbConnection);
+            port.setParameters(baudRate, dataBits, stopBits, parity);
+
+            // Importante para chips CP2102 y ESP32-S3: activar DTR/RTS
+            try {
+                port.setDTR(true);
+                port.setRTS(true);
+            } catch (Exception ignored) {}
+
+            currentUsbPort = port;
+
+            currentUsbIoManager = new SerialInputOutputManager(currentUsbPort, new SerialInputOutputManager.Listener() {
+                @Override
+                public void onNewData(byte[] data) {
+                    if (data == null || data.length == 0) return;
+                    com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                    com.getcapacitor.JSArray arr = new com.getcapacitor.JSArray();
+                    for (byte b : data) {
+                        arr.put(b & 0xFF);
+                    }
+                    ret.put("data", arr);
+                    notifyListeners("usbSerialData", ret);
+                }
+
+                @Override
+                public void onRunError(Exception e) {
+                    android.util.Log.e("RedNodePlugin", "Error en bucle I/O USB Serial: " + e.getMessage());
+                    com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                    ret.put("error", e.getMessage());
+                    notifyListeners("usbSerialError", ret);
+                    closeCurrentUsbPort();
+                }
+            });
+
+            currentUsbIoManager.start();
+
+            android.util.Log.i("RedNodePlugin", "✅ Puerto USB Serial iniciado correctamente a " + baudRate + " bps");
+
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("success", true);
+            ret.put("baudRate", baudRate);
+            ret.put("driver", driver.getClass().getSimpleName());
+            ret.put("deviceName", driver.getDevice().getDeviceName());
+            call.resolve(ret);
+        } catch (Exception e) {
+            closeCurrentUsbPort();
+            android.util.Log.e("RedNodePlugin", "Error inicializando puerto USB: " + e.getMessage(), e);
+            call.reject("Error inicializando puerto USB: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Escribe un búfer de bytes directamente en el bus USB conectado al transceptor LoRa.
+     */
+    @PluginMethod
+    public void writeUsbSerial(PluginCall call) {
+        try {
+            if (currentUsbPort == null || !currentUsbPort.isOpen()) {
+                call.reject("Puerto USB Serial no está conectado o no está abierto");
+                return;
+            }
+
+            com.getcapacitor.JSArray dataArray = call.getArray("data");
+            if (dataArray == null || dataArray.length() == 0) {
+                call.reject("Se requiere un arreglo 'data' con bytes");
+                return;
+            }
+
+            byte[] bytes = new byte[dataArray.length()];
+            for (int i = 0; i < dataArray.length(); i++) {
+                bytes[i] = (byte) dataArray.getInt(i);
+            }
+
+            currentUsbPort.write(bytes, 2000);
+
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("success", true);
+            ret.put("bytesWritten", bytes.length);
+            call.resolve(ret);
+        } catch (Exception e) {
+            android.util.Log.e("RedNodePlugin", "Error escribiendo en USB Serial: " + e.getMessage(), e);
+            call.reject("Error escribiendo en USB Serial: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Cierra la conexión física USB Serial liberando todos los recursos de hardware.
+     */
+    @PluginMethod
+    public void closeUsbSerial(PluginCall call) {
+        closeCurrentUsbPort();
+        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+        ret.put("success", true);
+        call.resolve(ret);
+    }
+
+    /**
+     * Consulta el estado de conexión del puerto USB Serial físico.
+     */
+    @PluginMethod
+    public void isUsbSerialConnected(PluginCall call) {
+        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+        ret.put("connected", currentUsbPort != null && currentUsbPort.isOpen());
+        call.resolve(ret);
+    }
+
+    /**
+     * Permite a la interfaz actualizar el texto y conteo de pares en la notificación persistente.
+     */
+    @PluginMethod
+    public void updateNotificationStatus(PluginCall call) {
+        String statusText = call.getString("statusText", null);
+        int peerCount = call.getInt("peerCount", -1);
+        boolean isPanic = call.getBoolean("isPanic", false);
+
+        RedNodeService.updateNotificationStatus(getContext(), statusText, peerCount, isPanic);
+
+        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+        ret.put("success", true);
+        call.resolve(ret);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // CURSOR-ON-TARGET (CoT) MULTICAST UDP GATEWAY (ATAK / CivTAK / WinTAK 239.2.3.1:6969)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    private static final String COT_MULTICAST_GROUP = "239.2.3.1";
+    private static final int COT_MULTICAST_PORT = 6969;
+    private MulticastSocket cotMulticastSocket = null;
+    private Thread cotReceiverThread = null;
+    private final AtomicBoolean isCotListening = new AtomicBoolean(false);
+
+    private synchronized void stopCotMulticastInternal() {
+        isCotListening.set(false);
+        if (cotMulticastSocket != null) {
+            try {
+                InetAddress group = InetAddress.getByName(COT_MULTICAST_GROUP);
+                cotMulticastSocket.leaveGroup(group);
+            } catch (Exception ignored) {}
+            try {
+                cotMulticastSocket.close();
+            } catch (Exception ignored) {}
+            cotMulticastSocket = null;
+        }
+        if (cotReceiverThread != null) {
+            cotReceiverThread.interrupt();
+            cotReceiverThread = null;
+        }
+    }
+
+    @PluginMethod
+    public synchronized void startCotMulticast(PluginCall call) {
+        if (isCotListening.get() && cotMulticastSocket != null && !cotMulticastSocket.isClosed()) {
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("active", true);
+            ret.put("port", COT_MULTICAST_PORT);
+            ret.put("group", COT_MULTICAST_GROUP);
+            call.resolve(ret);
+            return;
+        }
+
+        stopCotMulticastInternal();
+
+        new Thread(() -> {
+            try {
+                MulticastSocket socket = new MulticastSocket(COT_MULTICAST_PORT);
+                socket.setReuseAddress(true);
+                socket.setTimeToLive(32);
+
+                InetAddress group = InetAddress.getByName(COT_MULTICAST_GROUP);
+
+                // Join multicast on all up & multicast-supporting interfaces
+                try {
+                    Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+                    while (interfaces != null && interfaces.hasMoreElements()) {
+                        NetworkInterface ni = interfaces.nextElement();
+                        if (ni.isUp() && ni.supportsMulticast() && !ni.isLoopback()) {
+                            try {
+                                socket.joinGroup(new InetSocketAddress(group, COT_MULTICAST_PORT), ni);
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                } catch (Exception ignored) {
+                    socket.joinGroup(group);
+                }
+
+                cotMulticastSocket = socket;
+                isCotListening.set(true);
+
+                cotReceiverThread = new Thread(() -> {
+                    byte[] buffer = new byte[65535];
+                    while (isCotListening.get() && !Thread.currentThread().isInterrupted()) {
+                        try {
+                            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                            socket.receive(packet);
+                            if (packet.getLength() > 0) {
+                                String xml = new String(packet.getData(), packet.getOffset(), packet.getLength(), java.nio.charset.StandardCharsets.UTF_8);
+                                String sourceIp = packet.getAddress() != null ? packet.getAddress().getHostAddress() : "";
+
+                                com.getcapacitor.JSObject eventData = new com.getcapacitor.JSObject();
+                                eventData.put("xml", xml);
+                                eventData.put("sourceIp", sourceIp);
+                                eventData.put("port", packet.getPort());
+                                notifyListeners("cotMulticastData", eventData);
+                            }
+                        } catch (Exception e) {
+                            if (isCotListening.get()) {
+                                android.util.Log.w("RedNodePlugin", "Error in CoT multicast loop: " + e.getMessage());
+                            }
+                            break;
+                        }
+                    }
+                }, "RedCotReceiverThread");
+                cotReceiverThread.start();
+
+                android.util.Log.i("RedNodePlugin", "✅ CoT Multicast Gateway iniciado en " + COT_MULTICAST_GROUP + ":" + COT_MULTICAST_PORT);
+
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("active", true);
+                ret.put("port", COT_MULTICAST_PORT);
+                ret.put("group", COT_MULTICAST_GROUP);
+                call.resolve(ret);
+            } catch (Exception e) {
+                android.util.Log.e("RedNodePlugin", "Error starting CoT Multicast Gateway: " + e.getMessage(), e);
+                stopCotMulticastInternal();
+                call.reject("Error al iniciar CoT Multicast: " + e.getMessage());
+            }
+        }, "RedCotStarterThread").start();
+    }
+
+    @PluginMethod
+    public void stopCotMulticast(PluginCall call) {
+        stopCotMulticastInternal();
+        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+        ret.put("active", false);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void isCotMulticastActive(PluginCall call) {
+        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+        ret.put("active", isCotListening.get() && cotMulticastSocket != null && !cotMulticastSocket.isClosed());
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void sendCotMulticast(PluginCall call) {
+        String xml = call.getString("xml", null);
+        if (xml == null || xml.trim().isEmpty()) {
+            call.reject("Se requiere parámetro 'xml'");
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                byte[] bytes = xml.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                InetAddress group = InetAddress.getByName(COT_MULTICAST_GROUP);
+
+                MulticastSocket socket = cotMulticastSocket;
+                boolean shouldClose = false;
+                if (socket == null || socket.isClosed()) {
+                    socket = new MulticastSocket();
+                    socket.setTimeToLive(32);
+                    shouldClose = true;
+                }
+
+                DatagramPacket packet = new DatagramPacket(bytes, bytes.length, group, COT_MULTICAST_PORT);
+                socket.send(packet);
+
+                if (shouldClose) {
+                    try { socket.close(); } catch (Exception ignored) {}
+                }
+
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("success", true);
+                ret.put("bytesSent", bytes.length);
+                call.resolve(ret);
+            } catch (Exception e) {
+                android.util.Log.e("RedNodePlugin", "Error sending CoT multicast: " + e.getMessage(), e);
+                call.reject("Error enviando CoT Multicast: " + e.getMessage());
+            }
+        }, "RedCotSenderThread").start();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // NATIVE MBTILES VECTOR/RASTER OFFLINE MAP ENGINE
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    private MbtilesPackageReader activeMbtilesReader = null;
+
+    @PluginMethod
+    public void listAvailableMbtiles(PluginCall call) {
+        try {
+            List<File> searchDirs = new ArrayList<>();
+
+            // 1. App external files dir
+            File[] extDirs = getContext().getExternalFilesDirs(null);
+            if (extDirs != null) {
+                for (File f : extDirs) {
+                    if (f != null) {
+                        searchDirs.add(f);
+                        searchDirs.add(new File(f, "maps"));
+                    }
+                }
+            }
+
+            // 2. Common map directories
+            File sharedDownloads = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS);
+            if (sharedDownloads != null && sharedDownloads.exists()) {
+                searchDirs.add(sharedDownloads);
+                searchDirs.add(new File(sharedDownloads, "maps"));
+                searchDirs.add(new File(sharedDownloads, "RED/maps"));
+            }
+
+            File sdcardRoot = new File("/storage/emulated/0/RED/maps");
+            if (sdcardRoot.exists()) searchDirs.add(sdcardRoot);
+
+            List<Map<String, Object>> packages = MbtilesPackageReader.scanMapDirectories(searchDirs);
+            com.getcapacitor.JSArray arr = new com.getcapacitor.JSArray();
+
+            for (Map<String, Object> pkg : packages) {
+                com.getcapacitor.JSObject obj = new com.getcapacitor.JSObject();
+                for (Map.Entry<String, Object> entry : pkg.entrySet()) {
+                    obj.put(entry.getKey(), entry.getValue());
+                }
+                arr.put(obj);
+            }
+
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("packages", arr);
+            call.resolve(ret);
+        } catch (Exception e) {
+            android.util.Log.e("RedNodePlugin", "Error listing MBTiles: " + e.getMessage(), e);
+            call.reject("Error listando mapas MBTiles: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public synchronized void openMbtilesPackage(PluginCall call) {
+        String filePath = call.getString("filePath", null);
+        if (filePath == null || filePath.trim().isEmpty()) {
+            call.reject("Se requiere parámetro 'filePath'");
+            return;
+        }
+
+        try {
+            if (activeMbtilesReader == null) {
+                activeMbtilesReader = new MbtilesPackageReader();
+            }
+
+            boolean ok = activeMbtilesReader.open(filePath);
+            if (!ok) {
+                call.reject("No se pudo abrir el archivo .mbtiles en la ruta especificada");
+                return;
+            }
+
+            Map<String, String> meta = activeMbtilesReader.getMetadata();
+            com.getcapacitor.JSObject metaObj = new com.getcapacitor.JSObject();
+            for (Map.Entry<String, String> entry : meta.entrySet()) {
+                metaObj.put(entry.getKey(), entry.getValue());
+            }
+
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("success", true);
+            ret.put("filePath", filePath);
+            ret.put("metadata", metaObj);
+            call.resolve(ret);
+        } catch (Exception e) {
+            android.util.Log.e("RedNodePlugin", "Error opening MBTiles package: " + e.getMessage(), e);
+            call.reject("Error abriendo paquete MBTiles: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public synchronized void getMbtilesTile(PluginCall call) {
+        if (activeMbtilesReader == null || !activeMbtilesReader.isOpen()) {
+            call.reject("Ningún paquete MBTiles abierto actualmente");
+            return;
+        }
+
+        Integer z = call.getInt("z");
+        Integer x = call.getInt("x");
+        Integer y = call.getInt("y");
+
+        if (z == null || x == null || y == null) {
+            call.reject("Se requieren los parámetros 'z', 'x' e 'y'");
+            return;
+        }
+
+        try {
+            byte[] tileData = activeMbtilesReader.getTile(z, x, y);
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            if (tileData != null && tileData.length > 0) {
+                ret.put("found", true);
+                ret.put("dataBase64", Base64.encodeToString(tileData, Base64.NO_WRAP));
+                ret.put("sizeBytes", tileData.length);
+            } else {
+                ret.put("found", false);
+            }
+            call.resolve(ret);
+        } catch (Exception e) {
+            android.util.Log.e("RedNodePlugin", "Error fetching tile: " + e.getMessage(), e);
+            call.reject("Error obteniendo baldosa MBTiles: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public synchronized void closeMbtilesPackage(PluginCall call) {
+        if (activeMbtilesReader != null) {
+            activeMbtilesReader.close();
+        }
+        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+        ret.put("success", true);
+        call.resolve(ret);
     }
 }

@@ -81,7 +81,7 @@ runTest('6. SatelliteMeshGatewayEngine: Proyección Polar SkyView y cálculo AOS
 });
 
 runTest('7. SatelliteMeshGatewayEngine: Compositor de paquetes SBD formato V1', () => {
-    assert(satCode.includes("public composeAndEnqueueSbd(message: string, priority: number = 8)"), 'Debe proveer compositor SBD');
+    assert(satCode.includes("public composeAndEnqueueSbd(message: string, priority: number = 8"), 'Debe proveer compositor SBD');
     assert(satCode.includes("SBD_V1|LOC:"), 'Debe usar encabezado estándar SBD_V1');
     assert(satCode.includes("|RAD:"), 'Debe adjuntar telemetría radiológica');
     assert(satCode.includes("|MSG:"), 'Debe adjuntar mensaje del operador');

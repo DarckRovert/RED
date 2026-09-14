@@ -1,6 +1,6 @@
 {
   "name": "red-app",
-  "version": "104.0.0",
+  "version": "105.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -13,6 +13,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:crypto": "node scripts/test-crypto-core.js",
+    "test:pqc": "node scripts/test-pqc-mesh-transport-resilience.js",
     "test:sensors": "node scripts/test-phase1-sensors.js",
     "test:audio": "node scripts/test-phase2-audio-comms.js",
     "test:vault": "node scripts/test-phase3-vault-crypto.js",

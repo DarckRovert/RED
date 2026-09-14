@@ -23,6 +23,15 @@ export const MESH_MAGIC = 0x52454401;
 export const HEADER_SIZE_REAL = 96;
 export const MAX_HOPS = 20;    // maximum mesh relay hops
 
+// Wire flags bitmask
+export const FLAG_ENCRYPTED = 0x01;     // Payload is encrypted
+export const FLAG_ACK_REQUESTED = 0x02; // Receiver should emit cryptographic DELIVERY_ACK
+export const FLAG_IS_RELAY = 0x04;      // Packet has been relayed by intermediate node
+export const FLAG_PQC_ENCRYPTED = 0x20; // NIST FIPS 203 ML-KEM-768 + X25519 hybrid post-quantum encapsulation
+
+/** JSON packet type for out-of-band PQC key announcements broadcast over the mesh */
+export const PQC_TYPE_KEY_ANNOUNCE = 'PQC_KEY_ANNOUNCEMENT';
+
 export interface MeshPacket {
   /** 32-byte recipient identity hash (hex) */
   recipient: string;
@@ -30,7 +39,7 @@ export interface MeshPacket {
   sender: string;
   /** Remaining relay hops */
   ttl: number;
-  /** Bit flags: 0x01=encrypted 0x02=ack_requested 0x04=is_relay */
+  /** Bit flags: 0x01=encrypted 0x02=ack_requested 0x04=is_relay 0x20=pqc_encrypted */
   flags: number;
   /** Timestamp (unix ms) */
   timestamp: number;
@@ -38,6 +47,8 @@ export interface MeshPacket {
   nonce: string;
   /** Encrypted payload bytes */
   payload: Uint8Array;
+  /** Optional transient flag indicating verified PQC decapsulation */
+  isPqcEncrypted?: boolean;
 }
 
 /**

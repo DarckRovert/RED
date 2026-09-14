@@ -204,21 +204,8 @@ export function OffGridCompassModal() {
             setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(lat, lon));
             try { localStorage.setItem("red_last_known_gps", JSON.stringify({ lat, lng: lon, lon, timestamp: Date.now() })); } catch {}
 
-            // Dynamically set landmark defaults ONCE on first GPS fix to avoid overwriting user typing input
             if (!hasInitializedLandmarks.current) {
                 hasInitializedLandmarks.current = true;
-                setLandmark1(prev => {
-                    if (prev.lat === 0 && prev.lon === 0 && !hasStoredLm1) {
-                        return { ...prev, lat: Math.round((lat + 0.003) * 100000) / 100000, lon: Math.round((lon + 0.003) * 100000) / 100000 };
-                    }
-                    return prev;
-                });
-                setLandmark2(prev => {
-                    if (prev.lat === 0 && prev.lon === 0 && !hasStoredLm2) {
-                        return { ...prev, lat: Math.round((lat - 0.003) * 100000) / 100000, lon: Math.round((lon + 0.005) * 100000) / 100000 };
-                    }
-                    return prev;
-                });
             }
         });
 
@@ -1672,14 +1659,43 @@ export function OffGridCompassModal() {
                                         <TacIcon name="pin" size={12} color="#38BDF8" />
                                         <span>Punto 1 de Referencia</span>
                                     </span>
-                                    {activeCoords && (
-                                        <button
-                                            onClick={() => updateLandmark1({ ...landmark1, lat: activeCoords.lat, lon: activeCoords.lon })}
-                                            style={{ background: 'transparent', border: 'none', color: '#00E676', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
-                                        >
-                                            {pdrState.isTracking ? 'Usar PDR Actual' : 'Usar GPS Actual'}
-                                        </button>
-                                    )}
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        {waypoints.length > 0 && (
+                                            <select
+                                                onChange={(e) => {
+                                                    const wp = waypoints.find(w => w.id === e.target.value);
+                                                    if (wp) {
+                                                        updateLandmark1({ id: wp.id, name: wp.name, lat: wp.lat, lon: wp.lon });
+                                                    }
+                                                }}
+                                                style={{
+                                                    background: 'rgba(56, 189, 248, 0.12)',
+                                                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                    color: '#38BDF8',
+                                                    borderRadius: '6px',
+                                                    fontSize: '0.68rem',
+                                                    padding: '2px 6px',
+                                                    cursor: 'pointer'
+                                                }}
+                                                defaultValue=""
+                                            >
+                                                <option value="" disabled>📍 Cargar Waypoint...</option>
+                                                {waypoints.map(wp => (
+                                                    <option key={wp.id} value={wp.id} style={{ background: '#0d131a', color: '#fff' }}>
+                                                        {wp.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        )}
+                                        {activeCoords && (
+                                            <button
+                                                onClick={() => updateLandmark1({ ...landmark1, lat: activeCoords.lat, lon: activeCoords.lon })}
+                                                style={{ background: 'transparent', border: 'none', color: '#00E676', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
+                                            >
+                                                {pdrState.isTracking ? 'Usar PDR Actual' : 'Usar GPS Actual'}
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                                 <input value={landmark1.name} onChange={e => updateLandmark1({ ...landmark1, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Punto A)" />
                                 <div style={{ display: 'flex', gap: '6px' }}>
@@ -1696,14 +1712,43 @@ export function OffGridCompassModal() {
                                         <TacIcon name="pin" size={12} color="#A855F7" />
                                         <span>Punto 2 de Referencia</span>
                                     </span>
-                                    {activeCoords && (
-                                        <button
-                                            onClick={() => updateLandmark2({ ...landmark2, lat: activeCoords.lat, lon: activeCoords.lon })}
-                                            style={{ background: 'transparent', border: 'none', color: '#00E676', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
-                                        >
-                                            {pdrState.isTracking ? 'Usar PDR Actual' : 'Usar GPS Actual'}
-                                        </button>
-                                    )}
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        {waypoints.length > 0 && (
+                                            <select
+                                                onChange={(e) => {
+                                                    const wp = waypoints.find(w => w.id === e.target.value);
+                                                    if (wp) {
+                                                        updateLandmark2({ id: wp.id, name: wp.name, lat: wp.lat, lon: wp.lon });
+                                                    }
+                                                }}
+                                                style={{
+                                                    background: 'rgba(168, 85, 247, 0.12)',
+                                                    border: '1px solid rgba(168, 85, 247, 0.35)',
+                                                    color: '#A855F7',
+                                                    borderRadius: '6px',
+                                                    fontSize: '0.68rem',
+                                                    padding: '2px 6px',
+                                                    cursor: 'pointer'
+                                                }}
+                                                defaultValue=""
+                                            >
+                                                <option value="" disabled>📍 Cargar Waypoint...</option>
+                                                {waypoints.map(wp => (
+                                                    <option key={wp.id} value={wp.id} style={{ background: '#0d131a', color: '#fff' }}>
+                                                        {wp.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        )}
+                                        {activeCoords && (
+                                            <button
+                                                onClick={() => updateLandmark2({ ...landmark2, lat: activeCoords.lat, lon: activeCoords.lon })}
+                                                style={{ background: 'transparent', border: 'none', color: '#00E676', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
+                                            >
+                                                {pdrState.isTracking ? 'Usar PDR Actual' : 'Usar GPS Actual'}
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                                 <input value={landmark2.name} onChange={e => updateLandmark2({ ...landmark2, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Punto B)" />
                                 <div style={{ display: 'flex', gap: '6px' }}>

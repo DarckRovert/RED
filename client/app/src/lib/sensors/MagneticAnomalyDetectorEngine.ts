@@ -1,3 +1,4 @@
+
 /**
  * MagneticAnomalyDetectorEngine.ts — RED Ferromagnetic Anomaly & Metal Detection Engine
  * 
@@ -7,6 +8,8 @@
  */
 
 import { AudioContextManager } from '../audio/AudioContextManager';
+import { Capacitor } from '@capacitor/core';
+import { getNativeMagnetometerReading } from '../../api/sensors';
 
 export type AnomalySeverity = 'NORMAL' | 'ELEVATED' | 'HIGH' | 'EXTREME';
 
@@ -101,7 +104,31 @@ export class MagneticAnomalyDetectorEngine {
 
         this.isListening = true;
 
-        // 1. Intentar con Magnetometer Sensor API (si el navegador/WebView lo soporta)
+        // 1. Android / iOS Nativo (Capacitor): Sensor de hardware TYPE_MAGNETIC_FIELD vía RedNodePlugin
+        if (Capacitor.isNativePlatform()) {
+            let active = true;
+            const pollNative = async () => {
+                if (!active || !this.isListening) return;
+                try {
+                    const reading = await getNativeMagnetometerReading();
+                    if (reading.available && typeof reading.x === 'number' && typeof reading.y === 'number' && typeof reading.z === 'number') {
+                        this.processRawMagneticVector(reading.x, reading.y, reading.z);
+                    }
+                } catch {}
+            };
+            pollNative();
+            const pollInterval = setInterval(pollNative, 100); // 10Hz sampling
+
+            this.sensorListener = {
+                stop: () => {
+                    active = false;
+                    clearInterval(pollInterval);
+                }
+            };
+            return true;
+        }
+
+        // 2. Intentar con Magnetometer Sensor API (si el navegador/WebView lo soporta)
         if ('Magnetometer' in window) {
             try {
                 const mag = new (window as any).Magnetometer({ frequency: 20 });
@@ -117,7 +144,7 @@ export class MagneticAnomalyDetectorEngine {
             } catch {}
         }
 
-        // 2. Fallback con DeviceOrientation / Compass Heading
+        // 3. Fallback con DeviceOrientation / Compass Heading
         const orientationHandler = (e: DeviceOrientationEvent) => {
             const alpha = (typeof e.alpha === 'number' && isFinite(e.alpha)) ? e.alpha : 0;
             const beta = (typeof e.beta === 'number' && isFinite(e.beta)) ? e.beta : 0;

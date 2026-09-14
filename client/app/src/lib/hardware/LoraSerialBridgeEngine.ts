@@ -10,6 +10,10 @@
  * Implementa encuadre COBS (Consistent Overhead Byte Stuffing) y suma de verificación CRC-32.
  */
 
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const RedNode = registerPlugin<any>('RedNode');
+
 export interface LoraConfig {
     frequencyMhz: number;       // 915.0, 868.0, 433.0
     txPowerDbm: number;         // 2 a 22 dBm
@@ -22,7 +26,7 @@ export interface LoraConfig {
 
 export interface LoraTelemetry {
     connected: boolean;
-    transportType: 'USB_SERIAL' | 'BLE_NUS' | 'NONE';
+    transportType: 'USB_SERIAL' | 'USB_NATIVE' | 'BLE_NUS' | 'NONE';
     packetsSent: number;
     packetsReceived: number;
     bytesSent: number;
@@ -30,6 +34,7 @@ export interface LoraTelemetry {
     lastRssiDbm: number | null;
     lastSnrDb: number | null;
     lastPacketTimestamp: number | null;
+    driverInfo?: string;
 }
 
 export type LoraPacketCallback = (packet: Uint8Array, rssi?: number, snr?: number) => void;
@@ -65,6 +70,8 @@ export class LoraSerialBridgeEngine {
     private serialPort: any = null;
     private serialReader: any = null;
     private serialWriter: any = null;
+    private nativeUsbDataListener: any = null;
+    private nativeUsbErrorListener: any = null;
 
     private bleDevice: any = null;
     private bleServer: any = null;
@@ -203,9 +210,14 @@ export class LoraSerialBridgeEngine {
         }
     }
 
-    // ─── Conexión Web Serial / USB-OTG ──────────────────────────────────────────
+    // ─── Conexión Web Serial / USB-OTG Nativo ────────────────────────────────────
 
-    public async connectWebSerial(baudRate = 115200): Promise<boolean> {
+    public async connectWebSerial(baudRate = 115200, deviceId?: number): Promise<boolean> {
+        // En entorno nativo Android, conmutar directamente al driver USB-OTG de alto rendimiento
+        if (Capacitor.isNativePlatform()) {
+            return await this.connectNativeUsbSerial(baudRate, deviceId);
+        }
+
         if (typeof navigator === 'undefined' || !('serial' in navigator)) {
             console.warn('[LoRa] Web Serial no soportado en este entorno');
             return false;
@@ -218,6 +230,7 @@ export class LoraSerialBridgeEngine {
 
             this.telemetry.connected = true;
             this.telemetry.transportType = 'USB_SERIAL';
+            this.telemetry.driverInfo = 'WebSerial';
 
             this.startSerialReader();
             console.log(`[LoRa] Conectado a transceptor serie USB @ ${baudRate} bps`);
@@ -227,6 +240,73 @@ export class LoraSerialBridgeEngine {
             this.telemetry.connected = false;
             return false;
         }
+    }
+
+    /**
+     * Conexión USB Serial Nativa en Android mediante usb-serial-for-android (CP210x, CH340, FTDI, CDC-ACM)
+     */
+    public async connectNativeUsbSerial(baudRate = 115200, deviceId?: number): Promise<boolean> {
+        try {
+            const list = await RedNode.listUsbSerialDevices();
+            if (!list || !list.devices || list.devices.length === 0) {
+                console.warn('[LoRa] No se encontraron dispositivos USB Serial OTG conectados');
+                return false;
+            }
+
+            const res = await RedNode.openUsbSerial({
+                deviceId: deviceId !== undefined ? deviceId : list.devices[0].deviceId,
+                baudRate
+            });
+
+            if (!res || !res.success) {
+                console.error('[LoRa] openUsbSerial retornó fallo:', res);
+                return false;
+            }
+
+            // Desvincular listeners anteriores si existían
+            if (this.nativeUsbDataListener) {
+                try { await this.nativeUsbDataListener.remove(); } catch {}
+                this.nativeUsbDataListener = null;
+            }
+            if (this.nativeUsbErrorListener) {
+                try { await this.nativeUsbErrorListener.remove(); } catch {}
+                this.nativeUsbErrorListener = null;
+            }
+
+            this.nativeUsbDataListener = await RedNode.addListener('usbSerialData', (event: { data: number[] }) => {
+                if (event && event.data && event.data.length > 0) {
+                    this.feedRawBytes(new Uint8Array(event.data));
+                }
+            });
+
+            this.nativeUsbErrorListener = await RedNode.addListener('usbSerialError', (err: { error: string }) => {
+                console.warn('[LoRa] Error recibido de puerto serie USB:', err);
+                this.disconnect();
+            });
+
+            this.telemetry.connected = true;
+            this.telemetry.transportType = 'USB_NATIVE';
+            this.telemetry.driverInfo = `${res.driver || 'USB-UART'} (${res.deviceName || 'OTG'})`;
+
+            console.log(`[LoRa] ✅ Conectado nativamente a ${this.telemetry.driverInfo} @ ${baudRate} bps`);
+            return true;
+        } catch (e) {
+            console.error('[LoRa] Error conectando USB Serial Nativo:', e);
+            this.telemetry.connected = false;
+            return false;
+        }
+    }
+
+    public async listAvailableUsbDevices(): Promise<any[]> {
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const res = await RedNode.listUsbSerialDevices();
+                return res?.devices || [];
+            } catch {
+                return [];
+            }
+        }
+        return [];
     }
 
     private async startSerialReader() {
@@ -368,6 +448,18 @@ export class LoraSerialBridgeEngine {
             }
         }
 
+        if (this.telemetry.transportType === 'USB_NATIVE') {
+            try {
+                await RedNode.writeUsbSerial({ data: Array.from(framed) });
+                this.telemetry.packetsSent++;
+                this.telemetry.bytesSent += framed.length;
+                return true;
+            } catch (e) {
+                console.error('[LoRa] Error al transmitir por USB Serial Nativo:', e);
+                return false;
+            }
+        }
+
         if (this.serialPort && this.serialPort.writable) {
             try {
                 this.serialWriter = this.serialPort.writable.getWriter();
@@ -410,8 +502,23 @@ export class LoraSerialBridgeEngine {
     }
 
     public async disconnect() {
+        if (this.telemetry.transportType === 'USB_NATIVE') {
+            if (this.nativeUsbDataListener) {
+                try { await this.nativeUsbDataListener.remove(); } catch {}
+                this.nativeUsbDataListener = null;
+            }
+            if (this.nativeUsbErrorListener) {
+                try { await this.nativeUsbErrorListener.remove(); } catch {}
+                this.nativeUsbErrorListener = null;
+            }
+            try {
+                await RedNode.closeUsbSerial();
+            } catch {}
+        }
+
         this.telemetry.connected = false;
         this.telemetry.transportType = 'NONE';
+        this.telemetry.driverInfo = undefined;
         this.rxBuffer = [];
         if (this.serialReader) {
             await this.serialReader.cancel().catch(() => {});

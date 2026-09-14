@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- USB CDC-ACM (Class 2: Communications and CDC Control) -->
+    <usb-device class="2" />
+    <!-- FTDI devices (FT232, FT2232, FT4232, FT230X) -->
+    <usb-device vendor-id="1027" />
+    <!-- Silicon Labs CP210x (Heltec V3, LilyGO T-Beam, ESP32 dev boards) -->
+    <usb-device vendor-id="4292" />
+    <!-- QinHeng CH340, CH341, CH343 -->
+    <usb-device vendor-id="6790" />
+    <!-- Prolific PL2303 -->
+    <usb-device vendor-id="1659" />
+    <!-- Espressif ESP32-S2 / ESP32-S3 Native USB CDC -->
+    <usb-device vendor-id="12346" />
+    <!-- Raspberry Pi Pico / RP2040 CDC -->
+    <usb-device vendor-id="11914" />
+    <!-- Nordic Semiconductor nRF52840 Dongle / Meshtastic -->
+    <usb-device vendor-id="6421" />
+</resources>

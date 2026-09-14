@@ -233,6 +233,188 @@ export class PqcCryptoEngine {
             return false;
         }
     }
+
+    /**
+     * Determines if a raw byte slice represents a valid NIST FIPS 203 PQC1 binary container.
+     */
+    public static isPqcEncryptedContainer(bytes: Uint8Array | null | undefined): boolean {
+        if (!bytes || bytes.length < PQC_HEADER_LEN + 16) return false;
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        return view.getUint32(0, false) === PQC_CONTAINER_MAGIC;
+    }
+
+    /**
+     * Encapsulates a shared secret using peer's ML-KEM-768 + X25519 public keys,
+     * encrypts plaintext using AES-256-GCM, and packages it into a canonical PQC1 wire container.
+     */
+    public static async encryptPayload(
+        plaintext: Uint8Array,
+        peerKyberPubHex: string,
+        peerX25519PubHex: string
+    ): Promise<Uint8Array> {
+        const encap = await this.encapsulateSharedSecret(peerKyberPubHex, peerX25519PubHex);
+        const kemCtBytes = hexToBytes(encap.ciphertextHex);
+        const sharedSecretBytes = hexToBytes(encap.sharedSecretHex);
+
+        const subtle = getSubtle();
+        const aesKey = await subtle.importKey(
+            "raw",
+            sharedSecretBytes as unknown as BufferSource,
+            { name: "AES-GCM" },
+            false,
+            ["encrypt"]
+        );
+
+        const iv = getRandomBytes(PQC_GCM_IV_LEN);
+        const encryptedBuf = await subtle.encrypt(
+            { name: "AES-GCM", iv: iv as unknown as BufferSource },
+            aesKey,
+            plaintext as unknown as BufferSource
+        );
+        const encryptedBytes = new Uint8Array(encryptedBuf);
+
+        const totalLen = PQC_HEADER_LEN + encryptedBytes.length;
+        const container = new Uint8Array(totalLen);
+        const view = new DataView(container.buffer, container.byteOffset, container.byteLength);
+
+        // Header: [0..4] Magic "PQC1"
+        view.setUint32(0, PQC_CONTAINER_MAGIC, false);
+        // Header: [4..6] KEM Ciphertext Length (1120)
+        view.setUint16(4, kemCtBytes.length, false);
+        // Header: [6..1126] KEM Combined Ciphertext
+        container.set(kemCtBytes, 6);
+        // Header: [1126..1138] AES-GCM IV
+        container.set(iv, 6 + kemCtBytes.length);
+        // Payload: [1138..end] AES-256-GCM Ciphertext + 16-byte Auth Tag
+        container.set(encryptedBytes, PQC_HEADER_LEN);
+
+        return container;
+    }
+
+    /**
+     * Decapsulates the shared secret using recipient's ML-KEM-768 + X25519 secret keys,
+     * and decrypts/authenticates the AES-256-GCM payload from a PQC1 wire container.
+     */
+    public static async decryptPayload(
+        containerBytes: Uint8Array,
+        myKyberPrivHex: string,
+        myX25519PrivHex: string
+    ): Promise<Uint8Array> {
+        if (!this.isPqcEncryptedContainer(containerBytes)) {
+            throw new Error("Invalid or malformed PQC1 container: magic mismatch or insufficient length");
+        }
+
+        const view = new DataView(containerBytes.buffer, containerBytes.byteOffset, containerBytes.byteLength);
+        const kemCtLen = view.getUint16(4, false);
+        if (kemCtLen !== PQC_KEM_CT_LEN) {
+            throw new Error(`Invalid KEM ciphertext length in PQC1 container: got ${kemCtLen}, expected ${PQC_KEM_CT_LEN}`);
+        }
+
+        const kemCtBytes = containerBytes.slice(6, 6 + kemCtLen);
+        const iv = containerBytes.slice(6 + kemCtLen, 6 + kemCtLen + PQC_GCM_IV_LEN);
+        const encryptedBytes = containerBytes.slice(PQC_HEADER_LEN);
+
+        const kemCtHex = bytesToHex(kemCtBytes);
+        const sharedSecretHex = await this.decapsulateSharedSecret(kemCtHex, myKyberPrivHex, myX25519PrivHex);
+        const sharedSecretBytes = hexToBytes(sharedSecretHex);
+
+        const subtle = getSubtle();
+        const aesKey = await subtle.importKey(
+            "raw",
+            sharedSecretBytes as unknown as BufferSource,
+            { name: "AES-GCM" },
+            false,
+            ["decrypt"]
+        );
+
+        const decryptedBuf = await subtle.decrypt(
+            { name: "AES-GCM", iv: iv as unknown as BufferSource },
+            aesKey,
+            encryptedBytes as unknown as BufferSource
+        );
+
+        return new Uint8Array(decryptedBuf);
+    }
+
+    /**
+     * Retrieves existing local hybrid keys from storage or generates and persists a new pair.
+     */
+    public static async getOrGenerateLocalHybridKeyPair(): Promise<HybridKeyPair> {
+        if (typeof window !== 'undefined') {
+            try {
+                const raw = localStorage.getItem('red_pqc_hybrid_keys');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed.kyberPublicKeyHex && parsed.kyberPrivateKeyHex && parsed.x25519PublicKeyHex && parsed.x25519PrivateKeyHex) {
+                        return parsed;
+                    }
+                }
+            } catch {}
+        }
+
+        const newKeys = await this.generateHybridKeyPair();
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.setItem('red_pqc_hybrid_keys', JSON.stringify(newKeys));
+                localStorage.setItem('red_pqc_kyber_public_key', newKeys.kyberPublicKeyHex);
+                localStorage.setItem('red_pqc_x25519_public_key', newKeys.x25519PublicKeyHex);
+            } catch {}
+        }
+        return newKeys;
+    }
+
+    /**
+     * Synchronously retrieves local hybrid keys if already initialized in storage.
+     */
+    public static getLocalHybridKeyPair(): HybridKeyPair | null {
+        if (typeof window !== 'undefined') {
+            try {
+                const raw = localStorage.getItem('red_pqc_hybrid_keys');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed.kyberPublicKeyHex && parsed.kyberPrivateKeyHex) {
+                        return parsed;
+                    }
+                }
+            } catch {}
+        }
+        return null;
+    }
+}
+
+// ─── Cryptographic Wire-Format Constants & Helpers ────────────────────────────
+
+export const PQC_CONTAINER_MAGIC = 0x50514331; // "PQC1" (Big-Endian u32)
+export const PQC_KEM_CT_LEN = 1120; // 1088 bytes ML-KEM-768 ciphertext + 32 bytes Ephemeral X25519 public key
+export const PQC_GCM_IV_LEN = 12; // 12 bytes AES-GCM IV
+export const PQC_HEADER_LEN = 4 + 2 + PQC_KEM_CT_LEN + PQC_GCM_IV_LEN; // 1138 bytes
+
+function getSubtle(): SubtleCrypto {
+    if (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.subtle) {
+        return globalThis.crypto.subtle;
+    }
+    try {
+        const nodeCrypto = require('crypto');
+        if (nodeCrypto.webcrypto && nodeCrypto.webcrypto.subtle) {
+            return nodeCrypto.webcrypto.subtle;
+        }
+    } catch {}
+    throw new Error("WebCrypto SubtleCrypto is not available in this environment");
+}
+
+function getRandomBytes(length: number): Uint8Array {
+    const bytes = new Uint8Array(length);
+    if (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.getRandomValues) {
+        globalThis.crypto.getRandomValues(bytes);
+    } else {
+        try {
+            const nodeCrypto = require('crypto');
+            nodeCrypto.randomFillSync(bytes);
+        } catch {
+            for (let i = 0; i < length; i++) bytes[i] = Math.floor(Math.random() * 256);
+        }
+    }
+    return bytes;
 }
 
 

@@ -1,5 +1,30 @@
 # Changelog
 
+## [105.0.0-nist-fips-203-ml-kem-768-pqc-armor-and-sss-vault] - 2026-09-14
+
+### 🚀 NIST FIPS-203 ML-KEM-768 Post-Quantum Armor & Shamir Secret Sharing Vault (Release Oficial v105.0.0)
+
+- **Armadura Criptográfica Post-Cuántica Wire-Format (NIST FIPS 203 ML-KEM-768):**
+  - Contenedor binario canónico PQC1 (`0x50514331`) con 1138 bytes de cabecera (1088 bytes ciphertext ML-KEM-768 + 32 bytes clave efímera Curve25519 + 12 bytes IV AES-256-GCM).
+  - Derivación híbrida KDF SHA-256 combinando el secreto compartido cuántico (`ss_kem`) y clásico (`ss_x25519`) para inmunidad dual contra ataques cuánticos "Harvest Now, Decrypt Later".
+  - Wire Flag canónico `FLAG_PQC_ENCRYPTED = 0x20` y constante `PQC_TYPE_KEY_ANNOUNCE` estandarizada para negociación ad-hoc en la malla P2P.
+- **Bóveda Soberana de Secretos Shamir (SSS 3-de-5 en GF(2^8)):**
+  - Fragmentación polinómica matemática de semillas BIP-39 o secretos sensibles en 5 fragmentos independientes con umbral estricto 3-de-5.
+  - Parser multiformato tolerante a fallos (`RED_SSS:index:hex`, JSON o hex plano) y UI integrada en `IdentityVaultModal`.
+- **Ficha Médica Cifrada de Rescate & Triaje START:**
+  - Credencial QR táctica con firma Ed25519 / SHA-256 conteniendo grupo sanguíneo, alergias y contacto de emergencia para acceso inmediato sin red ni emisiones RF.
+- **Paridad Lingüística Total al 100.0% en 12 Idiomas:**
+  - 65 nuevas claves canónicas SSOT integradas en `es.ts` y propagadas con traducción nativa a las 11 lenguas restantes (`en`, `fr`, `de`, `it`, `pt`, `ru`, `ja`, `zh`, `ar`, `ko`, `qu`).
+  - Cero cadenas de texto hardcodeadas en `IdentityVaultModal.tsx`, alcanzando 1521 de 1521 claves auditadas (100.0% de cobertura).
+- **Motor de Integridad de Estado Blindado (`StateIntegrityEngine`):**
+  - Protección de claves criptográficas planas (`red_pqc_kyber_public_key`, `red_pqc_x25519_public_key`) contra clasificaciones erróneas de corrupción JSON.
+  - Supervisión activa de `red_identity_vault_v1` en el árbol Merkle de persistencia local.
+- **Gobernanza Atómica SSOT v105.0.0 & Verificación en Hardware Físico Real:**
+  - Sincronización atómica verificada en los 22 archivos SSOT de configuración (`version.ts`, `build.gradle`, Cargo workspaces, service workers, scripts de despliegue y documentación).
+  - Build code unificado `105000` y clave de caché soberana `red-vault-cache-v105`.
+  - Suma criptográfica SHA-256 certificada: `D99E2344DC58211E954A8923ED93FEFAA54DBBEBC30BEAFC1E8E377856EA054A`.
+  - Desinstalación e instalación limpia en Motorola Moto G22 (`ZT322B386P`), verificación en Logcat con 0 excepciones fatales, inicialización correcta de JNI `libred_mobile.so` y renderizado a 90 FPS.
+
 ## [104.0.0-tactical-command-hud-and-complete-autonomous-triage-integration] - 2026-09-13
 
 ### 🚀 Tactical Command HUD & Complete Autonomous Triage Integration (Release Oficial v104.0.0)

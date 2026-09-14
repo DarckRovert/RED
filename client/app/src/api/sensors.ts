@@ -504,3 +504,43 @@ export async function getNativeCompassReading(): Promise<any> {
     };
 }
 
+export interface NativeMagnetometerResult {
+    available: boolean;
+    x?: number;
+    y?: number;
+    z?: number;
+    magnitude?: number;
+    accuracy?: number;
+    sensor_name?: string;
+    vendor?: string;
+}
+
+export async function getNativeMagnetometerReading(): Promise<NativeMagnetometerResult> {
+    try {
+        if (typeof window !== 'undefined') {
+            const { Capacitor, registerPlugin } = await import('@capacitor/core');
+            if (Capacitor.isNativePlatform()) {
+                const plugin = registerPlugin<any>('RedNode');
+                const reading = await plugin.getMagnetometerSensor();
+                if (reading && reading.available) {
+                    return {
+                        available: true,
+                        x: reading.x || 0,
+                        y: reading.y || 0,
+                        z: reading.z || 0,
+                        magnitude: reading.magnitude || Math.sqrt((reading.x || 0) ** 2 + (reading.y || 0) ** 2 + (reading.z || 0) ** 2),
+                        accuracy: reading.accuracy,
+                        sensor_name: reading.sensor_name || 'Android Sensor.TYPE_MAGNETIC_FIELD',
+                        vendor: reading.vendor
+                    };
+                }
+            }
+        }
+    } catch {}
+
+    return {
+        available: false,
+        sensor_name: 'Magnetómetro No Disponible'
+    };
+}
+

@@ -10,6 +10,7 @@ import { meshSosBeacon } from "../lib/emergency/MeshSosBeaconEngine";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
 
 export function SonarSeismicModal() {
     const { navigate, goBack, identity } = useRedStore();
@@ -271,22 +272,42 @@ export function SonarSeismicModal() {
         try {
             const rawWp = localStorage.getItem("red_offgrid_waypoints");
             const wps = rawWp ? JSON.parse(rawWp) : [];
+
+            const lastLoc = TacticalLocationEngine.getLastKnownLocation();
+            let victimLat = 0;
+            let victimLon = 0;
+            const hasGps = Boolean(lastLoc && TacticalLocationEngine.isValidCoordinates(lastLoc.lat, lastLoc.lon));
+
+            if (hasGps && lastLoc?.lat && lastLoc?.lon) {
+                const baseLat = lastLoc.lat;
+                const baseLon = lastLoc.lon;
+                // Proyección geodésica WGS-84 local (1 deg lat = 111,139m)
+                const deltaLat = seismicResult.estimatedY / 111139;
+                const deltaLon = seismicResult.estimatedX / (111139 * Math.cos((baseLat * Math.PI) / 180));
+                victimLat = Math.round((baseLat + deltaLat) * 1e6) / 1e6;
+                victimLon = Math.round((baseLon + deltaLon) * 1e6) / 1e6;
+            }
+
             const newWp = {
                 id: `seismic_victim_${Date.now()}`,
                 name: `VÍCTIMA USAR (X=${seismicResult.estimatedX}m, Y=${seismicResult.estimatedY}m, Prof=${seismicResult.estimatedDepthMeters}m)`,
-                lat: 0,
-                lon: 0,
+                lat: victimLat,
+                lon: victimLon,
                 createdAt: Date.now()
             };
             wps.unshift(newWp);
             localStorage.setItem("red_offgrid_waypoints", JSON.stringify(wps.slice(0, 30)));
             useRedStore.getState().setTacticalTarget({
                 name: newWp.name,
-                lat: 0,
-                lon: 0,
+                lat: victimLat,
+                lon: victimLon,
                 createdAt: Date.now(),
             }, 'SonarSeismic');
-            toast.success("🧭 Posición de víctima fijada. Abriendo navegación.");
+            if (hasGps) {
+                toast.success(`🧭 Víctima proyectada en WGS-84 (${victimLat.toFixed(5)}, ${victimLon.toFixed(5)})`);
+            } else {
+                toast.info("🧭 Posición métrica relativa fijada. Adquiera fix GPS para georreferenciación absoluta.");
+            }
             navigate("compass");
         } catch {
             navigate("nodemap");

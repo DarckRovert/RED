@@ -9,6 +9,7 @@ import { fetchWithFallback } from "../api/core";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { useRedStore } from "../store/useRedStore";
+import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
 
 interface LoraTransceiverModalProps {
     onClose?: () => void;
@@ -123,10 +124,17 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
         try {
             const ok = await loraBridge.connectWebSerial(115200);
             if (ok) {
-                toast.success("Transceptor LoRa USB Conectado @ 115200 bps");
+                const telem = loraBridge.getTelemetry();
+                const info = telem.driverInfo ? ` (${telem.driverInfo})` : '';
+                toast.success(`Transceptor LoRa USB Conectado${info} @ 115200 bps`);
                 syncConfigToBackend(config);
             } else {
-                toast.error("No se pudo conectar al puerto USB/Serie");
+                const devs = await loraBridge.listAvailableUsbDevices();
+                if (devs.length === 0) {
+                    toast.error("No se detectó módem LoRa USB. Conéctelo con cable OTG.");
+                } else {
+                    toast.error("No se pudo conectar al puerto USB/Serie. Verifique permisos.");
+                }
             }
         } catch (e: any) {
             toast.error(e.message || "Error al conectar LoRa USB");
@@ -297,7 +305,7 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                             <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#FFFFFF", display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
                                 {telemetry.connected ? (
                                     <span style={{ color: "var(--accent-emerald)" }}>
-                                        CONECTADO ({telemetry.transportType === 'BLE_NUS' ? 'BLUETOOTH NUS' : 'USB-OTG SERIE'})
+                                        CONECTADO ({telemetry.transportType === 'BLE_NUS' ? 'BLUETOOTH NUS' : telemetry.driverInfo || 'USB-OTG SERIE'})
                                     </span>
                                 ) : (
                                     <span style={{ color: "var(--accent-amber)" }}>SIN DISPOSITIVO ENLAZADO</span>
@@ -539,13 +547,30 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                                                 <button
                                                     onClick={() => {
                                                         try {
+                                                            const hasGps = typeof node.latitude === "number" && typeof node.longitude === "number" && TacticalLocationEngine.isValidCoordinates(node.latitude, node.longitude);
+                                                            let targetLat = 0;
+                                                            let targetLon = 0;
+                                                            if (hasGps) {
+                                                                targetLat = node.latitude!;
+                                                                targetLon = node.longitude!;
+                                                            } else {
+                                                                const lastLoc = TacticalLocationEngine.getLastKnownLocation();
+                                                                if (lastLoc && lastLoc.lat && lastLoc.lon) {
+                                                                    targetLat = lastLoc.lat;
+                                                                    targetLon = lastLoc.lon;
+                                                                }
+                                                            }
                                                             useRedStore.getState().setTacticalTarget({
-                                                                name: `NODO LORA: ${node.user.longName || node.user.shortName}`,
-                                                                lat: 0,
-                                                                lon: 0,
+                                                                name: `NODO LORA: ${node.user.longName || node.user.shortName} (0x${node.nodeNum.toString(16)})`,
+                                                                lat: targetLat,
+                                                                lon: targetLon,
                                                                 createdAt: Date.now(),
                                                             }, 'LoraTransceiver');
-                                                            toast.success(`Foxhunt apuntado a nodo 0x${node.nodeNum.toString(16)}`);
+                                                            if (hasGps) {
+                                                                toast.success(`Foxhunt apuntado a coordenadas GPS (0x${node.nodeNum.toString(16)})`);
+                                                            } else {
+                                                                toast.info(`Nodo sin GPS reportado: Modo Foxhunt RDF por RSSI activo (${node.rssi} dBm)`);
+                                                            }
                                                             if (onClose) onClose();
                                                             useRedStore.getState().navigate('tacticalFoxhunt');
                                                         } catch {

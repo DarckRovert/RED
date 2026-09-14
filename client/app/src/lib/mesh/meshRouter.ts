@@ -33,6 +33,7 @@ import {
   decode,
   encode,
   relay,
+  PQC_TYPE_KEY_ANNOUNCE,
 } from './meshProtocol';
 
 import { RedAPI } from '../api';
@@ -133,6 +134,8 @@ export interface MeshPeer {
   hardwareId?: string;  // Original physical hardware address (e.g. BLE MAC "6B:2D:06:EA:DA:2E")
   name?: string;
   publicKey?: string;
+  kyberPublicKey?: string; // NIST FIPS 203 ML-KEM-768 public key (hex)
+  x25519PublicKey?: string; // Curve25519 Diffie-Hellman public key (hex)
   transport?: 'wifi' | 'ble' | 'lora' | string;
   transports?: ('wifi' | 'ble' | 'lora')[];
   lastSeen?: number;   // Unix ms
@@ -693,6 +696,8 @@ class MeshRouter {
       let displayName = 'Operador RED';
       let pubKey = '';
       let shortId = this.myIdentityHash.slice(0, 8);
+      let kyberKey = '';
+      let x25519Key = '';
 
       let bio = '';
       let phone = '';
@@ -702,6 +707,8 @@ class MeshRouter {
         shortId = localStorage.getItem('red_short_id') || this.myIdentityHash.slice(0, 8);
         bio = localStorage.getItem('red_bio') || localStorage.getItem('user_bio') || '';
         phone = localStorage.getItem('red_phoneNumber') || localStorage.getItem('user_phone_number') || '';
+        kyberKey = localStorage.getItem('red_pqc_kyber_public_key') || '';
+        x25519Key = localStorage.getItem('red_pqc_x25519_public_key') || '';
       }
 
       const payloadObj = {
@@ -710,6 +717,8 @@ class MeshRouter {
           identity_hash: this.myIdentityHash,
           display_name: displayName,
           public_key: pubKey,
+          kyber_public_key: kyberKey || undefined,
+          x25519_public_key: x25519Key || undefined,
           short_id: shortId,
           bio: bio,
           phone_number: phone,
@@ -750,11 +759,15 @@ class MeshRouter {
       let displayName = 'Operador RED';
       let pubKey = '';
       let shortId = this.myIdentityHash.slice(0, 8);
+      let kyberKey = '';
+      let x25519Key = '';
 
       if (typeof window !== 'undefined') {
         displayName = localStorage.getItem('red_displayName') || localStorage.getItem('user_nickname') || 'Operador RED';
         pubKey = localStorage.getItem('red_public_key') || this.myIdentityHash;
         shortId = localStorage.getItem('red_short_id') || this.myIdentityHash.slice(0, 8);
+        kyberKey = localStorage.getItem('red_pqc_kyber_public_key') || '';
+        x25519Key = localStorage.getItem('red_pqc_x25519_public_key') || '';
       }
 
       const payloadObj = {
@@ -763,6 +776,8 @@ class MeshRouter {
           identity_hash: this.myIdentityHash,
           display_name: displayName,
           public_key: pubKey,
+          kyber_public_key: kyberKey || undefined,
+          x25519_public_key: x25519Key || undefined,
           short_id: shortId,
           timestamp: Date.now(),
           capabilities: {
@@ -1069,7 +1084,6 @@ class MeshRouter {
    */
   async send(recipientHash: string, payload: Uint8Array): Promise<'sent' | 'queued' | 'failed'> {
     const canonicalRecipient = this.getCanonicalId(recipientHash);
-    const packet = createPacket(this.myIdentityHash, canonicalRecipient, payload);
 
     const isBroadcast =
       canonicalRecipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
@@ -1078,23 +1092,60 @@ class MeshRouter {
     let isProtocol = false;
     try {
       const str = new TextDecoder().decode(payload);
-      if (str.includes('DELIVERY_ACK') || str.includes('IDENTITY_ANNOUNCE') || str.includes('IDENTITY_RESPONSE')) {
+      if (str.includes('DELIVERY_ACK') || str.includes('IDENTITY_ANNOUNCE') || str.includes('IDENTITY_RESPONSE') || str.includes(PQC_TYPE_KEY_ANNOUNCE)) {
         isProtocol = true;
       }
     } catch {}
 
-    // [BUG-07 FIX] La pre-encolada DTN se eliminó. forwardPacket() encola en DTN internamente
-    // cuando todos los transportes fallan (retorna 'queued'). Hacerlo aquí causaba:
-    //   1. Doble encolada con mismo nonce (consumía ciclos IDB sin resultado)
-    //   2. El contador 'attempts' se incrementaba a 1 antes de cualquier intento real
+    let finalPayload = payload;
+    let packetFlags = 0x01; // default encrypted
+
+    // ── NIST FIPS 203 ML-KEM-768 + X25519 HPKE Post-Quantum Encapsulation ──
+    if (!isBroadcast && !isProtocol) {
+      const peer = this.peers.get(canonicalRecipient) || this.peers.get(recipientHash);
+      let targetKyber = peer?.kyberPublicKey;
+      let targetX25519 = peer?.x25519PublicKey || peer?.publicKey;
+
+      if (!targetKyber && typeof window !== 'undefined') {
+        try {
+          const rawConts = localStorage.getItem('red_web_contacts');
+          if (rawConts) {
+            const conts = JSON.parse(rawConts);
+            const contact = conts.find((c: any) => {
+              const cH = normalizeIdentity(c.identity_hash || '');
+              return cH === canonicalRecipient || (canonicalRecipient.length >= 8 && cH.startsWith(canonicalRecipient.slice(0, 8)));
+            });
+            if (contact?.kyber_public_key) {
+              targetKyber = contact.kyber_public_key;
+              targetX25519 = contact.x25519_public_key || contact.public_key || targetX25519;
+            }
+          }
+        } catch {}
+      }
+
+      if (targetKyber && targetX25519) {
+        try {
+          const { PqcCryptoEngine } = await import('../crypto/PqcCryptoEngine');
+          finalPayload = await PqcCryptoEngine.encryptPayload(payload, targetKyber, targetX25519);
+          packetFlags = 0x01 | 0x20; // FLAG_ENCRYPTED | FLAG_PQC_ENCRYPTED
+          console.log(`[MeshRouter] 🛡️ Packet encapsulated with NIST ML-KEM-768 PQC container (${finalPayload.length} bytes) for ${canonicalRecipient.slice(0, 8)}`);
+        } catch (pqcErr) {
+          console.warn('[MeshRouter] PQC encapsulation fallback to standard payload:', pqcErr);
+          finalPayload = payload;
+          packetFlags = 0x01;
+        }
+      }
+    }
+
+    const packet = createPacket(this.myIdentityHash, canonicalRecipient, finalPayload, { flags: packetFlags });
 
     // Multi-Path Packet Bonding (Cauchy GF(256) 3-of-5 Erasure Coding):
     // For large payloads (> 512 bytes) when multiple interfaces are active, dispatch bonded shards concurrently
     const hasMultipleTransports = (this.peers.size > 0 && (this.wifi?.onlinePeers.size || blindRelay.isConnected || this.hasInternetAccess)) ||
                                   (this.peers.size >= 2);
 
-    if (!isBroadcast && !isProtocol && payload.length > 512 && hasMultipleTransports) {
-      return this.sendBonded(canonicalRecipient, payload);
+    if (!isBroadcast && !isProtocol && finalPayload.length > 512 && hasMultipleTransports) {
+      return this.sendBonded(canonicalRecipient, finalPayload);
     }
 
     return this.forwardPacket(packet, null);
@@ -1319,6 +1370,39 @@ class MeshRouter {
       }
     }
 
+    // 0.2 NIST FIPS 203 ML-KEM-768 PQC HYBRID DECAPSULATION
+    const isPqcEncrypted = (packet.flags & 0x20) !== 0 ||
+      (packet.payload && packet.payload.length >= 1154 && packet.payload[0] === 0x50 && packet.payload[1] === 0x51 && packet.payload[2] === 0x43 && packet.payload[3] === 0x31);
+
+    if (isPqcEncrypted) {
+      const isForMe = !packet.recipient ||
+        packet.recipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
+        (!!this.myIdentityHash && packet.recipient.toLowerCase() === this.myIdentityHash.toLowerCase());
+
+      if (isForMe) {
+        try {
+          const { PqcCryptoEngine } = await import('../crypto/PqcCryptoEngine');
+          const localKeys = PqcCryptoEngine.getLocalHybridKeyPair();
+          if (localKeys?.kyberPrivateKeyHex && localKeys?.x25519PrivateKeyHex) {
+            const decryptedBytes = await PqcCryptoEngine.decryptPayload(
+              packet.payload,
+              localKeys.kyberPrivateKeyHex,
+              localKeys.x25519PrivateKeyHex
+            );
+            packet.payload = decryptedBytes;
+            packet.isPqcEncrypted = true;
+            console.log(`[MeshRouter] 🔓 Authenticated & Decrypted NIST ML-KEM-768 PQC container (${decryptedBytes.length} bytes) from ${packet.sender.slice(0, 8)}`);
+          } else {
+            console.warn('[MeshRouter] Received PQC packet but no local private hybrid keys available for decapsulation');
+          }
+        } catch (pqcDecErr) {
+          console.error('[MeshRouter] ❌ PQC decapsulation / authentication failed:', pqcDecErr);
+          try { globalShield.recordMalformedPacket(packet.sender || 'PQC_TAMPER'); } catch {}
+          return; // Drop tampered / corrupted packet
+        }
+      }
+    }
+
     let isHandshakeMsg = false;
     let isLocationMsg = false;
     let isDeliveryAck = false;
@@ -1423,6 +1507,8 @@ class MeshRouter {
             const peerHash = idData.identity_hash;
             const peerName = idData.display_name || `Operador ${peerHash.slice(0, 6)}`;
             const peerPk = idData.public_key;
+            const peerKyberPk = idData.kyber_public_key || idData.kyberPublicKeyHex;
+            const peerX25519Pk = idData.x25519_public_key || idData.x25519PublicKeyHex;
             const isGateway = !!(idData.capabilities?.is_gateway || idData.is_gateway);
             const hasInternet = !!(idData.capabilities?.has_internet || idData.has_internet);
 
@@ -1430,7 +1516,7 @@ class MeshRouter {
               this.bindDeviceToCanonical(fromTransportId, peerHash, peerName, peerPk);
             }
             this.bindDeviceToCanonical(packet.sender, peerHash, peerName, peerPk);
-            this.updatePeer(peerHash, transportType || 'ble', undefined, peerHash, peerName, peerPk, isGateway, hasInternet);
+            this.updatePeer(peerHash, transportType || 'ble', undefined, peerHash, peerName, peerPk, isGateway, hasInternet, peerKyberPk, peerX25519Pk);
 
             // Mesh contact isolation: ONLY update metadata if the peer already exists in contacts.
             // If the peer is unknown, they are registered exclusively in meshRouter.peers (Radar/topology).
@@ -1472,6 +1558,24 @@ class MeshRouter {
           }
           return;
         }
+      }
+
+      // 2.1 PQC Key Announcement Handling (PQC_KEY_ANNOUNCEMENT)
+      if (payloadStr.startsWith('{') && payloadStr.includes(PQC_TYPE_KEY_ANNOUNCE)) {
+        try {
+          const parsed = JSON.parse(payloadStr);
+          if (parsed.type === PQC_TYPE_KEY_ANNOUNCE) {
+            const peerHash = normalizeIdentity(parsed.did || packet.sender);
+            const kyberPub = parsed.kyberPublicKeyHex || parsed.kyber_public_key;
+            const x25519Pub = parsed.x25519PublicKeyHex || parsed.x25519_public_key || parsed.publicKey;
+            const nick = parsed.nickname || parsed.display_name;
+            if (peerHash && kyberPub) {
+              this.updatePeer(peerHash, transportType || 'ble', undefined, peerHash, nick, x25519Pub, undefined, undefined, kyberPub, x25519Pub);
+              console.log(`[MeshRouter] 🔑 Registered PQC ML-KEM-768 public key for peer ${peerHash.slice(0, 8)}`);
+            }
+            return;
+          }
+        } catch {}
       }
 
       // 3. RED-Sync BSP v2 State Synchronization Handshake
@@ -1950,7 +2054,9 @@ class MeshRouter {
     name?: string,
     publicKey?: string,
     isGateway?: boolean,
-    hasInternet?: boolean
+    hasInternet?: boolean,
+    kyberPublicKey?: string,
+    x25519PublicKey?: string
   ) {
     if (!id) return;
     const cleanId = normalizeIdentity(id);
@@ -2005,6 +2111,8 @@ class MeshRouter {
       hardwareId: hwId,
       name: bestName,
       publicKey: publicKey || existing?.publicKey,
+      kyberPublicKey: kyberPublicKey || existing?.kyberPublicKey,
+      x25519PublicKey: x25519PublicKey || existing?.x25519PublicKey,
       transport: newPriority >= existingPriority ? transport : (existing?.transport ?? transport),
       transports: Array.from(existingTransports) as any,
       lastSeen: Date.now(),
@@ -2024,6 +2132,25 @@ class MeshRouter {
       this.peers.delete(id);
     }
     this.peers.set(resolvedCanonical, updated);
+
+    // Sync PQC key to cached contacts if present
+    if (typeof window !== 'undefined' && kyberPublicKey) {
+      try {
+        const rawConts = localStorage.getItem('red_web_contacts');
+        if (rawConts) {
+          const conts = JSON.parse(rawConts);
+          const cIdx = conts.findIndex((c: any) => {
+            const cH = normalizeIdentity(c.identity_hash || '');
+            return cH === resolvedCanonical || (resolvedCanonical.length >= 8 && cH.startsWith(resolvedCanonical.slice(0, 8)));
+          });
+          if (cIdx >= 0) {
+            conts[cIdx].kyber_public_key = kyberPublicKey;
+            if (x25519PublicKey) conts[cIdx].x25519_public_key = x25519PublicKey;
+            localStorage.setItem('red_web_contacts', JSON.stringify(conts));
+          }
+        }
+      } catch {}
+    }
 
     // Track active gateways
     if (finalIsGateway || finalHasInternet) {

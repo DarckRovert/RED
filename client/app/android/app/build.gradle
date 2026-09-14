@@ -8,8 +8,8 @@ android {
         applicationId "f.red.app"
         minSdkVersion 24
         targetSdkVersion 35
-        versionCode 104000
-        versionName "104.0.0"
+        versionCode 105000
+        versionName "105.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
 
@@ -65,6 +65,7 @@ dependencies {
     implementation "androidx.core:core-splashscreen:1.0.1"
     implementation project(':capacitor-android')
     implementation project(':capacitor-cordova-android-plugins')
+    implementation 'com.github.mik3y:usb-serial-for-android:3.11.0'
     
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'

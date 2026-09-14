@@ -21,22 +21,44 @@ export function CbrnSatelliteModal() {
     const [cbrn, setCbrn] = useState<RadiationTelemetry>(() => cbrnRadiation.getTelemetry());
     const [sat, setSat] = useState<SatelliteGatewayTelemetry>(() => satelliteMeshGateway.getTelemetry());
 
-    // Estado Interactivo de la Pluma Atmosférica
-    const [incidentSource, setIncidentSource] = useState<CbrnIncidentSource>({
-        id: `INCIDENT-${Date.now()}`,
-        lat: -12.0464,
-        lon: -77.0428,
-        hazardType: "RADIOACTIVE_FALLOUT",
-        releaseRateKgSec: 15,
-        windSpeedKmh: 18,
-        windDirectionDegrees: 45,
-        stabilityClass: "D",
-        timestamp: Date.now()
+    // Estado Interactivo de la Pluma Atmosférica con anclaje GPS dinámico
+    const [operatorPos, setOperatorPos] = useState<{ lat: number; lon: number }>(() => {
+        const last = TacticalLocationEngine.getLastKnownLocation();
+        if (last && TacticalLocationEngine.isValidCoordinates(last.lat, last.lon)) {
+            return { lat: last.lat!, lon: last.lon! };
+        }
+        return { lat: 0, lon: 0 };
     });
 
-    const [operatorPos, setOperatorPos] = useState<{ lat: number; lon: number }>({
-        lat: -12.0440,
-        lon: -77.0400
+    const [incidentSource, setIncidentSource] = useState<CbrnIncidentSource>(() => {
+        const last = TacticalLocationEngine.getLastKnownLocation();
+        let initLat = 0;
+        let initLon = 0;
+        if (last && TacticalLocationEngine.isValidCoordinates(last.lat, last.lon)) {
+            const opLat = last.lat!;
+            const opLon = last.lon!;
+            const upwindBearing = (45 + 180) % 360;
+            const R = 6371000;
+            const d = 400 / R;
+            const brng = upwindBearing * (Math.PI / 180);
+            const lat1 = opLat * (Math.PI / 180);
+            const lon1 = opLon * (Math.PI / 180);
+            const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brng));
+            const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+            initLat = lat2 * (180 / Math.PI);
+            initLon = lon2 * (180 / Math.PI);
+        }
+        return {
+            id: `INCIDENT-${Date.now()}`,
+            lat: initLat,
+            lon: initLon,
+            hazardType: "RADIOACTIVE_FALLOUT",
+            releaseRateKgSec: 15,
+            windSpeedKmh: 18,
+            windDirectionDegrees: 45,
+            stabilityClass: "D",
+            timestamp: Date.now()
+        };
     });
 
     const [plumeZone, setPlumeZone] = useState<PlumeHazardZone>(() =>
@@ -61,10 +83,10 @@ export function CbrnSatelliteModal() {
                 satelliteMeshGateway.setObserverLocation(lat, lon);
                 setOperatorPos({ lat, lon });
 
-                // Si el incidente tiene las coordenadas por defecto (-12.0464), adaptarlo dinámicamente
+                // Si el incidente no tenía ubicación válida inicial o coincide con 0,0, adaptarlo dinámicamente
                 // a 400m hacia barlovento (contra el viento) de la posición real del operador
                 setIncidentSource(prev => {
-                    if (Math.abs(prev.lat - (-12.0464)) < 0.0001 && Math.abs(prev.lon - (-77.0428)) < 0.0001) {
+                    if (prev.lat === 0 && prev.lon === 0) {
                         const upwindBearing = (prev.windDirectionDegrees + 180) % 360;
                         const R = 6371000;
                         const d = 400 / R;

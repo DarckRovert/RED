@@ -24,6 +24,8 @@ import { cbrnPlumeDispersionEngine, CbrnIncidentSource } from "../lib/tactical/C
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { copyToClipboard } from "../lib/clipboard";
 import { TacIcon } from "./ui/TacIcon";
+import { mbtilesReader } from "../lib/storage/MbtilesReaderEngine";
+import { RfLinkProfileModal } from "./tactical/RfLinkProfileModal";
 
 function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
@@ -78,6 +80,8 @@ export interface CanonicalNode {
     lastSeen: number;
     lat?: number;
     lng?: number;
+    alt?: number;
+    altitude?: number;
     distMeters?: number;
     isEstimated?: boolean;
     isContact: boolean;
@@ -121,10 +125,13 @@ export default function NodeMap() {
     });
     const [realGPS, setRealGPS] = useState(false);
     const [selectedPeer, setSelectedPeer] = useState<CanonicalNode | null>(null);
+    const [isRfProfileOpen, setIsRfProfileOpen] = useState(false);
     const [showTelemetryDrawer, setShowTelemetryDrawer] = useState(false);
     const [showVaultModal, setShowVaultModal] = useState(false);
     const [vaultRadiusKm, setVaultRadiusKm] = useState(10);
     const [vaultStats, setVaultStats] = useState<TileCacheStats | null>(null);
+    const [availableMbtiles, setAvailableMbtiles] = useState<any[]>([]);
+    const [activeMbtilesPkg, setActiveMbtilesPkg] = useState<any>(() => mbtilesReader.getActivePackage());
     const [downloadProgress, setDownloadProgress] = useState<TileDownloadProgress | null>(null);
     const [isDownloadingVault, setIsDownloadingVault] = useState(false);
     const abortControllerRef = useRef<AbortController | null>(null);
@@ -253,6 +260,27 @@ export default function NodeMap() {
     const loadVaultStats = async () => {
         const stats = await offlineTileCacheEngine.getCacheStats();
         setVaultStats(stats);
+        try {
+            const pkgs = await mbtilesReader.listAvailablePackages();
+            setAvailableMbtiles(pkgs);
+            setActiveMbtilesPkg(mbtilesReader.getActivePackage());
+        } catch {}
+    };
+
+    const handleSelectMbtiles = async (pkg: any) => {
+        if (activeMbtilesPkg?.path === pkg.path) {
+            await mbtilesReader.closePackage();
+            setActiveMbtilesPkg(null);
+            toast.info("Paquete MBTiles desactivado (usando caché OpenStreetMap)");
+        } else {
+            const ok = await mbtilesReader.openPackage(pkg.path);
+            if (ok) {
+                setActiveMbtilesPkg(mbtilesReader.getActivePackage());
+                toast.success(`Cargado mapa MBTiles: ${pkg.name}`);
+            } else {
+                toast.error("Error al abrir paquete MBTiles");
+            }
+        }
     };
 
     const handleStartVaultDownload = async () => {
@@ -543,6 +571,34 @@ export default function NodeMap() {
 
                         if ((this as any).options.isVectorGrid) {
                             tile.src = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' fill='%23050812'%3E%3Crect width='256' height='256'/%3E%3Cpath d='M0 0h256v256H0z' stroke='%2300E5FF' stroke-width='0.4' stroke-opacity='0.25' fill='none'/%3E%3Ccircle cx='128' cy='128' r='1.5' fill='%2300E5FF' fill-opacity='0.45'/%3E%3C/svg%3E";
+                            return tile;
+                        }
+
+                        if (mbtilesReader.isPackageOpen()) {
+                            mbtilesReader.getTileDataUrl(coords.z, coords.x, coords.y)
+                                .then((dataUrl) => {
+                                    if (dataUrl) {
+                                        tile.src = dataUrl;
+                                    } else {
+                                        const url = (this as any).getTileUrl(coords);
+                                        offlineTileCacheEngine.getOrFetchTile(coords.z, coords.x, coords.y, url)
+                                            .then((blob) => {
+                                                if (blob) {
+                                                    const blobUrl = URL.createObjectURL(blob);
+                                                    (tile as any)._blobUrl = blobUrl;
+                                                    tile.src = blobUrl;
+                                                } else {
+                                                    tile.src = (this as any).options.errorTileUrl;
+                                                }
+                                            })
+                                            .catch(() => {
+                                                tile.src = (this as any).options.errorTileUrl;
+                                            });
+                                    }
+                                })
+                                .catch(() => {
+                                    tile.src = (this as any).options.errorTileUrl;
+                                });
                             return tile;
                         }
 
@@ -991,26 +1047,26 @@ export default function NodeMap() {
                 backdropFilter: "blur(20px)",
                 zIndex: 1000, flexShrink: 0,
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flexShrink: 1 }}>
                     <div style={{
-                        width: 36, height: 36, borderRadius: "10px", flexShrink: 0,
+                        width: 32, height: 32, borderRadius: "8px", flexShrink: 0,
                         background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        boxShadow: "0 4px 14px rgba(0,229,255,0.3)"
+                        boxShadow: "0 2px 10px rgba(0,229,255,0.3)"
                     }}>
-                        <TacIcon name="map" size={20} color="#000" />
+                        <TacIcon name="map" size={18} color="#000" />
                     </div>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: "0.92rem", fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <div style={{ minWidth: 0, flexShrink: 1 }}>
+                        <div style={{ fontSize: "0.82rem", fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {t('map.title')}
                         </div>
-                        <div style={{ fontSize: "0.62rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {realGPS ? `${t('map.gps_fixed')} (±${gpsData.accuracy ? gpsData.accuracy.toFixed(0) : "3"}m)` : t('map.gps_searching')}
+                        <div style={{ fontSize: "0.58rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {realGPS ? `GPS (±${gpsData.accuracy ? gpsData.accuracy.toFixed(0) : "3"}m)` : t('map.gps_searching')}
                         </div>
                     </div>
                 </div>
 
-                <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "4px", flexShrink: 0, alignItems: "center" }}>
                     <button
                         onClick={async () => {
                             try {
@@ -1029,17 +1085,27 @@ export default function NodeMap() {
                                 try {
                                     meshRouter.broadcastLocation(gpsData.lat, gpsData.lng, gpsData.altitude, gpsData.accuracy);
                                 } catch {}
-                                toast.success("🎯 CoT BFT emitido por la malla y copiado al portapapeles");
+                                await cursorOnTarget.broadcastToTak(bftEvt);
+                                toast.success("🎯 CoT BFT emitido por Multicast TAK (239.2.3.1:6969) y Malla");
                             } catch (e: any) {
                                 toast.error("Error al exportar CoT: " + e.message);
                             }
                         }}
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 9px", fontSize: "0.74rem", display: "flex", alignItems: "center", gap: "4px" }}
-                        title="Exportar y Difundir Cursor-on-Target (ATAK/CivTAK XML)"
+                        title="Exportar y Difundir Cursor-on-Target (ATAK/CivTAK Multicast 239.2.3.1:6969)"
                     >
                         <TacIcon name="crosshair" size={13} color="var(--accent-cyan)" />
                         <span>CoT</span>
+                    </button>
+                    <button
+                        onClick={() => setIsRfProfileOpen(prev => !prev)}
+                        className={isRfProfileOpen ? "btn-tactical-primary" : "btn-tactical-secondary"}
+                        style={{ padding: "6px 9px", fontSize: "0.74rem", display: "flex", alignItems: "center", gap: "4px" }}
+                        title="Análisis de Enlace RF & Zonas de Fresnel (LoS / Curvatura Terrestre)"
+                    >
+                        <TacIcon name="radio" size={13} color={isRfProfileOpen ? "#000" : "var(--accent-cyan)"} />
+                        <span>RF</span>
                     </button>
                     <button
                         onClick={handleTogglePdr}
@@ -1459,6 +1525,15 @@ export default function NodeMap() {
                             <TacIcon name="plus" size={13} />
                             <span>Guardar</span>
                         </button>
+                        <button
+                            onClick={() => setIsRfProfileOpen(true)}
+                            className="btn-tactical-secondary"
+                            style={{ padding: "8px 12px", fontSize: "0.78rem", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "4px" }}
+                            title="Analizar enlace de radiofrecuencia (Fresnel / LoS) con este nodo"
+                        >
+                            <TacIcon name="radio" size={13} color="var(--accent-cyan)" />
+                            <span>Enlace RF</span>
+                        </button>
                     </div>
                 </div>
             )}
@@ -1603,6 +1678,49 @@ export default function NodeMap() {
                             </div>
                         </div>
 
+                        {/* Paquetes MBTiles SQLite Offline */}
+                        <div style={{ background: "rgba(0,0,0,0.4)", border: "1px solid var(--glass-border)", borderRadius: "10px", padding: "10px 14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                    PAQUETES MBTILES NATIVOS (.mbtiles)
+                                </span>
+                                <span style={{ fontSize: "0.65rem", color: activeMbtilesPkg ? "var(--accent-emerald)" : "var(--text-muted)", fontWeight: 700 }}>
+                                    {activeMbtilesPkg ? `ACTIVO: ${activeMbtilesPkg.name}` : "NINGUNO"}
+                                </span>
+                            </div>
+                            {availableMbtiles.length === 0 ? (
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                                    Almacena mapas <code>.mbtiles</code> en <code>/sdcard/RED/maps/</code> para cartografía militar offline instantánea sin consumo de RAM.
+                                </div>
+                            ) : (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "120px", overflowY: "auto" }}>
+                                    {availableMbtiles.map(pkg => (
+                                        <button
+                                            key={pkg.path}
+                                            onClick={() => handleSelectMbtiles(pkg)}
+                                            style={{
+                                                padding: "6px 10px",
+                                                borderRadius: "6px",
+                                                background: activeMbtilesPkg?.path === pkg.path ? "rgba(0, 229, 255, 0.15)" : "rgba(255,255,255,0.04)",
+                                                border: activeMbtilesPkg?.path === pkg.path ? "1px solid var(--accent-cyan)" : "1px solid rgba(255,255,255,0.08)",
+                                                color: activeMbtilesPkg?.path === pkg.path ? "var(--accent-cyan)" : "var(--text-primary)",
+                                                display: "flex", justifyContent: "space-between", alignItems: "center",
+                                                cursor: "pointer", textAlign: "left", fontSize: "0.72rem"
+                                            }}
+                                        >
+                                            <div>
+                                                <div style={{ fontWeight: 800 }}>{pkg.name}</div>
+                                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>{pkg.fileName} · Zoom {pkg.minzoom}-{pkg.maxzoom}</div>
+                                            </div>
+                                            <span style={{ fontSize: "0.68rem", fontWeight: 700 }}>
+                                                {activeMbtilesPkg?.path === pkg.path ? "DESACTIVAR" : "ACTIVAR"}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
                         {/* Selector de Radio Táctico */}
                         <div>
                             <label style={{ fontSize: "0.72rem", color: "var(--text-secondary)", fontWeight: 800, display: "block", marginBottom: "6px" }}>
@@ -1691,6 +1809,56 @@ export default function NodeMap() {
                     </div>
                 </div>
             )}
+
+            {/* Modal de Análisis de Enlace RF / Zonas de Fresnel */}
+            {(() => {
+                const lastLoc = TacticalLocationEngine.getLastKnownLocation();
+                const txLat = (gpsData.lat && gpsData.lat !== 0) ? gpsData.lat : (lastLoc?.lat || 0);
+                const txLon = (gpsData.lng && gpsData.lng !== 0) ? gpsData.lng : (lastLoc?.lon || 0);
+                const txAlt = gpsData.altitude || lastLoc?.alt || 0;
+
+                let rxNodeInfo: { name: string; lat: number; lon: number; alt?: number } | undefined = undefined;
+
+                if (selectedPeer && typeof selectedPeer.lat === 'number' && typeof selectedPeer.lng === 'number' && (selectedPeer.lat !== 0 || selectedPeer.lng !== 0)) {
+                    rxNodeInfo = {
+                        name: selectedPeer.name || selectedPeer.id || "Nodo Peer",
+                        lat: selectedPeer.lat,
+                        lon: selectedPeer.lng,
+                        alt: selectedPeer.alt || 0
+                    };
+                } else if (target && typeof target.lat === 'number' && typeof target.lon === 'number' && (target.lat !== 0 || target.lon !== 0)) {
+                    rxNodeInfo = {
+                        name: target.name || "Objetivo Táctico",
+                        lat: target.lat,
+                        lon: target.lon,
+                        alt: 0
+                    };
+                } else {
+                    const peerWithCoords = peers.find((p: any) => typeof p.lat === 'number' && typeof p.lng === 'number' && (p.lat !== 0 || p.lng !== 0));
+                    if (peerWithCoords && typeof peerWithCoords.lat === 'number' && typeof peerWithCoords.lng === 'number') {
+                        rxNodeInfo = {
+                            name: peerWithCoords.name || peerWithCoords.id || "Nodo Remoto",
+                            lat: peerWithCoords.lat,
+                            lon: peerWithCoords.lng,
+                            alt: peerWithCoords.alt || 0
+                        };
+                    }
+                }
+
+                return (
+                    <RfLinkProfileModal
+                        isOpen={isRfProfileOpen}
+                        onClose={() => setIsRfProfileOpen(false)}
+                        txNode={{
+                            name: "Mi Posición",
+                            lat: txLat,
+                            lon: txLon,
+                            alt: txAlt
+                        }}
+                        rxNode={rxNodeInfo}
+                    />
+                );
+            })()}
         </div>
     );
 }

@@ -10,6 +10,7 @@ import { useTranslation } from "../lib/i18n/i18nEngine";
 import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { PQC_TYPE_KEY_ANNOUNCE } from "../lib/mesh/meshProtocol";
 
 const STORAGE_KEY = "red_identity_vault_v1";
 
@@ -125,7 +126,7 @@ export const IdentityVaultModal: React.FC = () => {
 
     const handleSaveProfile = () => {
         if (!nickname.trim()) {
-            toast.error("El nickname no puede estar vacío");
+            toast.error(t("identity_vault.toast_nickname_empty"));
             return;
         }
 
@@ -145,7 +146,7 @@ export const IdentityVaultModal: React.FC = () => {
         setIsProfileSaved(true);
         setTimeout(() => setIsProfileSaved(false), 2500);
         TacticalAudioEngine.playRogerBeep();
-        toast.success("✅ Perfil de Operador actualizado y sincronizado");
+        toast.success(t("identity_vault.toast_profile_saved"));
     };
 
     const handleSaveMedical = async () => {
@@ -183,7 +184,7 @@ export const IdentityVaultModal: React.FC = () => {
         }
 
         TacticalAudioEngine.playRogerBeep();
-        toast.success("🛡️ Ficha Médica Cifrada Guardada");
+        toast.success(t("identity_vault.toast_medical_saved"));
     };
 
     const handleClearMedical = () => {
@@ -196,7 +197,7 @@ export const IdentityVaultModal: React.FC = () => {
             localStorage.removeItem(STORAGE_KEY);
             window.dispatchEvent(new CustomEvent("red:medical_vault_updated", { detail: null }));
         }
-        toast.info("Ficha médica purgada de la bóveda local");
+        toast.info(t("identity_vault.toast_medical_cleared"));
     };
 
     const handleGeneratePqcKeys = async () => {
@@ -208,12 +209,13 @@ export const IdentityVaultModal: React.FC = () => {
             if (typeof window !== "undefined") {
                 localStorage.setItem("red_pqc_hybrid_keys", JSON.stringify(keys));
                 localStorage.setItem("red_pqc_kyber_public_key", keys.kyberPublicKeyHex);
+                localStorage.setItem("red_pqc_x25519_public_key", keys.x25519PublicKeyHex);
             }
             TacticalAudioEngine.playRogerBeep();
-            toast.success("🔑 Par de llaves híbridas FIPS-203 ML-KEM-768 generadas");
+            toast.success(t("identity_vault.toast_pqc_generated"));
         } catch (e: any) {
             TacticalAudioEngine.playWarning();
-            toast.error(`Fallo al generar llaves PQC: ${e.message}`);
+            toast.error(t("identity_vault.toast_pqc_generate_error", { error: e.message }));
         } finally {
             setIsPqcGenerating(false);
         }
@@ -226,19 +228,20 @@ export const IdentityVaultModal: React.FC = () => {
         if (typeof window !== "undefined") {
             localStorage.removeItem("red_pqc_hybrid_keys");
             localStorage.removeItem("red_pqc_kyber_public_key");
+            localStorage.removeItem("red_pqc_x25519_public_key");
         }
-        toast.info("Llaves PQC eliminadas de la memoria local");
+        toast.info(t("identity_vault.toast_pqc_cleared"));
     };
 
     const handleAnnouncePqcKey = async () => {
         if (!pqcKeys) {
-            toast.warning("Primero genera las llaves PQC");
+            toast.warning(t("identity_vault.toast_pqc_no_keys"));
             return;
         }
         TacticalAudioEngine.playTap();
         try {
             const payload = new TextEncoder().encode(JSON.stringify({
-                type: "PQC_KEY_ANNOUNCEMENT",
+                type: PQC_TYPE_KEY_ANNOUNCE,
                 did: myDid,
                 nickname: nickname || "Operador RED",
                 kyberPublicKeyHex: pqcKeys.kyberPublicKeyHex,
@@ -248,10 +251,10 @@ export const IdentityVaultModal: React.FC = () => {
             }));
             await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", payload);
             TacticalAudioEngine.playRogerBeep();
-            toast.success("📡 Llave pública PQC ML-KEM-768 anunciada por la malla");
+            toast.success(t("identity_vault.toast_pqc_announced"));
         } catch (e: any) {
             TacticalAudioEngine.playWarning();
-            toast.error("Error al anunciar llave PQC: " + e.message);
+            toast.error(t("identity_vault.toast_pqc_announce_error", { error: e.message }));
         }
     };
 
@@ -276,10 +279,10 @@ export const IdentityVaultModal: React.FC = () => {
                 success: secret === encap.sharedSecretHex
             });
             TacticalAudioEngine.playRogerBeep();
-            toast.success(`⚡ Benchmark PQC: Encap ${encapTime}ms · Decap ${decapTime}ms`);
+            toast.success(t("identity_vault.toast_benchmark_result", { encap: encapTime, decap: decapTime }));
         } catch (e: any) {
             TacticalAudioEngine.playWarning();
-            toast.error(`Error en benchmark: ${e.message}`);
+            toast.error(t("identity_vault.toast_benchmark_error", { error: e.message }));
         } finally {
             setIsBenchmarking(false);
         }
@@ -288,7 +291,7 @@ export const IdentityVaultModal: React.FC = () => {
     const handleSplitSecret = () => {
         TacticalAudioEngine.playTap();
         if (!secretToSplit.trim()) {
-            toast.warning("Ingresa un secreto o semilla BIP-39 para dividir.");
+            toast.warning(t("identity_vault.toast_shamir_no_secret"));
             return;
         }
         try {
@@ -297,10 +300,10 @@ export const IdentityVaultModal: React.FC = () => {
             setSssShares(shares);
             setSecretToSplit("");
             TacticalAudioEngine.playRogerBeep();
-            toast.success("🔐 Secreto dividido en 5 fragmentos (Umbral: 3)");
+            toast.success(t("identity_vault.toast_shamir_split_ok"));
         } catch (e: any) {
             TacticalAudioEngine.playWarning();
-            toast.error(`Error al dividir secreto: ${e.message}`);
+            toast.error(t("identity_vault.toast_shamir_split_error", { error: e.message }));
         }
     };
 
@@ -309,14 +312,14 @@ export const IdentityVaultModal: React.FC = () => {
         if (sssShares.length === 0) return;
         const formatted = sssShares.map(s => `RED_SSS:${s.shareIndex}:${s.shareHex}`).join('\n');
         copyToClipboard(formatted);
-        toast.success("📋 5 fragmentos SSS copiados en formato táctico");
+        toast.success(t("identity_vault.shamir_btn_copy_all"));
     };
 
     const handleReconstructSecret = () => {
         TacticalAudioEngine.playTap();
         const rawInput = sharesToReconstruct.trim();
         if (!rawInput) {
-            toast.warning("Pega al menos 3 fragmentos SSS.");
+            toast.warning(t("identity_vault.toast_shamir_no_shares"));
             return;
         }
         try {
@@ -355,7 +358,7 @@ export const IdentityVaultModal: React.FC = () => {
 
             if (!sharesList || sharesList.length < 3) {
                 TacticalAudioEngine.playWarning();
-                toast.error("Se requieren al menos 3 fragmentos válidos para reconstruir el secreto.");
+                toast.error(t("identity_vault.toast_shamir_need_more"));
                 return;
             }
 
@@ -364,10 +367,10 @@ export const IdentityVaultModal: React.FC = () => {
             const secret = new TextDecoder().decode(bytes);
             setReconstructedSecret(secret);
             TacticalAudioEngine.playRogerBeep();
-            toast.success("🎉 ¡Secreto reconstruido exitosamente!");
+            toast.success(t("identity_vault.toast_shamir_reconstructed"));
         } catch (e: any) {
             TacticalAudioEngine.playWarning();
-            toast.error(`Fallo en reconstrucción: ${e.message}`);
+            toast.error(t("identity_vault.toast_shamir_reconstruct_error", { error: e.message }));
         }
     };
 
@@ -375,7 +378,7 @@ export const IdentityVaultModal: React.FC = () => {
         TacticalAudioEngine.playTap();
         if (typeof navigator !== "undefined" && navigator.clipboard) {
             navigator.clipboard.writeText(text);
-            toast.success("Copiado al portapapeles");
+            toast.success(t("identity_vault.toast_copied"));
         }
     };
 
@@ -421,10 +424,10 @@ export const IdentityVaultModal: React.FC = () => {
                     }}>🪪</div>
                     <div>
                         <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
-                            BÓVEDA DE IDENTIDAD SOBERANA
+                            {t("identity_vault.title")}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan, #00E5FF)", fontWeight: 800 }}>
-                            DID SOBERANO · NIST FIPS-203 · SHAMIR SSS
+                            {t("identity_vault.subtitle")}
                         </div>
                     </div>
                 </div>
@@ -453,12 +456,12 @@ export const IdentityVaultModal: React.FC = () => {
                 background: "rgba(8, 10, 20, 0.95)", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
                 overflowX: "auto", flexShrink: 0
             }}>
-                {[
-                    { id: "profile", icon: "👤", label: "PERFIL DID" },
-                    { id: "pqc", icon: "🔐", label: "PQC KYBER" },
-                    { id: "shamir", icon: "🔑", label: "SHAMIR SSS" },
-                    { id: "medical", icon: "🫀", label: "FICHA MÉDICA" }
-                ].map(tab => {
+                {([
+                    { id: "profile", icon: "👤", labelKey: "identity_vault.tab_profile" },
+                    { id: "pqc", icon: "🔐", labelKey: "identity_vault.tab_pqc" },
+                    { id: "shamir", icon: "🔑", labelKey: "identity_vault.tab_shamir" },
+                    { id: "medical", icon: "🫀", labelKey: "identity_vault.tab_medical" }
+                ] as const).map(tab => {
                     const isSel = activeTab === tab.id;
                     return (
                         <button
@@ -478,7 +481,7 @@ export const IdentityVaultModal: React.FC = () => {
                                 transition: "all 0.15s ease"
                             }}
                         >
-                            <span>{tab.icon}</span> <span>{tab.label}</span>
+                            <span>{tab.icon}</span> <span>{t(tab.labelKey)}</span>
                         </button>
                     );
                 })}
@@ -517,7 +520,7 @@ export const IdentityVaultModal: React.FC = () => {
                             {/* DID String */}
                             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                                 <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>
-                                    IDENTIFICADOR DESCENTRALIZADO (DID)
+                                    {t("identity_vault.did_label")}
                                 </label>
                                 <div style={{ display: "flex", gap: "6px" }}>
                                     <input
@@ -537,7 +540,7 @@ export const IdentityVaultModal: React.FC = () => {
                                             color: "var(--accent-cyan, #00E5FF)", fontWeight: 900, fontSize: "0.74rem", cursor: "pointer"
                                         }}
                                     >
-                                        COPIAR
+                                        {t("identity_vault.btn_copy")}
                                     </button>
                                 </div>
                             </div>
@@ -550,10 +553,10 @@ export const IdentityVaultModal: React.FC = () => {
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                     <div>
                                         <div style={{ fontSize: "0.86rem", fontWeight: 900, color: "var(--accent-cyan)" }}>
-                                            CREDENCIAL QR DE IDENTIDAD SOBERANA
+                                            {t("identity_vault.qr_credential_title")}
                                         </div>
                                         <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                                            Para emparejamiento táctico pantalla-a-pantalla sin emisión de radiofrecuencia.
+                                            {t("identity_vault.qr_credential_desc")}
                                         </div>
                                     </div>
                                     <button
@@ -565,7 +568,7 @@ export const IdentityVaultModal: React.FC = () => {
                                             fontSize: "0.72rem", fontWeight: 800, cursor: "pointer"
                                         }}
                                     >
-                                        {showIdentityQr ? "✕ OCULTAR QR" : "👁️ MOSTRAR QR"}
+                                        {showIdentityQr ? `✕ ${t("identity_vault.qr_hide")}` : `👁️ ${t("identity_vault.qr_show")}`}
                                     </button>
                                 </div>
 
@@ -577,7 +580,7 @@ export const IdentityVaultModal: React.FC = () => {
                                             style={{ width: 220, height: 220, borderRadius: "12px", border: "2px solid #00E676" }}
                                         />
                                         <div style={{ fontSize: "0.64rem", color: "var(--text-secondary)", textAlign: "center" }}>
-                                            Escaneable ópticamente por cualquier nodo RED Sovereign Mesh OS.
+                                            {t("identity_vault.qr_scannable")}
                                         </div>
                                     </div>
                                 )}
@@ -587,7 +590,7 @@ export const IdentityVaultModal: React.FC = () => {
                             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                                 <div>
                                     <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900, display: "block", marginBottom: "4px" }}>
-                                        NICKNAME / INDICATIVO TÁCTICO
+                                        {t("identity_vault.label_nickname")}
                                     </label>
                                     <input
                                         value={nickname}
@@ -601,12 +604,12 @@ export const IdentityVaultModal: React.FC = () => {
                                 </div>
                                 <div>
                                     <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900, display: "block", marginBottom: "4px" }}>
-                                        BIO / ESTADO TÁCTICO
+                                        {t("identity_vault.label_bio")}
                                     </label>
                                     <input
                                         value={bio}
                                         onChange={e => setBio(e.target.value)}
-                                        placeholder="Ej: Operador de Enlace, Frecuencia 433 MHz..."
+                                        placeholder={t("identity_vault.bio_placeholder")}
                                         style={{
                                             width: "100%", padding: "10px 14px", background: "rgba(0, 0, 0, 0.5)",
                                             border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "10px",
@@ -623,7 +626,7 @@ export const IdentityVaultModal: React.FC = () => {
                                         boxShadow: "0 0 15px rgba(0, 229, 255, 0.3)"
                                     }}
                                 >
-                                    {isProfileSaved ? "✓ PERFIL GUARDADO" : "⚡ GUARDAR Y FIRMAR PERFIL"}
+                                    {isProfileSaved ? t("identity_vault.btn_saved_profile") : t("identity_vault.btn_save_profile")}
                                 </button>
                             </div>
                         </div>
@@ -639,10 +642,10 @@ export const IdentityVaultModal: React.FC = () => {
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                 <div>
                                     <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#B388FF" }}>
-                                        ARMADURA POST-CUÁNTICA (NIST FIPS 203)
+                                        {t("identity_vault.pqc_title")}
                                     </div>
                                     <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                                        Cifrado de celosías ML-KEM-768 resistente a computación cuántica.
+                                        {t("identity_vault.pqc_subtitle")}
                                     </div>
                                 </div>
                                 <span style={{
@@ -663,7 +666,7 @@ export const IdentityVaultModal: React.FC = () => {
                                         fontWeight: 900, fontSize: "0.78rem", cursor: "pointer"
                                     }}
                                 >
-                                    {isPqcGenerating ? "Generando..." : "🔑 GENERAR LLAVES PQC"}
+                                    {isPqcGenerating ? t("identity_vault.pqc_btn_generating") : `🔑 ${t("identity_vault.pqc_btn_generate")}`}
                                 </button>
                                 <button
                                     onClick={handleRunBenchmark}
@@ -674,7 +677,7 @@ export const IdentityVaultModal: React.FC = () => {
                                         fontWeight: 900, fontSize: "0.78rem", cursor: "pointer"
                                     }}
                                 >
-                                    {isBenchmarking ? "Probando..." : "⚡ BENCHMARK LOCAL"}
+                                    {isBenchmarking ? t("identity_vault.pqc_btn_benchmarking") : `⚡ ${t("identity_vault.pqc_btn_benchmark")}`}
                                 </button>
                             </div>
 
@@ -687,7 +690,7 @@ export const IdentityVaultModal: React.FC = () => {
                                 }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                         <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "#B388FF" }}>
-                                            LLAVES PQC ML-KEM-768 ACTIVAS
+                                            {t("identity_vault.pqc_label_kyber_pub")}
                                         </span>
                                         <button
                                             onClick={handleClearPqcKeys}
@@ -697,13 +700,13 @@ export const IdentityVaultModal: React.FC = () => {
                                                 color: "#FF3355", fontSize: "0.65rem", fontWeight: 800, cursor: "pointer"
                                             }}
                                         >
-                                            ELIMINAR LLAVES
+                                            {t("identity_vault.pqc_btn_clear")}
                                         </button>
                                     </div>
 
                                     <div>
                                         <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)", marginBottom: "2px" }}>
-                                            KYBER PUBLIC KEY ({Math.round(pqcKeys.kyberPublicKeyHex.length / 2)} BYTES):
+                                            {t("identity_vault.pqc_label_kyber_pub")} ({Math.round(pqcKeys.kyberPublicKeyHex.length / 2)} BYTES):
                                         </div>
                                         <div style={{ display: "flex", gap: "6px" }}>
                                             <input
@@ -723,14 +726,14 @@ export const IdentityVaultModal: React.FC = () => {
                                                     color: "#FFFFFF", fontSize: "0.66rem", fontWeight: 800, cursor: "pointer"
                                                 }}
                                             >
-                                                COPIAR
+                                                {t("identity_vault.btn_copy")}
                                             </button>
                                         </div>
                                     </div>
 
                                     <div>
                                         <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)", marginBottom: "2px" }}>
-                                            X25519 ECDH PUBLIC KEY:
+                                            {t("identity_vault.pqc_label_x25519_pub")}:
                                         </div>
                                         <div style={{ display: "flex", gap: "6px" }}>
                                             <input
@@ -750,7 +753,7 @@ export const IdentityVaultModal: React.FC = () => {
                                                     color: "#FFFFFF", fontSize: "0.66rem", fontWeight: 800, cursor: "pointer"
                                                 }}
                                             >
-                                                COPIAR
+                                                {t("identity_vault.btn_copy")}
                                             </button>
                                         </div>
                                     </div>
@@ -765,7 +768,7 @@ export const IdentityVaultModal: React.FC = () => {
                                             display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                                         }}
                                     >
-                                        📡 ANUNCIAR LLAVE PQC EN LA MALLA
+                                        📡 {t("identity_vault.pqc_btn_announce")}
                                     </button>
                                 </div>
                             )}
@@ -777,15 +780,15 @@ export const IdentityVaultModal: React.FC = () => {
                                     display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", textAlign: "center"
                                 }}>
                                     <div>
-                                        <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>ENCAPSULACIÓN</div>
+                                        <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>{t("identity_vault.pqc_bench_encap").toUpperCase()}</div>
                                         <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E676" }}>{benchmarkResult.encapTimeMs} ms</div>
                                     </div>
                                     <div>
-                                        <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>DESENCAPSULACIÓN</div>
+                                        <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>{t("identity_vault.pqc_bench_decap").toUpperCase()}</div>
                                         <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E676" }}>{benchmarkResult.decapTimeMs} ms</div>
                                     </div>
                                     <div>
-                                        <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>TAMAÑO CIPHERTEXT</div>
+                                        <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>{t("identity_vault.pqc_bench_ciphertext").toUpperCase()}</div>
                                         <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#B388FF" }}>{benchmarkResult.ciphertextBytes} B</div>
                                     </div>
                                 </div>
@@ -802,10 +805,10 @@ export const IdentityVaultModal: React.FC = () => {
                         }}>
                             <div>
                                 <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#00E676" }}>
-                                    DIVISIÓN DE SECRETOS SHAMIR (SSS 3-OF-5)
+                                    {t("identity_vault.shamir_title")}
                                 </div>
                                 <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                                    Divide tu semilla o clave en 5 fragmentos matemáticos; se requieren 3 cualesquiera para reconstruirla.
+                                    {t("identity_vault.shamir_subtitle")}
                                 </div>
                             </div>
 
@@ -813,7 +816,7 @@ export const IdentityVaultModal: React.FC = () => {
                                 <input
                                     value={secretToSplit}
                                     onChange={e => setSecretToSplit(e.target.value)}
-                                    placeholder="Ingresa semilla mnemónica o secreto a dividir..."
+                                    placeholder={t("identity_vault.shamir_split_placeholder")}
                                     style={{
                                         padding: "10px 14px", background: "rgba(0, 0, 0, 0.5)",
                                         border: "1px solid rgba(0, 230, 118, 0.3)", borderRadius: "10px",
@@ -828,7 +831,7 @@ export const IdentityVaultModal: React.FC = () => {
                                         fontWeight: 900, fontSize: "0.82rem", cursor: "pointer"
                                     }}
                                 >
-                                    🔐 DIVIDIR EN 5 FRAGMENTOS
+                                    🔐 {t("identity_vault.shamir_btn_split")}
                                 </button>
                             </div>
 
@@ -836,7 +839,7 @@ export const IdentityVaultModal: React.FC = () => {
                                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                         <div style={{ fontSize: "0.72rem", color: "#00E676", fontWeight: 900 }}>
-                                            FRAGMENTOS GENERADOS:
+                                            {t("identity_vault.shamir_btn_split").toUpperCase()}:
                                         </div>
                                         <button
                                             onClick={handleCopyAllShares}
@@ -846,7 +849,7 @@ export const IdentityVaultModal: React.FC = () => {
                                                 color: "#00E676", fontSize: "0.66rem", fontWeight: 800, cursor: "pointer"
                                             }}
                                         >
-                                            📋 COPIAR TODOS
+                                            📋 {t("identity_vault.shamir_btn_copy_all")}
                                         </button>
                                     </div>
                                     {sssShares.map(s => (
@@ -859,19 +862,19 @@ export const IdentityVaultModal: React.FC = () => {
                                                 fontSize: "0.68rem", cursor: "pointer", display: "flex", justifyContent: "space-between"
                                             }}
                                         >
-                                            <span>Fragmento #{s.shareIndex}: {s.shareHex.substring(0, 16)}…</span>
-                                            <span style={{ color: "var(--accent-cyan, #00E5FF)" }}>COPIAR</span>
+                                            <span>Share #{s.shareIndex}: {s.shareHex.substring(0, 16)}…</span>
+                                            <span style={{ color: "var(--accent-cyan, #00E5FF)" }}>{t("identity_vault.btn_copy")}</span>
                                         </div>
                                     ))}
                                 </div>
                             )}
 
-                            <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                                <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "#FFFFFF" }}>RECONSTRUIR SECRETO</div>
+                            <div style={{ borderTop: "1px solid rgba(255,255,200,0.08)", paddingTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                                <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "#FFFFFF" }}>{t("identity_vault.shamir_reconstruct_label")}</div>
                                 <textarea
                                     value={sharesToReconstruct}
                                     onChange={e => setSharesToReconstruct(e.target.value)}
-                                    placeholder="Pega array JSON, líneas de fragmentos o formato RED_SSS:1:hex..."
+                                    placeholder={t("identity_vault.shamir_reconstruct_placeholder")}
                                     rows={2}
                                     style={{
                                         padding: "8px 12px", background: "rgba(0,0,0,0.5)",
@@ -887,11 +890,11 @@ export const IdentityVaultModal: React.FC = () => {
                                         color: "var(--accent-cyan, #00E5FF)", fontWeight: 900, fontSize: "0.78rem", cursor: "pointer"
                                     }}
                                 >
-                                    🎉 RECONSTRUIR SECRETO ORIGINAL
+                                    🎉 {t("identity_vault.shamir_btn_reconstruct")}
                                 </button>
                                 {reconstructedSecret && (
                                     <div style={{ padding: "10px", background: "rgba(0, 230, 118, 0.15)", border: "1px solid #00E676", borderRadius: "8px", fontSize: "0.82rem", fontWeight: 900, color: "#00E676" }}>
-                                        Secreto: {reconstructedSecret}
+                                        {t("identity_vault.shamir_reconstructed_label")}: {reconstructedSecret}
                                     </div>
                                 )}
                             </div>
@@ -908,10 +911,10 @@ export const IdentityVaultModal: React.FC = () => {
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                 <div>
                                     <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FF3355" }}>
-                                        FICHA MÉDICA DE RESCATE (ED25519 FIRMADA)
+                                        {t("identity_vault.medical_title")}
                                     </div>
                                     <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                                        Información vital accesible por rescatistas en caso de inconsciencia o triaje START.
+                                        {t("identity_vault.medical_subtitle")}
                                     </div>
                                 </div>
                                 <button
@@ -922,17 +925,17 @@ export const IdentityVaultModal: React.FC = () => {
                                         color: "var(--text-muted)", fontSize: "0.65rem", fontWeight: 800, cursor: "pointer"
                                     }}
                                 >
-                                    LIMPIAR
+                                    {t("identity_vault.shamir_btn_clear_result")}
                                 </button>
                             </div>
 
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "10px" }}>
                                 <div>
-                                    <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>GRUPO SANGUÍNEO</label>
+                                    <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>{t("identity_vault.medical_label_blood")}</label>
                                     <input
                                         value={bloodType}
                                         onChange={e => setBloodType(e.target.value)}
-                                        placeholder="Ej: O+, A-, B+..."
+                                        placeholder={t("identity_vault.medical_placeholder_blood")}
                                         style={{
                                             width: "100%", padding: "10px", background: "rgba(0, 0, 0, 0.5)",
                                             border: "1px solid rgba(255, 51, 85, 0.3)", borderRadius: "10px",
@@ -941,11 +944,11 @@ export const IdentityVaultModal: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>ALERGIAS CRÍTICAS</label>
+                                    <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>{t("identity_vault.medical_label_allergies")}</label>
                                     <input
                                         value={allergies}
                                         onChange={e => setAllergies(e.target.value)}
-                                        placeholder="Ej: Penicilina, Látex, Ninguna..."
+                                        placeholder={t("identity_vault.medical_placeholder_allergies")}
                                         style={{
                                             width: "100%", padding: "10px", background: "rgba(0, 0, 0, 0.5)",
                                             border: "1px solid rgba(255, 51, 85, 0.3)", borderRadius: "10px",
@@ -956,11 +959,11 @@ export const IdentityVaultModal: React.FC = () => {
                             </div>
 
                             <div>
-                                <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>CONTACTO DE EMERGENCIA</label>
+                                <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>{t("identity_vault.medical_label_contact")}</label>
                                 <input
                                     value={emergencyContact}
                                     onChange={e => setEmergencyContact(e.target.value)}
-                                    placeholder="Nombre y teléfono o DID de contacto..."
+                                    placeholder={t("identity_vault.medical_placeholder_contact")}
                                     style={{
                                         width: "100%", padding: "10px", background: "rgba(0, 0, 0, 0.5)",
                                         border: "1px solid rgba(255, 51, 85, 0.3)", borderRadius: "10px",
@@ -979,7 +982,7 @@ export const IdentityVaultModal: React.FC = () => {
                                         boxShadow: "0 0 15px rgba(255, 51, 85, 0.35)"
                                     }}
                                 >
-                                    🫀 GENERAR QR Y GUARDAR
+                                    🫀 {t("identity_vault.medical_btn_save")}
                                 </button>
                                 <button
                                     onClick={() => {
@@ -1001,7 +1004,7 @@ export const IdentityVaultModal: React.FC = () => {
                                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", paddingTop: "10px" }}>
                                     <img src={qrCodeData} alt="QR Médico" style={{ width: 220, height: 220, borderRadius: "12px", border: "2px solid #FF3355" }} />
                                     <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", textAlign: "center" }}>
-                                        Escaneable ópticamente por cualquier lector de emergencias sin conexión.
+                                        {t("identity_vault.medical_qr_desc")}
                                     </div>
                                 </div>
                             )}

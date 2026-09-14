@@ -78,6 +78,11 @@ public class RedNodeService extends Service {
     private static final java.util.concurrent.ConcurrentHashMap<String, BluetoothDevice> connectedGattClients = new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.concurrent.ConcurrentHashMap<String, Boolean> clientNotificationsEnabled = new java.util.concurrent.ConcurrentHashMap<>();
 
+    public static final int FOREGROUND_NOTIFICATION_ID = 1;
+    private static volatile String currentStatusText = "Nodo P2P Soberano Activo";
+    private static volatile int currentPeerCount = 0;
+    private static volatile boolean isPanicActive = false;
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -124,26 +129,8 @@ public class RedNodeService extends Service {
             // Avoid nulls if started by system
             if (dataDir == null) dataDir = getFilesDir().getAbsolutePath() + "/red_node";
 
-            // Build notification
-            Notification.Builder builder;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                builder = new Notification.Builder(this, CHANNEL_ID);
-            } else {
-                builder = new Notification.Builder(this);
-            }
-
-            builder.setContentTitle("RED Protocol")
-                    .setContentText("Decentralized node running")
-                    .setOngoing(true);
-
-            int iconResId = getResources().getIdentifier("ic_launcher", "mipmap", getPackageName());
-            if (iconResId != 0) {
-                builder.setSmallIcon(iconResId);
-            } else {
-                builder.setSmallIcon(android.R.drawable.ic_dialog_info);
-            }
-
-            Notification notification = builder.build();
+            // Build tactical interactive notification
+            Notification notification = buildForegroundNotification(null, -1, false);
 
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -152,12 +139,12 @@ public class RedNodeService extends Service {
                     // MissingForegroundServiceTypeException and kills the service.
                     // specialUse is required because we added it to the manifest for
                     // the 6-hour timeout exemption on Xiaomi HyperOS.
-                    startForeground(1, notification,
+                    startForeground(FOREGROUND_NOTIFICATION_ID, notification,
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
                             | ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                             | ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
                 } else {
-                    startForeground(1, notification);
+                    startForeground(FOREGROUND_NOTIFICATION_ID, notification);
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error starting foreground service: " + e.getMessage());
@@ -486,6 +473,7 @@ public class RedNodeService extends Service {
         } catch (Exception ignored) {}
 
         super.onDestroy();
+        activeInstance = null;
         
         if (heartbeatExecutor != null) {
             heartbeatExecutor.shutdownNow();
@@ -927,5 +915,75 @@ public class RedNodeService extends Service {
      */
     public static java.util.List<String> getConnectedClients() {
         return new java.util.ArrayList<>(connectedGattClients.keySet());
+    }
+
+    /**
+     * Construye la notificación persistente de primer plano con controles tácticos de acción.
+     */
+    public Notification buildForegroundNotification(String statusText, int peerCount, boolean panic) {
+        return buildForegroundNotification(this, statusText, peerCount, panic);
+    }
+
+    public static Notification buildForegroundNotification(Context context, String statusText, int peerCount, boolean panic) {
+        if (context == null) return null;
+        if (statusText != null && !statusText.isEmpty()) currentStatusText = statusText;
+        if (peerCount >= 0) currentPeerCount = peerCount;
+        isPanicActive = panic;
+
+        Intent launchIntent = new Intent(context, MainActivity.class);
+        launchIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent contentPendingIntent = PendingIntent.getActivity(
+                context, 0, launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
+        );
+
+        Intent sosIntent = new Intent(context, RedActionReceiver.class);
+        sosIntent.setAction(RedActionReceiver.ACTION_PANIC_SOS);
+        PendingIntent sosPendingIntent = PendingIntent.getBroadcast(
+                context, 101, sosIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
+        );
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
+                .setContentTitle(isPanicActive ? "🚨 RED PROTOCOL — ALERTA SOS ACTIVA" : "RED Protocol · Malla Soberana")
+                .setContentText(currentStatusText + (currentPeerCount > 0 ? " (" + currentPeerCount + " pares)" : ""))
+                .setContentIntent(contentPendingIntent)
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+
+        int iconResId = context.getResources().getIdentifier("ic_launcher", "mipmap", context.getPackageName());
+        if (iconResId != 0) {
+            builder.setSmallIcon(iconResId);
+        } else {
+            builder.setSmallIcon(android.R.drawable.ic_dialog_info);
+        }
+
+        // Acción Táctica 1: Emergencia SOS inmediata
+        builder.addAction(android.R.drawable.ic_dialog_alert, "🚨 EMERGENCIA SOS", sosPendingIntent);
+
+        // Acción Táctica 2: Abrir consola táctica
+        builder.addAction(android.R.drawable.ic_menu_view, "ABRIR RED", contentPendingIntent);
+
+        return builder.build();
+    }
+
+    /**
+     * Actualiza dinámicamente la notificación persistente desde cualquier contexto.
+     */
+    public static void updateNotificationStatus(Context context, String statusText, int peerCount, boolean isPanic) {
+        Context ctx = (context != null) ? context : activeInstance;
+        if (ctx != null) {
+            try {
+                Notification notification = buildForegroundNotification(ctx, statusText, peerCount, isPanic);
+                NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm != null && notification != null) {
+                    nm.notify(FOREGROUND_NOTIFICATION_ID, notification);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Error updating foreground notification: " + e.getMessage());
+            }
+        }
     }
 }

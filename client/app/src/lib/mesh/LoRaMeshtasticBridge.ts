@@ -3,9 +3,11 @@
  * 
  * Enables physical long-range (15-30 km) RF radio packet bridging by interfacing
  * directly with Meshtastic ESP32 / nRF52 / SX1262 hardware dongles over WebSerial,
- * WebUSB, Bluetooth SPP, and USB-C OTG.
+ * Android USB-OTG Serial (CP2102, CH340, FTDI, CDC-ACM), and Bluetooth NUS.
  * 
  * Features:
+ * - Full wire-level Protobuf codec for Meshtastic v2.x (ToRadio / FromRadio / MeshPacket / Data)
+ * - Fallback support for legacy 16-byte fixed-header binary framing
  * - Transparent encapsulation of RED PQC encrypted packets into LoRa MTU (237 bytes)
  * - Compression and streaming of RED LowBitrateVocoder voice bursts across LoRa
  * - Dual-way framing with Meshtastic packet sync header (0x94, 0xC3)
@@ -13,6 +15,9 @@
  */
 
 import { loraTdmaScheduler } from './LoRaTdmaSchedulerEngine';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const RedNode = registerPlugin<any>('RedNode');
 
 export interface LoRaNodeInfo {
     nodeNum: number;
@@ -26,6 +31,10 @@ export interface LoRaNodeInfo {
     rssi: number;
     batteryLevel?: number;
     channel?: number;
+    latitude?: number;
+    longitude?: number;
+    altitude?: number;
+    lastSeen?: number;
 }
 
 export enum MeshtasticPortNum {
@@ -56,10 +65,250 @@ export interface LoRaPacket {
 
 export type LoRaPacketCallback = (packet: LoRaPacket) => void;
 
+// ─── Meshtastic Protobuf Wire-Level Codec (Zero Dependencies) ───────────────
+
+function encodeVarint(val: number): number[] {
+    const res: number[] = [];
+    let n = val >>> 0;
+    while (n >= 0x80) {
+        res.push((n & 0x7F) | 0x80);
+        n >>>= 7;
+    }
+    res.push(n & 0x7F);
+    return res;
+}
+
+function decodeVarint(buf: Uint8Array, offset: number): { value: number; bytesRead: number } {
+    let result = 0;
+    let shift = 0;
+    let count = 0;
+    while (offset + count < buf.length) {
+        const b = buf[offset + count];
+        count++;
+        result |= (b & 0x7F) << shift;
+        if ((b & 0x80) === 0) break;
+        shift += 7;
+        if (shift > 35) break;
+    }
+    return { value: result >>> 0, bytesRead: count };
+}
+
+function encodeFixed32(val: number): number[] {
+    return [
+        val & 0xFF,
+        (val >>> 8) & 0xFF,
+        (val >>> 16) & 0xFF,
+        (val >>> 24) & 0xFF
+    ];
+}
+
+function decodeFixed32(buf: Uint8Array, offset: number): number {
+    if (offset + 4 > buf.length) return 0;
+    return (buf[offset] | (buf[offset + 1] << 8) | (buf[offset + 2] << 16) | (buf[offset + 3] << 24)) >>> 0;
+}
+
+function encodeTag(fieldNum: number, wireType: number): number[] {
+    return encodeVarint((fieldNum << 3) | wireType);
+}
+
+function encodeVarintField(fieldNum: number, val: number): number[] {
+    if (!val) return [];
+    return [...encodeTag(fieldNum, 0), ...encodeVarint(val)];
+}
+
+function encodeFixed32Field(fieldNum: number, val: number): number[] {
+    if (!val) return [];
+    return [...encodeTag(fieldNum, 5), ...encodeFixed32(val)];
+}
+
+function encodeLengthDelimited(fieldNum: number, bytes: Uint8Array | number[]): number[] {
+    const arr = bytes instanceof Uint8Array ? Array.from(bytes) : bytes;
+    if (!arr || arr.length === 0) return [];
+    return [...encodeTag(fieldNum, 2), ...encodeVarint(arr.length), ...arr];
+}
+
+function encodeData(portnum: number, payload: Uint8Array, wantResponse?: boolean): number[] {
+    const bytes: number[] = [];
+    if (portnum) bytes.push(...encodeVarintField(1, portnum));
+    if (payload && payload.length > 0) bytes.push(...encodeLengthDelimited(2, payload));
+    if (wantResponse) bytes.push(...encodeVarintField(3, 1));
+    return bytes;
+}
+
+function encodeMeshPacket(pkt: LoRaPacket): number[] {
+    const bytes: number[] = [];
+    if (pkt.from) bytes.push(...encodeFixed32Field(1, pkt.from));
+    if (pkt.to !== undefined) bytes.push(...encodeFixed32Field(2, pkt.to));
+    if (pkt.channel) bytes.push(...encodeVarintField(3, pkt.channel));
+    const dataBytes = encodeData(pkt.portnum, pkt.payload, pkt.wantAck);
+    if (dataBytes.length > 0) bytes.push(...encodeLengthDelimited(4, dataBytes));
+    if (pkt.id) bytes.push(...encodeFixed32Field(6, pkt.id));
+    if (pkt.hopLimit) bytes.push(...encodeVarintField(9, pkt.hopLimit));
+    if (pkt.wantAck) bytes.push(...encodeVarintField(10, 1));
+    return bytes;
+}
+
+function encodeToRadio(pkt: LoRaPacket): Uint8Array {
+    const meshPktBytes = encodeMeshPacket(pkt);
+    const toRadioBytes = encodeLengthDelimited(1, meshPktBytes);
+    const totalLen = toRadioBytes.length;
+    const out = new Uint8Array(4 + totalLen);
+    out[0] = 0x94;
+    out[1] = 0xC3;
+    out[2] = (totalLen >> 8) & 0xFF;
+    out[3] = totalLen & 0xFF;
+    out.set(toRadioBytes, 4);
+    return out;
+}
+
+function decodeData(buf: Uint8Array): { portnum: MeshtasticPortNum; payload: Uint8Array; wantResponse?: boolean } {
+    let offset = 0;
+    let portnum = MeshtasticPortNum.UNKNOWN_APP;
+    let payload = new Uint8Array(0);
+    let wantResponse = false;
+    while (offset < buf.length) {
+        const { value: tag, bytesRead: tagLen } = decodeVarint(buf, offset);
+        offset += tagLen;
+        const fieldNum = tag >>> 3;
+        const wireType = tag & 0x07;
+        if (wireType === 0) {
+            const { value: v, bytesRead: vLen } = decodeVarint(buf, offset);
+            offset += vLen;
+            if (fieldNum === 1) portnum = v as MeshtasticPortNum;
+            if (fieldNum === 3) wantResponse = v !== 0;
+        } else if (wireType === 2) {
+            const { value: len, bytesRead: lenLen } = decodeVarint(buf, offset);
+            offset += lenLen;
+            const dataSlice = new Uint8Array(buf.slice(offset, offset + len));
+            offset += len;
+            if (fieldNum === 2) payload = dataSlice;
+        } else {
+            break;
+        }
+    }
+    return { portnum, payload, wantResponse };
+}
+
+function decodePosition(buf: Uint8Array): { latitude?: number; longitude?: number; altitude?: number; batteryLevel?: number } {
+    let offset = 0;
+    let latitude: number | undefined;
+    let longitude: number | undefined;
+    let altitude: number | undefined;
+    let batteryLevel: number | undefined;
+
+    while (offset < buf.length) {
+        const { value: tag, bytesRead: tLen } = decodeVarint(buf, offset);
+        offset += tLen;
+        const field = tag >>> 3;
+        const wire = tag & 0x07;
+
+        if (wire === 5) {
+            const val = decodeFixed32(buf, offset);
+            offset += 4;
+            const sval = (val | 0);
+            if (field === 1 && sval !== 0) {
+                latitude = sval * 1e-7;
+            } else if (field === 2 && sval !== 0) {
+                longitude = sval * 1e-7;
+            }
+        } else if (wire === 0) {
+            const { value: v, bytesRead: vLen } = decodeVarint(buf, offset);
+            offset += vLen;
+            if (field === 3) {
+                altitude = v;
+            } else if (field === 7) {
+                batteryLevel = v;
+            }
+        } else if (wire === 2) {
+            const { value: len, bytesRead: lenLen } = decodeVarint(buf, offset);
+            offset += lenLen + len;
+        } else {
+            break;
+        }
+    }
+    return { latitude, longitude, altitude, batteryLevel };
+}
+
+function decodeMeshPacket(buf: Uint8Array): LoRaPacket {
+    let offset = 0;
+    let from = 0;
+    let to = 0xFFFFFFFF;
+    let channel = 0;
+    let portnum = MeshtasticPortNum.UNKNOWN_APP;
+    let payload: Uint8Array = new Uint8Array(0);
+    let id = 0;
+    let rxTime = 0;
+    let rxSnr = 8;
+    let rxRssi = -90;
+    let hopLimit = 3;
+    let wantAck = false;
+
+    while (offset < buf.length) {
+        const { value: tag, bytesRead: tagLen } = decodeVarint(buf, offset);
+        offset += tagLen;
+        const fieldNum = tag >>> 3;
+        const wireType = tag & 0x07;
+
+        if (wireType === 0) {
+            const { value: v, bytesRead: vLen } = decodeVarint(buf, offset);
+            offset += vLen;
+            if (fieldNum === 3) channel = v;
+            else if (fieldNum === 9) hopLimit = v;
+            else if (fieldNum === 10) wantAck = v !== 0;
+            else if (fieldNum === 12) rxRssi = (v << 24 >> 24);
+        } else if (wireType === 2) {
+            const { value: len, bytesRead: lenLen } = decodeVarint(buf, offset);
+            offset += lenLen;
+            const slice = new Uint8Array(buf.slice(offset, offset + len));
+            offset += len;
+            if (fieldNum === 4) {
+                const decodedData = decodeData(slice);
+                portnum = decodedData.portnum;
+                payload = decodedData.payload;
+                if (decodedData.wantResponse !== undefined) wantAck = decodedData.wantResponse;
+            } else if (fieldNum === 5) {
+                if (payload.length === 0) payload = slice;
+            }
+        } else if (wireType === 5) {
+            const val = decodeFixed32(buf, offset);
+            offset += 4;
+            if (fieldNum === 1) from = val;
+            else if (fieldNum === 2) to = val;
+            else if (fieldNum === 6) id = val;
+            else if (fieldNum === 7) rxTime = val;
+            else if (fieldNum === 8) {
+                const f32View = new Float32Array(new Uint32Array([val]).buffer);
+                rxSnr = Math.round(f32View[0] * 10) / 10;
+            }
+        } else if (wireType === 1) {
+            offset += 8;
+        } else {
+            break;
+        }
+    }
+
+    return {
+        from,
+        to,
+        channel,
+        portnum,
+        payload,
+        id,
+        rxTime,
+        rxSnr,
+        rxRssi,
+        hopLimit,
+        wantAck
+    };
+}
+
 export class LoRaMeshtasticBridge {
     private static instance: LoRaMeshtasticBridge | null = null;
 
     private isConnected: boolean = false;
+    private isNativeUsb: boolean = false;
+    private nativeDataListener: any = null;
+    private nativeErrorListener: any = null;
     private serialPort: any = null;
     private reader: any = null;
     private writer: any = null;
@@ -67,6 +316,7 @@ export class LoRaMeshtasticBridge {
     private localNodeInfo: LoRaNodeInfo | null = null;
     private knownNodes: Map<number, LoRaNodeInfo> = new Map();
     private packetCounter: number = 1;
+    private rxBuffer: Uint8Array = new Uint8Array(0);
 
     private constructor() {
         loraTdmaScheduler.setTransmitHandler(async (framed: Uint8Array) => {
@@ -90,11 +340,14 @@ export class LoRaMeshtasticBridge {
     }
 
     /**
-     * Connects to a physical LoRa module via WebSerial (Chrome / Edge / Android USB OTG)
+     * Connects to a physical LoRa module via Android USB-OTG Serial or WebSerial (Chrome / Edge)
      */
-    public async connectSerial(baudRate = 115200): Promise<boolean> {
+    public async connectSerial(baudRate = 115200, deviceId?: number): Promise<boolean> {
+        if (Capacitor.isNativePlatform()) {
+            return await this.connectNativeSerial(baudRate, deviceId);
+        }
+
         if (typeof navigator === 'undefined' || !(navigator as any).serial) {
-            // WebSerial not supported in this browser context (e.g. non-Chromium)
             return false;
         }
 
@@ -102,9 +355,58 @@ export class LoRaMeshtasticBridge {
             this.serialPort = await (navigator as any).serial.requestPort();
             await this.serialPort.open({ baudRate });
             this.isConnected = true;
+            this.isNativeUsb = false;
             this.startReading();
             return true;
         } catch {
+            this.isConnected = false;
+            return false;
+        }
+    }
+
+    /**
+     * Conexión directa mediante driver nativo Android USB-OTG (CP2102, CH340, FTDI, CDC-ACM)
+     */
+    public async connectNativeSerial(baudRate = 115200, deviceId?: number): Promise<boolean> {
+        try {
+            const list = await RedNode.listUsbSerialDevices();
+            if (!list || !list.devices || list.devices.length === 0) {
+                console.warn('[Meshtastic] No se detectaron dispositivos USB Serial OTG');
+                return false;
+            }
+
+            const targetId = deviceId !== undefined ? deviceId : list.devices[0].deviceId;
+            const res = await RedNode.openUsbSerial({ deviceId: targetId, baudRate });
+            if (!res || !res.success) {
+                console.error('[Meshtastic] Fallo abriendo puerto nativo:', res);
+                return false;
+            }
+
+            if (this.nativeDataListener) {
+                try { await this.nativeDataListener.remove(); } catch {}
+                this.nativeDataListener = null;
+            }
+            if (this.nativeErrorListener) {
+                try { await this.nativeErrorListener.remove(); } catch {}
+                this.nativeErrorListener = null;
+            }
+
+            this.nativeDataListener = await RedNode.addListener('usbSerialData', (ev: { data: number[] }) => {
+                if (ev && ev.data && ev.data.length > 0) {
+                    this.feedIncomingBytes(new Uint8Array(ev.data));
+                }
+            });
+
+            this.nativeErrorListener = await RedNode.addListener('usbSerialError', () => {
+                this.disconnect();
+            });
+
+            this.isConnected = true;
+            this.isNativeUsb = true;
+            console.log(`[Meshtastic] ✅ Conectado nativamente a ${res.driver || 'LoRa USB'} @ ${baudRate} bps`);
+            return true;
+        } catch (e) {
+            console.error('[Meshtastic] Error conectando serie nativo:', e);
             this.isConnected = false;
             return false;
         }
@@ -115,6 +417,20 @@ export class LoRaMeshtasticBridge {
      */
     public async disconnect(): Promise<void> {
         this.isConnected = false;
+        if (this.isNativeUsb) {
+            if (this.nativeDataListener) {
+                try { await this.nativeDataListener.remove(); } catch {}
+                this.nativeDataListener = null;
+            }
+            if (this.nativeErrorListener) {
+                try { await this.nativeErrorListener.remove(); } catch {}
+                this.nativeErrorListener = null;
+            }
+            try {
+                await RedNode.closeUsbSerial();
+            } catch {}
+            this.isNativeUsb = false;
+        }
         try {
             if (this.reader) {
                 await this.reader.cancel();
@@ -132,9 +448,10 @@ export class LoRaMeshtasticBridge {
         } catch {}
     }
 
-    public getConnectionStatus(): { connected: boolean; nodeInfo: LoRaNodeInfo | null; knownNodesCount: number } {
+    public getConnectionStatus(): { connected: boolean; isNativeUsb: boolean; nodeInfo: LoRaNodeInfo | null; knownNodesCount: number } {
         return {
             connected: this.isConnected,
+            isNativeUsb: this.isNativeUsb,
             nodeInfo: this.localNodeInfo,
             knownNodesCount: this.knownNodes.size
         };
@@ -154,7 +471,7 @@ export class LoRaMeshtasticBridge {
     public async broadcastMeshFrame(redFrame: Uint8Array): Promise<boolean> {
         return this.sendPacket({
             from: this.localNodeInfo?.nodeNum || 0x12345678,
-            to: 0xFFFFFFFF, // Broadcast
+            to: 0xFFFFFFFF,
             channel: 0,
             portnum: MeshtasticPortNum.RED_SOVEREIGN_MESH_APP,
             payload: redFrame,
@@ -253,8 +570,7 @@ export class LoRaMeshtasticBridge {
     }
 
     private async transmitRawFramed(framed: Uint8Array, packetForLoopback?: LoRaPacket): Promise<boolean> {
-        if (!this.isConnected || !this.serialPort) {
-            // Virtual loopback / test mode dispatch
+        if (!this.isConnected) {
             if (packetForLoopback) {
                 this.dispatchInbound(packetForLoopback);
             } else {
@@ -264,59 +580,266 @@ export class LoRaMeshtasticBridge {
             return true;
         }
 
-        try {
-            if (!this.writer) {
-                this.writer = this.serialPort.writable.getWriter();
+        if (this.isNativeUsb) {
+            try {
+                await RedNode.writeUsbSerial({ data: Array.from(framed) });
+                return true;
+            } catch {
+                return false;
             }
-            await this.writer.write(framed);
-            return true;
-        } catch {
-            return false;
         }
+
+        if (this.serialPort && this.serialPort.writable) {
+            try {
+                if (!this.writer) {
+                    this.writer = this.serialPort.writable.getWriter();
+                }
+                await this.writer.write(framed);
+                return true;
+            } catch {
+                return false;
+            }
+        }
+
+        return false;
     }
 
     /**
-     * Encodes a packet using Meshtastic Serial Framing:
-     * [0x94, 0xC3] [MSB len, LSB len] [Packet bytes]
+     * Encodes a packet using Meshtastic Wire Protocol (Protobuf ToRadio with 0x94, 0xC3 sync header)
      */
     public framePacket(packet: LoRaPacket): Uint8Array {
-        // Simple serialization of header + payload
-        const payload = (packet.payload instanceof Uint8Array) ? packet.payload : new Uint8Array(0);
-        const headerLen = 16;
-        const totalLen = headerLen + payload.length;
-        const out = new Uint8Array(4 + totalLen);
-
-        // Meshtastic Sync Header
-        out[0] = 0x94;
-        out[1] = 0xC3;
-        out[2] = (totalLen >> 8) & 0xFF;
-        out[3] = totalLen & 0xFF;
-
-        // Packet fields
-        const dv = new DataView(out.buffer, 4);
-        dv.setUint32(0, packet.from || 0, false);
-        dv.setUint32(4, packet.to || 0, false);
-        dv.setUint8(8, packet.channel || 0);
-        dv.setUint8(9, packet.portnum || 0);
-        dv.setUint32(10, packet.id || 0, false);
-        dv.setUint8(14, packet.hopLimit || 3);
-        dv.setUint8(15, packet.wantAck ? 1 : 0);
-
-        out.set(payload, 4 + headerLen);
-        return out;
+        return encodeToRadio(packet);
     }
 
     /**
-     * Decodes a framed Meshtastic byte buffer back into a LoRaPacket
+     * Decodes a framed Meshtastic byte buffer (Protobuf FromRadio or Legacy Header) back into a LoRaPacket
      */
     public unframePacket(buf: Uint8Array): LoRaPacket | null {
-        if (!buf || !(buf instanceof Uint8Array) || buf.length < 20) return null;
+        if (!buf || !(buf instanceof Uint8Array) || buf.length < 4) return null;
         if (buf[0] !== 0x94 || buf[1] !== 0xC3) return null;
 
         const len = (buf[2] << 8) | buf[3];
         if (len < 16 || buf.length < 4 + len) return null;
 
-        const dv = new DataView(buf.buffer, buf.byteOffset + 4, len);
+        const body = buf.slice(4, 4 + len);
+
+        // Check if body is Protobuf FromRadio (starts with field tags: 0x08 id, 0x12 packet, 0x1a my_info, 0x22 node_info)
+        const isProtobuf = (body[0] & 0x07) <= 5 && (body[0] === 0x08 || body[0] === 0x12 || body[0] === 0x1A || body[0] === 0x22 || body[0] === 0x38 || body[0] === 0x40);
+
+        if (isProtobuf) {
+            return this.unframeProtobufFromRadio(body);
+        }
+
+        // Legacy 16-byte fixed-header fallback
+        return this.unframeLegacyPacket(body, len);
+    }
+
+    private unframeProtobufFromRadio(body: Uint8Array): LoRaPacket | null {
+        let offset = 0;
+        let packet: LoRaPacket | null = null;
+
+        while (offset < body.length) {
+            const { value: tag, bytesRead: tagLen } = decodeVarint(body, offset);
+            offset += tagLen;
+            const fieldNum = tag >>> 3;
+            const wireType = tag & 0x07;
+
+            if (wireType === 2) {
+                const { value: len, bytesRead: lenLen } = decodeVarint(body, offset);
+                offset += lenLen;
+                const slice = body.slice(offset, offset + len);
+                offset += len;
+
+                if (fieldNum === 2) {
+                    // MeshPacket
+                    packet = decodeMeshPacket(slice);
+                    if (packet.from && packet.from !== 0 && packet.from !== 0xFFFFFFFF) {
+                        const existing = this.knownNodes.get(packet.from);
+                        let lat = existing?.latitude;
+                        let lon = existing?.longitude;
+                        let alt = existing?.altitude;
+                        let bat = existing?.batteryLevel;
+
+                        // Decodificar posición en tiempo real si el paquete corresponde a POSITION_APP
+                        if (packet.portnum === MeshtasticPortNum.POSITION_APP && packet.payload && packet.payload.length > 0) {
+                            const pos = decodePosition(packet.payload);
+                            if (pos.latitude !== undefined) lat = pos.latitude;
+                            if (pos.longitude !== undefined) lon = pos.longitude;
+                            if (pos.altitude !== undefined) alt = pos.altitude;
+                            if (pos.batteryLevel !== undefined) bat = pos.batteryLevel;
+                        }
+
+                        this.knownNodes.set(packet.from, {
+                            nodeNum: packet.from,
+                            user: existing?.user || {
+                                id: `!${packet.from.toString(16).padStart(8, '0')}`,
+                                longName: `Meshtastic-${packet.from.toString(16).slice(-4).toUpperCase()}`,
+                                shortName: packet.from.toString(16).slice(-4).toUpperCase(),
+                                hwModel: 'SX1262'
+                            },
+                            snr: packet.rxSnr ?? 8,
+                            rssi: packet.rxRssi ?? -90,
+                            channel: packet.channel,
+                            latitude: lat,
+                            longitude: lon,
+                            altitude: alt,
+                            batteryLevel: bat,
+                            lastSeen: Date.now()
+                        });
+                    }
+                } else if (fieldNum === 3) {
+                    // MyNodeInfo
+                    this.decodeMyInfo(slice);
+                } else if (fieldNum === 4) {
+                    // NodeInfo
+                    this.decodeNodeInfo(slice);
+                }
+            } else if (wireType === 0) {
+                const { bytesRead: vLen } = decodeVarint(body, offset);
+                offset += vLen;
+            } else if (wireType === 5) {
+                offset += 4;
+            } else {
+                break;
+            }
+        }
+
+        return packet;
+    }
+
+    private decodeMyInfo(slice: Uint8Array): void {
+        let offset = 0;
+        let myNum = 0;
+        while (offset < slice.length) {
+            const { value: tag, bytesRead: tLen } = decodeVarint(slice, offset);
+            offset += tLen;
+            const field = tag >>> 3;
+            const wire = tag & 0x07;
+            if (wire === 5 && field === 1) {
+                myNum = decodeFixed32(slice, offset);
+                offset += 4;
+            } else if (wire === 0) {
+                const { bytesRead: vLen } = decodeVarint(slice, offset);
+                offset += vLen;
+            } else {
+                break;
+            }
+        }
+        if (myNum) {
+            this.localNodeInfo = {
+                nodeNum: myNum,
+                user: {
+                    id: `!${myNum.toString(16).padStart(8, '0')}`,
+                    longName: `RED-Local-${myNum.toString(16).slice(-4).toUpperCase()}`,
+                    shortName: myNum.toString(16).slice(-4).toUpperCase(),
+                    hwModel: 'Heltec/T-Beam'
+                },
+                snr: 10,
+                rssi: -80
+            };
+        }
+    }
+
+    private decodeNodeInfo(slice: Uint8Array): void {
+        let offset = 0;
+        let num = 0;
+        let snr = 8;
+        let longName = '';
+        let shortName = '';
+        while (offset < slice.length) {
+            const { value: tag, bytesRead: tLen } = decodeVarint(slice, offset);
+            offset += tLen;
+            const field = tag >>> 3;
+            const wire = tag & 0x07;
+            if (wire === 5 && field === 1) {
+                num = decodeFixed32(slice, offset);
+                offset += 4;
+            } else if (wire === 2 && field === 2) {
+                // user info submessage
+                const { value: uLen, bytesRead: ulLen } = decodeVarint(slice, offset);
+                offset += ulLen;
+                const userSlice = slice.slice(offset, offset + uLen);
+                offset += uLen;
+                let uOff = 0;
+                while (uOff < userSlice.length) {
+                    const { value: uTag, bytesRead: utLen } = decodeVarint(userSlice, uOff);
+                    uOff += utLen;
+                    const uField = uTag >>> 3;
+                    const uWire = uTag & 0x07;
+                    if (uWire === 2) {
+                        const { value: sLen, bytesRead: slLen } = decodeVarint(userSlice, uOff);
+                        uOff += slLen;
+                        const strBytes = userSlice.slice(uOff, uOff + sLen);
+                        uOff += sLen;
+                        const decoded = new TextDecoder().decode(strBytes);
+                        if (uField === 2) longName = decoded;
+                        if (uField === 3) shortName = decoded;
+                    } else if (uWire === 0) {
+                        const { bytesRead: uvLen } = decodeVarint(userSlice, uOff);
+                        uOff += uvLen;
+                    } else {
+                        break;
+                    }
+                }
+            } else if (wire === 5 && field === 4) {
+                const f32View = new Float32Array(new Uint32Array([decodeFixed32(slice, offset)]).buffer);
+                snr = Math.round(f32View[0] * 10) / 10;
+                offset += 4;
+            } else if (wire === 2 && field === 3) {
+                // position submessage
+                const { value: pLen, bytesRead: plLen } = decodeVarint(slice, offset);
+                offset += plLen;
+                const posSlice = slice.slice(offset, offset + pLen);
+                offset += pLen;
+                const pos = decodePosition(posSlice);
+                const existing = num ? this.knownNodes.get(num) : undefined;
+                if (num) {
+                    this.knownNodes.set(num, {
+                        nodeNum: num,
+                        user: existing?.user || {
+                            id: `!${num.toString(16).padStart(8, '0')}`,
+                            longName: longName || `Node-${num.toString(16).slice(-4).toUpperCase()}`,
+                            shortName: shortName || num.toString(16).slice(-4).toUpperCase(),
+                            hwModel: 'SX1262'
+                        },
+                        snr,
+                        rssi: existing?.rssi ?? -90,
+                        latitude: pos.latitude !== undefined ? pos.latitude : existing?.latitude,
+                        longitude: pos.longitude !== undefined ? pos.longitude : existing?.longitude,
+                        altitude: pos.altitude !== undefined ? pos.altitude : existing?.altitude,
+                        batteryLevel: pos.batteryLevel !== undefined ? pos.batteryLevel : existing?.batteryLevel,
+                        lastSeen: Date.now()
+                    });
+                }
+            } else if (wire === 0) {
+                const { bytesRead: vLen } = decodeVarint(slice, offset);
+                offset += vLen;
+            } else if (wire === 2) {
+                const { value: skipLen, bytesRead: sklLen } = decodeVarint(slice, offset);
+                offset += sklLen + skipLen;
+            } else {
+                break;
+            }
+        }
+        if (num && !this.knownNodes.has(num)) {
+            this.knownNodes.set(num, {
+                nodeNum: num,
+                user: {
+                    id: `!${num.toString(16).padStart(8, '0')}`,
+                    longName: longName || `Node-${num.toString(16).slice(-4).toUpperCase()}`,
+                    shortName: shortName || num.toString(16).slice(-4).toUpperCase(),
+                    hwModel: 'SX1262'
+                },
+                snr,
+                rssi: -90,
+                lastSeen: Date.now()
+            });
+        }
+    }
+
+    private unframeLegacyPacket(buf: Uint8Array, len: number): LoRaPacket | null {
+        if (len < 16) return null;
+        const dv = new DataView(buf.buffer, buf.byteOffset, len);
         const from = dv.getUint32(0, false);
         const to = dv.getUint32(4, false);
         const channel = dv.getUint8(8);
@@ -324,24 +847,7 @@ export class LoRaMeshtasticBridge {
         const id = dv.getUint32(10, false);
         const hopLimit = dv.getUint8(14);
         const wantAck = dv.getUint8(15) === 1;
-
-        const payload = buf.slice(20, 4 + len);
-
-        if (from && from !== 0 && from !== 0xFFFFFFFF) {
-            const existing = this.knownNodes.get(from);
-            this.knownNodes.set(from, {
-                nodeNum: from,
-                user: existing?.user || {
-                    id: `!${from.toString(16).padStart(8, '0')}`,
-                    longName: `Meshtastic-${from.toString(16).slice(-4).toUpperCase()}`,
-                    shortName: from.toString(16).slice(-4).toUpperCase(),
-                    hwModel: 'SX1262'
-                },
-                snr: 8,
-                rssi: -90,
-                channel: channel
-            });
-        }
+        const payload = new Uint8Array(buf.slice(16, len));
 
         return {
             from,
@@ -355,8 +861,38 @@ export class LoRaMeshtasticBridge {
         };
     }
 
+    public feedIncomingBytes(value: Uint8Array): void {
+        const newBuf = new Uint8Array(this.rxBuffer.length + value.length);
+        newBuf.set(this.rxBuffer, 0);
+        newBuf.set(value, this.rxBuffer.length);
+        this.rxBuffer = newBuf;
+
+        while (this.rxBuffer.length >= 4) {
+            const syncIdx = this.findSyncHeader(this.rxBuffer);
+            if (syncIdx === -1) {
+                this.rxBuffer = new Uint8Array(0);
+                break;
+            }
+            if (syncIdx > 0) {
+                this.rxBuffer = this.rxBuffer.slice(syncIdx);
+            }
+            if (this.rxBuffer.length < 4) break;
+
+            const frameLen = (this.rxBuffer[2] << 8) | this.rxBuffer[3];
+            const totalFrameLen = 4 + frameLen;
+            if (this.rxBuffer.length < totalFrameLen) break;
+
+            const frameBytes = this.rxBuffer.slice(0, totalFrameLen);
+            this.rxBuffer = this.rxBuffer.slice(totalFrameLen);
+
+            const packet = this.unframePacket(frameBytes);
+            if (packet) {
+                this.dispatchInbound(packet);
+            }
+        }
+    }
+
     private async startReading(): Promise<void> {
-        let buffer = new Uint8Array(0);
         while (this.isConnected && this.serialPort?.readable) {
             try {
                 this.reader = this.serialPort.readable.getReader();
@@ -364,36 +900,7 @@ export class LoRaMeshtasticBridge {
                     const { value, done } = await this.reader.read();
                     if (done) break;
                     if (value) {
-                        // Append to buffer
-                        const newBuf = new Uint8Array(buffer.length + value.length);
-                        newBuf.set(buffer, 0);
-                        newBuf.set(value, buffer.length);
-                        buffer = newBuf;
-
-                        // Check for complete frame
-                        while (buffer.length >= 4) {
-                            const syncIdx = this.findSyncHeader(buffer);
-                            if (syncIdx === -1) {
-                                buffer = new Uint8Array(0);
-                                break;
-                            }
-                            if (syncIdx > 0) {
-                                buffer = buffer.slice(syncIdx);
-                            }
-                            if (buffer.length < 4) break;
-
-                            const frameLen = (buffer[2] << 8) | buffer[3];
-                            const totalFrameLen = 4 + frameLen;
-                            if (buffer.length < totalFrameLen) break; // Incomplete, wait for more data
-
-                            const frameBytes = buffer.slice(0, totalFrameLen);
-                            buffer = buffer.slice(totalFrameLen);
-
-                            const packet = this.unframePacket(frameBytes);
-                            if (packet) {
-                                this.dispatchInbound(packet);
-                            }
-                        }
+                        this.feedIncomingBytes(value);
                     }
                 }
             } catch {
@@ -430,6 +937,7 @@ export class LoRaMeshtasticBridge {
         this.packetListeners.clear();
         this.knownNodes.clear();
         this.localNodeInfo = null;
+        this.rxBuffer = new Uint8Array(0);
         LoRaMeshtasticBridge.instance = null;
     }
 }

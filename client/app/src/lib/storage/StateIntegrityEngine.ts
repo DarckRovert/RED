@@ -65,7 +65,12 @@ export class StateIntegrityEngine {
             "red_contacts",
             "red_channels",
             "red_offline_queue",
-            "red_pqc_keypair",
+            // PQC hybrid key bundle (private + public, JSON object)
+            "red_pqc_hybrid_keys",
+            // Individual PQC public key announcements (hex strings)
+            "red_pqc_kyber_public_key",
+            "red_pqc_x25519_public_key",
+            "red_identity_vault_v1",
             "red_tactical_notes"
         ];
 
@@ -92,14 +97,21 @@ export class StateIntegrityEngine {
             if (rawVal === null) continue;
 
             totalRecords++;
+            const isRawHexKey = key === "red_pqc_kyber_public_key" || key === "red_pqc_x25519_public_key";
 
             try {
-                // Try JSON parsing
-                const parsed = JSON.parse(rawVal);
+                if (isRawHexKey) {
+                    if (typeof rawVal !== "string" || rawVal.trim().length === 0 || !/^[0-9a-fA-F]+$/.test(rawVal.trim())) {
+                        throw new Error("Invalid hex key format");
+                    }
+                } else {
+                    // Try JSON parsing
+                    const parsed = JSON.parse(rawVal);
 
-                // Verify object / array structure
-                if (typeof parsed !== "object" || parsed === null) {
-                    throw new Error("Invalid structure");
+                    // Verify object / array structure
+                    if (typeof parsed !== "object" || parsed === null) {
+                        throw new Error("Invalid structure");
+                    }
                 }
 
                 // Valid record: compute hash leaf
@@ -116,7 +128,9 @@ export class StateIntegrityEngine {
                     localStorage.setItem(quarantineKey, rawVal);
 
                     // Re-initialize with safe baseline
-                    if (key.endsWith("contacts") || key.endsWith("channels") || key.endsWith("offline_queue")) {
+                    if (isRawHexKey) {
+                        localStorage.removeItem(key);
+                    } else if (key.endsWith("contacts") || key.endsWith("channels") || key.endsWith("offline_queue")) {
                         localStorage.setItem(key, JSON.stringify([]));
                     } else {
                         localStorage.setItem(key, JSON.stringify({}));
