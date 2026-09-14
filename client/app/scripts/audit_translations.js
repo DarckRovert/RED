@@ -1,13 +1,26 @@
 /**
- * audit_translations.js — Auditoría estricta de calidad de traducción RED v65.0.1
+ * audit_translations.js — Auditoría estricta de calidad de traducción RED
  *
  * Detecta strings IDÉNTICOS al locale canónico (es.ts) en los demás locales.
  * Valor idéntico = fallback sin traducir.
  * Parsing por regex de línea (sin require/eval — compatible con TypeScript export).
+ * La versión se lee dinámicamente de version.ts (SSOT).
  */
 
 const fs = require('fs');
 const path = require('path');
+
+// ── Leer versión canónica desde SSOT (version.ts) ──────────────────────────────
+function readRedVersion() {
+    try {
+        const versionFile = fs.readFileSync(
+            path.join(__dirname, '..', 'src', 'lib', 'version.ts'), 'utf-8'
+        );
+        const match = versionFile.match(/RED_VERSION\s*=\s*["']([^"']+)["']/);
+        return match ? match[1] : 'unknown';
+    } catch { return 'unknown'; }
+}
+const RED_VERSION = readRedVersion();
 
 const LOCALES_DIR = path.join(__dirname, '..', 'src', 'lib', 'i18n', 'locales');
 
@@ -65,7 +78,7 @@ const localeFiles = fs.readdirSync(LOCALES_DIR)
     .sort();
 
 console.log(`\n${'='.repeat(80)}`);
-console.log(`🌍  AUDITORÍA DE TRADUCCIÓN ESTRICTA — RED v65.0.1`);
+console.log(`🌍  AUDITORÍA DE TRADUCCIÓN ESTRICTA — RED v${RED_VERSION}`);
 console.log(`    Base: es.ts — ${totalKeys} claves canónicas detectadas`);
 console.log(`${'='.repeat(80)}\n`);
 
