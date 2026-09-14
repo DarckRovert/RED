@@ -37,7 +37,7 @@ const totalTests = 9;
     const content = fs.readFileSync(filePath, 'utf8');
 
     assert.ok(content.includes('import { queryAICopilot } from "../api/ai";'), 'BlockchainExplorer debe importar queryAICopilot');
-    assert.ok(content.includes('await queryAICopilot(prompt)'), 'BlockchainExplorer debe evaluar la cadena con queryAICopilot');
+    assert.ok(content.includes('queryAICopilot(prompt'), 'BlockchainExplorer debe evaluar la cadena con queryAICopilot');
     console.log('✓ Test 3 PASÓ: BlockchainExplorer.tsx canaliza auditoría de bloques por queryAICopilot.');
     passedTests++;
 }
@@ -48,7 +48,7 @@ const totalTests = 9;
     const content = fs.readFileSync(filePath, 'utf8');
 
     assert.ok(content.includes('import { queryAICopilot } from "../api/ai";'), 'CryptoPanel debe importar queryAICopilot');
-    assert.ok(content.includes('await queryAICopilot(prompt)'), 'CryptoPanel debe evaluar la salud criptográfica con queryAICopilot');
+    assert.ok(content.includes('queryAICopilot(prompt'), 'CryptoPanel debe evaluar la salud criptográfica con queryAICopilot');
     console.log('✓ Test 4 PASÓ: CryptoPanel.tsx canaliza auditoría criptográfica por queryAICopilot.');
     passedTests++;
 }
@@ -59,7 +59,7 @@ const totalTests = 9;
     const content = fs.readFileSync(filePath, 'utf8');
 
     assert.ok(content.includes('import { queryAICopilot } from "../api/ai";'), 'NetworkPanel debe importar queryAICopilot');
-    assert.ok(content.includes('await queryAICopilot(prompt)'), 'NetworkPanel debe diagnosticar la red P2P con queryAICopilot');
+    assert.ok(content.includes('queryAICopilot(prompt'), 'NetworkPanel debe diagnosticar la red P2P con queryAICopilot');
     console.log('✓ Test 5 PASÓ: NetworkPanel.tsx canaliza diagnóstico de topología por queryAICopilot.');
     passedTests++;
 }

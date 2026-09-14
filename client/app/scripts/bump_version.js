@@ -167,9 +167,27 @@ replace(gradlePath, 'build.gradle (versionName)',
 );
 
 // =============================================================================
-// 4-7. Cargo.toml de cada crate
+// 2b. client/app/package-lock.json
+const pkgLockPath = path.join(CLIENT_APP, 'package-lock.json');
+if (fs.existsSync(pkgLockPath)) {
+    try {
+        const lock = JSON.parse(fs.readFileSync(pkgLockPath, 'utf-8'));
+        lock.version = newVersion;
+        if (lock.packages && lock.packages['']) {
+            lock.packages[''].version = newVersion;
+        }
+        fs.writeFileSync(pkgLockPath, JSON.stringify(lock, null, 2) + '\n', 'utf-8');
+        console.log(`  ✅  client/app/package-lock.json → ${path.relative(ROOT, pkgLockPath)}`);
+        updated++;
+    } catch (e) {
+        console.warn(`  ⚠️   No se pudo actualizar package-lock.json: ${e.message}`);
+    }
+}
+
 // =============================================================================
-for (const crate of ['core', 'blockchain', 'node', 'red_mobile']) {
+// 4-8. Cargo.toml de cada crate (core, blockchain, node, red_mobile, client)
+// =============================================================================
+for (const crate of ['core', 'blockchain', 'node', 'red_mobile', 'client']) {
     replace(
         path.join(ROOT, crate, 'Cargo.toml'),
         `${crate}/Cargo.toml`,

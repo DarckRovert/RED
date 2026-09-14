@@ -80,5 +80,14 @@ if (latestHash && fs.existsSync(versionTsPath)) {
 }
 
 fs.writeFileSync(SUMS_FILE, lines.join('\n') + '\n', 'utf-8');
-console.log(`\n  📄  SHA256SUMS.txt → ${lines.length} entrada(s) escritas`);
+console.log(`  📄  SHA256SUMS.txt (root) → ${lines.length} entrada(s) escritas`);
+
+const releaseSums = path.join(RELEASE_ASSETS, 'SHA256SUMS.txt');
+fs.writeFileSync(releaseSums, lines.join('\n') + '\n', 'utf-8');
+console.log(`  📄  release-assets/SHA256SUMS.txt → ${lines.length} entrada(s) escritas`);
+
+const singleSha = path.join(RELEASE_ASSETS, `RED-v${version}.apk.sha256`);
+fs.writeFileSync(singleSha, latestHash + '\n', 'utf-8');
+console.log(`  📄  release-assets/RED-v${version}.apk.sha256 → sincronizado`);
+
 console.log(`\n🎯  Listo. Ejecuta ahora:\n    node scripts/check_release_integrity.js --strict\n`);

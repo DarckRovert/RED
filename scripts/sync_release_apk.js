@@ -31,6 +31,7 @@ console.log(`SHA256: ${sha256}`);
 
 const sumsContent = `${sha256}  red-v${currentVersion}-release.apk\n${sha256}  red-latest.apk\n`;
 fs.writeFileSync(path.join(releaseDir, 'SHA256SUMS.txt'), sumsContent, 'utf8');
+fs.writeFileSync(path.join(rootDir, 'SHA256SUMS.txt'), sumsContent, 'utf8');
 fs.writeFileSync(path.join(releaseDir, `RED-v${currentVersion}.apk.sha256`), sha256 + '\n', 'utf8');
 
 // Update version.ts SHA256

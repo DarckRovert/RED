@@ -1,0 +1,26 @@
+#!/bin/sh
+command -v git-lfs >/dev/null 2>&1 || { printf >&2 "\n%s\n\n" "This repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting the 'pre-push' file in the hooks directory (set by 'core.hookspath'; usually '.git/hooks')."; exit 2; }
+git lfs pre-push "$@"
+
+# ── RED Release Integrity Guard ───────────────────────────────────────────────
+# Ejecuta check_release_integrity.js antes de cada push para detectar
+# automáticamente: SHA256SUMS desincronizado, versiones hardcodeadas,
+# release_notes faltantes y desincronización SSOT.
+if command -v node > /dev/null 2>&1; then
+    SCRIPT="$(git rev-parse --show-toplevel)/client/app/scripts/check_release_integrity.js"
+    if [ -f "$SCRIPT" ]; then
+        echo "🔒  Ejecutando RED Release Integrity Check..."
+        node "$SCRIPT" --strict
+        RESULT=$?
+        if [ $RESULT -ne 0 ]; then
+            echo ""
+            echo "❌  PUSH BLOQUEADO: check_release_integrity.js detectó problemas críticos."
+            echo "    Corrige los errores listados arriba y vuelve a hacer push."
+            echo "    Para saltar este check en emergencia: git push --no-verify"
+            echo ""
+            exit 1
+        fi
+    fi
+else
+    echo "⚠️  [pre-push] node no encontrado — saltando RED Integrity Check"
+fi

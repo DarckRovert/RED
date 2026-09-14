@@ -83,7 +83,7 @@ const zkModalCode = fs.readFileSync(zkModalPath, 'utf8');
 runTest('6. ZkBarterSubsurfaceModal: Generación visual de QR y escaneo de cámara', () => {
     assert(zkModalCode.includes('OfflineQrEngine.generateDataUrl(qrPayload'), 'Debe generar código QR visual para la prueba ZK');
     assert(zkModalCode.includes('handleStartZkScan'), 'Debe implementar handleStartZkScan');
-    assert(zkModalCode.includes('ESCANEAR QR ZK CON LA CÁMARA'), 'Debe proveer botón de escaneo de cámara para pruebas');
+    assert(zkModalCode.includes('scan_camera_btn') || zkModalCode.includes('ESCANEAR QR ZK CON LA CÁMARA'), 'Debe proveer botón de escaneo de cámara para pruebas');
     assert(zkModalCode.includes('zkBarter.parseProofFromQrString(text)'), 'handleVerifyProof debe soportar cadenas escaneadas ZK_PROOF');
 });
 

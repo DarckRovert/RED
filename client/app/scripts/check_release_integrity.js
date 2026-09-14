@@ -131,7 +131,51 @@ function checkSHA256Sums(version) {
         }
     }
 
-    if (allOk) pass('SHA256SUMS.txt completamente sincronizado con APKs reales');
+    // [1b] Verificar release-assets/SHA256SUMS.txt en paridad con root SHA256SUMS.txt
+    const relSumsFile = path.join(RELEASE_ASSETS, 'SHA256SUMS.txt');
+    if (fs.existsSync(relSumsFile)) {
+        const relDeclared = parseSHA256Sums(relSumsFile);
+        let relMismatch = false;
+        for (const [k, v] of Object.entries(declared)) {
+            if (relDeclared[k] !== v) {
+                fail(`release-assets/SHA256SUMS.txt desfasado para "${k}": ${relDeclared[k]} ≠ ${v}`);
+                relMismatch = true;
+                allOk = false;
+            }
+        }
+        if (!relMismatch) pass('release-assets/SHA256SUMS.txt en paridad con root SHA256SUMS.txt');
+    } else {
+        warn('release-assets/SHA256SUMS.txt no encontrado');
+    }
+
+    // [1c] Verificar archivo individual release-assets/RED-vX.Y.Z.apk.sha256
+    const singleShaFile = path.join(RELEASE_ASSETS, `RED-v${version}.apk.sha256`);
+    if (fs.existsSync(singleShaFile)) {
+        const shaContent = fs.readFileSync(singleShaFile, 'utf-8').trim().toUpperCase();
+        const expectedHash = declared[expectedApkName];
+        if (expectedHash && shaContent !== expectedHash) {
+            fail(`release-assets/RED-v${version}.apk.sha256 desfasado: ${shaContent} ≠ ${expectedHash}`);
+            allOk = false;
+        } else if (expectedHash) {
+            pass(`release-assets/RED-v${version}.apk.sha256 → ${shaContent.slice(0, 16)}… ✓`);
+        }
+    }
+
+    // [1d] Verificar RED_APK_SHA256 en version.ts
+    const versionTsPath = path.join(CLIENT_APP, 'src', 'lib', 'version.ts');
+    if (fs.existsSync(versionTsPath)) {
+        const vSrc = fs.readFileSync(versionTsPath, 'utf-8');
+        const vMatch = vSrc.match(/RED_APK_SHA256\s*=\s*["']([^"']+)["']/);
+        const expectedHash = declared[latestApkName] || declared[expectedApkName];
+        if (vMatch && expectedHash && vMatch[1] !== expectedHash) {
+            fail(`version.ts (RED_APK_SHA256) desfasado: "${vMatch[1]}" ≠ "${expectedHash}"`);
+            allOk = false;
+        } else if (vMatch && expectedHash) {
+            pass(`version.ts (RED_APK_SHA256) alineado: ${vMatch[1].slice(0, 16)}… ✓`);
+        }
+    }
+
+    if (allOk) pass('Ecosistema de checksums SHA-256 completamente sincronizado');
 }
 
 // =============================================================================
@@ -249,8 +293,26 @@ function checkSSotVersionParity(version) {
             regex: /^version\s*=\s*"([^"]+)"/m,
         },
         {
+            label: 'client/Cargo.toml',
+            path: path.join(ROOT, 'client', 'Cargo.toml'),
+            regex: /^version\s*=\s*"([^"]+)"/m,
+        },
+        {
             label: 'signaling/package.json',
             path: path.join(ROOT, 'signaling', 'package.json'),
+            regex: /"version"\s*:\s*"([^"]+)"/,
+        },
+        {
+            label: 'client/app/public/sw.js (cache name)',
+            path: path.join(CLIENT_APP, 'public', 'sw.js'),
+            regex: /red-vault-cache-v(\d+)/,
+            transform: (m) => { const major = version.split('.')[0]; return m === major ? version : m; },
+            compareWith: (found) => found === version.split('.')[0],
+            display: (found) => `major=${found} (cache versioning uses major only)`,
+        },
+        {
+            label: 'client/app/package-lock.json',
+            path: path.join(CLIENT_APP, 'package-lock.json'),
             regex: /"version"\s*:\s*"([^"]+)"/,
         },
     ];
@@ -273,6 +335,24 @@ function checkSSotVersionParity(version) {
             fail(`${check.label}: versión "${display}" ≠ esperada "${version}"`);
         } else {
             pass(`${check.label}: ${display}`);
+        }
+    }
+
+    // Verificar Cargo.lock para crates locales del workspace
+    const cargoLockPath = path.join(ROOT, 'Cargo.lock');
+    if (fs.existsSync(cargoLockPath)) {
+        const lockContent = fs.readFileSync(cargoLockPath, 'utf-8');
+        const localCrates = ['red-blockchain', 'red_core', 'red_mobile', 'red_node'];
+        for (const crate of localCrates) {
+            const re = new RegExp(`name = "${crate}"[\\r\\n]+version = "([^"]+)"`);
+            const m = lockContent.match(re);
+            if (!m) {
+                warn(`Cargo.lock: no se encontró entrada para [${crate}]`);
+            } else if (m[1] !== version) {
+                fail(`Cargo.lock [${crate}]: versión "${m[1]}" ≠ esperada "${version}"`);
+            } else {
+                pass(`Cargo.lock [${crate}]: v${m[1]}`);
+            }
         }
     }
 }
