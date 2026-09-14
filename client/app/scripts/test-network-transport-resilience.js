@@ -10,10 +10,21 @@
  * 6. Local AI Engine: Gating estricto de dominio e inferencia determinista de topología de red.
  */
 
+const fs = require('fs');
+const path = require('path');
 const assert = require('assert');
 
+function readRedVersion() {
+    try {
+        const vf = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'version.ts'), 'utf-8');
+        const m = vf.match(/RED_VERSION\s*=\s*["']([^"']+)["']/);
+        return m ? m[1] : 'current';
+    } catch { return 'current'; }
+}
+const RED_VERSION = readRedVersion();
+
 console.log("================================================================================");
-console.log("🛡️  SUITE DE VERIFICACIÓN: INGENIERÍA DE REDES, DTN & IA LOCAL (RED v101.0.0)");
+console.log(`🛡️  SUITE DE VERIFICACIÓN: INGENIERÍA DE REDES, DTN & IA LOCAL (RED v${RED_VERSION})`);
 console.log("================================================================================\n");
 
 let passedTests = 0;

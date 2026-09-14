@@ -18,6 +18,15 @@ const path = require('path');
 const https = require('https');
 const http = require('http');
 
+function readRedVersion() {
+    try {
+        const vf = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'version.ts'), 'utf-8');
+        const m = vf.match(/RED_VERSION\s*=\s*["']([^"']+)["']/);
+        return m ? m[1] : 'current';
+    } catch { return 'current'; }
+}
+const RED_VERSION = readRedVersion();
+
 // ── Config ─────────────────────────────────────────────────────────────────────
 const LOCAL_AI_URL = 'http://localhost:1234/v1/chat/completions';
 const MODEL = 'prism-ml/bonsai-27b';
@@ -164,7 +173,7 @@ function patchLocaleFile(filePath, translations) {
 // ── Main ───────────────────────────────────────────────────────────────────────
 async function main() {
     console.log(`\n${'═'.repeat(80)}`);
-    console.log(`🌍  MOTOR DE TRADUCCIÓN RED v65.0.1 — Bonsai-27B @ localhost:1234`);
+    console.log(`🌍  MOTOR DE TRADUCCIÓN RED v${RED_VERSION} — Bonsai-27B @ localhost:1234`);
     console.log(`    Modo: ${DRY_RUN ? '🔍 DRY RUN (sin escritura)' : '✍️  ESCRITURA REAL'}`);
     console.log(`    Locales objetivo: ${TARGET_LOCALES.join(', ')}`);
     console.log(`${'═'.repeat(80)}\n`);

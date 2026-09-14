@@ -10,8 +10,19 @@
  * 6. High-Concurrency Identity Rotation & Merkle Root Invariant
  */
 
+const fs = require('fs');
+const path = require('path');
 const assert = require('assert');
 const crypto = require('crypto');
+
+function readRedVersion() {
+    try {
+        const vf = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'version.ts'), 'utf-8');
+        const m = vf.match(/RED_VERSION\s*=\s*["']([^"']+)["']/);
+        return m ? m[1] : 'current';
+    } catch { return 'current'; }
+}
+const RED_VERSION = readRedVersion();
 
 let passedTests = 0;
 let totalTests = 0;
@@ -41,7 +52,7 @@ async function runAsyncTest(name, fn) {
 }
 
 console.log("================================================================================");
-console.log("🌪️  INICIANDO SUITE DE CAOS & ESTRÉS EXTREMO — RED MESH v65.0.1 (100 NODOS)");
+console.log(`🌪️  INICIANDO SUITE DE CAOS & ESTRÉS EXTREMO — RED MESH v${RED_VERSION} (100 NODOS)`);
 console.log("================================================================================\n");
 
 // ─────────────────────────────────────────────────────────────────────────────

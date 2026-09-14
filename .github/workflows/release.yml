@@ -24,6 +24,14 @@ jobs:
               exit 1
             fi
           fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Run Release Integrity Check
+        run: node client/app/scripts/check_release_integrity.js --strict
   
   build-release:
     name: Build Release Artifacts

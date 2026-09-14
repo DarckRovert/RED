@@ -13,6 +13,15 @@ const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 
+function readRedVersion() {
+    try {
+        const vf = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'version.ts'), 'utf-8');
+        const m = vf.match(/RED_VERSION\s*=\s*["']([^"']+)["']/);
+        return m ? m[1] : 'current';
+    } catch { return 'current'; }
+}
+const RED_VERSION = readRedVersion();
+
 let passed = 0;
 let failed = 0;
 
@@ -28,7 +37,7 @@ function runTest(name, fn) {
 }
 
 console.log("\n========================================================");
-console.log("🛡️ INICIANDO SUITE DE RESILIENCIA Y GOBERNANZA v87.0.0");
+console.log(`🛡️ INICIANDO SUITE DE RESILIENCIA Y GOBERNANZA — RED v${RED_VERSION}`);
 console.log("========================================================\n");
 
 // ── Test 1: AndroidManifest.xml no contiene AdMob ─────────────────────────────

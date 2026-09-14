@@ -62,6 +62,9 @@ jobs:
       
       - name: Run tactical test suite (All Phases 1-5 & Crypto)
         run: cd client/app && npm run test:all
+      
+      - name: Verify release integrity & SSOT parity
+        run: cd client/app && npm run audit:integrity -- --strict
   
   integration-tests:
     name: Integration Tests
