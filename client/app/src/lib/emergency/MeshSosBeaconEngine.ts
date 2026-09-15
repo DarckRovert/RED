@@ -7,6 +7,7 @@
 
 import { meshRouter } from '../mesh/meshRouter';
 import { dtnStorage } from '../mesh/dtnStorage';
+import { forensicBlackBox } from '../security/ForensicBlackBoxEngine';
 
 export type SosDistressType = 'TCCC_MEDICAL' | 'SEARCH_RESCUE' | 'EVACUATION' | 'NATURAL_DISASTER' | 'GENERAL_DISTRESS';
 export type TriageColor = 'RED' | 'YELLOW' | 'GREEN' | 'BLACK';
@@ -141,6 +142,12 @@ export class MeshSosBeaconEngine {
         this.meshBeacons.set(beacon.id, beacon);
         this.saveState();
 
+        forensicBlackBox.recordEvent(
+            'SOS_BROADCAST',
+            'CRITICAL',
+            `Baliza SOS activada: ${beacon.id} (${beacon.issuerName}) [${beacon.distressType}/${beacon.triageColor}] - ${beacon.note}`
+        );
+
         // Difusión inmediata
         await this.broadcastSosHeartbeat();
 
@@ -226,9 +233,18 @@ export class MeshSosBeaconEngine {
 
         const existing = this.meshBeacons.get(beacon.id);
         if (!existing || beacon.timestamp > existing.timestamp) {
+            const isNewAlert = !existing && beacon.active;
             beacon.hopCount = (beacon.hopCount || 0) + 1;
             this.meshBeacons.set(beacon.id, beacon);
             this.saveState();
+
+            if (isNewAlert) {
+                forensicBlackBox.recordEvent(
+                    'SOS_BROADCAST',
+                    'CRITICAL',
+                    `Alerta SOS remota recibida: ${beacon.id} (${beacon.issuerName}) [${beacon.distressType}/${beacon.triageColor}] hop=${beacon.hopCount}`
+                );
+            }
         }
     }
 

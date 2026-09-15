@@ -8,6 +8,7 @@
 
 import { meshSosBeacon } from '../emergency/MeshSosBeaconEngine';
 import { TacticalAudioEngine } from '../audio/TacticalAudioEngine';
+import { forensicBlackBox } from '../security/ForensicBlackBoxEngine';
 
 export type ManDownState = 'DISARMED' | 'MONITORING' | 'IMPACT_DETECTED' | 'PRE_ALARM_COUNTDOWN' | 'ALARM_DISPATCHED';
 
@@ -237,6 +238,12 @@ export class ManDownDetectorEngine {
     private async dispatchEmergencySos() {
         this.state = 'ALARM_DISPATCHED';
         this.notify();
+
+        forensicBlackBox.recordEvent(
+            'MAN_DOWN_TRIGGER',
+            'CRITICAL',
+            `Hombre Caído disparado: impacto de ${this.lastMagnitude.toFixed(2)}g seguido de inmovilidad prolongada. Despacho SOS activado.`
+        );
 
         try {
             // Emisión automática de socorro con código de rescate TCCC

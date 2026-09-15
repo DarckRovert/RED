@@ -12,6 +12,7 @@ import { vectorKnowledgeStore } from "../lib/ai/VectorKnowledgeStore";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { zeroFootprintAiMemoryManager, AiMemoryMetrics } from "../lib/ai/ZeroFootprintAiMemoryManager";
 
 type CopilotTab = "chat" | "translator" | "summarizer" | "models";
 
@@ -136,6 +137,9 @@ export const AICopilotModal: React.FC = () => {
     const [isProbing, setIsProbing] = useState(false);
     const [hwProbe, setHwProbe] = useState<{ recommendedModelId: string; hasWebGpu: boolean; ramMb: number; cpuCores: number; reason: string } | null>(null);
 
+    // Zero-Footprint AI Memory Guard State
+    const [aiMemoryMetrics, setAiMemoryMetrics] = useState<AiMemoryMetrics>(() => zeroFootprintAiMemoryManager.getMetrics());
+
     // Offline Translator & Emergency Glossary State
     const [targetLang, setTargetLang] = useState<GlossaryLanguage>("en");
     const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -198,6 +202,13 @@ export const AICopilotModal: React.FC = () => {
             clearInterval(interval);
         };
     }, [refreshModels]);
+
+    useEffect(() => {
+        const unsubscribe = zeroFootprintAiMemoryManager.subscribe((metrics) => {
+            setAiMemoryMetrics(metrics);
+        });
+        return unsubscribe;
+    }, []);
 
     const handleProbeHardware = async () => {
         setIsProbing(true);
@@ -656,12 +667,29 @@ export const AICopilotModal: React.FC = () => {
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <div style={{
-                        fontSize: "0.65rem", padding: "3px 8px", borderRadius: "6px",
-                        background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.3)",
-                        color: "var(--accent-cyan, #00E5FF)", fontWeight: 900
-                    }}>
-                        RAM: {(memoryBudget.totalDeviceRamMb / 1024).toFixed(1)} GB
+                    <div
+                        onClick={() => {
+                            if (aiMemoryMetrics.isPipelineLoaded) {
+                                zeroFootprintAiMemoryManager.purgeAiPipelines('manual_header_tap');
+                                TacticalAudioEngine.playTap();
+                                toast.info("🧹 Memoria IA purgada (0 MB retenidos en RAM)");
+                            }
+                        }}
+                        style={{
+                            fontSize: "0.65rem", padding: "3px 8px", borderRadius: "6px",
+                            background: aiMemoryMetrics.isPipelineLoaded ? "rgba(255, 171, 0, 0.15)" : "rgba(0, 229, 255, 0.12)",
+                            border: `1px solid ${aiMemoryMetrics.isPipelineLoaded ? "rgba(255, 171, 0, 0.4)" : "rgba(0, 229, 255, 0.3)"}`,
+                            color: aiMemoryMetrics.isPipelineLoaded ? "#FFD54F" : "var(--accent-cyan, #00E5FF)",
+                            fontWeight: 900,
+                            cursor: aiMemoryMetrics.isPipelineLoaded ? "pointer" : "default",
+                            display: "flex", alignItems: "center", gap: "4px"
+                        }}
+                        title={aiMemoryMetrics.isPipelineLoaded ? "Modelos cargados en RAM. Clic para purgar preventivamente." : "Zero-Footprint: RAM liberada tras inactividad"}
+                    >
+                        <span>RAM: {(memoryBudget.totalDeviceRamMb / 1024).toFixed(1)} GB</span>
+                        {aiMemoryMetrics.isPipelineLoaded && (
+                            <span style={{ fontSize: "0.55rem", background: "rgba(255, 171, 0, 0.3)", padding: "1px 4px", borderRadius: "4px" }}>PURGAR</span>
+                        )}
                     </div>
                     {activeTab === "chat" && (
                         <button
@@ -1277,6 +1305,47 @@ export const AICopilotModal: React.FC = () => {
                                     </button>
                                 </div>
                             )}
+
+                            {/* Zero-Footprint Memory Guard Card */}
+                            <div style={{
+                                padding: "10px 12px", borderRadius: "10px", marginTop: "4px",
+                                background: "rgba(0, 0, 0, 0.35)", border: "1px solid rgba(255, 255, 255, 0.1)",
+                                display: "flex", flexDirection: "column", gap: "6px"
+                            }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <span style={{ fontSize: "0.85rem" }}>🛡️</span>
+                                        <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#FFFFFF" }}>
+                                            GUARDIÁN ZERO-FOOTPRINT (RAM 2-3 GB)
+                                        </span>
+                                    </div>
+                                    <span style={{
+                                        fontSize: "0.62rem", fontWeight: 900, padding: "1px 6px", borderRadius: "6px",
+                                        background: aiMemoryMetrics.isPipelineLoaded ? "rgba(255, 171, 0, 0.15)" : "rgba(0, 230, 118, 0.15)",
+                                        color: aiMemoryMetrics.isPipelineLoaded ? "#FFD54F" : "#00E676",
+                                        border: `1px solid ${aiMemoryMetrics.isPipelineLoaded ? "rgba(255, 171, 0, 0.4)" : "rgba(0, 230, 118, 0.4)"}`
+                                    }}>
+                                        {aiMemoryMetrics.isPipelineLoaded ? "● MODELO EN RAM (15s idle)" : "💤 RAM LIBERADA (0 MB)"}
+                                    </span>
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.68rem", color: "var(--text-secondary)" }}>
+                                    <span>Presión Heap: {aiMemoryMetrics.usedHeapMb > 0 ? `${aiMemoryMetrics.usedHeapMb} MB (${aiMemoryMetrics.heapPressurePct}%)` : "Baja"} | Purgas: {aiMemoryMetrics.totalPurgesCount}</span>
+                                    <button
+                                        onClick={() => {
+                                            zeroFootprintAiMemoryManager.purgeAiPipelines('manual_models_tab');
+                                            TacticalAudioEngine.playTap();
+                                            toast.success("🧹 Pipelines ONNX liberados de memoria RAM");
+                                        }}
+                                        style={{
+                                            padding: "3px 8px", borderRadius: "6px", fontSize: "0.65rem", fontWeight: 800,
+                                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.18)",
+                                            color: "#FFFFFF", cursor: "pointer"
+                                        }}
+                                    >
+                                        🧹 Purgar RAM
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Sovereign Endpoint Card */}

@@ -9,6 +9,7 @@ import { RED_VERSION_NAME } from "../lib/version";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { forensicBlackBox, BlackBoxEvent } from "../lib/security/ForensicBlackBoxEngine";
 
 interface NodeLogsModalProps {
     onClose?: () => void;
@@ -20,6 +21,9 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
     const { goBack } = useRedStore();
     const { t } = useTranslation();
     const handleClose = onClose || goBack;
+    const [viewMode, setViewMode] = useState<"TERMINAL" | "BLACK_BOX">("TERMINAL");
+    const [blackBoxEvents, setBlackBoxEvents] = useState<BlackBoxEvent[]>(() => forensicBlackBox.getEvents());
+    const [isChainValid, setIsChainValid] = useState<boolean>(() => forensicBlackBox.verifyChainIntegrity());
     const [logs, setLogs] = useState<RustLogEntry[]>([]);
     const [filter, setFilter] = useState<LogFilter>("ALL");
     const [searchQuery, setSearchQuery] = useState<string>("");
@@ -202,6 +206,28 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
         return unregister;
     }, [handleClose]);
 
+    useEffect(() => {
+        const unsub = forensicBlackBox.subscribe(() => {
+            setBlackBoxEvents(forensicBlackBox.getEvents());
+            setIsChainValid(forensicBlackBox.verifyChainIntegrity());
+        });
+        return () => unsub();
+    }, []);
+
+    const copyHash = (hash: string) => {
+        TacticalAudioEngine.playTap();
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(hash)
+                .then(() => {
+                    TacticalAudioEngine.playMessageSent();
+                    toast.success("📋 Hash SHA-256 copiado al portapapeles");
+                })
+                .catch(() => copyWithTextarea(hash, 1));
+        } else {
+            copyWithTextarea(hash, 1);
+        }
+    };
+
     const copyWithTextarea = (text: string, count: number) => {
         try {
             const ta = document.createElement("textarea");
@@ -280,6 +306,44 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
         toast.info("Buffer de logs vaciado");
     };
 
+    useEffect(() => {
+        const unsubBB = forensicBlackBox.subscribe(() => {
+            setBlackBoxEvents(forensicBlackBox.getEvents());
+            setIsChainValid(forensicBlackBox.verifyChainIntegrity());
+        });
+        return () => unsubBB();
+    }, []);
+
+    const handleVerifyChain = () => {
+        TacticalAudioEngine.playTap();
+        const valid = forensicBlackBox.verifyChainIntegrity();
+        setIsChainValid(valid);
+        if (valid) {
+            TacticalAudioEngine.playRogerBeep();
+            toast.success(`✅ Cadena Criptográfica Verificada: ${blackBoxEvents.length} eventos íntegros.`);
+        } else {
+            TacticalAudioEngine.playWarning();
+            toast.error("❌ Discrepancia criptográfica detectada en la cadena forense.");
+        }
+    };
+
+    const handleExportAuditJson = () => {
+        TacticalAudioEngine.playTap();
+        const json = forensicBlackBox.exportAuditReport();
+        const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const dateStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        a.href = url;
+        a.download = `red_flight_recorder_audit_${dateStr}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        TacticalAudioEngine.playMessageSent();
+        toast.success("📥 Reporte forense exportado");
+    };
+
     const getLevelBadge = (level: string) => {
         switch (level) {
             case "ERROR": return <span className="badge-tactical badge-tactical-crimson">ERROR</span>;
@@ -346,158 +410,294 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
                 </div>
             </header>
 
-            {/* Barra de Estadísticas y Búsqueda */}
-            <div style={{
-                padding: "8px 16px",
-                display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between",
-                background: "rgba(10, 10, 20, 0.95)",
-                borderBottom: "1px solid var(--glass-border)",
-                gap: "10px", flexShrink: 0
-            }}>
-                {/* Stats Chips */}
-                <div style={{ display: "flex", gap: "10px", fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace" }}>
-                    <span style={{ color: "var(--text-muted)" }}>Total: <strong style={{ color: "#fff" }}>{stats.total}</strong></span>
-                    <span style={{ color: "var(--accent-emerald)" }}>P2P/Mesh: <strong>{stats.p2p}</strong></span>
-                    <span style={{ color: "var(--accent-amber)" }}>Warn: <strong>{stats.warnings}</strong></span>
-                    <span style={{ color: "var(--accent-crimson)" }}>Error: <strong>{stats.errors}</strong></span>
-                </div>
-
-                {/* Search Bar */}
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, maxWidth: "340px", minWidth: "180px" }}>
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        placeholder="Buscar en logs (regex, texto, subsystem)..."
-                        style={{
-                            width: "100%", padding: "6px 10px", fontSize: "0.75rem",
-                            borderRadius: "6px", fontFamily: "JetBrains Mono, monospace"
-                        }}
-                    />
-                    {searchQuery && (
-                        <button
-                            onClick={() => {
-                                TacticalAudioEngine.playTap();
-                                setSearchQuery("");
-                            }}
-                            className="btn-ghost"
-                            style={{ padding: "4px 8px", fontSize: "0.70rem" }}
-                        >
-                            ✕
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            {/* Barra de Filtros por Severidad y Acciones de Archivo */}
+            {/* Selector de Modo: Consola SSE vs Caja Negra Forense */}
             <div style={{
                 padding: "8px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                background: "rgba(6, 6, 14, 0.98)",
+                background: "rgba(10, 14, 28, 0.98)",
                 borderBottom: "1px solid var(--glass-border)",
-                flexShrink: 0, gap: "10px", overflowX: "auto"
+                flexShrink: 0, gap: "10px", flexWrap: "wrap"
             }}>
-                <div style={{ display: "flex", gap: "6px" }}>
-                    {(["ALL", "INFO", "P2P", "MESH", "CRYPTO", "CONSENSUS", "WARN", "ERROR"] as LogFilter[]).map((f) => (
-                        <button
-                            key={f}
-                            onClick={() => {
-                                TacticalAudioEngine.playTap();
-                                setFilter(f);
-                            }}
-                            className={filter === f ? "glow-pill-active" : "btn-ghost"}
-                            style={{ padding: "4px 10px", fontSize: "0.72rem", fontWeight: 700, borderRadius: "var(--radius-full)" }}
-                        >
-                            {f}
-                        </button>
-                    ))}
-                </div>
-
-                <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                <div style={{ display: "flex", gap: "8px" }}>
                     <button
                         onClick={() => {
                             TacticalAudioEngine.playTap();
-                            setAutoScroll(!autoScroll);
+                            setViewMode("TERMINAL");
                         }}
-                        className="btn-tactical-secondary"
-                        style={{ padding: "4px 10px", fontSize: "0.72rem" }}
-                        title="Auto-desplazamiento hacia el final"
+                        className={viewMode === "TERMINAL" ? "glow-pill-active" : "btn-ghost"}
+                        style={{ padding: "6px 14px", fontSize: "0.74rem", fontWeight: 700, borderRadius: "6px" }}
                     >
-                        {autoScroll ? "⬇️ Scroll ON" : "⏸️ Scroll OFF"}
+                        🖥️ Consola SSE ({logs.length})
                     </button>
                     <button
-                        onClick={copyLogs}
-                        className="btn-tactical-secondary"
-                        style={{ padding: "4px 10px", fontSize: "0.72rem" }}
-                        title="Copiar texto de logs filtrados"
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setViewMode("BLACK_BOX");
+                        }}
+                        className={viewMode === "BLACK_BOX" ? "glow-pill-active" : "btn-ghost"}
+                        style={{ padding: "6px 14px", fontSize: "0.74rem", fontWeight: 700, borderRadius: "6px", display: "flex", alignItems: "center", gap: "6px" }}
                     >
-                        📋 Copiar
-                    </button>
-                    <button
-                        onClick={downloadLogs}
-                        className="btn-tactical-secondary"
-                        style={{ padding: "4px 10px", fontSize: "0.72rem" }}
-                        title="Descargar archivo de registro .txt"
-                    >
-                        📥 Exportar
-                    </button>
-                    <button
-                        onClick={clearLogs}
-                        className="btn-ghost"
-                        style={{ padding: "4px 8px", fontSize: "0.72rem", color: "var(--accent-crimson)" }}
-                        title="Limpiar buffer actual"
-                    >
-                        🗑️
+                        <span>🛡️ Caja Negra Forense SHA-256</span>
+                        <span className={`badge-tactical ${isChainValid ? "badge-tactical-emerald" : "badge-tactical-crimson"}`} style={{ fontSize: "0.6rem" }}>
+                            {isChainValid ? "ÍNDICE OK" : "ERROR"}
+                        </span>
                     </button>
                 </div>
+
+                {viewMode === "BLACK_BOX" && (
+                    <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                            onClick={handleVerifyChain}
+                            className="btn-tactical-secondary"
+                            style={{ padding: "4px 10px", fontSize: "0.7rem", fontWeight: 700 }}
+                        >
+                            🔍 Verificar Cadena
+                        </button>
+                        <button
+                            onClick={handleExportAuditJson}
+                            className="btn-tactical-secondary"
+                            style={{ padding: "4px 10px", fontSize: "0.7rem", fontWeight: 700 }}
+                        >
+                            📥 Exportar Auditoría JSON
+                        </button>
+                    </div>
+                )}
             </div>
 
-            {/* Consola Terminal CRT */}
-            <div className="scroll-container" style={{ flex: 1, padding: "12px 16px", background: "#020204", display: "flex", flexDirection: "column" }}>
-                <div style={{ maxWidth: "860px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "4px" }}>
-                    {isLoading ? (
-                        <SkeletonCard count={4} />
-                    ) : filteredLogs.length === 0 ? (
-                        <div style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)", fontSize: "0.80rem", fontFamily: "JetBrains Mono, monospace" }}>
-                            {searchQuery ? `No hay logs que coincidan con "${searchQuery}"` : "Esperando flujo de eventos del núcleo RED..."}
+            {viewMode === "TERMINAL" ? (
+                <>
+                    {/* Barra de Estadísticas y Búsqueda */}
+                    <div style={{
+                        padding: "8px 16px",
+                        display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between",
+                        background: "rgba(10, 10, 20, 0.95)",
+                        borderBottom: "1px solid var(--glass-border)",
+                        gap: "10px", flexShrink: 0
+                    }}>
+                        {/* Stats Chips */}
+                        <div style={{ display: "flex", gap: "10px", fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace" }}>
+                            <span style={{ color: "var(--text-muted)" }}>Total: <strong style={{ color: "#fff" }}>{stats.total}</strong></span>
+                            <span style={{ color: "var(--accent-emerald)" }}>P2P/Mesh: <strong>{stats.p2p}</strong></span>
+                            <span style={{ color: "var(--accent-amber)" }}>Warn: <strong>{stats.warnings}</strong></span>
+                            <span style={{ color: "var(--accent-crimson)" }}>Error: <strong>{stats.errors}</strong></span>
                         </div>
-                    ) : (
-                        filteredLogs.map((entry, index) => (
-                            <div
-                                key={index}
-                                onClick={() => copySingleLog(entry)}
-                                title="Click para copiar este log al portapapeles"
+
+                        {/* Search Bar */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, maxWidth: "340px", minWidth: "180px" }}>
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder="Buscar en logs (regex, texto, subsystem)..."
                                 style={{
-                                    display: "flex", alignItems: "flex-start", gap: "8px",
-                                    padding: "5px 8px", borderRadius: "4px",
-                                    background: index % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent",
-                                    fontFamily: "JetBrains Mono, monospace", fontSize: "0.74rem",
-                                    lineHeight: 1.4,
-                                    cursor: "pointer",
-                                    borderLeft: entry.level === "ERROR" ? "2px solid var(--accent-crimson)" : entry.level === "WARN" ? "2px solid var(--accent-amber)" : "none"
+                                    width: "100%", padding: "6px 10px", fontSize: "0.75rem",
+                                    borderRadius: "6px", fontFamily: "JetBrains Mono, monospace"
                                 }}
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => {
+                                        TacticalAudioEngine.playTap();
+                                        setSearchQuery("");
+                                    }}
+                                    className="btn-ghost"
+                                    style={{ padding: "4px 8px", fontSize: "0.70rem" }}
+                                >
+                                    ✕
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Barra de Filtros por Severidad y Acciones de Archivo */}
+                    <div style={{
+                        padding: "8px 16px",
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        background: "rgba(6, 6, 14, 0.98)",
+                        borderBottom: "1px solid var(--glass-border)",
+                        flexShrink: 0, gap: "10px", overflowX: "auto"
+                    }}>
+                        <div style={{ display: "flex", gap: "6px" }}>
+                            {(["ALL", "INFO", "P2P", "MESH", "CRYPTO", "CONSENSUS", "WARN", "ERROR"] as LogFilter[]).map((f) => (
+                                <button
+                                    key={f}
+                                    onClick={() => {
+                                        TacticalAudioEngine.playTap();
+                                        setFilter(f);
+                                    }}
+                                    className={filter === f ? "glow-pill-active" : "btn-ghost"}
+                                    style={{ padding: "4px 10px", fontSize: "0.72rem", fontWeight: 700, borderRadius: "var(--radius-full)" }}
+                                >
+                                    {f}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                            <button
+                                onClick={() => {
+                                    TacticalAudioEngine.playTap();
+                                    setAutoScroll(!autoScroll);
+                                }}
+                                className="btn-tactical-secondary"
+                                style={{ padding: "4px 10px", fontSize: "0.72rem" }}
+                                title="Auto-desplazamiento hacia el final"
                             >
-                                <span style={{ color: "var(--text-muted)", flexShrink: 0, fontSize: "0.70rem" }}>
-                                    {new Date(entry.timestamp).toLocaleTimeString()}
-                                </span>
+                                {autoScroll ? "⬇️ Scroll ON" : "⏸️ Scroll OFF"}
+                            </button>
+                            <button
+                                onClick={copyLogs}
+                                className="btn-tactical-secondary"
+                                style={{ padding: "4px 10px", fontSize: "0.72rem" }}
+                                title="Copiar texto de logs filtrados"
+                            >
+                                📋 Copiar
+                            </button>
+                            <button
+                                onClick={downloadLogs}
+                                className="btn-tactical-secondary"
+                                style={{ padding: "4px 10px", fontSize: "0.72rem" }}
+                                title="Descargar archivo de registro .txt"
+                            >
+                                📥 Exportar
+                            </button>
+                            <button
+                                onClick={clearLogs}
+                                className="btn-ghost"
+                                style={{ padding: "4px 8px", fontSize: "0.72rem", color: "var(--accent-crimson)" }}
+                                title="Limpiar buffer actual"
+                            >
+                                🗑️
+                            </button>
+                        </div>
+                    </div>
 
-                                <div style={{ flexShrink: 0 }}>
-                                    {getLevelBadge(entry.level)}
+                    {/* Consola Terminal CRT */}
+                    <div className="scroll-container" style={{ flex: 1, padding: "12px 16px", background: "#020204", display: "flex", flexDirection: "column" }}>
+                        <div style={{ maxWidth: "860px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "4px" }}>
+                            {isLoading ? (
+                                <SkeletonCard count={4} />
+                            ) : filteredLogs.length === 0 ? (
+                                <div style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)", fontSize: "0.80rem", fontFamily: "JetBrains Mono, monospace" }}>
+                                    {searchQuery ? `No hay logs que coincidan con "${searchQuery}"` : "Esperando flujo de eventos del núcleo RED..."}
                                 </div>
+                            ) : (
+                                filteredLogs.map((entry, index) => (
+                                    <div
+                                        key={index}
+                                        onClick={() => copySingleLog(entry)}
+                                        title="Click para copiar este log al portapapeles"
+                                        style={{
+                                            display: "flex", alignItems: "flex-start", gap: "8px",
+                                            padding: "5px 8px", borderRadius: "4px",
+                                            background: index % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent",
+                                            fontFamily: "JetBrains Mono, monospace", fontSize: "0.74rem",
+                                            lineHeight: 1.4,
+                                            cursor: "pointer",
+                                            borderLeft: entry.level === "ERROR" ? "2px solid var(--accent-crimson)" : entry.level === "WARN" ? "2px solid var(--accent-amber)" : "none"
+                                        }}
+                                    >
+                                        <span style={{ color: "var(--text-muted)", flexShrink: 0, fontSize: "0.70rem" }}>
+                                            {new Date(entry.timestamp).toLocaleTimeString()}
+                                        </span>
 
-                                <span style={{ color: "var(--accent-cyan)", flexShrink: 0, fontSize: "0.72rem" }}>
-                                    [{entry.target.replace(/^red_/, "")}]
-                                </span>
+                                        <div style={{ flexShrink: 0 }}>
+                                            {getLevelBadge(entry.level)}
+                                        </div>
 
-                                <span style={{ color: entry.level === "ERROR" ? "var(--accent-crimson-bright)" : entry.level === "WARN" ? "var(--accent-amber)" : "var(--text-secondary)", wordBreak: "break-all", flex: 1 }}>
-                                    {entry.message}
-                                </span>
+                                        <span style={{ color: "var(--accent-cyan)", flexShrink: 0, fontSize: "0.72rem" }}>
+                                            [{entry.target.replace(/^red_/, "")}]
+                                        </span>
+
+                                        <span style={{ color: entry.level === "ERROR" ? "var(--accent-crimson-bright)" : entry.level === "WARN" ? "var(--accent-amber)" : "var(--text-secondary)", wordBreak: "break-all", flex: 1 }}>
+                                            {entry.message}
+                                        </span>
+                                    </div>
+                                ))
+                            )}
+                            <div ref={logsEndRef} />
+                        </div>
+                    </div>
+                </>
+            ) : (
+                /* Vista de Caja Negra Forense (SHA-256 Chained Flight Recorder) */
+                <div className="scroll-container" style={{ flex: 1, padding: "16px", background: "#020204", display: "flex", flexDirection: "column", gap: "10px" }}>
+                    <div style={{ maxWidth: "860px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <div style={{
+                            padding: "12px 14px", borderRadius: "8px",
+                            background: isChainValid ? "rgba(0, 230, 118, 0.06)" : "rgba(255, 23, 68, 0.08)",
+                            border: `1px solid ${isChainValid ? "rgba(0, 230, 118, 0.3)" : "rgba(255, 23, 68, 0.4)"}`,
+                            display: "flex", justifyContent: "space-between", alignItems: "center"
+                        }}>
+                            <div>
+                                <div style={{ fontSize: "0.82rem", fontWeight: 800, color: isChainValid ? "var(--accent-emerald)" : "var(--accent-crimson)" }}>
+                                    {isChainValid ? "🛡️ CADENA FORENSE CRIPTOGRÁFICA VÁLIDA (SHA-256)" : "⚠️ INTEGRIDAD DE LA CADENA COMPROMETIDA"}
+                                </div>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    {blackBoxEvents.length} eventos inmutables encadenados con Genesis 0000...
+                                </div>
                             </div>
-                        ))
-                    )}
-                    <div ref={logsEndRef} />
+                            <span className="badge-tactical badge-tactical-cyan" style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.65rem" }}>
+                                {blackBoxEvents.length > 0 ? `HEAD: #${blackBoxEvents[0].index}` : "VACÍA"}
+                            </span>
+                        </div>
+
+                        {blackBoxEvents.length === 0 ? (
+                            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)", fontSize: "0.80rem" }}>
+                                Sin eventos en la caja negra forense.
+                            </div>
+                        ) : (
+                            blackBoxEvents.map((evt) => {
+                                const severityColor = evt.severity === 'CRITICAL' 
+                                    ? "var(--accent-crimson)" 
+                                    : evt.severity === 'WARNING' 
+                                    ? "var(--accent-amber)" 
+                                    : "var(--accent-cyan)";
+                                return (
+                                    <div
+                                        key={evt.index}
+                                        style={{
+                                            padding: "10px 12px", borderRadius: "8px",
+                                            background: "rgba(255,255,255,0.02)",
+                                            border: "1px solid var(--glass-border)",
+                                            borderLeft: `3px solid ${severityColor}`,
+                                            display: "flex", flexDirection: "column", gap: "4px",
+                                            fontFamily: "JetBrains Mono, monospace"
+                                        }}
+                                    >
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                <span style={{ fontWeight: 800, color: "#fff", fontSize: "0.78rem" }}>#{evt.index}</span>
+                                                <span style={{ fontSize: "0.68rem", color: severityColor, fontWeight: 800 }}>[{evt.eventType}]</span>
+                                                <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>{new Date(evt.timestamp).toLocaleString()}</span>
+                                            </div>
+                                            <span className="badge-tactical" style={{ borderColor: severityColor, color: severityColor, fontSize: "0.58rem" }}>
+                                                {evt.severity}
+                                            </span>
+                                        </div>
+
+                                        <div style={{ fontSize: "0.76rem", color: "var(--text-primary)", lineHeight: 1.4, margin: "2px 0" }}>
+                                            {evt.details}
+                                        </div>
+
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.62rem", color: "var(--text-muted)", background: "rgba(0,0,0,0.4)", padding: "4px 8px", borderRadius: "4px" }}>
+                                            <span title="Hash del bloque actual">H: <span style={{ color: "var(--accent-cyan)" }}>{evt.hash.slice(0, 18)}...</span></span>
+                                            <span title="Hash del bloque previo">PREV: <span style={{ color: "var(--text-secondary)" }}>{evt.prevHash.slice(0, 18)}...</span></span>
+                                            <button
+                                                onClick={() => copyHash(evt.hash)}
+                                                className="btn-ghost"
+                                                style={{ padding: "2px 6px", fontSize: "0.58rem", color: "var(--accent-cyan)" }}
+                                            >
+                                                Copiar Hash
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };

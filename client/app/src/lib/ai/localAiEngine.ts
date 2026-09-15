@@ -13,6 +13,7 @@ import { ModelManager } from './modelManager';
 import { EmergencyGlossaryEngine, GlossaryLanguage } from '../emergency/emergencyGlossary';
 import { NeuralTelemetryData, NeuralThoughtStep } from '../../components/ai/NeuralThoughtViewer';
 import { AudioContextManager } from '../audio/AudioContextManager';
+import { zeroFootprintAiMemoryManager } from './ZeroFootprintAiMemoryManager';
 
 export interface NeuralSafetyEvaluation {
     isToxic: boolean;
@@ -511,83 +512,91 @@ class LocalAIEngineClass {
      * Transcribe audio (Blob, DataURL or ArrayBuffer) into text using local Whisper model or Sovereign Endpoint.
      */
     public async transcribeAudio(audioData: string | Blob | ArrayBuffer): Promise<{ text: string; executionTimeMs: number }> {
-        const start = performance.now();
-
-        // 1. Nivel 1: Inferencia prioritaria vía Endpoint Soberano (Whisper compatible)
-        const sovereignText = await this.callSovereignTranscribe(audioData);
-        if (sovereignText && sovereignText.trim().length > 0) {
-            return {
-                text: sovereignText,
-                executionTimeMs: Math.round(performance.now() - start)
-            };
-        }
-
-        // 2. Nivel 2: Decodificación de audio a PCM 16kHz Float32Array (hilo principal con Web Audio API)
+        zeroFootprintAiMemoryManager.notifyInferenceStart();
         try {
-            const pcmData = await this.decodeAudioTo16kHzPcm(audioData);
-            if (pcmData && pcmData.length > 0) {
-                // 2a. Inferencia Whisper en Web Worker off-thread (no congela la interfaz gráfica)
-                try {
-                    const workerRes = await this.dispatchToWorker<any>(
-                        'TRANSCRIBE_AUDIO',
-                        { audio: pcmData },
-                        'TRANSCRIBE_AUDIO_RESULT',
-                        25000
-                    );
-                    if (workerRes?.data?.text && workerRes.data.text.trim().length > 0) {
-                        return {
-                            text: workerRes.data.text.trim(),
-                            executionTimeMs: Math.round(performance.now() - start)
-                        };
-                    }
-                } catch {/* Worker no disponible o timeout — cae al fallback inline */}
+            const start = performance.now();
 
-                // 2b. Inferencia Whisper WASM inline (fallback de contingencia)
-                const asr = await this.getTranscriber();
-                if (asr) {
-                    const out = await this.withTimeout(
-                        asr(pcmData, {
-                            chunk_length_s: 30,
-                            stride_length_s: 5,
-                            language: 'spanish',
-                            task: 'transcribe'
-                        }),
-                        25000,
-                        'Whisper ASR'
-                    );
+            // 1. Nivel 1: Inferencia prioritaria vía Endpoint Soberano (Whisper compatible)
+            const sovereignText = await this.callSovereignTranscribe(audioData);
+            if (sovereignText && sovereignText.trim().length > 0) {
+                return {
+                    text: sovereignText,
+                    executionTimeMs: Math.round(performance.now() - start)
+                };
+            }
 
-                    const text = out && typeof out === 'object' && (out as any).text ? (out as any).text.trim() : (Array.isArray(out) ? (out as any)[0]?.text : '');
-                    if (text && text.trim().length > 0) {
-                        return {
-                            text,
-                            executionTimeMs: Math.round(performance.now() - start)
-                        };
+            // 2. Nivel 2: Decodificación de audio a PCM 16kHz Float32Array (hilo principal con Web Audio API)
+            try {
+                const pcmData = await this.decodeAudioTo16kHzPcm(audioData);
+                if (pcmData && pcmData.length > 0) {
+                    // 2a. Inferencia Whisper en Web Worker off-thread (no congela la interfaz gráfica)
+                    try {
+                        const workerRes = await this.dispatchToWorker<any>(
+                            'TRANSCRIBE_AUDIO',
+                            { audio: pcmData },
+                            'TRANSCRIBE_AUDIO_RESULT',
+                            25000
+                        );
+                        if (workerRes?.data?.text && workerRes.data.text.trim().length > 0) {
+                            return {
+                                text: workerRes.data.text.trim(),
+                                executionTimeMs: Math.round(performance.now() - start)
+                            };
+                        }
+                    } catch {/* Worker no disponible o timeout — cae al fallback inline */}
+
+                    // 2b. Inferencia Whisper WASM inline (fallback de contingencia)
+                    const asr = await this.getTranscriber();
+                    if (asr) {
+                        const out = await this.withTimeout(
+                            asr(pcmData, {
+                                chunk_length_s: 30,
+                                stride_length_s: 5,
+                                language: 'spanish',
+                                task: 'transcribe'
+                            }),
+                            25000,
+                            'Whisper ASR'
+                        );
+
+                        const text = out && typeof out === 'object' && (out as any).text ? (out as any).text.trim() : (Array.isArray(out) ? (out as any)[0]?.text : '');
+                        if (text && text.trim().length > 0) {
+                            return {
+                                text,
+                                executionTimeMs: Math.round(performance.now() - start)
+                            };
+                        }
                     }
                 }
+            } catch (err: any) {
+                console.warn('[LocalAIEngine] Whisper transcription local fallback:', err);
             }
-        } catch (err: any) {
-            console.warn('[LocalAIEngine] Whisper transcription local fallback:', err);
-        }
 
-        // 3. Nivel 3: Fallback táctico determinista seguro
-        return {
-            text: '📝 Nota de voz táctica recibida (Configura un Endpoint Soberano en Ajustes para transcripción neuronal completa).',
-            executionTimeMs: Math.round(performance.now() - start)
-        };
+            // 3. Nivel 3: Fallback táctico determinista seguro
+            return {
+                text: '📝 Nota de voz táctica recibida (Configura un Endpoint Soberano en Ajustes para transcripción neuronal completa).',
+                executionTimeMs: Math.round(performance.now() - start)
+            };
+        } finally {
+            zeroFootprintAiMemoryManager.notifyInferenceEnd();
+        }
     }
 
     /**
      * 1. Clasificación de Seguridad Neuronal Real (RED Guardian IA)
      */
     public async classifySafety(text: string): Promise<NeuralSafetyEvaluation> {
-        const start = performance.now();
         const trimmed = text.trim();
 
         if (!trimmed) {
             return { isToxic: false, category: 'general', confidence: 1.0, executionTimeMs: 0 };
         }
 
-        // ─ Nivel 0: Off-main-thread via Worker (no bloquea UI) ──────────────────────────────
+        zeroFootprintAiMemoryManager.notifyInferenceStart();
+        try {
+            const start = performance.now();
+
+            // ─ Nivel 0: Off-main-thread via Worker (no bloquea UI) ──────────────────────────────
         try {
             const workerRes = await this.dispatchToWorker<any>(
                 'CLASSIFY_SAFETY', { text: trimmed }, 'CLASSIFY_SAFETY_RESULT', 15000
@@ -673,6 +682,9 @@ class LocalAIEngineClass {
                 console.warn('[RED Guardian AI] Semantic embedding safety fallback error:', embErr);
             }
             return { isToxic: false, category: 'general', confidence: 0.95, executionTimeMs: Math.round(performance.now() - start) };
+        }
+        } finally {
+            zeroFootprintAiMemoryManager.notifyInferenceEnd();
         }
     }
 
@@ -838,9 +850,11 @@ class LocalAIEngineClass {
      *    Generación de lenguaje natural fluida, contextual y transparente con telemetría Chain-of-Thought.
      */
     public async generateCopilotResponse(prompt: string, context?: string): Promise<CopilotAIResponse> {
-        const start = performance.now();
-        const trimmed = prompt.trim();
-        const cleanQuery = trimmed.replace(/^\[Contexto Táctico:[^\]]+\]\s*/i, '').trim() || trimmed;
+        zeroFootprintAiMemoryManager.notifyInferenceStart();
+        try {
+            const start = performance.now();
+            const trimmed = prompt.trim();
+            const cleanQuery = trimmed.replace(/^\[Contexto Táctico:[^\]]+\]\s*/i, '').trim() || trimmed;
 
         const thoughtSteps: NeuralThoughtStep[] = [];
 
@@ -1102,14 +1116,17 @@ class LocalAIEngineClass {
             steps: thoughtSteps
         };
 
-        return {
-            answer: finalAnswer,
-            topicCategory,
-            confidence: matchedFrag ? Math.max(0.95, highestSim) : 0.98,
-            modelInfo: activeModelTag,
-            executionTimeMs: totalExecTime,
-            thoughtChain: telemetryPayload
-        };
+            return {
+                answer: finalAnswer,
+                topicCategory,
+                confidence: matchedFrag ? Math.max(0.95, highestSim) : 0.98,
+                modelInfo: activeModelTag,
+                executionTimeMs: totalExecTime,
+                thoughtChain: telemetryPayload
+            };
+        } finally {
+            zeroFootprintAiMemoryManager.notifyInferenceEnd();
+        }
     }
 
     /**
@@ -1420,11 +1437,14 @@ class LocalAIEngineClass {
 
     /** 4. Traductor Táctico Neuronal Off-Grid (Modelo Activo + Fallback Glosario) */
     public async translateText(text: string, targetLang: string = 'es'): Promise<TranslationResponse> {
-        const start = performance.now();
         const trimmed = text.trim();
         if (!trimmed) {
             return { originalText: '', translatedText: '', targetLang, executionTimeMs: 0 };
         }
+
+        zeroFootprintAiMemoryManager.notifyInferenceStart();
+        try {
+            const start = performance.now();
 
         const langNames: Record<string, string> = {
             'es': 'español',
@@ -1526,12 +1546,15 @@ class LocalAIEngineClass {
 
         // 2. Fallback al glosario estructurado de emergencia
         const res = EmergencyGlossaryEngine.translate(text, (targetLang || 'es') as GlossaryLanguage);
-        return {
-            originalText: text,
-            translatedText: res.translatedText,
-            targetLang,
-            executionTimeMs: Math.round(performance.now() - start),
-        };
+            return {
+                originalText: text,
+                translatedText: res.translatedText,
+                targetLang,
+                executionTimeMs: Math.round(performance.now() - start),
+            };
+        } finally {
+            zeroFootprintAiMemoryManager.notifyInferenceEnd();
+        }
     }
 
     /** 5. Asistente Neuronal de Redacción Táctica & SITREP */
@@ -1557,92 +1580,97 @@ class LocalAIEngineClass {
             };
         }
 
-        let systemInstruction = 'Transforma el siguiente mensaje en un reporte táctico militar conciso y profesional en formato SITREP (Situación, Ubicación, Estado). Devuelve únicamente el texto transformado sin comentarios adicionales.';
-        if (mode === 'urgent') {
-            systemInstruction = 'Transforma el mensaje en una directiva de emergencia de máxima urgencia, clara, directa y concisa.';
-        } else if (mode === 'grammar') {
-            systemInstruction = 'Corrige la ortografía y redacción del siguiente texto militar manteniendo su sentido original con máxima claridad.';
-        }
+        zeroFootprintAiMemoryManager.notifyInferenceStart();
+        try {
+            let systemInstruction = 'Transforma el siguiente mensaje en un reporte táctico militar conciso y profesional en formato SITREP (Situación, Ubicación, Estado). Devuelve únicamente el texto transformado sin comentarios adicionales.';
+            if (mode === 'urgent') {
+                systemInstruction = 'Transforma el mensaje en una directiva de emergencia de máxima urgencia, clara, directa y concisa.';
+            } else if (mode === 'grammar') {
+                systemInstruction = 'Corrige la ortografía y redacción del siguiente texto militar manteniendo su sentido original con máxima claridad.';
+            }
 
-        // 1. Nivel 1: Inferencia prioritaria vía Endpoint Soberano
-        const sovereignRephrase = await this.callSovereignLlm([
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: trimmed }
-        ], { temperature: 0.2, max_tokens: 180 });
+            // 1. Nivel 1: Inferencia prioritaria vía Endpoint Soberano
+            const sovereignRephrase = await this.callSovereignLlm([
+                { role: 'system', content: systemInstruction },
+                { role: 'user', content: trimmed }
+            ], { temperature: 0.2, max_tokens: 180 });
 
-        if (sovereignRephrase && sovereignRephrase.trim().length > 0) {
-            const cleaned = sovereignRephrase
-                .replace(/<\|im_end\|>/g, '')
-                .replace(/<\|eot_id\|>/g, '')
-                .replace(/<\|end\|>/g, '')
-                .replace(/^["']|["']$/g, '')
-                .trim();
+            if (sovereignRephrase && sovereignRephrase.trim().length > 0) {
+                const cleaned = sovereignRephrase
+                    .replace(/<\|im_end\|>/g, '')
+                    .replace(/<\|eot_id\|>/g, '')
+                    .replace(/<\|end\|>/g, '')
+                    .replace(/^["']|["']$/g, '')
+                    .trim();
+                return {
+                    originalText: text,
+                    rephrasedText: cleaned,
+                    mode,
+                    executionTimeMs: Math.round(performance.now() - start)
+                };
+            }
+
+            // 2. Nivel 2: Inferencia neuronal WASM si está disponible
+            try {
+                const prompt = `<|im_start|>system\n${systemInstruction}\n<|im_end|>\n<|im_start|>user\n${trimmed}\n<|im_end|>\n<|im_start|>assistant\n`;
+                const generator = await this.getGenerator();
+                if (generator) {
+                    const output = await this.withTimeout(
+                        generator(prompt, {
+                            max_new_tokens: 150,
+                            temperature: 0.3,
+                            do_sample: false
+                        }),
+                        12000,
+                        'Neural Rephrase'
+                    );
+
+                    let raw = '';
+                    if (Array.isArray(output) && output[0]?.generated_text) {
+                        raw = output[0].generated_text;
+                    } else if (output && typeof output === 'object' && (output as any).generated_text) {
+                        raw = (output as any).generated_text;
+                    }
+
+                    if (raw) {
+                        if (raw.startsWith(prompt)) {
+                            raw = raw.slice(prompt.length);
+                        } else if (raw.includes('<|im_start|>assistant\n')) {
+                            raw = raw.split('<|im_start|>assistant\n').pop() || '';
+                        }
+                        const cleaned = raw
+                            .replace(/<\|im_end\|>/g, '')
+                            .replace(/<\|eot_id\|>/g, '')
+                            .replace(/<\|end\|>/g, '')
+                            .replace(/<\|endoftext\|>/g, '')
+                            .trim();
+
+                        if (cleaned) {
+                            return {
+                                originalText: text,
+                                rephrasedText: cleaned,
+                                mode,
+                                executionTimeMs: Math.round(performance.now() - start)
+                            };
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[LocalAIEngine] Rephrase neuronal fallback:', e);
+            }
+
+            // Fallback determinista
+            let fallback = `[SITREP TÁCTICO] ${trimmed} // FIN DE TRANSMISIÓN`;
+            if (mode === 'urgent') fallback = `🚨 [URGENTE / ALERTA MESH] ${trimmed}`;
             return {
                 originalText: text,
-                rephrasedText: cleaned,
+                rephrasedText: fallback,
                 mode,
                 executionTimeMs: Math.round(performance.now() - start)
             };
+        } finally {
+            zeroFootprintAiMemoryManager.notifyInferenceEnd();
         }
-
-        // 2. Nivel 2: Inferencia neuronal WASM si está disponible
-        try {
-            const prompt = `<|im_start|>system\n${systemInstruction}\n<|im_end|>\n<|im_start|>user\n${trimmed}\n<|im_end|>\n<|im_start|>assistant\n`;
-            const generator = await this.getGenerator();
-            if (generator) {
-                const output = await this.withTimeout(
-                    generator(prompt, {
-                        max_new_tokens: 150,
-                        temperature: 0.3,
-                        do_sample: false
-                    }),
-                    12000,
-                    'Neural Rephrase'
-                );
-
-                let raw = '';
-                if (Array.isArray(output) && output[0]?.generated_text) {
-                    raw = output[0].generated_text;
-                } else if (output && typeof output === 'object' && (output as any).generated_text) {
-                    raw = (output as any).generated_text;
-                }
-
-                if (raw) {
-                    if (raw.startsWith(prompt)) {
-                        raw = raw.slice(prompt.length);
-                    } else if (raw.includes('<|im_start|>assistant\n')) {
-                        raw = raw.split('<|im_start|>assistant\n').pop() || '';
-                    }
-                    const cleaned = raw
-                        .replace(/<\|im_end\|>/g, '')
-                        .replace(/<\|eot_id\|>/g, '')
-                        .replace(/<\|end\|>/g, '')
-                        .replace(/<\|endoftext\|>/g, '')
-                        .trim();
-
-                    if (cleaned) {
-                        return {
-                            originalText: text,
-                            rephrasedText: cleaned,
-                            mode,
-                            executionTimeMs: Math.round(performance.now() - start)
-                        };
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn('[LocalAIEngine] Rephrase neuronal fallback:', e);
-        }
-
-        // Fallback determinista
-        let fallback = `[SITREP TÁCTICO] ${trimmed} // FIN DE TRANSMISIÓN`;
-        if (mode === 'urgent') fallback = `🚨 [URGENTE / ALERTA MESH] ${trimmed}`;
-        return {
-            originalText: text,
-            rephrasedText: fallback,
-            mode,
-            executionTimeMs: Math.round(performance.now() - start)
-        };
     }
 
     /** 5. Diagnóstico Real de Salud del Nodo Mesh (Telemetría en Vivo) */
@@ -1745,41 +1773,46 @@ class LocalAIEngineClass {
 
     /** Extractor de Embeddings Neuronal 384-Dim (Motor Nativo Rust ARM64 / NNAPI) */
     public async extractEmbeddings(text: string) {
-        const start = performance.now();
-        const trimmed = text.trim();
-
+        zeroFootprintAiMemoryManager.notifyInferenceStart();
         try {
-            const resp = await fetch('http://127.0.0.1:7333/api/ai/embeddings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: trimmed }),
-            });
-            if (resp.ok) {
-                const data = await resp.json();
-                return {
-                    dimensions: data.dimensions || 384,
-                    magnitude: data.magnitude ? data.magnitude.toFixed(4) : "1.0000",
-                    vectorPreview: data.vector_preview || [],
-                    fullVector: data.full_vector || [],
-                    executionTimeMs: Math.round(performance.now() - start),
-                };
-            }
-        } catch {}
+            const start = performance.now();
+            const trimmed = text.trim();
 
-        // Fallback local instantáneo sin bloquear el hilo principal
-        const extractor = await this.getExtractor();
-        const tensor = await extractor(trimmed, { pooling: 'mean', normalize: true });
-        const vecData = Array.from(tensor.data as Float32Array);
-        const norm = vecData.reduce((acc, v) => acc + v * v, 0);
-        const magnitude = Math.sqrt(norm).toFixed(4);
+            try {
+                const resp = await fetch('http://127.0.0.1:7333/api/ai/embeddings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: trimmed }),
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    return {
+                        dimensions: data.dimensions || 384,
+                        magnitude: data.magnitude ? data.magnitude.toFixed(4) : "1.0000",
+                        vectorPreview: data.vector_preview || [],
+                        fullVector: data.full_vector || [],
+                        executionTimeMs: Math.round(performance.now() - start),
+                    };
+                }
+            } catch {}
 
-        return {
-            dimensions: vecData.length,
-            magnitude,
-            vectorPreview: vecData.slice(0, 10).map(v => v.toFixed(6)),
-            fullVector: vecData,
-            executionTimeMs: Math.round(performance.now() - start),
-        };
+            // Fallback local instantáneo sin bloquear el hilo principal
+            const extractor = await this.getExtractor();
+            const tensor = await extractor(trimmed, { pooling: 'mean', normalize: true });
+            const vecData = Array.from(tensor.data as Float32Array);
+            const norm = vecData.reduce((acc, v) => acc + v * v, 0);
+            const magnitude = Math.sqrt(norm).toFixed(4);
+
+            return {
+                dimensions: vecData.length,
+                magnitude,
+                vectorPreview: vecData.slice(0, 10).map(v => v.toFixed(6)),
+                fullVector: vecData,
+                executionTimeMs: Math.round(performance.now() - start),
+            };
+        } finally {
+            zeroFootprintAiMemoryManager.notifyInferenceEnd();
+        }
     }
 
     /** 6. Evaluación de Resiliencia Forense Zero-Trust (Seguridad Táctica) */
@@ -1945,11 +1978,7 @@ class LocalAIEngineClass {
      * Debe invocarse al desmontar la aplicación o cuando el dispositivo reporte memoria crítica.
      */
     public destroy(): void {
-        this.classifierPipeline = null;
-        this.embeddingPipeline  = null;
-        this.generatorPipeline  = null;
-        this.asrPipeline        = null;
-        this.transformersLib    = null;
+        this.disposePipelines();
         LocalAIEngineClass.kbVectorCache.clear();
         LocalAIEngineClass.lastSyncCache.clear();
         LocalAIEngineClass.sessionDialogHistory = [];

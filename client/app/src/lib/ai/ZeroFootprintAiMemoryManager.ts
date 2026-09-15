@@ -148,6 +148,19 @@ export class ZeroFootprintAiMemoryManager {
             try { cb(m); } catch {}
         });
     }
+
+    public destroy(): void {
+        if (this.idleTimer) {
+            clearTimeout(this.idleTimer);
+            this.idleTimer = null;
+        }
+        if (this.checkIntervalTimer) {
+            clearInterval(this.checkIntervalTimer);
+            this.checkIntervalTimer = null;
+        }
+        this.listeners.clear();
+        (ZeroFootprintAiMemoryManager as any).instance = null;
+    }
 }
 
 export const zeroFootprintAiMemoryManager = ZeroFootprintAiMemoryManager.getInstance();

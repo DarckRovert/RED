@@ -11,6 +11,8 @@ import { getP2PWallet } from '../api/economy';
 import { toast } from './Toast';
 import { MultiRailCheckoutModal } from './MultiRailCheckoutModal';
 import { TacIcon } from './ui/TacIcon';
+import { voucherVault, SovereignVoucher, VoucherAssetType } from '../lib/blockchain/VoucherVaultEngine';
+import { OfflineQrEngine } from '../lib/qr/OfflineQrEngine';
 
 import { useRedStore } from '../store/useRedStore';
 
@@ -19,7 +21,7 @@ interface CommercialHubModalProps {
     onClose: () => void;
 }
 
-type HubTab = 'catalog' | 'redeem' | 'transactions' | 'create';
+type HubTab = 'catalog' | 'vouchers' | 'redeem' | 'transactions' | 'create';
 
 export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, onClose }) => {
     const { t } = useTranslation();
@@ -52,11 +54,23 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
     const [p2pQrUrl, setP2pQrUrl] = useState<string | null>(null);
     const [isIssuingVoucher, setIsIssuingVoucher] = useState(false);
 
+    // Sovereign Multi-Asset Voucher Vault
+    const [sovereignVouchers, setSovereignVouchers] = useState<SovereignVoucher[]>(() => voucherVault.getVouchers());
+    const [newVoucherAsset, setNewVoucherAsset] = useState<VoucherAssetType>('ENERGY_WH');
+    const [newVoucherAmount, setNewVoucherAmount] = useState<string>('50');
+    const [newVoucherDesc, setNewVoucherDesc] = useState<string>('Recarga Batería 50Wh Malla');
+    const [newVoucherHours, setNewVoucherHours] = useState<number>(72);
+    const [redeemInputString, setRedeemInputString] = useState<string>('');
+    const [selectedVoucherQr, setSelectedVoucherQr] = useState<{ voucher: SovereignVoucher; qrUrl: string } | null>(null);
+    const [isIssuingSovereign, setIsIssuingSovereign] = useState(false);
+    const [isRedeemingSovereign, setIsRedeemingSovereign] = useState(false);
+
     const refreshData = async () => {
         setProStatus(MonetizationEngine.getProStatus());
         const crdtCatalog = bazaarSync.getActiveListings();
         setCatalog(crdtCatalog.length > 0 ? crdtCatalog : MonetizationEngine.getCatalog());
         setTransactions(MonetizationEngine.getTransactions());
+        setSovereignVouchers(voucherVault.getVouchers());
         try {
             const wallet = await getP2PWallet();
             if (wallet && wallet.ok && typeof wallet.balance === 'number') {
@@ -69,6 +83,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
     useEffect(() => {
         if (!isOpen) return;
         return BackHandlerRegistry.register(() => {
+            if (selectedVoucherQr) {
+                setSelectedVoucherQr(null);
+                return true;
+            }
             if (checkoutProduct) {
                 setCheckoutProduct(null);
                 return true;
@@ -86,7 +104,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
             onClose();
             return true;
         });
-    }, [isOpen, checkoutProduct, p2pModalItem, activeTab, onClose]);
+    }, [isOpen, selectedVoucherQr, checkoutProduct, p2pModalItem, activeTab, onClose]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -96,10 +114,14 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
         window.addEventListener('red_pro_status_updated', handleUpdate);
         window.addEventListener('red:wallet_updated', handleUpdate);
         const unsubBazaar = bazaarSync.subscribe(handleUpdate);
+        const unsubVouchers = voucherVault.subscribe(() => {
+            setSovereignVouchers(voucherVault.getVouchers());
+        });
         return () => {
             window.removeEventListener('red_pro_status_updated', handleUpdate);
             window.removeEventListener('red:wallet_updated', handleUpdate);
             unsubBazaar();
+            unsubVouchers();
         };
     }, [isOpen]);
 
@@ -288,6 +310,80 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
             toast.error("Error al emitir orden P2P: " + (e?.message || ""));
         } finally {
             setIsIssuingVoucher(false);
+        }
+    };
+
+    const handleIssueSovereignVoucher = async () => {
+        const amt = parseFloat(newVoucherAmount);
+        if (!isFinite(amt) || amt <= 0) {
+            toast.error("Monto de vale inválido");
+            return;
+        }
+
+        setIsIssuingSovereign(true);
+        TacticalAudioEngine.playTap();
+        try {
+            const issuerDid = identity?.identity_hash || 'did:red:local_node';
+            const pseudoPrivKey = (identity?.identity_hash || '0123456789abcdef0123456789abcdef').repeat(2).substring(0, 64);
+            const vch = await voucherVault.issueVoucher(
+                issuerDid,
+                pseudoPrivKey,
+                newVoucherAsset,
+                amt,
+                newVoucherDesc.trim() || 'Cupón Táctico Soberano',
+                newVoucherHours
+            );
+
+            const qrStr = voucherVault.exportVoucherToQrString(vch);
+            const qrUrl = await OfflineQrEngine.generateDataUrl(qrStr, {
+                width: 260,
+                margin: 1,
+                darkColor: "#00E676",
+                lightColor: "#04060A"
+            });
+            setSelectedVoucherQr({ voucher: vch, qrUrl });
+            toast.success(`🎟️ Vale ${vch.id} (${vch.amount} ${vch.assetType}) emitido`);
+            TacticalAudioEngine.playRogerBeep();
+            setSovereignVouchers(voucherVault.getVouchers());
+        } catch (e: any) {
+            toast.error("Error emitiendo vale: " + (e?.message || ""));
+            TacticalAudioEngine.playWarning();
+        } finally {
+            setIsIssuingSovereign(false);
+        }
+    };
+
+    const handleRedeemSovereignVoucher = async () => {
+        if (!redeemInputString.trim()) {
+            toast.warning("Pegue o escanee la cadena del cupón VOUCHER:1:...");
+            return;
+        }
+
+        setIsRedeemingSovereign(true);
+        TacticalAudioEngine.playTap();
+        try {
+            const parsed = voucherVault.parseVoucherFromQrString(redeemInputString);
+            if (!parsed) {
+                toast.error("Formato de cupón VOUCHER:1:... inválido o corrupto");
+                TacticalAudioEngine.playWarning();
+                return;
+            }
+
+            const redeemerDid = identity?.identity_hash || 'did:red:local_node';
+            const res = await voucherVault.redeemVoucher(parsed, redeemerDid);
+            if (res.success && res.voucher) {
+                toast.success(`✅ Vale ${res.voucher.id} de ${res.voucher.amount} ${res.voucher.assetType} canjeado con éxito.`);
+                TacticalAudioEngine.playRogerBeep();
+                setRedeemInputString('');
+                setSovereignVouchers(voucherVault.getVouchers());
+            } else {
+                toast.error(`❌ Canje rechazado: ${res.error || 'Doble gasto o firma inválida'}`);
+                TacticalAudioEngine.playWarning();
+            }
+        } catch (e: any) {
+            toast.error("Error al canjear cupón: " + (e?.message || ""));
+        } finally {
+            setIsRedeemingSovereign(false);
         }
     };
 
@@ -488,6 +584,17 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                     >
                         <TacIcon name="box" size={15} />
                         <span>Catálogo Homologado ({catalog.length})</span>
+                    </button>
+                    <button
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setActiveTab('vouchers');
+                        }}
+                        className={activeTab === 'vouchers' ? 'glow-pill-active' : 'btn-ghost'}
+                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                        <TacIcon name="card" size={15} />
+                        <span>Bóveda de Vales ({sovereignVouchers.length})</span>
                     </button>
                     <button
                         onClick={() => {
@@ -732,6 +839,294 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                 ))}
                             </div>
                         </>
+                    )}
+
+                    {/* TAB: VOUCHERS (BÓVEDA DE VALES CRIPTOGRÁFICOS) */}
+                    {activeTab === 'vouchers' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {/* Header / Summary Card */}
+                            <div style={{
+                                padding: '16px', borderRadius: '14px',
+                                background: 'linear-gradient(135deg, rgba(0, 230, 118, 0.12) 0%, rgba(0, 229, 255, 0.06) 100%)',
+                                border: '1px solid rgba(0, 230, 118, 0.3)',
+                                display: 'flex', flexDirection: 'column', gap: '8px'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span>🎟️</span> BÓVEDA DE VALES SOBERANOS OFF-GRID
+                                    </div>
+                                    <span className="badge-tactical badge-tactical-emerald">
+                                        ED25519 + NULLIFIER H(S||N)
+                                    </span>
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.4 }}>
+                                    Vales multi-activo resistentes a la censura para trueque táctico fuera de red (energía, ancho de banda, minutos de radio y raciones). Los nullifiers criptográficos previenen el doble gasto sin necesidad de internet.
+                                </div>
+
+                                {/* Asset Types Breakdown */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px', marginTop: '6px' }}>
+                                    {[
+                                        { type: 'ENERGY_WH', label: 'Energía', icon: '⚡', unit: 'Wh' },
+                                        { type: 'BANDWIDTH_MB', label: 'Datos', icon: '📶', unit: 'MB' },
+                                        { type: 'RADIO_MIN', label: 'Radio', icon: '📻', unit: 'min' },
+                                        { type: 'RATION_UNIT', label: 'Ración', icon: '🍞', unit: 'uds' },
+                                        { type: 'RED_CREDITS', label: 'Créditos', icon: '🪙', unit: 'RED' }
+                                    ].map(a => {
+                                        const count = sovereignVouchers.filter(v => v.assetType === a.type && !v.redeemed && v.expiresAt > Date.now()).length;
+                                        const sum = sovereignVouchers
+                                            .filter(v => v.assetType === a.type && !v.redeemed && v.expiresAt > Date.now())
+                                            .reduce((acc, curr) => acc + curr.amount, 0);
+                                        return (
+                                            <div key={a.type} style={{
+                                                padding: '8px 6px', borderRadius: '8px',
+                                                background: 'rgba(0,0,0,0.3)', border: '1px solid var(--glass-border)',
+                                                textAlign: 'center'
+                                            }}>
+                                                <div style={{ fontSize: '1.1rem' }}>{a.icon}</div>
+                                                <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{a.label}</div>
+                                                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#FFF', fontFamily: 'JetBrains Mono, monospace' }}>
+                                                    {sum} <span style={{ fontSize: '0.58rem', color: 'var(--text-secondary)' }}>{a.unit}</span>
+                                                </div>
+                                                <div style={{ fontSize: '0.55rem', color: 'var(--accent-emerald)' }}>{count} vales</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Two-Column Forms: Issue Voucher & Redeem Voucher */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+                                {/* Issue Voucher Panel */}
+                                <div style={{
+                                    padding: '16px', borderRadius: '12px',
+                                    background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)',
+                                    display: 'flex', flexDirection: 'column', gap: '10px'
+                                }}>
+                                    <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--accent-cyan)' }}>
+                                        ✍️ EMITIR VALE SOBERANO
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Tipo de Activo Táctico:</label>
+                                        <select
+                                            value={newVoucherAsset}
+                                            onChange={e => setNewVoucherAsset(e.target.value as VoucherAssetType)}
+                                            style={{
+                                                padding: '8px 10px', borderRadius: '6px',
+                                                background: 'rgba(0,0,0,0.5)', color: '#FFF',
+                                                border: '1px solid var(--glass-border)', fontSize: '0.76rem'
+                                            }}
+                                        >
+                                            <option value="ENERGY_WH">⚡ Energía Eléctrica (Wh)</option>
+                                            <option value="BANDWIDTH_MB">📶 Tránsito / Datos (MB)</option>
+                                            <option value="RADIO_MIN">📻 Tiempo de Radio LoRa/VHF (Min)</option>
+                                            <option value="RATION_UNIT">🍞 Ración de Supervivencia / MRE</option>
+                                            <option value="RED_CREDITS">🪙 Créditos Soberanos RED</option>
+                                        </select>
+                                    </div>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Cantidad:</label>
+                                            <input
+                                                type="number"
+                                                value={newVoucherAmount}
+                                                onChange={e => setNewVoucherAmount(e.target.value)}
+                                                placeholder="50"
+                                                min="1"
+                                                style={{
+                                                    padding: '8px', borderRadius: '6px',
+                                                    background: 'rgba(0,0,0,0.5)', color: '#FFF',
+                                                    border: '1px solid var(--glass-border)', fontSize: '0.78rem',
+                                                    fontFamily: 'JetBrains Mono, monospace'
+                                                }}
+                                            />
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Validez (Horas):</label>
+                                            <input
+                                                type="number"
+                                                value={newVoucherHours}
+                                                onChange={e => setNewVoucherHours(parseInt(e.target.value, 10) || 72)}
+                                                placeholder="72"
+                                                min="1"
+                                                max="720"
+                                                style={{
+                                                    padding: '8px', borderRadius: '6px',
+                                                    background: 'rgba(0,0,0,0.5)', color: '#FFF',
+                                                    border: '1px solid var(--glass-border)', fontSize: '0.78rem',
+                                                    fontFamily: 'JetBrains Mono, monospace'
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Descripción / Propósito:</label>
+                                        <input
+                                            type="text"
+                                            value={newVoucherDesc}
+                                            onChange={e => setNewVoucherDesc(e.target.value)}
+                                            placeholder="Recarga batería 50Wh Malla..."
+                                            style={{
+                                                padding: '8px', borderRadius: '6px',
+                                                background: 'rgba(0,0,0,0.5)', color: '#FFF',
+                                                border: '1px solid var(--glass-border)', fontSize: '0.76rem'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <button
+                                        onClick={handleIssueSovereignVoucher}
+                                        disabled={isIssuingSovereign}
+                                        className="btn-tactical-primary"
+                                        style={{ padding: '10px', fontSize: '0.76rem', fontWeight: 800, marginTop: '4px' }}
+                                    >
+                                        {isIssuingSovereign ? "Firmando Ed25519..." : "🎟️ Emitir Vale y Generar QR"}
+                                    </button>
+                                </div>
+
+                                {/* Redeem Voucher Panel */}
+                                <div style={{
+                                    padding: '16px', borderRadius: '12px',
+                                    background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)',
+                                    display: 'flex', flexDirection: 'column', gap: '10px'
+                                }}>
+                                    <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>
+                                        ⚡ CANJEAR / ANULAR VALE RECIBIDO
+                                    </div>
+                                    <div style={{ fontSize: '0.70rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                                        Verifica la firma digital Ed25519 del emisor y registra el Nullifier en la base anti-doble gasto del nodo.
+                                    </div>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                                        <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Cadena QR / Token de Cupón:</label>
+                                        <textarea
+                                            value={redeemInputString}
+                                            onChange={e => setRedeemInputString(e.target.value)}
+                                            placeholder="Pegue la cadena del cupón (VOUCHER:1:VCH-...)..."
+                                            rows={4}
+                                            style={{
+                                                width: '100%', padding: '8px', borderRadius: '6px',
+                                                background: 'rgba(0,0,0,0.5)', color: '#FFF',
+                                                border: '1px solid var(--glass-border)', fontSize: '0.72rem',
+                                                fontFamily: 'JetBrains Mono, monospace', resize: 'vertical'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <button
+                                        onClick={handleRedeemSovereignVoucher}
+                                        disabled={isRedeemingSovereign}
+                                        className="btn-tactical-secondary"
+                                        style={{
+                                            padding: '10px', fontSize: '0.76rem', fontWeight: 800,
+                                            borderColor: 'var(--accent-emerald)', color: 'var(--accent-emerald)'
+                                        }}
+                                    >
+                                        {isRedeemingSovereign ? "Verificando..." : "✅ Validar Nullifier y Canjear"}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* List of Vouchers in Local Vault */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#FFF' }}>
+                                        📦 VALES EN LA BÓVEDA LOCAL ({sovereignVouchers.length})
+                                    </div>
+                                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                        {sovereignVouchers.filter(v => !v.redeemed && v.expiresAt > Date.now()).length} Activos / No canjeados
+                                    </span>
+                                </div>
+
+                                {sovereignVouchers.length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', fontSize: '0.78rem', background: 'rgba(0,0,0,0.2)', borderRadius: '10px' }}>
+                                        No hay vales en la bóveda local. Emite uno nuevo arriba o canjea un cupón de otro operador.
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {sovereignVouchers.map(vch => {
+                                            const isExpired = Date.now() > vch.expiresAt;
+                                            const isRedeemed = vch.redeemed;
+                                            const statusColor = isRedeemed 
+                                                ? 'var(--accent-crimson)' 
+                                                : isExpired 
+                                                ? 'var(--accent-amber)' 
+                                                : 'var(--accent-emerald)';
+                                            const statusText = isRedeemed ? 'CANJEADO' : isExpired ? 'EXPIRADO' : 'ACTIVO / VÁLIDO';
+                                            const assetIcon = vch.assetType === 'ENERGY_WH' ? '⚡'
+                                                : vch.assetType === 'BANDWIDTH_MB' ? '📶'
+                                                : vch.assetType === 'RADIO_MIN' ? '📻'
+                                                : vch.assetType === 'RATION_UNIT' ? '🍞' : '🪙';
+
+                                            return (
+                                                <div
+                                                    key={vch.id}
+                                                    style={{
+                                                        padding: '12px 14px', borderRadius: '10px',
+                                                        background: 'rgba(255,255,255,0.02)',
+                                                        border: '1px solid var(--glass-border)',
+                                                        borderLeft: `3px solid ${statusColor}`,
+                                                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                        gap: '10px', flexWrap: 'wrap'
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '220px' }}>
+                                                        <div style={{
+                                                            width: '38px', height: '38px', borderRadius: '10px',
+                                                            background: 'rgba(0,0,0,0.4)', border: '1px solid var(--glass-border)',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem'
+                                                        }}>
+                                                            {assetIcon}
+                                                        </div>
+                                                        <div>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                <span style={{ fontWeight: 800, color: '#FFF', fontSize: '0.82rem', fontFamily: 'JetBrains Mono, monospace' }}>{vch.id}</span>
+                                                                <span className="badge-tactical" style={{ borderColor: statusColor, color: statusColor, fontSize: '0.55rem' }}>
+                                                                    {statusText}
+                                                                </span>
+                                                            </div>
+                                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                                                {vch.description} · Expira: {new Date(vch.expiresAt).toLocaleDateString()}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.60rem', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', marginTop: '1px' }}>
+                                                                Nullifier: {vch.nullifierHash.slice(0, 16)}...
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                        <div style={{ textAlign: 'right' }}>
+                                                            <div style={{ fontSize: '1.1rem', fontWeight: 900, color: statusColor, fontFamily: 'JetBrains Mono, monospace' }}>
+                                                                {vch.amount}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.60rem', color: 'var(--text-muted)' }}>
+                                                                {vch.assetType}
+                                                            </div>
+                                                        </div>
+
+                                                        <button
+                                                            onClick={async () => {
+                                                                TacticalAudioEngine.playTap();
+                                                                const qrStr = voucherVault.exportVoucherToQrString(vch);
+                                                                const qrUrl = await OfflineQrEngine.generateDataUrl(qrStr, {
+                                                                    width: 260, margin: 1, darkColor: '#00E676', lightColor: '#04060A'
+                                                                });
+                                                                setSelectedVoucherQr({ voucher: vch, qrUrl });
+                                                            }}
+                                                            className="btn-tactical-secondary"
+                                                            style={{ padding: '6px 10px', fontSize: '0.68rem', fontWeight: 700 }}
+                                                        >
+                                                            📱 Ver QR
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     )}
 
                     {/* TAB: REDEEM PRO */}
@@ -1104,6 +1499,86 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                 style={{ padding: '12px', width: '100%', marginTop: '4px' }}
                             >
                                 Entendido / Cerrar Vale
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Modal Visualizador de Vale Soberano QR */}
+                {selectedVoucherQr && (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            inset: 0,
+                            zIndex: 100000,
+                            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                            backdropFilter: 'blur(10px)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '16px',
+                            animation: 'fadeIn 0.15s ease-out'
+                        }}
+                        onClick={() => setSelectedVoucherQr(null)}
+                    >
+                        <div
+                            className="card-tactical animate-enter"
+                            style={{
+                                width: '100%', maxWidth: '420px', padding: '24px',
+                                background: 'linear-gradient(180deg, #0e1222 0%, #080a14 100%)',
+                                border: '1px solid rgba(0, 230, 118, 0.4)',
+                                textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px',
+                                boxShadow: '0 20px 60px rgba(0,0,0,0.8), 0 0 30px rgba(0,230,118,0.15)'
+                            }}
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div style={{ fontSize: '2rem' }}>🎟️</div>
+                            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#FFF' }}>
+                                Vale Criptográfico Soberano
+                            </h3>
+                            <div style={{ fontSize: '0.80rem', color: 'var(--text-muted)' }}>
+                                {selectedVoucherQr.voucher.id} · <span style={{ color: '#00E676', fontWeight: 800 }}>{selectedVoucherQr.voucher.amount} {selectedVoucherQr.voucher.assetType}</span>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0' }}>
+                                <div style={{ padding: '12px', background: '#04060A', borderRadius: '14px', border: '2px solid rgba(0,230,118,0.4)', boxShadow: '0 0 20px rgba(0,230,118,0.25)' }}>
+                                    <img src={selectedVoucherQr.qrUrl} alt="QR de Vale Soberano" style={{ width: '200px', height: '200px', display: 'block', borderRadius: '8px' }} />
+                                </div>
+                            </div>
+
+                            <div style={{
+                                padding: '8px', borderRadius: '8px', background: 'rgba(0,0,0,0.5)',
+                                border: '1px solid var(--glass-border)', fontSize: '0.64rem',
+                                fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-muted)',
+                                wordBreak: 'break-all'
+                            }}>
+                                Nullifier: {selectedVoucherQr.voucher.nullifierHash}
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                <button
+                                    onClick={() => copyToClipboard(voucherVault.exportVoucherToQrString(selectedVoucherQr.voucher))}
+                                    className="btn-tactical-secondary"
+                                    style={{ padding: '8px 12px', fontSize: '0.72rem', fontWeight: 800 }}
+                                >
+                                    📋 Copiar Token
+                                </button>
+                                <a
+                                    href={selectedVoucherQr.qrUrl}
+                                    download={`vale_${selectedVoucherQr.voucher.id}.png`}
+                                    className="btn-tactical-primary"
+                                    style={{ padding: '8px 12px', fontSize: '0.72rem', fontWeight: 800, textDecoration: 'none' }}
+                                >
+                                    💾 Descargar QR
+                                </a>
+                            </div>
+
+                            <button
+                                onClick={() => setSelectedVoucherQr(null)}
+                                className="btn-ghost"
+                                style={{ padding: '8px', fontSize: '0.74rem' }}
+                            >
+                                Cerrar
                             </button>
                         </div>
                     </div>

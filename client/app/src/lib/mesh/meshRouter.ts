@@ -44,6 +44,8 @@ import { SoundMeshEngine } from '../audio/SoundMeshEngine';
 import { globalShield } from '../network/GlobalShieldEngine';
 import { multipathBonding, MultipathBondingEngine } from './MultipathBondingEngine';
 import { loraTdmaScheduler } from './LoRaTdmaSchedulerEngine';
+import { broadcastStormGuardEngine } from './BroadcastStormGuardEngine';
+import { tacticalMicroBurst } from './TacticalMicroBurstEngine';
 
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
 const DEDUP_WINDOW_MSG_MS = 30 * 60 * 1000;       // 30m  — chat messages (reduces Map size ~95% in long sessions)
@@ -1222,6 +1224,14 @@ class MeshRouter {
       SoundMeshEngine.transmitPayload(payload).catch(() => {});
     }
 
+    // LPI / LPD Micro-Burst queueing when stealth transmission mode is active
+    if (tacticalMicroBurst.getTelemetry().isLpiModeActive && payload.length > 0) {
+      try {
+        const hexSample = Array.from(payload.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join('');
+        tacticalMicroBurst.enqueuePayload(hexSample);
+      } catch {}
+    }
+
     // Filter peers if battery conservation is active (throttle dense flood)
     let peersList = Array.from(this.peers.entries());
     if (decision.batteryConservationMode && peersList.length > 3) {
@@ -1727,7 +1737,25 @@ class MeshRouter {
       if (forwarded) {
         const encoded = encode(forwarded);
 
-        // Slotted Backoff Gossip anti-storm suppression in dense RF topologies
+        // 1. Broadcast Storm Guard Engine: Bloom filter & adaptive TTL suppression in dense mesh
+        const stormEval = broadcastStormGuardEngine.evaluateRelay(
+          packet.nonce,
+          packet.ttl !== undefined ? (20 - packet.ttl) : 1,
+          forwarded.ttl,
+          this.peers.size,
+          encoded.length
+        );
+        if (!stormEval.shouldRelay) {
+          console.log(`[MeshRouter] ⛈️ BroadcastStormGuard suppressed redundant relay for packet ${packet.nonce.slice(0, 8)}`);
+          return;
+        }
+
+        // Apply jittered backoff delay to de-synchronize concurrent relays
+        if (stormEval.backoffDelayMs > 0) {
+          await new Promise(r => setTimeout(r, stormEval.backoffDelayMs));
+        }
+
+        // 2. Slotted Backoff Gossip anti-storm suppression in dense RF topologies
         const shouldRelay = await slottedGossip.shouldRelayPacket(packet.nonce, encoded.length, this.peers.size);
         if (!shouldRelay) {
           console.log(`[MeshRouter] SlottedGossip suppressed redundant relay for packet ${packet.nonce.slice(0, 8)}`);

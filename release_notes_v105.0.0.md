@@ -60,6 +60,54 @@ Esta versión mayor **v105.0.0 Sovereign Mesh — NIST FIPS-203 ML-KEM-768 Post-
 
 ---
 
+### 8. Bóveda de Pánico Zeroize (`DuressWipeEngine`)
+
+- **Sobrescritura Criptográfica CSPRNG:** Purga de 3 pasadas sobre `localStorage` (0x00, 0xFF y ruido aleatorio) ante PIN de coacción o botón de pánico en la barra de estado.
+- **Destrucción Atómica IndexedDB:** Eliminación y desindexación forzada de las 8 bases de datos locales (`RedP2PDB`, `red_geohash_dtn_v2`, `red_tile_cache`, etc.).
+- **Limpieza Multiplataforma Nativa:** Ejecución de `SecureStoragePlugin.clear()` y detención del daemon nativo `RedNode.destroy()` en Capacitor, combinada con purga en motor Sled Rust (`RedAPI.panicWipe()`).
+- **Registro Inmutable Pre-Zeroize:** Emisión inmediata del evento `PANIC_PURGE` a la Caja Negra Forense antes de la desconexión final.
+
+---
+
+### 9. Gestión de Memoria IA de Huella Cero (`ZeroFootprintAiMemoryManager`)
+
+- **Instrumentación de Ciclo de Vida en `localAiEngine`:** Hooks reactivos `notifyInferenceStart()` y `notifyInferenceEnd()` en los flujos de inferencia local.
+- **Purga Preventiva de VRAM / WebGPU:** Liberación automática de tensores y caché de inferencia tras periodos de inactividad, evitando que el OOM-killer del sistema operativo liquide el proceso en segundo plano.
+- **Telemetría en Vivo en `AICopilotModal`:** Monitoreo del uso de memoria, presión del sistema y disparador manual para purga de memoria sin reiniciar la aplicación.
+
+---
+
+### 10. Gobernanza de Tráfico RF Anti-Tormentas & Micro-Ráfagas LPI/LPD
+
+- **Supresor de Tormentas Broadcast (`BroadcastStormGuardEngine`):** Integración de filtro Bloom de 2048 bits para deduplicación ultra-rápida, cálculo adaptativo de saltos TTL (2 a 7 según densidad de la malla) y backoff exponencial con jitter para desincronizar retransmisiones concurrentes en `meshRouter.ts`.
+- **Módulo Táctico SIGINT (`TacticalMicroBurstEngine`):** Modo de Baja Probabilidad de Intercepción (LPI/LPD) que encola y comprime paquetes en micro-ráfagas sub-15ms con dispersión temporal aleatoria (6s a 25s).
+- **Consola Táctica en `GlobalShieldPanel`:** Monitoreo en tiempo real de paquetes evaluados, retransmitidos, suprimidos, colisiones evitadas, ancho de banda salvado y control de activación LPI.
+
+---
+
+### 11. Blindaje Anti-Asesinos de Batería OEM (24/7 Mesh Sentry)
+
+- **Heurística de Fabricantes en `OemBatteryHelper`:** Detección de capas de personalización con asesinos agresivos de servicios en segundo plano (Xiaomi/MIUI, Huawei/EMUI, Samsung/OneUI, OnePlus, Oppo, Vivo).
+- **Panel Integrado en `EcoMeshPanel`:** Diagnóstico de riesgo (`CRÍTICO`, `ALTO`, `MODERADO`, `NOMINAL`), instrucciones paso a paso para exclusión de batería y botón de acceso directo a la configuración OEM del dispositivo.
+
+---
+
+### 12. Caja Negra Forense Criptográfica SHA-256 (`ForensicBlackBoxEngine`)
+
+- **Ledger Inmutable Encadenado:** Registro secuencial de eventos tácticos con hashes SHA-256 encadenados al bloque Génesis (`0000...0000`).
+- **Captura Determinista:** Registro automático de balizas SOS (`SOS_BROADCAST`), caídas e inmovilidad de operador (`MAN_DOWN_TRIGGER`), transacciones de trueque (`P2P_TRANSACTION`) y eventos de pánico (`PANIC_PURGE`).
+- **Visor Forense en `NodeLogsModal`:** Selector de vista `🖥️ Consola SSE` vs `🛡️ Caja Negra Forense`, verificación de integridad de cadena en un tap (`verifyChainIntegrity()`), visualización de hashes encadenados, copiado táctico de firmas y exportación en formato JSON auditado.
+
+---
+
+### 13. Bóveda Barter Multi-Activo con Nullifiers Anti-Doble Gasto (`VoucherVaultEngine`)
+
+- **Pestaña "Bóveda de Vales" en `CommercialHubModal`:** Gestión de 5 balances de activos físicos descentralizados: Energía (`ENERGY_WH`), Datos (`BANDWIDTH_MB`), Radio Minutos (`RADIO_MIN`), Raciones de Supervivencia (`RATION_UNIT`) y Créditos (`RED_CREDITS`).
+- **Prevención de Doble Gasto Desconectada:** Anulación criptográfica determinista de vales mediante hash Nullifier $H(\text{issuerDid} \parallel \text{secretNonce})$.
+- **Generación y Escaneo QR Soberano:** Exportación visual en tarjetas QR (`OfflineQrEngine`), descarga de tokens, verificación de firmas Ed25519 e intercepción jerárquica LIFO en el `BackHandlerRegistry`.
+
+---
+
 ## 📦 Artefactos de Distribución Binaria
 
 | Archivo | SHA-256 | Plataforma | Tamaño |

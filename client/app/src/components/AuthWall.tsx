@@ -229,21 +229,18 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
         // 1. PANIC WIPE
         if (panicPin && pwd === panicPin) {
             TacticalAudioEngine.playEmergencyAlarm();
-            try {
-                const { Capacitor, registerPlugin } = await import("@capacitor/core");
-                if (Capacitor.isNativePlatform()) {
-                    const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-                    await SecureStoragePlugin.clear().catch(() => {});
-                    const RedNode = registerPlugin<any>("RedNode");
-                    await RedNode.destroy().catch(() => {});
-                }
-            } catch (e) { console.error("Wipe failed", e); }
-            if (typeof window !== "undefined") {
-                localStorage.clear();
-                sessionStorage.clear();
-            }
             toast.error("🔥 BÓVEDA DESTRUIDA POR PROTOCOLO DE PÁNICO");
-            window.location.reload();
+            try {
+                const { duressWipe } = await import("../lib/security/DuressWipeEngine");
+                await duressWipe.executeZeroizeWipe();
+            } catch (e) {
+                console.error("Wipe failed", e);
+                if (typeof window !== "undefined") {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    window.location.reload();
+                }
+            }
             return;
         }
 

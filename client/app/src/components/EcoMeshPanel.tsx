@@ -10,12 +10,14 @@ import { ErrorBanner } from "./ui/ErrorBanner";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { OemBatteryHelper, OemProfile } from "../lib/hardware/OemBatteryHelper";
 
 export const EcoMeshPanel: React.FC = () => {
     const { goBack } = useRedStore();
     const { t } = useTranslation();
     const [status, setStatus] = useState<EcoMeshStatus | null>(null);
     const [telemetry, setTelemetry] = useState<KineticTelemetry>(KineticDutyGovernor.getInstance().getTelemetry());
+    const [oemProfile, setOemProfile] = useState<OemProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +45,7 @@ export const EcoMeshPanel: React.FC = () => {
 
     useEffect(() => {
         loadStatus();
+        OemBatteryHelper.getOemProfile().then(setOemProfile).catch(() => {});
         const unsubscribe = KineticDutyGovernor.getInstance().subscribe((data) => {
             setTelemetry(data);
             // Sync with Rust backend if level differs
@@ -301,6 +304,78 @@ export const EcoMeshPanel: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
+
+                            {/* Blindaje Anti-Asesino de Procesos OEM (Background Mesh Guard) */}
+                            {oemProfile && (
+                                <div className="card-tactical animate-enter" style={{
+                                    padding: "18px 16px",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "12px",
+                                    borderColor: oemProfile.isOemAggressiveKiller ? "rgba(255, 23, 68, 0.4)" : "var(--glass-border)",
+                                    background: oemProfile.isOemAggressiveKiller ? "rgba(255, 23, 68, 0.03)" : undefined
+                                }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                        <div style={{ fontSize: "0.85rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "6px" }}>
+                                            <span>🛡️</span> BLINDAJE ANTI-ASESINO OEM (24/7 MESH)
+                                        </div>
+                                        <span className={`badge-tactical ${
+                                            oemProfile.riskLevel === 'CRÍTICO' ? 'badge-tactical-crimson' :
+                                            oemProfile.riskLevel === 'ALTO' ? 'badge-tactical-amber' :
+                                            oemProfile.riskLevel === 'MODERADO' ? 'badge-tactical-cyan' : 'badge-tactical-emerald'
+                                        }`}>
+                                            RIESGO: {oemProfile.riskLevel}
+                                        </span>
+                                    </div>
+
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: "rgba(0,0,0,0.35)", borderRadius: "8px", border: "1px solid var(--glass-border)" }}>
+                                        <div>
+                                            <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Hardware / Fabricante Detectado</div>
+                                            <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "var(--text-primary)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                {oemProfile.manufacturer} · {oemProfile.model}
+                                            </div>
+                                        </div>
+                                        <span style={{ fontSize: "0.7rem", fontFamily: "JetBrains Mono, monospace", color: oemProfile.isOemAggressiveKiller ? "var(--accent-crimson)" : "var(--accent-emerald)" }}>
+                                            {oemProfile.isOemAggressiveKiller ? "KILLER AGRESIVO" : "NOMINAL"}
+                                        </span>
+                                    </div>
+
+                                    <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-primary)" }}>
+                                        {oemProfile.recommendationTitle}
+                                    </div>
+
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                        {oemProfile.recommendationSteps.map((step, idx) => (
+                                            <div key={idx} style={{
+                                                fontSize: "0.72rem",
+                                                color: "var(--text-secondary)",
+                                                padding: "6px 8px",
+                                                borderRadius: "6px",
+                                                background: "rgba(255,255,255,0.02)",
+                                                borderLeft: `3px solid ${oemProfile.isOemAggressiveKiller ? "var(--accent-amber)" : "var(--accent-emerald)"}`
+                                            }}>
+                                                {step}
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <button
+                                        onClick={async () => {
+                                            TacticalAudioEngine.playTap();
+                                            const opened = await OemBatteryHelper.openOemSettings();
+                                            if (opened) {
+                                                toast.success("Abriendo panel de configuración de batería OEM...");
+                                            } else {
+                                                toast.info("Ajuste manual: Ajustes > Batería > Sin Restricciones");
+                                            }
+                                        }}
+                                        className={oemProfile.isOemAggressiveKiller ? "btn-tactical-primary" : "btn-tactical-secondary"}
+                                        style={{ width: "100%", padding: "10px", marginTop: "4px", fontSize: "0.76rem", fontWeight: 800 }}
+                                    >
+                                        ⚙️ {oemProfile.actionButtonText}
+                                    </button>
+                                </div>
+                            )}
                         </>
                     )}
                 </div>

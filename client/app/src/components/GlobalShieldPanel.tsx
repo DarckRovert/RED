@@ -14,6 +14,8 @@ import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { broadcastStormGuardEngine, StormGuardMetrics } from "../lib/mesh/BroadcastStormGuardEngine";
+import { tacticalMicroBurst, MicroBurstTelemetry } from "../lib/mesh/TacticalMicroBurstEngine";
 
 /** Clipboard with textarea fallback */
 function copyToClipboard(text: string, label = 'Dato'): void {
@@ -45,6 +47,9 @@ export default function GlobalShieldPanel() {
         reason?: string;
     } | null>(null);
 
+    const [stormMetrics, setStormMetrics] = useState<StormGuardMetrics>(() => broadcastStormGuardEngine.getMetrics());
+    const [burstTelemetry, setBurstTelemetry] = useState<MicroBurstTelemetry>(() => tacticalMicroBurst.getTelemetry());
+
     useEffect(() => {
         const unsubscribeTelemetry = globalShield.subscribe((t) => {
             setTelemetry(t);
@@ -53,15 +58,20 @@ export default function GlobalShieldPanel() {
         const unsubscribeAudit = globalShield.subscribeAuditLog((log) => {
             setAuditLog(log);
         });
+        const unsubBurst = tacticalMicroBurst.subscribe((b) => {
+            setBurstTelemetry(b);
+        });
 
-        // 3s interval to refresh quarantine countdowns
+        // 3s interval to refresh quarantine countdowns and storm metrics
         const qInterval = setInterval(() => {
             setQuarantined(globalShield.getQuarantinedPeers());
+            setStormMetrics(broadcastStormGuardEngine.getMetrics());
         }, 3000);
 
         return () => {
             unsubscribeTelemetry();
             unsubscribeAudit();
+            unsubBurst();
             clearInterval(qInterval);
         };
     }, []);
@@ -428,6 +438,114 @@ export default function GlobalShieldPanel() {
                                 <span className={`badge-tactical ${activeProfile.dnsTunnelFallbackForced ? "badge-tactical-crimson" : "badge-tactical-cyan"}`}>
                                     {activeProfile.dnsTunnelFallbackForced ? "FORZADO APAGÓN" : "AUTO"}
                                 </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* RF Spectrum Governance & LPI/LPD Micro-Bursts */}
+                    <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ fontSize: "0.85rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span>📡</span> GOBERNANZA DE ESPECTRO RF & MICRO-RÁFAGAS LPI/LPD
+                            </div>
+                            <span className={`badge-tactical ${burstTelemetry.isLpiModeActive ? "badge-tactical-emerald" : "badge-tactical-amber"}`}>
+                                {burstTelemetry.isLpiModeActive ? "SIGINT SHIELD ACTIVO" : "RF ABIERTO"}
+                            </span>
+                        </div>
+                        <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                            Control anti-tormentas con filtro Bloom de 2048-bits, retroceso estocástico (Jittered Backoff) y emisión por ráfagas ultra-rápidas (&lt;15ms) para evasión de radiogoniometría hostil.
+                        </div>
+
+                        {/* Telemetry metrics sub-grid */}
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                            <div style={{ padding: "8px 10px", background: "rgba(0,0,0,0.35)", borderRadius: "8px", border: "1px solid var(--glass-border)" }}>
+                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Pkts Evaluados</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: "var(--text-primary)" }}>
+                                    {stormMetrics.packetsEvaluated}
+                                </div>
+                            </div>
+                            <div style={{ padding: "8px 10px", background: "rgba(0,0,0,0.35)", borderRadius: "8px", border: "1px solid var(--glass-border)" }}>
+                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Retransmitidos</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)" }}>
+                                    {stormMetrics.packetsForwarded}
+                                </div>
+                            </div>
+                            <div style={{ padding: "8px 10px", background: "rgba(0,0,0,0.35)", borderRadius: "8px", border: "1px solid var(--glass-border)" }}>
+                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Suprimidos / Storms</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: "var(--accent-emerald)" }}>
+                                    {stormMetrics.packetsSuppressed}
+                                </div>
+                            </div>
+                            <div style={{ padding: "8px 10px", background: "rgba(0,0,0,0.35)", borderRadius: "8px", border: "1px solid var(--glass-border)" }}>
+                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Colisiones Evitadas</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: "var(--accent-amber)" }}>
+                                    {stormMetrics.collisionsAvoided}
+                                </div>
+                            </div>
+                            <div style={{ padding: "8px 10px", background: "rgba(0,0,0,0.35)", borderRadius: "8px", border: "1px solid var(--glass-border)" }}>
+                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Tasa Supresión</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: "var(--accent-purple)" }}>
+                                    {stormMetrics.currentSuppressionRatePct}%
+                                </div>
+                            </div>
+                            <div style={{ padding: "8px 10px", background: "rgba(0,0,0,0.35)", borderRadius: "8px", border: "1px solid var(--glass-border)" }}>
+                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Ancho Banda Salvado</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: "var(--accent-emerald)" }}>
+                                    {(stormMetrics.bandwidthSavedBytes / 1024).toFixed(1)} <span style={{ fontSize: "0.65rem" }}>KB</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* LPI/LPD Micro-Burst Sub-Panel */}
+                        <div style={{ padding: "12px", background: "rgba(0,0,0,0.25)", borderRadius: "8px", border: "1px solid rgba(0,229,255,0.15)", display: "flex", flexDirection: "column", gap: "10px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--accent-cyan)" }}>
+                                    Módulo SIGINT: Modo LPI / LPD (Baja Probabilidad de Intercepción)
+                                </span>
+                                <button
+                                    onClick={() => {
+                                        TacticalAudioEngine.playTap();
+                                        tacticalMicroBurst.setLpiMode(!burstTelemetry.isLpiModeActive);
+                                        toast.info(`Modo LPI/LPD ${!burstTelemetry.isLpiModeActive ? "Activado" : "Desactivado"}`);
+                                    }}
+                                    className={burstTelemetry.isLpiModeActive ? "btn-tactical-primary" : "btn-tactical-secondary"}
+                                    style={{ padding: "4px 10px", fontSize: "0.68rem" }}
+                                >
+                                    {burstTelemetry.isLpiModeActive ? "DESACTIVAR" : "ACTIVAR"}
+                                </button>
+                            </div>
+
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px", fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace" }}>
+                                <div style={{ textAlign: "center", padding: "6px", background: "rgba(255,255,255,0.02)", borderRadius: "6px" }}>
+                                    <div style={{ fontSize: "0.58rem", color: "var(--text-muted)" }}>PRÓXIMA RÁFAGA</div>
+                                    <div style={{ fontWeight: 800, color: "var(--accent-amber)" }}>{burstTelemetry.nextBurstInSeconds}s</div>
+                                </div>
+                                <div style={{ textAlign: "center", padding: "6px", background: "rgba(255,255,255,0.02)", borderRadius: "6px" }}>
+                                    <div style={{ fontSize: "0.58rem", color: "var(--text-muted)" }}>EN COLA</div>
+                                    <div style={{ fontWeight: 800, color: "var(--text-primary)" }}>{burstTelemetry.queuedPacketsCount} pkts</div>
+                                </div>
+                                <div style={{ textAlign: "center", padding: "6px", background: "rgba(255,255,255,0.02)", borderRadius: "6px" }}>
+                                    <div style={{ fontSize: "0.58rem", color: "var(--text-muted)" }}>DURACIÓN</div>
+                                    <div style={{ fontWeight: 800, color: "var(--accent-cyan)" }}>{burstTelemetry.lastBurstDurationMs}ms</div>
+                                </div>
+                                <div style={{ textAlign: "center", padding: "6px", background: "rgba(255,255,255,0.02)", borderRadius: "6px" }}>
+                                    <div style={{ fontSize: "0.58rem", color: "var(--text-muted)" }}>TOTAL RÁFAGAS</div>
+                                    <div style={{ fontWeight: 800, color: "var(--accent-emerald)" }}>{burstTelemetry.totalBurstsTransmitted}</div>
+                                </div>
+                            </div>
+
+                            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                                <button
+                                    onClick={() => {
+                                        TacticalAudioEngine.playTap();
+                                        tacticalMicroBurst.executeBurst();
+                                        toast.success("⚡ Micro-Ráfaga LPI Forzada en canal RF");
+                                    }}
+                                    className="btn-tactical-secondary"
+                                    style={{ padding: "6px 12px", fontSize: "0.68rem", fontWeight: 700 }}
+                                >
+                                    ⚡ Forzar Micro-Ráfaga Inmediata
+                                </button>
                             </div>
                         </div>
                     </div>

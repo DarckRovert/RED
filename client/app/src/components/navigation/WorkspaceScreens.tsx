@@ -261,12 +261,10 @@ export function WorkspaceScreens({ isTablet, onOpenTool }: WorkspaceScreensProps
 
       const isPanic = await verifySecurePin("panic_pin", pin);
       if (isPanic) {
-        // Panic PIN: borrado de emergencia sin trazas
-        if (typeof window !== "undefined") {
-          localStorage.clear();
-          sessionStorage.clear();
-        }
+        // Panic PIN: purga destructiva Zeroize total (DoD 5220.22-M)
         useRedStore.setState({ isAuthenticated: false, messages: [], contacts: [] });
+        const { duressWipe } = await import("../../lib/security/DuressWipeEngine");
+        await duressWipe.executeZeroizeWipe();
         return false;
       }
 

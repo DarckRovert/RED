@@ -10,6 +10,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '../mesh/meshProtocol';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { LocalChainLedger } from './LocalChainLedger';
+import { forensicBlackBox } from '../security/ForensicBlackBoxEngine';
 
 export type VoucherAssetType = 'ENERGY_WH' | 'BANDWIDTH_MB' | 'RADIO_MIN' | 'RATION_UNIT' | 'RED_CREDITS';
 
@@ -177,6 +178,12 @@ export class VoucherVaultEngine {
         this.vouchers.push(voucher);
         this.saveVault();
 
+        forensicBlackBox.recordEvent(
+            'P2P_TRANSACTION',
+            'INFO',
+            `Vale Soberano Emitido: ${voucher.id} (${voucher.amount} ${voucher.assetType}) por ${issuerDid.slice(0, 14)}`
+        );
+
         // Registrar transacción de emisión en el ledger blockchain
         try {
             await ledger.submitTransaction({
@@ -272,6 +279,12 @@ export class VoucherVaultEngine {
         }
 
         this.saveVault();
+
+        forensicBlackBox.recordEvent(
+            'P2P_TRANSACTION',
+            'INFO',
+            `Vale Soberano Canjeado: ${voucher.id} (${voucher.amount} ${voucher.assetType}) por ${redeemerDid.slice(0, 14)} - Nullifier Anulado`
+        );
 
         // Anclar canje al ledger local
         try {

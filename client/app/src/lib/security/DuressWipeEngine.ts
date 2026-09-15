@@ -9,6 +9,7 @@
 import { RedAPI } from '../api';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '../mesh/meshProtocol';
+import { forensicBlackBox } from './ForensicBlackBoxEngine';
 
 const DURESS_PIN_STORAGE_KEY = 'red_duress_coercion_pin_hash_v1';
 
@@ -56,6 +57,14 @@ export class DuressWipeEngine {
     public async executeZeroizeWipe(): Promise<void> {
         console.warn('[DuressWipeEngine] EJECUTANDO PURGA DESTRUTIVA ZEROIZE...');
 
+        try {
+            forensicBlackBox.recordEvent(
+                'PANIC_PURGE',
+                'CRITICAL',
+                'PROTOCOLO ZEROIZE INICIADO: Destrucción criptográfica de bóvedas, claves y bases de datos'
+            );
+        } catch {}
+
         // 1. Sobrescritura de claves en localStorage con ruido aleatorio CSPRNG
         if (typeof window !== 'undefined') {
             try {
@@ -88,12 +97,23 @@ export class DuressWipeEngine {
                 });
             } catch {}
 
-            // 3. Purga en el núcleo Rust / Sled DB
+            // 3. Purga nativa en plataforma móvil Capacitor (SecureStorage & RedNode daemon)
+            try {
+                const { Capacitor, registerPlugin } = await import('@capacitor/core');
+                if (Capacitor.isNativePlatform()) {
+                    const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                    await SecureStoragePlugin.clear().catch(() => {});
+                    const RedNode = registerPlugin<any>('RedNode');
+                    await RedNode.destroy().catch(() => {});
+                }
+            } catch {}
+
+            // 4. Purga en el núcleo Rust / Sled DB
             try {
                 await RedAPI.panicWipe();
             } catch {}
 
-            // 4. Recarga o desconexión inmediata
+            // 5. Recarga o desconexión inmediata
             try {
                 window.location.reload();
             } catch {}
