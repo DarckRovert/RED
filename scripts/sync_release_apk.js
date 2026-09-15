@@ -4,6 +4,7 @@ const crypto = require('crypto');
 
 const rootDir = path.resolve(__dirname, '..');
 const apkSrc = path.join(rootDir, 'client', 'app', 'android', 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
+const aabSrc = path.join(rootDir, 'client', 'app', 'android', 'app', 'build', 'outputs', 'bundle', 'release', 'app-release.aab');
 const releaseDir = path.join(rootDir, 'release-assets');
 
 if (!fs.existsSync(apkSrc)) {
@@ -21,6 +22,14 @@ const latestApk = path.join(releaseDir, 'red-latest.apk');
 
 fs.copyFileSync(apkSrc, versionApk);
 fs.copyFileSync(apkSrc, latestApk);
+
+if (fs.existsSync(aabSrc)) {
+    const versionAab = path.join(releaseDir, `red-v${currentVersion}-release.aab`);
+    const latestAab = path.join(releaseDir, 'red-latest.aab');
+    fs.copyFileSync(aabSrc, versionAab);
+    fs.copyFileSync(aabSrc, latestAab);
+    console.log(`✅ AAB release bundle synchronized to release-assets`);
+}
 
 const apkBuffer = fs.readFileSync(latestApk);
 const sha256 = crypto.createHash('sha256').update(apkBuffer).digest('hex').toUpperCase();

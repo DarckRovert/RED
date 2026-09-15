@@ -18,9 +18,10 @@ set CAPACITOR_BUILD=true
 call npm.cmd run build:mobile
 call npx.cmd cap sync android
 
-echo [2/4] Building Android AAB & APK Release...
+echo.
+echo [2/4] Building Android AAB App Bundle Release for Google Play...
 cd /d "%~dp0\..\client\app\android"
-call gradlew.bat bundleRelease assembleRelease
+call gradlew.bat bundleRelease
 
 if %ERRORLEVEL% NEQ 0 (
     echo BUILD FAILED - Check errors above
@@ -28,11 +29,10 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo [3/4] Synchronizing release APK binary to release-assets...
+echo [3/4] Synchronizing release AAB binary to release-assets...
 node "%~dp0\sync_release_apk.js"
 
 echo.
 echo ====================================
-echo FULL BUILD COMPLETED SUCCESSFULLY!
+echo AAB BUNDLE COMPLETED SUCCESSFULLY!
 echo ====================================
-

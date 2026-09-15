@@ -9,6 +9,10 @@
     artifact distribution (jniLibs).
 #>
 
+param(
+    [switch]$Release
+)
+
 $ErrorActionPreference = "Stop"
 $RED_ROOT = Get-Location
 $FRONTEND_PATH = "$RED_ROOT\client\app"
@@ -146,37 +150,50 @@ if (Test-Path $ReadElf) {
 
 Write-Host "`n[OK] Rust motor injected into Android project." -ForegroundColor Green
 
-# --- Step 5: Compile Production APK ---
+# --- Step 5: Compile Production / Debug APK ---
 
-Write-Header "Step 5: Compiling Signed Debug APK (assembleDebug)"
-Set-Location $ANDROID_PATH
-if (Test-Path "gradlew.bat") {
-    Write-Host "Running Gradle build..." -ForegroundColor Gray
-    cmd.exe /c "gradlew.bat assembleDebug"
-    
-    $ApkPath = "$ANDROID_PATH\app\build\outputs\apk\debug\app-debug.apk"
-    if (Test-Path $ApkPath) {
-        Write-Host "`n[OK] APK successfully built!" -ForegroundColor Green
-        Write-Host "Path: $ApkPath" -ForegroundColor Cyan
+if ($Release) {
+    Write-Header "Step 5: Compiling Certified Production Release (assembleRelease & bundleRelease)"
+    Set-Location $ANDROID_PATH
+    if (Test-Path "gradlew.bat") {
+        Write-Host "Running Gradle production release build..." -ForegroundColor Gray
+        cmd.exe /c "gradlew.bat assembleRelease bundleRelease"
         
-        $VersionFile = "$FRONTEND_PATH\src\lib\version.ts"
-        $CurrentVersion = "66.0.0"
-        if (Test-Path $VersionFile) {
-            $Match = Select-String -Path $VersionFile -Pattern 'RED_VERSION\s*=\s*["'']([^"'']+)["'']'
-            if ($Match) { $CurrentVersion = $Match.Matches[0].Groups[1].Value }
+        $ApkPath = "$ANDROID_PATH\app\build\outputs\apk\release\app-release.apk"
+        if (Test-Path $ApkPath) {
+            Write-Host "`n[OK] Production Release APK & AAB successfully built!" -ForegroundColor Green
+            Write-Host "Path: $ApkPath" -ForegroundColor Cyan
+            
+            Set-Location $RED_ROOT
+            node "$RED_ROOT\scripts\sync_release_apk.js"
+        } else {
+            Write-Host "`n[!] Warning: Gradle completed but release APK was not found at $ApkPath" -ForegroundColor Yellow
+            exit 1
         }
-
-        Write-Host "Copying APK to release-assets (red-v$CurrentVersion-release.apk, red-latest.apk)..." -ForegroundColor Gray
-        if (-not (Test-Path "$RED_ROOT\release-assets")) { New-Item -ItemType Directory -Path "$RED_ROOT\release-assets" | Out-Null }
-        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\release-assets\red-v$CurrentVersion-release.apk" -Force -ErrorAction SilentlyContinue
-        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\release-assets\red-latest.apk" -Force -ErrorAction SilentlyContinue
     } else {
-        Write-Host "`n[!] Warning: Gradle completed but APK was not found at expected path." -ForegroundColor Yellow
+        Write-Host "Error: gradlew.bat not found in $ANDROID_PATH" -ForegroundColor Red
         exit 1
     }
 } else {
-    Write-Host "Error: gradlew.bat not found in $ANDROID_PATH" -ForegroundColor Red
-    exit 1
+    Write-Header "Step 5: Compiling Development Debug APK (assembleDebug)"
+    Set-Location $ANDROID_PATH
+    if (Test-Path "gradlew.bat") {
+        Write-Host "Running Gradle debug build..." -ForegroundColor Gray
+        cmd.exe /c "gradlew.bat assembleDebug"
+        
+        $ApkPath = "$ANDROID_PATH\app\build\outputs\apk\debug\app-debug.apk"
+        if (Test-Path $ApkPath) {
+            Write-Host "`n[OK] Debug APK successfully built!" -ForegroundColor Green
+            Write-Host "Path: $ApkPath" -ForegroundColor Cyan
+            # Debug builds do NOT overwrite production release assets
+        } else {
+            Write-Host "`n[!] Warning: Gradle completed but APK was not found at expected path." -ForegroundColor Yellow
+            exit 1
+        }
+    } else {
+        Write-Host "Error: gradlew.bat not found in $ANDROID_PATH" -ForegroundColor Red
+        exit 1
+    }
 }
 
 # --- Step 6: Auto-install to connected device ---
