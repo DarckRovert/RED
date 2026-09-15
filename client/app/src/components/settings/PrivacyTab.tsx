@@ -7,11 +7,13 @@ import {
 import { BiometricLockEngine, BiometricTimeout } from "../../lib/crypto/BiometricLockEngine";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
+import { LegalComplianceModal } from "../legal/LegalComplianceModal";
 
 export const PrivacyTab: React.FC = () => {
     const { preferences, updatePreferences, navigate } = useRedStore();
     const { t } = useTranslation();
     const [, forceUpdate] = useState({});
+    const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
     const [bioHardware, setBioHardware] = useState<{ isAvailable: boolean; biometryType: string }>({
         isAvailable: false,
         biometryType: "Verificando...",
@@ -202,6 +204,35 @@ export const PrivacyTab: React.FC = () => {
                     <span>📑</span> Reporte de Seguridad
                 </button>
             </div>
+
+            {/* Certificación Legal & Transparencia de Datos */}
+            <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span>⚖️</span> Marco Legal & Privacidad v105.0.0
+                    </div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                        Declaración de datos Google Play, Términos EULA, AGPL-3.0 y protocolo de privacidad.
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => {
+                        SettingsManager.triggerHaptic("light");
+                        setIsLegalModalOpen(true);
+                    }}
+                    className="btn-tactical-primary"
+                    style={{ padding: "8px 14px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
+                >
+                    Examinar
+                </button>
+            </div>
+
+            {/* Modal de Cumplimiento Legal y Privacidad */}
+            <LegalComplianceModal
+                isOpen={isLegalModalOpen}
+                onClose={() => setIsLegalModalOpen(false)}
+            />
         </div>
     );
 };
