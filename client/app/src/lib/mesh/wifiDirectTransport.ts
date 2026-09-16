@@ -740,9 +740,11 @@ export class WifiDirectTransport {
         // 2. Sovereign DePIN Blind Relay Transport (Primary Sovereign WAN Route)
         const blindSent = blindRelay.sendPacket(peerId, payload);
 
-        // 3. High-Availability Global MQTT Blind Relay (Secondary Legacy Fallback)
+        // 3. High-Availability Global MQTT Blind Relay (Multi-Rail WAN Delivery)
+        // Concurrently transmitted over verified global MQTT clusters (EMQX / HiveMQ)
+        // to guarantee instant cross-carrier delivery across different cellular operators / networks.
         let mqttSent = false;
-        if (!blindSent || !blindRelay.isConnected) {
+        if (mqttRelay.isConnected) {
             mqttSent = mqttRelay.sendPacket(peerId, payload);
         }
 

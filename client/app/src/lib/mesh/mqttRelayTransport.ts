@@ -543,7 +543,13 @@ export class MqttRelayTransport {
 
       // B) Mesh Data / Chat / Binary Packet
       let senderId = 'remote_peer';
-      if (payloadStr.startsWith('{')) {
+      if (payload.length >= 96 && payload[0] === 0x52 && payload[1] === 0x45 && payload[2] === 0x44 && payload[3] === 0x01) {
+        // Direct extraction of 32-byte sender DID from RED MeshPacket binary wire header (offset 36..68)
+        const lut = MqttRelayTransport.HEX_LUT;
+        let sHex = '';
+        for (let i = 36; i < 68; i++) sHex += lut[payload[i]];
+        senderId = sHex;
+      } else if (payloadStr.startsWith('{')) {
         try {
           const parsed = JSON.parse(payloadStr);
           if (parsed.sender) senderId = parsed.sender;
