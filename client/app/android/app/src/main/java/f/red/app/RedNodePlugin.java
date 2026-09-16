@@ -710,11 +710,18 @@ public class RedNodePlugin extends Plugin {
     @PluginMethod
     public void canRequestPackageInstalls(PluginCall call) {
         com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ret.put("granted", getContext().getPackageManager().canRequestPackageInstalls());
-        } else {
-            ret.put("granted", true);
+        boolean granted = false;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                granted = getContext().getPackageManager().canRequestPackageInstalls();
+            } else {
+                granted = true;
+            }
+        } catch (Throwable t) {
+            android.util.Log.w("RedNodePlugin", "canRequestPackageInstalls exception: " + t.getMessage());
+            granted = false;
         }
+        ret.put("granted", granted);
         call.resolve(ret);
     }
 
@@ -866,7 +873,13 @@ public class RedNodePlugin extends Plugin {
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (!getContext().getPackageManager().canRequestPackageInstalls()) {
+                boolean canInstall = false;
+                try {
+                    canInstall = getContext().getPackageManager().canRequestPackageInstalls();
+                } catch (Throwable t) {
+                    android.util.Log.w("RedNodePlugin", "canRequestPackageInstalls check in installApk failed: " + t.getMessage());
+                }
+                if (!canInstall) {
                     Intent permIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
                     permIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     getContext().startActivity(permIntent);

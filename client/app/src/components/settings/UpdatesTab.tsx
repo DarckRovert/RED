@@ -4,6 +4,7 @@ import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from "../../lib/version";
 import { SettingsManager } from "../../lib/settingsManager";
 import { toast } from "../Toast";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
+import { LegalComplianceModal } from "../legal/LegalComplianceModal";
 
 export const UpdatesTab: React.FC = () => {
     const { t } = useTranslation();
@@ -12,6 +13,7 @@ export const UpdatesTab: React.FC = () => {
     const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
     const [downloading, setDownloading] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+    const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
 
     useEffect(() => {
         UpdateManager.checkInstallPermission().then(granted => {
@@ -184,6 +186,35 @@ export const UpdatesTab: React.FC = () => {
                     </button>
                 )}
             </div>
+
+            {/* Acerca de RED, Marco Legal & Licencia */}
+            <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "4px" }}>
+                <div>
+                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span>⚖️</span> Marco Legal & Licencia AGPL-3.0
+                    </div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                        Términos de servicio, política de privacidad Zero-Knowledge y seguridad de datos.
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => {
+                        SettingsManager.triggerHaptic("light");
+                        setIsLegalModalOpen(true);
+                    }}
+                    className="btn-tactical-secondary"
+                    style={{ padding: "8px 14px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
+                >
+                    Ver Términos
+                </button>
+            </div>
+
+            {/* Modal de Cumplimiento Legal */}
+            <LegalComplianceModal
+                isOpen={isLegalModalOpen}
+                onClose={() => setIsLegalModalOpen(false)}
+            />
         </div>
     );
 };

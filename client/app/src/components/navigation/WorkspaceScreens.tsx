@@ -194,8 +194,9 @@ function TacticalTabletWorkspace({ onOpenTool }: TacticalTabletWorkspaceProps) {
       {/* Quick-access grid (8 tools) */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))", gap: "12px", width: "100%", maxWidth: "620px" }}>
         {TABLET_QUICK_TOOLS.map(tool => {
-          const titleKey = `tablet.${tool.screen === "hyperBrowser" ? "browser" : tool.screen === "appStore" ? "appstore" : tool.screen}_title` as any;
-          const subKey   = `tablet.${tool.screen === "hyperBrowser" ? "browser" : tool.screen === "appStore" ? "appstore" : tool.screen}_sub` as any;
+          const screenKey = tool.screen === "hyperBrowser" ? "browser" : tool.screen === "appStore" ? "appstore" : tool.screen === "nodemap" ? "map" : tool.screen;
+          const titleKey = `tablet.${screenKey}_title` as any;
+          const subKey   = `tablet.${screenKey}_sub` as any;
           return (
             <div
               key={tool.screen}
@@ -209,10 +210,10 @@ function TacticalTabletWorkspace({ onOpenTool }: TacticalTabletWorkspaceProps) {
             >
               <span style={{ fontSize: "1.6rem" }}>{tool.icon}</span>
               <span style={{ fontSize: "0.82rem", fontWeight: 800, color: (tool as any).bg ? tool.colorKey : "#FFFFFF" }}>
-                {t(titleKey)}
+                {t(titleKey) || (tool.screen === "nodemap" ? "Mapa Táctico GPS" : tool.screen)}
               </span>
               <span style={{ fontSize: "0.64rem", color: tool.colorKey, fontFamily: "JetBrains Mono, monospace" }}>
-                {t(subKey)}
+                {t(subKey) || (tool.screen === "nodemap" ? "OFFLINE OPENSTREETMAP" : "")}
               </span>
             </div>
           );

@@ -1,0 +1,50 @@
+Categories:
+  - Connectivity
+  - Internet
+  - Security
+License: AGPL-3.0-or-later
+AuthorName: Rodrigo Alejandro Vega Rojas
+AuthorEmail: darckrovert@gmail.com
+SourceCode: https://github.com/DarckRovert/RED
+IssueTracker: https://github.com/DarckRovert/RED/issues
+Changelog: https://github.com/DarckRovert/RED/releases
+WebSite: https://darckrovert.github.io/RED/
+Donate: https://darckrovert.github.io/RED/
+
+Name: RED
+Summary: Sovereign Mesh Communication & Decentralized P2P Infrastructure
+Description: |-
+  RED (Red Criptográfica Off-Grid & P2P Mesh) es una plataforma de
+  comunicaciones tácticas, descentralizadas y soberanas.
+
+  Diseñada para operar bajo apagón tecnológico, censura o desastres naturales,
+  RED no depende de servidores centrales, infraestructuras celulares ni
+  conexión a Internet.
+
+  Características principales:
+  * Doble Modo: Modo Familiar (WhatsApp UX) + Modo Táctico C4ISR (8 Hubs, 62 Pantallas)
+  * Cifrado Post-Cuántico Híbrido: NIST FIPS 203 ML-KEM-768 + ECDH X25519 + AES-256-GCM
+  * Operación Off-Grid: BLE GATT, WiFi Direct, LoRa 915MHz y SoundMesh Ultrasónico (18-20 kHz)
+  * Planificador Espectral LoRa TDMA: Supertrama de 2000ms con ranuras deterministas FNV-1a
+  * Poda Geoespacial Geohash DTN y soporte de repetidores solares autónomos ESP32-S3
+  * 100% Libre de rastreadores, telemetría corporativa y anuncios publicitarios
+  * Bóveda de Pánico Zeroize (DoD 5220.22-M) y Secreto Compartido de Shamir (SSS 3-de-5)
+
+RepoType: git
+Repo: https://github.com/DarckRovert/RED.git
+
+AutoUpdateMode: Version v%v
+UpdateCheckMode: Tags
+CurrentVersion: 105.0.0
+CurrentVersionCode: 105000
+
+Builds:
+  - versionName: 105.0.0
+    versionCode: 105000
+    commit: v105.0.0
+    subdir: client/app/android
+    gradle:
+      - yes
+    prebuild:
+      - cd ../.. && npm install && npm run build
+      - npx cap sync android

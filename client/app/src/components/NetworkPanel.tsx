@@ -127,19 +127,23 @@ export default function NetworkPanel() {
             const testPayload = "6d079229_NOISE_XK_TEST_PACKET_V30";
             const queries = DnsTunnelEngine.packPayloadIntoDnsQuery(testPayload);
             const res = await DnsTunnelEngine.transmitDnsQuery(queries[0]);
-            const sniRes = await SniSpoofEngine.transmitSniBypass(testPayload);
+            const probeRes = await SniSpoofEngine.probeCaptivePortalPermeability(testPayload);
             
-            if (res.success || sniRes.success) {
+            if (res.success || probeRes.success) {
                 const parts: string[] = [];
                 if (res.success) parts.push(`DNS Anycast: ${res.latencyMs}ms`);
-                if (sniRes.success) parts.push(`Fronting (${sniRes.provider}): ${sniRes.latencyMs}ms`);
+                if (probeRes.success) parts.push(`Fronting (${probeRes.provider}): ${probeRes.latencyMs}ms`);
                 setTestResult(`✅ Canal Encubierto Operativo | ${parts.join(' | ')}`);
                 TacticalAudioEngine.playRogerBeep();
-                toast.success("Evasión de censura multi-operador exitosa");
+                toast.success("Canal encubierto verificado con éxito");
+            } else if (probeRes.isCaptivePermeable) {
+                setTestResult(`⚠️ Celda Permeable Sin Saldo (${probeRes.provider}) | El operador no bloquea HTTP a portales cautivos, pero requiere un servidor RED autoritativo para entregar datos`);
+                TacticalAudioEngine.playRogerBeep();
+                toast.info("Permeabilidad cautiva detectada sin saldo");
             } else {
-                setTestResult(`❌ Canales Bloqueados | DoH/UDP: ${res.reason || "Sin respuesta"} | SNI: ${sniRes.reason || "Bloqueado"}`);
+                setTestResult(`❌ Canales Bloqueados | DoH/UDP: ${res.reason || "Sin respuesta"} | Sonda Cautiva: ${probeRes.reason || "Bloqueado"}`);
                 TacticalAudioEngine.playWarning();
-                toast.error("Canales encubiertos bloqueados");
+                toast.error("Canales encubiertos bloqueados o sin señal celular");
             }
         } catch {
             setTestResult("⚠️ Error crítico al simular canal encubierto");

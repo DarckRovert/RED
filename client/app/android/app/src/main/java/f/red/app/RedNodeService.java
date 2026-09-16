@@ -62,7 +62,18 @@ public class RedNodeService extends Service {
         }
     }
 
-    private static boolean isNodeRunning = false;
+    private static volatile boolean isNodeRunning = false;
+
+    public static void setNodeRunning(boolean running) {
+        isNodeRunning = running;
+        if (running && activeInstance != null) {
+            activeInstance.startSseNotificationConsumer();
+        }
+    }
+
+    public static boolean isNodeRunning() {
+        return isNodeRunning;
+    }
     private BluetoothLeAdvertiser bleAdvertiser = null;
     private AdvertiseCallback advertiseCallback = null;
     private BluetoothGattServer gattServer = null;
@@ -168,7 +179,9 @@ public class RedNodeService extends Service {
                         Thread.sleep(100);
                         Log.i(TAG, "Starting Rust Node JNI call with UI password...");
                         RedNodePlugin.startNode(finalDataDir, finalPassword);
-                        Log.i(TAG, "Rust Node JNI call returned successfully.");
+                        isNodeRunning = true;
+                        Log.i(TAG, "Rust Node JNI call returned successfully. Setting isNodeRunning=true and starting SSE Consumer...");
+                        startSseNotificationConsumer();
                     } catch (UnsatisfiedLinkError e) {
                         // No crashear — la librería puede haberse cargado pero un símbolo falta
                         Log.e(TAG, "🔴 UnsatisfiedLinkError calling startNode — degraded mode: " + e.getMessage());
@@ -185,13 +198,19 @@ public class RedNodeService extends Service {
 
             // Start BLE Advertising so nearby RED devices can discover this node
             startBleAdvertising();
-
-            // v41 Sprint 2: Start SSE consumer for native push notifications when app is backgrounded
-            startSseNotificationConsumer();
         }
 
         // START_STICKY ensures the OS tries to restart the background service if it kills it for memory
         return START_STICKY;
+    }
+
+    /**
+     * Permite al frontend o al plugin notificar que el nodo Rust ya está corriendo y que el SSE debe activarse.
+     */
+    public static void startSseConsumerIfNodeRunning() {
+        if (activeInstance != null) {
+            activeInstance.startSseNotificationConsumer();
+        }
     }
 
     /**
@@ -203,6 +222,7 @@ public class RedNodeService extends Service {
         if (sseShouldRun.getAndSet(true)) return; // Already running
         sseThread = new Thread(() -> {
             int backoffMs = 2000;
+            int attemptCount = 0;
             while (sseShouldRun.get()) {
                 HttpURLConnection conn = null;
                 try {
@@ -211,17 +231,21 @@ public class RedNodeService extends Service {
                     conn.setRequestMethod("GET");
                     conn.setRequestProperty("Accept", "text/event-stream");
                     conn.setRequestProperty("Cache-Control", "no-cache");
-                    conn.setConnectTimeout(5000);
+                    conn.setConnectTimeout(4000);
                     conn.setReadTimeout(0); // infinite — SSE is a persistent stream
                     conn.setDoInput(true);
                     int status = conn.getResponseCode();
                     if (status != 200) {
-                        Log.w(TAG, "SSE endpoint returned HTTP " + status + " — retrying in " + backoffMs + "ms");
+                        attemptCount++;
+                        if (attemptCount <= 2 || attemptCount % 10 == 0) {
+                            Log.w(TAG, "SSE endpoint HTTP " + status + " — retrying in " + backoffMs + "ms");
+                        }
                         Thread.sleep(backoffMs);
                         backoffMs = Math.min(backoffMs * 2, 30000);
                         continue;
                     }
                     backoffMs = 2000; // reset backoff on successful connect
+                    attemptCount = 0;
                     Log.i(TAG, "SSE consumer connected to /api/events");
                     BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
                     String line;
@@ -247,8 +271,16 @@ public class RedNodeService extends Service {
                     break;
                 } catch (Exception e) {
                     if (sseShouldRun.get()) {
-                        Log.w(TAG, "SSE consumer error (will retry): " + e.getMessage());
-                        try { Thread.sleep(backoffMs); backoffMs = Math.min(backoffMs * 2, 30000); } catch (InterruptedException ie) { break; }
+                        attemptCount++;
+                        if (attemptCount <= 2 || attemptCount % 10 == 0) {
+                            Log.w(TAG, "SSE consumer waiting for node API (attempt #" + attemptCount + "): " + e.getMessage());
+                        }
+                        try {
+                            Thread.sleep(backoffMs);
+                            backoffMs = Math.min(backoffMs * 2, 30000);
+                        } catch (InterruptedException ie) {
+                            break;
+                        }
                     }
                 } finally {
                     if (conn != null) conn.disconnect();
@@ -546,6 +578,7 @@ public class RedNodeService extends Service {
             try { stopThread.join(3000); } catch (InterruptedException ignored) {}
         }
 
+        isNodeRunning = false;
         Log.i(TAG, "RedNodeService destroyed — all locks, BLE, and SSE consumer released.");
     }
 
@@ -820,8 +853,8 @@ public class RedNodeService extends Service {
                     Log.i(TAG, "[Heartbeat] MulticastLock re-acquired");
                 }
 
-                // 3. Verify SSE notification consumer thread
-                if (sseThread == null || !sseThread.isAlive()) {
+                // 3. Verify SSE notification consumer thread (only when Rust node is confirmed running)
+                if (isNodeRunning && (sseThread == null || !sseThread.isAlive())) {
                     Log.w(TAG, "[Heartbeat] SSE consumer died, restarting...");
                     sseShouldRun.set(false);
                     startSseNotificationConsumer();
@@ -891,12 +924,27 @@ public class RedNodeService extends Service {
                 System.arraycopy(data, offset, chunk, 0, sliceLen);
                 offset += sliceLen;
 
-                rxChar.setValue(chunk);
-                boolean ok = activeInstance.gattServer.notifyCharacteristicChanged(target, rxChar, false);
+                boolean ok = false;
+                try {
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        int status = activeInstance.gattServer.notifyCharacteristicChanged(target, rxChar, false, chunk);
+                        ok = (status == 0); // BluetoothStatusCodes.SUCCESS
+                    } else {
+                        rxChar.setValue(chunk);
+                        ok = activeInstance.gattServer.notifyCharacteristicChanged(target, rxChar, false);
+                    }
+                } catch (SecurityException se) {
+                    Log.w(TAG, "[BLE Server] BLUETOOTH_CONNECT SecurityException during notify: " + se.getMessage());
+                    ok = false;
+                } catch (Throwable t) {
+                    Log.w(TAG, "[BLE Server] Error during notifyCharacteristicChanged: " + t.getMessage());
+                    ok = false;
+                }
+
                 if (ok) {
                     anySuccess = true;
                 } else {
-                    Log.w(TAG, "[BLE Server] notifyCharacteristicChanged returned false for " + target.getAddress());
+                    Log.w(TAG, "[BLE Server] notifyCharacteristicChanged failed or returned false");
                 }
 
                 if (offset < data.length) {

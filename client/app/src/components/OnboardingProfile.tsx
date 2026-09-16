@@ -7,6 +7,7 @@ import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { LegalComplianceModal } from "./legal/LegalComplianceModal";
 
 interface OnboardingProfileProps {
     onDone?: () => void;
@@ -22,6 +23,7 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
     const [displayName, setDisplayName] = useState("Operador-RED");
     const [avatarColor, setAvatarColor] = useState("#FF3355");
     const [saving, setSaving] = useState(false);
+    const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
     // Step 4: QR real generado desde la librería qrcode
     const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
@@ -247,6 +249,20 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                     >
                         {t('common.confirm')} →
                     </button>
+
+                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", lineHeight: 1.4, marginTop: "-8px" }}>
+                        Al continuar, aceptas el{" "}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setIsLegalModalOpen(true);
+                            }}
+                            style={{ background: "none", border: "none", color: "var(--accent-cyan)", textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: "inherit" }}
+                        >
+                            Marco Legal, Privacidad & Licencia AGPL
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -478,6 +494,12 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                     </div>
                 </div>
             )}
+
+            {/* Modal de Cumplimiento Legal y Privacidad */}
+            <LegalComplianceModal
+                isOpen={isLegalModalOpen}
+                onClose={() => setIsLegalModalOpen(false)}
+            />
         </div>
     );
 }

@@ -1,5 +1,25 @@
 # Changelog
 
+## [106.0.0-soberania-limpia] - 2026-09-16
+
+### 🚀 Soberanía Limpia: Sanitización de Motores de Red, Túnel DNS Dual y Blindaje Daemon Android (Release Oficial v106.0.0)
+
+- **Sanitización de Bypass y Eliminación de Falsos Positivos:**
+  - `sniSpoofEngine.ts`: Refactorización semántica de `transmitSniBypass` a `probeCaptivePortalPermeability` retornando `isCaptivePermeable` para distinguir la permeabilidad de red de la entrega efectiva de paquetes.
+  - `dnsTunnelEngine.ts`: Validación estricta de respuestas DoH y UDP 53; las respuestas NXDOMAIN o vacías se reportan como fallo de canal en lugar de falsos ACKs.
+  - `meshRouter.ts`: Corrección de prefijo de ACK DNS (`startsWith('ACK')`) para sincronizar con los códigos del handler Rust (`ACK_RECORDS_N`, `ACK_OK_EMPTY`, `ACK_PROCESSED`).
+- **Túnel DNS Soberano Dual (`dns_tunnel.rs`):**
+  - Soporte canónico dual para zonas `.DNS.REDMESH.NET` y `.RED.MESH` en el servidor UDP 5353, con filtrado determinista de prefijos de sesión Base32.
+- **Blindaje del Ciclo de Vida del Daemon Android (`RedNodeService.java`):**
+  - Gatekeeper `volatile boolean isNodeRunning` para arrancar el SSE consumer únicamente cuando el runtime Rust y la DB Sled están en línea.
+  - Backoff exponencial controlado (2s a 30s) y eliminación de log spam en Logcat.
+  - Adaptación nativa de `notifyCharacteristicChanged` para Android 13+ (API 33) con manejo seguro de `SecurityException`.
+- **Gobernanza Atómica SSOT v106.0.0 & Verificación en Hardware Físico Real:**
+  - Sincronización atómica al 100% en los 22 archivos SSOT de configuración.
+  - Build code unificado `106000`, caché `red-vault-cache-v106`.
+  - Checksum SHA-256 certificado: `228C0F02C7DF61F5D84A1D0E5D61D06925441D424F6417BFE864B467F580D108`.
+  - Desinstalación e instalación limpia en Lenovo Tablet (`HA2CHKZ2`) y Motorola Moto G22 (`ZT322B386P`), logcat verificado con 0 crashes y SSE conectado a `/api/events`.
+
 ## [105.0.0-nist-fips-203-ml-kem-768-pqc-armor-and-sss-vault] - 2026-09-14
 
 ### 🚀 NIST FIPS-203 ML-KEM-768 Post-Quantum Armor & Shamir Secret Sharing Vault (Release Oficial v105.0.0)

@@ -154,9 +154,16 @@ export class DnsTunnelEngine {
 
         if (res.ok) {
           const json = await res.json();
-          this.stats.packetsReceived++;
-          const answer = json.Answer && json.Answer.length > 0 ? json.Answer[0].data : "OK_ACK";
-          return { success: true, responseTxt: answer, latencyMs };
+          // json.Status: 0 = NOERROR, 3 = NXDOMAIN, 2 = SERVFAIL
+          // Solo consideramos éxito si el DNS recursivo devuelve registros TXT válidos
+          if (json.Status === 0 && Array.isArray(json.Answer) && json.Answer.length > 0) {
+            const txtRecord = json.Answer.find((a: any) => typeof a.data === 'string' && a.data.trim().length > 0);
+            if (txtRecord) {
+              const cleanData = String(txtRecord.data).replace(/^"|"$/g, '');
+              this.stats.packetsReceived++;
+              return { success: true, responseTxt: cleanData, latencyMs };
+            }
+          }
         }
       } catch {}
     }
@@ -187,9 +194,9 @@ export class DnsTunnelEngine {
             const json = await res.json();
             const latencyMs = Math.round(performance.now() - startTime);
             this.stats.lastResponseTimeMs = latencyMs;
-            if (json.success) {
+            if (json.success && json.answer && typeof json.answer === 'string' && json.answer.trim().length > 0) {
               this.stats.packetsReceived++;
-              return { success: true, responseTxt: json.answer || `UDP_53_${srv}`, latencyMs };
+              return { success: true, responseTxt: json.answer, latencyMs };
             }
           }
         } catch {}
@@ -201,7 +208,7 @@ export class DnsTunnelEngine {
         success: false,
         responseTxt: undefined,
         latencyMs,
-        reason: 'DoH y UDP 53 sin respuesta (sin conectividad celular/DNS en celda)',
+        reason: 'Consultas DNS resueltas sin respuesta TXT autoritativa (NXDOMAIN o sin servidor en la zona)',
     };
   }
 

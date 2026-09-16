@@ -306,7 +306,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                         <TacIcon name="search" size={15} color="#8696A0" />
                         <input
                             type="text"
-                            placeholder="Buscar un chat o iniciar uno nuevo"
+                            placeholder="Buscar un chat..."
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             style={{

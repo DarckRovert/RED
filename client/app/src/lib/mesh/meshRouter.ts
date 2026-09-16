@@ -1886,15 +1886,18 @@ class MeshRouter {
     }
 
     // ─── 5. ZERO-BALANCE CELLULAR DNS TUNNELING FALLBACK ───
-    // If no local radio routes succeeded, but the device is on Cellular without data balance:
+    // If no local radio routes succeeded, attempt DNS tunneling query if on cellular.
+    // Notice: Only marks anySent=true if an authoritative ACK is received from the remote zone.
     if (!anySent && !isBroadcast) {
       try {
         const hex = Array.from(encoded).map(b => b.toString(16).padStart(2, '0')).join('');
         const dnsQueries = DnsTunnelEngine.packPayloadIntoDnsQuery(hex);
         if (dnsQueries.length > 0) {
           DnsTunnelEngine.transmitDnsQuery(dnsQueries[0]).then(res => {
-            if (res.success) {
-              console.log(`[MeshRouter] 📡 Zero-Balance Carrier Bypass: Transmitted packet via DNS Tunneling (${res.latencyMs}ms)`);
+            // Rust handle_dns_query retorna: "ACK_RECORDS_N", "ACK_OK_EMPTY", "ACK_PROCESSED"
+            // También acepta prefijo "RED:" para ACKs de un servidor autoritativo RED propio
+            if (res.success && res.responseTxt && (res.responseTxt.startsWith('ACK') || res.responseTxt.startsWith('RED:'))) {
+              console.log(`[MeshRouter] 📡 Zero-Balance Carrier Bypass: Transmitted packet via DNS Tunneling (${res.latencyMs}ms, server_ack=${res.responseTxt})`);
             }
           }).catch(() => {});
         }
@@ -1903,6 +1906,8 @@ class MeshRouter {
 
     // ─── 6. AUTONOMOUS LEO SATELLITE GATEWAY FALLBACK & ORBITAL UPLINK ───
     // If no terrestrial routes succeeded, dispatch via LEO Satellite Gateway if in AOS or priority packet:
+    // Notice: We enqueue in the satellite buffer for ground stations / transceivers, but also keep
+    // the packet in the terrestrial DTN store-and-forward queue until an explicit ACK confirms delivery.
     if (!anySent && packet.sender !== 'SAT_GATEWAY') {
       try {
         const payloadStr = new TextDecoder().decode(packet.payload);
@@ -1923,8 +1928,7 @@ class MeshRouter {
           satelliteMeshGateway.enqueueOutboundUplink(payloadStr, 8);
           if (satTelem.isUplinkAvailable) {
             satelliteMeshGateway.triggerSatelliteBurst();
-            console.log(`[MeshRouter] 🛰️ LEO Satellite Gateway Fallback: Dispatched packet via orbital uplink to ${satTelem.bestAvailableSatellite?.satelliteId || 'LEO'}`);
-            anySent = true;
+            console.log(`[MeshRouter] 🛰️ LEO Satellite Gateway Fallback: Dispatched packet to orbital uplink buffer (${satTelem.bestAvailableSatellite?.satelliteId || 'LEO'})`);
           }
         }
       } catch (err) {

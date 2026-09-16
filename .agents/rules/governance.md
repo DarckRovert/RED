@@ -1,4 +1,4 @@
-# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v105.0.0
+# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v106.0.0
 
 Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNANCE.md`.
 

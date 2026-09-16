@@ -96,12 +96,31 @@ impl DnsTunnelServer {
         }
         let qname_end = idx;
 
-        // 3. Decode payload (Real parsing of base32 subdomains)
+        // 3. Decode payload: strip known RED zone suffixes and session metadata labels,
+        //    then concatenate all remaining Base32 chunks and decode.
+        //    Supported zones: "dns.redmesh.net" (TS client default) and "red.mesh" (legacy)
         let qname_str = String::from_utf8_lossy(&qname).to_string();
-        let payload_str = qname_str.to_uppercase().replace(".RED.MESH", "").replace(".", "");
-        
-        // Use base32 decode (standard RFC4648 without padding, or similar)
-        // We will try standard decode
+        let normalized = qname_str.to_uppercase();
+        // Strip zone suffix (either variant)
+        let zone_stripped = normalized
+            .trim_end_matches(".DNS.REDMESH.NET")
+            .trim_end_matches(".RED.MESH")
+            .to_string();
+        // Remove session metadata labels: s<id>.p<n>of<n>
+        // Labels look like: CHUNK1.S1A2B.P1OF3 → we want only CHUNK1
+        let payload_parts: Vec<&str> = zone_stripped
+            .split('.')
+            .filter(|label| {
+                !label.is_empty()
+                // drop session-id label: starts with S and rest is alnum
+                && !(label.starts_with('S') && label.len() >= 4 && label[1..].chars().all(|c| c.is_alphanumeric()))
+                // drop position label: starts with P and contains OF
+                && !(label.starts_with('P') && label.contains("OF"))
+            })
+            .collect();
+        let payload_str = payload_parts.join("");
+
+        // Use base32 decode (standard RFC4648 without padding)
         let decoded = data_encoding::BASE32_NOPAD.decode(payload_str.as_bytes()).unwrap_or_default();
         
         if !decoded.is_empty() {

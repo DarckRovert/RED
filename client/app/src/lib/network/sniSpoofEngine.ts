@@ -26,10 +26,19 @@ export interface SniSpoofStats {
   lastSuccessfulRegion?: string;
 }
 
+export interface SniProbeResult {
+  success: boolean;            // true SOLO si un nodo o pasarela RED remota valida la recepción
+  isCaptivePermeable: boolean; // true si la red celular permite tráfico hacia portales cautivos sin saldo
+  latencyMs: number;
+  provider: string;
+  reason?: string;
+  statusCode?: number;
+}
+
 export class SniSpoofEngine {
   /**
    * Catálogo Global de Dominios Zero-Rating y Portales Cautivos Universales
-   * Diseñado para operar sobre cualquier operador celular del planeta.
+   * Diseñado para verificar la permeabilidad de red sin saldo a nivel mundial.
    */
   public static readonly ZERO_RATING_TARGETS: SniTarget[] = [
     // ── 1. PORTALES CAUTIVOS UNIVERSALES (Permitidos sin saldo por el 99.9% de operadores mundiales) ──
@@ -64,14 +73,14 @@ export class SniSpoofEngine {
 
   private static stats: SniSpoofStats = {
     requestsSent: 0,
-    bypassSuccessRate: 100.0,
+    bypassSuccessRate: 0.0,
     currentHostFront: "connectivitycheck.gstatic.com (Universal Captive)",
     bytesBypassed: 0,
     activeProvider: "Universal Captive Portal"
   };
 
   /**
-   * Genera un payload HTTP con encabezados SNI alterados para Domain Fronting
+   * Genera un payload HTTP con encabezados SNI alterados para sondeo o Domain Fronting
    */
   public static createSpoofedFrontRequest(encryptedPayloadHex: string, targetSniIndex = 0): {
     headers: Record<string, string>;
@@ -103,30 +112,28 @@ export class SniSpoofEngine {
   }
 
   /**
-   * Transmite el paquete a través del túnel con spoofing SNI.
+   * Sonda empírica de permeabilidad en portales cautivos y dominios exentos de saldo (Zero-Rating).
    * 
-   * Arquitectura Autonómica Multi-Operador:
-   * 1. Intenta sondeo adaptativo priorizando portales cautivos universales (compatibles con 100% de operadores).
-   * 2. Si un operador local bloquea la resolución DNS de un host regional (ej. 'Unable to resolve host'),
-   *    automáticamente avanza al siguiente operador o recurre a la IP directa para evitar interrupción.
-   * 3. Retorna éxito si el canal HTTP entrega 200, 204 o respuesta de captura de portal.
+   * Análisis Empírico:
+   * - En redes celulares sin saldo de datos, el operador desvía peticiones HTTP o responde con 204/302.
+   * - Esta sonda verifica si el dispositivo tiene paso libre a través del firewall del operador.
+   * - Para considerarse transmisión exitosa del paquete mesh, debe existir un servidor RED autoritativo
+   *   que valide la recepción (HTTP 200 con cabecera X-RED-ACK). Un 204 o 302 solo indica permeabilidad.
    */
-  public static async transmitSniBypass(
-    encryptedPayloadHex: string,
+  public static async probeCaptivePortalPermeability(
+    payloadHex: string = '',
     preferredIndex?: number
-  ): Promise<{ success: boolean; latencyMs: number; provider: string; reason?: string }> {
-    const safePayload = typeof encryptedPayloadHex === 'string' ? encryptedPayloadHex : '';
+  ): Promise<SniProbeResult> {
+    const safePayload = typeof payloadHex === 'string' ? payloadHex : '';
     const startTime = performance.now();
     this.stats.requestsSent++;
     this.stats.bytesBypassed += safePayload.length;
 
-    // Determinar orden de prueba: primero universal, luego por índice solicitado o rotación
     const candidatesToTry: number[] = [];
     if (typeof preferredIndex === 'number' && isFinite(preferredIndex)) {
       candidatesToTry.push(Math.abs(Math.floor(preferredIndex)) % this.ZERO_RATING_TARGETS.length);
     }
     
-    // Probar siempre los primeros 3 portales universales + 2 rotativos
     const universalIndices = [0, 1, 2];
     for (const u of universalIndices) {
       if (!candidatesToTry.includes(u)) candidatesToTry.push(u);
@@ -135,28 +142,42 @@ export class SniSpoofEngine {
     if (!candidatesToTry.includes(rotatingIdx)) candidatesToTry.push(rotatingIdx);
 
     const errorsCollected: string[] = [];
+    let detectedPermeability = false;
+    let permeableProvider = "";
 
     for (const idx of candidatesToTry) {
       const target = this.ZERO_RATING_TARGETS[idx];
       const { headers, body } = this.createSpoofedFrontRequest(safePayload, idx);
 
-      // Intento 1: Por nombre de host HTTPS (Domain Fronting estándar)
+      // Intento 1: Por nombre de host HTTPS
       try {
         const response = await fetch(`https://${target.sniHost}/red-tunnel`, {
           method: 'POST',
           headers,
           body,
-          signal: AbortSignal.timeout(2200), // 2.2s timeout por candidato
+          signal: AbortSignal.timeout(2000),
         });
 
         const latencyMs = Math.round(performance.now() - startTime);
 
-        // En redes cautivas sin saldo, status 200, 204, 301, 302 o 403 demuestran paso libre por la pasarela
-        if (response.ok || response.status === 204 || response.status === 302 || response.status === 403) {
+        // Si devuelve HTTP 200 con firma RED, transmisión real verificada
+        const redAck = response.headers?.get('X-RED-ACK');
+        if (response.ok && redAck) {
           this.stats.currentHostFront = `${target.sniHost} (${target.provider})`;
           this.stats.activeProvider = target.provider;
           this.stats.lastSuccessfulRegion = target.region;
-          return { success: true, latencyMs, provider: this.stats.currentHostFront };
+          this.stats.bypassSuccessRate = 100.0;
+          return { success: true, isCaptivePermeable: true, latencyMs, provider: this.stats.currentHostFront, statusCode: response.status };
+        }
+
+        // Si el portal cautivo responde con 204 o redirección 302, la red es permeable pero no entregó a un nodo RED
+        if (response.status === 204 || response.status === 302 || response.status === 403 || response.ok) {
+          detectedPermeability = true;
+          permeableProvider = `${target.sniHost} (${target.provider})`;
+          this.stats.currentHostFront = permeableProvider;
+          this.stats.activeProvider = target.provider;
+          this.stats.lastSuccessfulRegion = target.region;
+          this.stats.bypassSuccessRate = 50.0;
         } else {
           errorsCollected.push(`${target.provider}: HTTP ${response.status}`);
         }
@@ -164,33 +185,71 @@ export class SniSpoofEngine {
         const errMsg = err instanceof Error ? err.message : String(err);
         errorsCollected.push(`${target.provider}: ${errMsg}`);
 
-        // Intento 2: Fallback por IP directa (evasión de censura DNS en celdas telefónicas)
+        // Intento 2: Fallback por IP directa (evasión de bloqueo DNS local)
         try {
           const directIpResponse = await fetch(`http://${target.ipTarget}/red-tunnel`, {
             method: 'POST',
             headers,
             body,
-            signal: AbortSignal.timeout(1800),
+            signal: AbortSignal.timeout(1500),
           });
 
           const latencyMs = Math.round(performance.now() - startTime);
-          if (directIpResponse.ok || directIpResponse.status === 204 || directIpResponse.status === 302) {
+          const directAck = directIpResponse.headers?.get('X-RED-ACK');
+          if (directIpResponse.ok && directAck) {
             this.stats.currentHostFront = `${target.ipTarget} [SNI: ${target.sniHost}] (${target.provider})`;
-            this.stats.activeProvider = `${target.provider} (IP Bypass Directo)`;
-            return { success: true, latencyMs, provider: this.stats.currentHostFront };
+            this.stats.activeProvider = `${target.provider} (IP Direct)`;
+            return { success: true, isCaptivePermeable: true, latencyMs, provider: this.stats.currentHostFront, statusCode: directIpResponse.status };
+          }
+
+          if (directIpResponse.status === 204 || directIpResponse.status === 302 || directIpResponse.ok) {
+            detectedPermeability = true;
+            permeableProvider = `${target.ipTarget} (${target.provider} Direct)`;
+            this.stats.currentHostFront = permeableProvider;
           }
         } catch {}
+      }
+
+      if (detectedPermeability) {
+        break;
       }
     }
 
     const latencyMs = Math.round(performance.now() - startTime);
-    const summaryReason = errorsCollected.slice(0, 2).join(' | ');
 
+    if (detectedPermeability) {
+      return {
+        success: false, // Honestidad técnica: la red es permeable, pero no se ha entregado a un nodo mesh
+        isCaptivePermeable: true,
+        latencyMs,
+        provider: permeableProvider,
+        reason: `Portal cautivo permeable detectado en ${permeableProvider}. Sin pasarela RED autoritativa en el destino.`,
+      };
+    }
+
+    const summaryReason = errorsCollected.slice(0, 2).join(' | ');
     return {
       success: false,
+      isCaptivePermeable: false,
       latencyMs,
       provider: this.stats.currentHostFront,
-      reason: `Sondeo multi-operador completado: ${summaryReason}`,
+      reason: `Sondeo de portales cautivos sin respuesta: ${summaryReason || 'Sin conexión celular permeable'}`,
+    };
+  }
+
+  /**
+   * Alias de compatibilidad para código existente
+   */
+  public static async transmitSniBypass(
+    encryptedPayloadHex: string,
+    preferredIndex?: number
+  ): Promise<{ success: boolean; latencyMs: number; provider: string; reason?: string }> {
+    const res = await this.probeCaptivePortalPermeability(encryptedPayloadHex, preferredIndex);
+    return {
+      success: res.success,
+      latencyMs: res.latencyMs,
+      provider: res.provider,
+      reason: res.reason,
     };
   }
 
@@ -201,7 +260,7 @@ export class SniSpoofEngine {
   public static resetStats(): void {
     this.stats = {
       requestsSent: 0,
-      bypassSuccessRate: 100.0,
+      bypassSuccessRate: 0.0,
       currentHostFront: "connectivitycheck.gstatic.com (Universal Captive)",
       bytesBypassed: 0,
       activeProvider: "Universal Captive Portal"

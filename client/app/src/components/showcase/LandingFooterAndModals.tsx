@@ -449,16 +449,24 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
         </div>
 
         <div style={{ display: "flex", gap: "18px", flexWrap: "wrap", justifyContent: "center", fontSize: "12px", color: "#64748B" }}>
-          <a href="https://github.com/DarckRovert/RED/blob/main/LICENSE" target="_blank" rel="noreferrer" style={{ color: "#00F0FF", textDecoration: "none" }}>
+          <a href="./privacy.html" target="_blank" rel="noreferrer" style={{ color: "#00E676", textDecoration: "none", fontWeight: 700 }}>
+            🔒 Política de Privacidad
+          </a>
+          <span>•</span>
+          <a href="./terms.html" target="_blank" rel="noreferrer" style={{ color: "#00E5FF", textDecoration: "none", fontWeight: 700 }}>
+            📜 Términos de Servicio
+          </a>
+          <span>•</span>
+          <a href="https://github.com/DarckRovert/RED/blob/main/LICENSE" target="_blank" rel="noreferrer" style={{ color: "#A855F7", textDecoration: "none" }}>
             📄 Licencia AGPLv3
           </a>
           <span>•</span>
           <a href="https://github.com/DarckRovert/RED/blob/main/DISCLAIMER.md" target="_blank" rel="noreferrer" style={{ color: "#FF3355", textDecoration: "none" }}>
-            🛡️ Descargo Legal (DISCLAIMER.md)
+            🛡️ Descargo Legal
           </a>
           <span>•</span>
-          <a href="mailto:darckrovert@gmail.com?subject=Consulta%20Corporativa%20RED%20Mesh" style={{ color: "#00FF88", textDecoration: "none", fontWeight: 700 }}>
-            💼 Contacto Comercial & Licitaciones (darckrovert@gmail.com)
+          <a href="mailto:darckrovert@gmail.com?subject=Consulta%20Corporativa%20RED%20Mesh" style={{ color: "#FBBF24", textDecoration: "none", fontWeight: 700 }}>
+            💼 Contacto & Licitaciones
           </a>
         </div>
 
