@@ -92,9 +92,8 @@ export class DnsTunnelEngine {
     "https://1.0.0.1/dns-query",
     "https://8.8.8.8/resolve",
     "https://8.8.4.4/resolve",
-    "https://9.9.9.9/dns-query",
-    "https://149.112.112.112/dns-query",
-    "https://94.140.14.14/dns-query",
+    "https://cloudflare-dns.com/dns-query",
+    "https://security.cloudflare-dns.com/dns-query",
     "https://dns.google/resolve",
   ];
 

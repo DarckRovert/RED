@@ -23,20 +23,16 @@ function runTest(name, fn) {
   }
 }
 
-// ─── 1. Verificación de Brokers MQTT sobre WSS Puerto 443 ───────────────────────
-console.log('📡 1. Probando Configuración de Brokers MQTT en Puerto Estándar 443 WSS...');
+// ─── 1. Verificación de Brokers MQTT sobre WSS Alta Disponibilidad ────────────────
+console.log('📡 1. Probando Configuración de Brokers MQTT WSS de Alta Disponibilidad...');
 
-runTest('Brokers MQTT en puerto 443 WSS (Anti-bloqueo CGNAT móvil)', () => {
+runTest('Brokers MQTT en WSS (EMQX 8084 / HiveMQ 8884)', () => {
   const fs = require('fs');
   const path = require('path');
   const fileContent = fs.readFileSync(path.join(__dirname, '../src/lib/mesh/mqttRelayTransport.ts'), 'utf-8');
 
-  assert(fileContent.includes('wss://broker.emqx.io/mqtt'), 'EMQX broker debe usar WSS puerto 443 estándar');
-  assert(fileContent.includes('wss://broker.hivemq.com/mqtt'), 'HiveMQ broker debe usar WSS puerto 443 estándar');
-  assert(fileContent.includes('wss://public.mqtthq.com:443/mqtt'), 'MQTTHQ broker debe estar configurado en puerto 443');
-  assert(fileContent.includes('wss://mqtt.eclipseprojects.io/mqtt'), 'Eclipse broker debe estar configurado');
-  assert(!fileContent.includes(':8084'), 'Puerto 8084 no debe estar presente');
-  assert(!fileContent.includes(':8884'), 'Puerto 8884 no debe estar presente');
+  assert(fileContent.includes('wss://broker.emqx.io:8084/mqtt'), 'EMQX broker debe usar WSS puerto 8084 verificado');
+  assert(fileContent.includes('wss://broker.hivemq.com:8884/mqtt'), 'HiveMQ broker debe usar WSS puerto 8884 verificado');
   assert(fileContent.includes('public reconnect(): void'), 'Método reconnect() debe existir en MqttRelayTransport');
 });
 

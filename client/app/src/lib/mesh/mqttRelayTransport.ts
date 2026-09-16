@@ -30,10 +30,8 @@ export class MqttRelayTransport {
   private reconnectAttempts: Map<string, number> = new Map();
 
   private static readonly BROKER_POOL: string[] = [
-    'wss://broker.emqx.io/mqtt',
-    'wss://broker.hivemq.com/mqtt',
-    'wss://public.mqtthq.com:443/mqtt',
-    'wss://mqtt.eclipseprojects.io/mqtt',
+    'wss://broker.emqx.io:8084/mqtt',
+    'wss://broker.hivemq.com:8884/mqtt',
   ];
 
   private static readonly HEX_LUT: string[] = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));

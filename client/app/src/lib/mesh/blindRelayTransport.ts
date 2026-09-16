@@ -40,9 +40,6 @@ export class BlindRelayTransport {
     // Default Sovereign Relay Seed Pool
     // Users can run `red-node relay` on any server and add it to localStorage or env
     private static readonly DEFAULT_RELAY_POOL: string[] = [
-        // Community and regional relays
-        'wss://relay1.redmesh.network/relay/ws',
-        'wss://relay2.redmesh.network/relay/ws',
         // Local node fallback (desktop / dev / local mesh node: 7331 desktop, 7333 mobile)
         'ws://127.0.0.1:7331/relay/ws',
         'ws://localhost:7331/relay/ws',
