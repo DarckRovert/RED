@@ -165,12 +165,31 @@ if (typeof self !== 'undefined') {
                 throw new Error('Generador ONNX no disponible en el Worker');
             }
 
-            const genOutput = await generator(prompt, { max_new_tokens: 180, temperature: 0.7, top_p: 0.9, do_sample: true });
+            const genOutput = await generator(prompt, { max_new_tokens: 160, temperature: 0.35, top_p: 0.9, do_sample: false, repetition_penalty: 1.12 });
             let answer = '';
             if (Array.isArray(genOutput) && genOutput[0]?.generated_text) {
                 answer = genOutput[0].generated_text;
             } else if (genOutput && typeof genOutput === 'object' && (genOutput as any).generated_text) {
                 answer = (genOutput as any).generated_text;
+            }
+
+            if (answer) {
+                if (answer.startsWith(prompt)) {
+                    answer = answer.slice(prompt.length);
+                } else if (answer.includes('<|im_start|>assistant\n')) {
+                    answer = answer.split('<|im_start|>assistant\n').pop() || '';
+                } else if (answer.includes('<|start_header_id|>assistant<|end_header_id|>\n\n')) {
+                    answer = answer.split('<|start_header_id|>assistant<|end_header_id|>\n\n').pop() || '';
+                } else if (answer.includes('<|assistant|>\n')) {
+                    answer = answer.split('<|assistant|>\n').pop() || '';
+                }
+                answer = answer
+                    .replace(/<\|im_end\|>/g, '')
+                    .replace(/<\|eot_id\|>/g, '')
+                    .replace(/<\|end\|>/g, '')
+                    .replace(/<\|endoftext\|>/g, '')
+                    .replace(/<\/s>/g, '')
+                    .trim();
             }
 
             if (!answer) {
