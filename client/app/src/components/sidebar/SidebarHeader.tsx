@@ -9,6 +9,7 @@ import { NewContactModal } from "../chat/NewContactModal";
 import { satelliteMeshGateway } from "../../lib/mesh/SatelliteMeshGatewayEngine";
 import { TacIcon } from "../ui/TacIcon";
 import { LegalComplianceModal } from "../legal/LegalComplianceModal";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 
 
 export type ChatFilterType = "all" | "unread" | "groups" | "contacts" | "channels";
@@ -58,6 +59,24 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     const [newContactOpen, setNewContactOpen] = useState(false);
     const [legalModalOpen, setLegalModalOpen] = useState(false);
     const [satAos, setSatAos] = useState(() => satelliteMeshGateway.getTelemetry().isUplinkAvailable);
+    const [peerCount, setPeerCount] = useState(() => meshRouter.peers.size);
+
+    // Reactividad a cambios en la topología de la malla peer-to-peer
+    useEffect(() => {
+        setPeerCount(meshRouter.peers.size);
+        const unsub = meshRouter.onPeersChange(peers => setPeerCount(peers.size));
+        return unsub;
+    }, []);
+
+    // LIFO back interceptor para cerrar el menú desplegable en Android
+    useEffect(() => {
+        if (!quickMenuOpen) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            setQuickMenuOpen(false);
+            return true;
+        });
+        return () => unregister();
+    }, [quickMenuOpen]);
 
     useEffect(() => {
         return satelliteMeshGateway.subscribe(t => setSatAos(t.isUplinkAvailable));
@@ -123,7 +142,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     display: "inline-block"
                                 }} />
                                 <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                    {nodeOnline ? `Malla activa (${meshRouter.peers.size})` : "Desconectado"}
+                                    {nodeOnline ? `Malla activa (${peerCount})` : "Desconectado"}
                                     {satAos && <> · <TacIcon name="satellite" size={11} color="#00A884" /> LEO AOS</>}
                                 </span>
                             </div>
@@ -201,113 +220,119 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
 
                         {/* Dropdown Menu (WhatsApp Web Style) */}
                         {quickMenuOpen && (
-                            <div 
-                                className="animate-fade-scale"
-                                style={{
-                                    position: "absolute", top: "46px", right: 0, width: "210px",
-                                    background: "#233138", borderRadius: "8px",
-                                    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.4)",
-                                    padding: "6px 0", display: "flex", flexDirection: "column",
-                                    zIndex: 100
-                                }}
-                                onClick={e => e.stopPropagation()}
-                            >
-                                <button
-                                    onClick={() => { setQuickMenuOpen(false); navigate("groups"); }}
+                            <>
+                                <div
+                                    onClick={() => setQuickMenuOpen(false)}
+                                    style={{ position: "fixed", inset: 0, zIndex: 90, background: "transparent" }}
+                                />
+                                <div 
+                                    className="animate-fade-scale"
                                     style={{
-                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
-                                        background: "transparent", border: "none",
-                                        color: "#D1D7DB", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                        position: "absolute", top: "46px", right: 0, width: "210px",
+                                        background: "#233138", borderRadius: "8px",
+                                        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.4)",
+                                        padding: "6px 0", display: "flex", flexDirection: "column",
+                                        zIndex: 100
                                     }}
-                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
-                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                    onClick={e => e.stopPropagation()}
                                 >
-                                    <TacIcon name="users" size={16} color="#D1D7DB" />
-                                    <span>Nuevo grupo</span>
-                                </button>
-                                <button
-                                    onClick={() => { setQuickMenuOpen(false); setNewContactOpen(true); }}
-                                    style={{
-                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
-                                        background: "transparent", border: "none",
-                                        color: "#D1D7DB", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
-                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                                >
-                                    <TacIcon name="user" size={16} color="#D1D7DB" />
-                                    <span>Nuevo contacto</span>
-                                </button>
-                                <button
-                                    onClick={() => { setQuickMenuOpen(false); navigate("webCompanionLink"); }}
-                                    style={{
-                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
-                                        background: "transparent", border: "none",
-                                        color: "#D1D7DB", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
-                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                                >
-                                    <TacIcon name="terminal" size={16} color="#D1D7DB" />
-                                    <span>Dispositivos vinculados</span>
-                                </button>
-                                <button
-                                    onClick={() => { setQuickMenuOpen(false); setGlobalSearchOpen(true); }}
-                                    style={{
-                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
-                                        background: "transparent", border: "none",
-                                        color: "#D1D7DB", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
-                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                                >
-                                    <TacIcon name="search" size={16} color="#D1D7DB" />
-                                    <span>Búsqueda global</span>
-                                </button>
-                                <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "4px 0" }} />
-                                <button
-                                    onClick={() => {
-                                        setQuickMenuOpen(false);
-                                        updatePreferences({ uiMode: 'tactical' });
-                                    }}
-                                    style={{
-                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
-                                        background: "transparent", border: "none",
-                                        color: "#00A884", fontSize: "0.86rem", fontWeight: 600, cursor: "pointer", textAlign: "left"
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
-                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                                >
-                                    <TacIcon name="zap" size={16} color="#00A884" />
-                                    <span>Cambiar a Modo Táctico</span>
-                                </button>
-                                <button
-                                    onClick={() => { setQuickMenuOpen(false); setMenuOpen(true); }}
-                                    style={{
-                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
-                                        background: "transparent", border: "none",
-                                        color: "#8696A0", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
-                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                                >
-                                    <TacIcon name="shield" size={16} color="#8696A0" />
-                                    <span>8 Hubs Tácticos</span>
-                                </button>
-                                <button
-                                    onClick={() => { setQuickMenuOpen(false); setLegalModalOpen(true); }}
-                                    style={{
-                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
-                                        background: "transparent", border: "none",
-                                        color: "#8696A0", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
-                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                                >
-                                    <span style={{ fontSize: "14px" }}>⚖️</span>
-                                    <span>Términos & Privacidad</span>
-                                </button>
-                            </div>
+                                    <button
+                                        onClick={() => { setQuickMenuOpen(false); navigate("groups"); }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                            background: "transparent", border: "none",
+                                            color: "#D1D7DB", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                    >
+                                        <TacIcon name="users" size={16} color="#D1D7DB" />
+                                        <span>Nuevo grupo</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setQuickMenuOpen(false); setNewContactOpen(true); }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                            background: "transparent", border: "none",
+                                            color: "#D1D7DB", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                    >
+                                        <TacIcon name="user" size={16} color="#D1D7DB" />
+                                        <span>Nuevo contacto</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setQuickMenuOpen(false); navigate("webCompanionLink"); }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                            background: "transparent", border: "none",
+                                            color: "#D1D7DB", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                    >
+                                        <TacIcon name="terminal" size={16} color="#D1D7DB" />
+                                        <span>Dispositivos vinculados</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setQuickMenuOpen(false); setGlobalSearchOpen(true); }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                            background: "transparent", border: "none",
+                                            color: "#D1D7DB", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                    >
+                                        <TacIcon name="search" size={16} color="#D1D7DB" />
+                                        <span>Búsqueda global</span>
+                                    </button>
+                                    <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "4px 0" }} />
+                                    <button
+                                        onClick={() => {
+                                            setQuickMenuOpen(false);
+                                            updatePreferences({ uiMode: 'tactical' });
+                                        }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                            background: "transparent", border: "none",
+                                            color: "#00A884", fontSize: "0.86rem", fontWeight: 600, cursor: "pointer", textAlign: "left"
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                    >
+                                        <TacIcon name="zap" size={16} color="#00A884" />
+                                        <span>Cambiar a Modo Táctico</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setQuickMenuOpen(false); setMenuOpen(true); }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                            background: "transparent", border: "none",
+                                            color: "#8696A0", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                    >
+                                        <TacIcon name="shield" size={16} color="#8696A0" />
+                                        <span>8 Hubs Tácticos</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setQuickMenuOpen(false); setLegalModalOpen(true); }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                            background: "transparent", border: "none",
+                                            color: "#8696A0", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                    >
+                                        <TacIcon name="shield" size={16} color="#8696A0" />
+                                        <span>Términos & Privacidad</span>
+                                    </button>
+                                </div>
+                            </>
                         )}
                     </div>
                 </header>
@@ -445,7 +470,12 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                 boxShadow: nodeOnline ? "0 0 8px #00E676" : "0 0 8px #FF3355",
                                 animation: nodeOnline ? "beaconPulse 2s infinite" : "none"
                             }} />
-                            {nodeOnline ? `MALLA P2P • ${meshRouter.peers.size} ${meshRouter.peers.size === 1 ? 'NODO' : 'NODOS'}` : "NODO LOCAL OFFLINE"}{satAos ? " · 🛰️ LEO AOS" : ""}
+                            {nodeOnline ? `MALLA P2P • ${peerCount} ${peerCount === 1 ? 'NODO' : 'NODOS'}` : "NODO LOCAL OFFLINE"}
+                            {satAos && (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", marginLeft: "4px" }}>
+                                    · <TacIcon name="satellite" size={11} color="#00E676" /> LEO AOS
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -481,89 +511,95 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                     </button>
 
                     {quickMenuOpen && (
-                        <div 
-                            className="animate-fade-scale"
-                            style={{
-                                position: "absolute", top: "44px", right: 0, width: "230px",
-                                background: "linear-gradient(180deg, #0F1428 0%, #080A18 100%)",
-                                border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "14px",
-                                boxShadow: "0 10px 30px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 229, 255, 0.2)",
-                                padding: "6px", display: "flex", flexDirection: "column", gap: "4px",
-                                zIndex: 100
-                            }}
-                            onClick={e => e.stopPropagation()}
-                        >
-                            <button
-                                onClick={() => { setQuickMenuOpen(false); navigate("groups"); }}
+                        <>
+                            <div
+                                onClick={() => setQuickMenuOpen(false)}
+                                style={{ position: "fixed", inset: 0, zIndex: 90, background: "transparent" }}
+                            />
+                            <div 
+                                className="animate-fade-scale"
                                 style={{
-                                    display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
-                                    background: "transparent", border: "none", borderRadius: "8px",
-                                    color: "#FFFFFF", fontSize: "0.82rem", fontWeight: 700,
-                                    cursor: "pointer", textAlign: "left"
+                                    position: "absolute", top: "44px", right: 0, width: "230px",
+                                    background: "linear-gradient(180deg, #0F1428 0%, #080A18 100%)",
+                                    border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "14px",
+                                    boxShadow: "0 10px 30px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 229, 255, 0.2)",
+                                    padding: "6px", display: "flex", flexDirection: "column", gap: "4px",
+                                    zIndex: 100
                                 }}
+                                onClick={e => e.stopPropagation()}
                             >
-                                <TacIcon name="users" size={16} color="var(--accent-cyan, #00E5FF)" /> Nuevo Escuadrón P2P
-                            </button>
-                            <button
-                                onClick={() => { setQuickMenuOpen(false); setNewContactOpen(true); }}
-                                style={{
-                                    display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
-                                    background: "transparent", border: "none", borderRadius: "8px",
-                                    color: "#FFFFFF", fontSize: "0.82rem", fontWeight: 700,
-                                    cursor: "pointer", textAlign: "left"
-                                }}
-                            >
-                                <TacIcon name="plus" size={16} color="var(--accent-cyan, #00E5FF)" /> Agregar Contacto
-                            </button>
-                            <button
-                                onClick={() => { setQuickMenuOpen(false); navigate("idVault"); }}
-                                style={{
-                                    display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
-                                    background: "transparent", border: "none", borderRadius: "8px",
-                                    color: "#FFFFFF", fontSize: "0.82rem", fontWeight: 700,
-                                    cursor: "pointer", textAlign: "left"
-                                }}
-                            >
-                                <TacIcon name="card" size={16} color="var(--accent-cyan, #00E5FF)" /> Bóveda de Identidad DID
-                            </button>
-                            <button
-                                onClick={() => { setQuickMenuOpen(false); setGlobalSearchOpen(true); }}
-                                style={{
-                                    display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
-                                    background: "transparent", border: "none", borderRadius: "8px",
-                                    color: "#FFFFFF", fontSize: "0.82rem", fontWeight: 700,
-                                    cursor: "pointer", textAlign: "left"
-                                }}
-                            >
-                                <TacIcon name="search" size={16} color="var(--accent-cyan, #00E5FF)" /> Búsqueda Global
-                            </button>
-                            <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.1)", margin: "4px 0" }} />
-                            <button
-                                onClick={() => {
-                                    setQuickMenuOpen(false);
-                                    updatePreferences({ uiMode: 'familiar' });
-                                }}
-                                style={{
-                                    display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
-                                    background: "rgba(0, 168, 132, 0.15)", border: "1px solid rgba(0, 168, 132, 0.35)", borderRadius: "8px",
-                                    color: "#00A884", fontSize: "0.82rem", fontWeight: 800,
-                                    cursor: "pointer", textAlign: "left"
-                                }}
-                            >
-                                <TacIcon name="chats" size={16} color="#00A884" /> Cambiar a Modo Familiar (WhatsApp)
-                            </button>
-                            <button
-                                onClick={() => { setQuickMenuOpen(false); setMenuOpen(true); }}
-                                style={{
-                                    display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
-                                    background: "rgba(0, 229, 255, 0.1)", border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "8px",
-                                    color: "var(--accent-cyan, #00E5FF)", fontSize: "0.82rem", fontWeight: 900,
-                                    cursor: "pointer", textAlign: "left"
-                                }}
-                            >
-                                <TacIcon name="shield" size={16} color="var(--accent-cyan, #00E5FF)" /> Centro de Comando (8 Hubs)
-                            </button>
-                        </div>
+                                <button
+                                    onClick={() => { setQuickMenuOpen(false); navigate("groups"); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
+                                        background: "transparent", border: "none", borderRadius: "8px",
+                                        color: "#FFFFFF", fontSize: "0.82rem", fontWeight: 700,
+                                        cursor: "pointer", textAlign: "left"
+                                    }}
+                                >
+                                    <TacIcon name="users" size={16} color="var(--accent-cyan, #00E5FF)" /> Nuevo Escuadrón P2P
+                                </button>
+                                <button
+                                    onClick={() => { setQuickMenuOpen(false); setNewContactOpen(true); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
+                                        background: "transparent", border: "none", borderRadius: "8px",
+                                        color: "#FFFFFF", fontSize: "0.82rem", fontWeight: 700,
+                                        cursor: "pointer", textAlign: "left"
+                                    }}
+                                >
+                                    <TacIcon name="plus" size={16} color="var(--accent-cyan, #00E5FF)" /> Agregar Contacto
+                                </button>
+                                <button
+                                    onClick={() => { setQuickMenuOpen(false); navigate("idVault"); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
+                                        background: "transparent", border: "none", borderRadius: "8px",
+                                        color: "#FFFFFF", fontSize: "0.82rem", fontWeight: 700,
+                                        cursor: "pointer", textAlign: "left"
+                                    }}
+                                >
+                                    <TacIcon name="card" size={16} color="var(--accent-cyan, #00E5FF)" /> Bóveda de Identidad DID
+                                </button>
+                                <button
+                                    onClick={() => { setQuickMenuOpen(false); setGlobalSearchOpen(true); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
+                                        background: "transparent", border: "none", borderRadius: "8px",
+                                        color: "#FFFFFF", fontSize: "0.82rem", fontWeight: 700,
+                                        cursor: "pointer", textAlign: "left"
+                                    }}
+                                >
+                                    <TacIcon name="search" size={16} color="var(--accent-cyan, #00E5FF)" /> Búsqueda Global
+                                </button>
+                                <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.1)", margin: "4px 0" }} />
+                                <button
+                                    onClick={() => {
+                                        setQuickMenuOpen(false);
+                                        updatePreferences({ uiMode: 'familiar' });
+                                    }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
+                                        background: "rgba(0, 168, 132, 0.15)", border: "1px solid rgba(0, 168, 132, 0.35)", borderRadius: "8px",
+                                        color: "#00A884", fontSize: "0.82rem", fontWeight: 800,
+                                        cursor: "pointer", textAlign: "left"
+                                    }}
+                                >
+                                    <TacIcon name="chats" size={16} color="#00A884" /> Cambiar a Modo Familiar (WhatsApp)
+                                </button>
+                                <button
+                                    onClick={() => { setQuickMenuOpen(false); setMenuOpen(true); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
+                                        background: "rgba(0, 229, 255, 0.1)", border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "8px",
+                                        color: "var(--accent-cyan, #00E5FF)", fontSize: "0.82rem", fontWeight: 900,
+                                        cursor: "pointer", textAlign: "left"
+                                    }}
+                                >
+                                    <TacIcon name="shield" size={16} color="var(--accent-cyan, #00E5FF)" /> Centro de Comando (8 Hubs)
+                                </button>
+                            </div>
+                        </>
                     )}
                 </div>
             </header>

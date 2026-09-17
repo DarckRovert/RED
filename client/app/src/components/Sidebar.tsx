@@ -736,7 +736,7 @@ export default function Sidebar() {
                 onClick={() => setAddContactOpen(true)}
                 style={{
                     position: "absolute",
-                    bottom: "76px",
+                    bottom: "calc(76px + env(safe-area-inset-bottom, 0px))",
                     right: "18px",
                     width: "56px",
                     height: "56px",
@@ -748,8 +748,6 @@ export default function Sidebar() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: "1.4rem",
-                    fontWeight: 900,
                     cursor: "pointer",
                     zIndex: 30,
                     transition: "all 0.2s ease"
@@ -762,7 +760,7 @@ export default function Sidebar() {
                 }}
                 title="Nuevo Chat / Agregar Contacto"
             >
-                💬
+                <TacIcon name="chats" size={24} color="#FFFFFF" />
             </button>
 
 

@@ -12,6 +12,8 @@ import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { tacticalGhostGps } from "../lib/sensors/TacticalGhostGpsEngine";
 import { redCyberTunnel } from "../lib/network/RedCyberTunnelEngine";
+import TacIcon, { TacIconName } from "./ui/TacIcon";
+import { meshRouter, MeshPeer } from "../lib/mesh/meshRouter";
 
 export default function StatusHeader() {
     const { nodeOnline, status, navigate, preferences, updatePreferences } = useRedStore();
@@ -34,9 +36,8 @@ export default function StatusHeader() {
     const [showModeModal, setShowModeModal] = useState(false);
     const [showSwarmModal, setShowSwarmModal] = useState(false);
 
-    // Hardware Telemetry & Peers Polling
-    const syncTelemetry = useCallback(async () => {
-        // 1. Kinetic & Real Hardware Battery
+    // Hardware Battery Sync (Capacitor Native + Fallback)
+    const syncBattery = useCallback(async () => {
         const governor = KineticDutyGovernor.getInstance();
         const telem = governor.getTelemetry();
         
@@ -64,29 +65,42 @@ export default function StatusHeader() {
             charging: isCharging,
             profile: telem.currentProfile
         });
+    }, []);
 
-        // 2. Mesh Transport Peers
-        if (nodeOnline) {
-            try {
-                const peers = await RedAPI.getPeers();
-                let wifi = 0, ble = 0, lora = 0, sound = 0, total = 0;
-                for (const p of peers) {
-                    const tr = (p.transport || "").toLowerCase();
-                    if (tr.includes("wifi") || tr.includes("websocket") || tr.includes("quic")) wifi++;
-                    else if (tr.includes("ble")) ble++;
-                    else if (tr.includes("lora")) lora++;
-                    else if (tr.includes("sound") || tr.includes("ultrasonic")) sound++;
-                    total++;
-                }
-                setMeshCounts({ wifi, ble, lora, sound, total });
-            } catch {}
-        }
-    }, [nodeOnline]);
+    // Reactive Mesh Peer Counts (Subscribed to MeshRouter 0-latency Event Bus)
+    useEffect(() => {
+        const computeCounts = (peersMap: Map<string, MeshPeer>) => {
+            let wifi = 0, ble = 0, lora = 0, sound = 0, total = 0;
+            for (const p of peersMap.values()) {
+                const tr = (p.transport || "").toLowerCase();
+                const trs = (p.transports || []).map(t => String(t).toLowerCase());
+                const matches = (bearer: string) => tr.includes(bearer) || trs.some(t => t.includes(bearer));
+
+                if (matches("wifi") || matches("websocket") || matches("quic")) wifi++;
+                else if (matches("ble")) ble++;
+                else if (matches("lora")) lora++;
+                else if (matches("sound") || matches("ultrasonic")) sound++;
+                total++;
+            }
+            setMeshCounts({ wifi, ble, lora, sound, total });
+        };
+
+        computeCounts(meshRouter.peers);
+        const unsubPeers = meshRouter.onPeersChange(computeCounts);
+        return unsubPeers;
+    }, []);
 
     useEffect(() => {
         setLoraActive(typeof window !== "undefined" && localStorage.getItem("red_lora_enabled") === "true");
-        syncTelemetry();
+        syncBattery();
 
+        const unsubKinetic = KineticDutyGovernor.getInstance().subscribe(telem => {
+            setBatteryInfo(prev => ({
+                level: Math.max(1, Math.min(100, telem.batteryLevel)),
+                charging: telem.isCharging,
+                profile: telem.currentProfile
+            }));
+        });
         const unsubSat = satelliteMeshGateway.subscribe(setSatTelem);
         const unsubShield = globalShield.subscribe(setShieldTelem);
         const unsubGhost = tacticalGhostGps.addListener(() => {
@@ -95,15 +109,16 @@ export default function StatusHeader() {
         const unsubTunnel = redCyberTunnel.addListener((stats) => {
             setIsCyberTunnelActive(stats.isActive);
         });
-        const timer = setInterval(syncTelemetry, 3500);
+        const timer = setInterval(syncBattery, 3500);
         return () => {
             clearInterval(timer);
+            unsubKinetic();
             unsubSat();
             unsubShield();
             unsubGhost();
             unsubTunnel();
         };
-    }, [syncTelemetry]);
+    }, [syncBattery]);
 
     const activeNetwork = (() => {
         if (loraActive && meshCounts.lora > 0) return "LORA RF";
@@ -126,13 +141,14 @@ export default function StatusHeader() {
     };
 
     const currentMode = preferences.operationalMode || 'stealth';
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
 
-    const operationalModes = [
-        { id: 'stealth', label: 'Sigilo OLED', icon: '🕶️', tag: 'DARK', desc: 'Negro puro (#000000), contraste ultra-alto, cero emisión de luz parasitaria.' },
-        { id: 'scotopic_red', label: 'Luz Roja (650nm)', icon: '🔴', tag: 'NVG', desc: 'Monocromático rojo militar para preservación de visión nocturna en campo.' },
-        { id: 'solar', label: 'Luz Solar / Exterior', icon: '☀️', tag: 'HI-CONTRAST', desc: 'Bordes reforzados y tipografía de máxima luminancia contra luz directa.' },
-        { id: 'survival', label: 'Apagón / DEFCON 1', icon: '⚡', tag: 'ECO', desc: 'CPU throttled a 50%, radio duty cycle ultra-bajo para 48h+ de autonomía.' },
-        { id: 'offgrid', label: 'Comercio & Campo', icon: '🛒', tag: 'BARTER', desc: 'Terminal de intercambio zk-Merkle y radar de proximidad activo.' },
+    const operationalModes: Array<{ id: string; label: string; icon: TacIconName; tag: string; desc: string }> = [
+        { id: 'stealth', label: 'Sigilo OLED', icon: 'moon', tag: 'DARK', desc: 'Negro puro (#000000), contraste ultra-alto, cero emisión de luz parasitaria.' },
+        { id: 'scotopic_red', label: 'Luz Roja (650nm)', icon: 'beacon', tag: 'NVG', desc: 'Monocromático rojo militar para preservación de visión nocturna en campo.' },
+        { id: 'solar', label: 'Luz Solar / Exterior', icon: 'sun', tag: 'HI-CONTRAST', desc: 'Bordes reforzados y tipografía de máxima luminancia contra luz directa.' },
+        { id: 'survival', label: 'Apagón / DEFCON 1', icon: 'zap', tag: 'ECO', desc: 'CPU throttled a 50%, radio duty cycle ultra-bajo para 48h+ de autonomía.' },
+        { id: 'offgrid', label: 'Comercio & Campo', icon: 'wallet', tag: 'BARTER', desc: 'Terminal de intercambio zk-Merkle y radar de proximidad activo.' },
     ];
 
     const currentModeObj = operationalModes.find(m => m.id === currentMode) || operationalModes[0];
@@ -188,7 +204,10 @@ export default function StatusHeader() {
                 fontFamily: "JetBrains Mono, monospace"
             }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#FFFFFF", display: "inline-block", animation: "pulse 1s infinite" }} />
-                <span>⚠️ {t('status_header.node_inaccessible') || "NODO LOCAL OFFLINE — INICIANDO SERVICIOS DE RESILIENCIA"}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <TacIcon name="alert-triangle" size={13} color="#FFFFFF" />
+                    {t('status_header.node_inaccessible') || "NODO LOCAL OFFLINE — INICIANDO SERVICIOS DE RESILIENCIA"}
+                </span>
             </div>
         );
     }
@@ -197,14 +216,20 @@ export default function StatusHeader() {
         <>
             <header style={{
                 width: "100%",
-                background: "linear-gradient(180deg, rgba(8, 12, 24, 0.96) 0%, rgba(4, 6, 14, 0.98) 100%)",
-                borderBottom: "1px solid rgba(0, 229, 255, 0.2)",
+                background: isFamiliar
+                    ? "#111B21"
+                    : "linear-gradient(180deg, rgba(8, 12, 24, 0.96) 0%, rgba(4, 6, 14, 0.98) 100%)",
+                borderBottom: isFamiliar
+                    ? "1px solid rgba(255, 255, 255, 0.08)"
+                    : "1px solid rgba(0, 229, 255, 0.2)",
                 boxShadow: "0 4px 30px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
                 padding: "calc(6px + var(--safe-top, 0px)) 12px 6px 12px",
-                fontFamily: "JetBrains Mono, monospace",
+                fontFamily: isFamiliar
+                    ? "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+                    : "JetBrains Mono, monospace",
                 fontSize: "0.72rem",
                 color: "var(--text-secondary)",
                 zIndex: 50,
@@ -221,15 +246,19 @@ export default function StatusHeader() {
                         onClick={() => setShowModeModal(true)}
                         style={{
                             padding: "4px 8px",
-                            background: "linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(0, 0, 0, 0.6) 100%)",
-                            border: "1px solid rgba(255, 255, 255, 0.18)",
+                            background: isFamiliar
+                                ? "#202C33"
+                                : "linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(0, 0, 0, 0.6) 100%)",
+                            border: isFamiliar
+                                ? "1px solid rgba(255, 255, 255, 0.12)"
+                                : "1px solid rgba(255, 255, 255, 0.18)",
                             borderRadius: "9px",
                             display: "flex",
                             alignItems: "center",
                             gap: "5px",
                             color: "#FFFFFF",
                             fontSize: "10.5px",
-                            fontFamily: "JetBrains Mono, monospace",
+                            fontFamily: isFamiliar ? "inherit" : "JetBrains Mono, monospace",
                             fontWeight: 800,
                             cursor: "pointer",
                             boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
@@ -240,7 +269,9 @@ export default function StatusHeader() {
                         }}
                         title={t('status_header.switch_mode') || "Cambiar Modo Operacional"}
                     >
-                        <span style={{ fontSize: "12px", flexShrink: 0 }}>{currentModeObj.icon}</span>
+                        <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
+                            <TacIcon name={currentModeObj.icon} size={13} color="#00E5FF" />
+                        </span>
                         <span className="status-label-truncate" style={{ letterSpacing: "0.4px", textTransform: "uppercase" }}>{currentModeObj.label}</span>
                         <span style={{ fontSize: "8px", opacity: 0.5, marginLeft: "2px", flexShrink: 0 }}>▼</span>
                     </button>
@@ -253,8 +284,8 @@ export default function StatusHeader() {
                             display: "flex",
                             alignItems: "center",
                             gap: "6px",
-                            background: "rgba(0, 0, 0, 0.55)",
-                            border: `1px solid ${color}40`,
+                            background: isFamiliar ? "#202C33" : "rgba(0, 0, 0, 0.55)",
+                            border: isFamiliar ? `1px solid ${color}40` : `1px solid ${color}40`,
                             padding: "4px 8px",
                             borderRadius: "9px",
                             fontSize: "10px",
@@ -283,7 +314,7 @@ export default function StatusHeader() {
 
                     {/* Quantum Shield Status Tag (Desktop/Tablet) */}
                     <div className="quantum-shield-badge" title="Blindaje Criptográfico Post-Cuántico NIST FIPS 203 (ML-KEM-768)">
-                        <span>🛡️</span>
+                        <TacIcon name="shield" size={11} color="var(--accent-cyan, #00E5FF)" />
                         <span>ML-KEM-768</span>
                     </div>
                 </div>
@@ -311,9 +342,9 @@ export default function StatusHeader() {
                                 boxShadow: "0 0 10px rgba(239, 68, 68, 0.4)",
                                 flexShrink: 0
                             }}
-                            title="👻 Modo Señuelo GPS Activo. Transmitiendo ubicación falsa. Clic para gestionar."
+                            title="Modo Señuelo GPS Activo. Transmitiendo ubicación falsa. Clic para gestionar."
                         >
-                            <span>👻</span>
+                            <TacIcon name="ghost" size={12} color="#fca5a5" />
                             <span>SEÑUELO</span>
                         </button>
                     )}
@@ -339,9 +370,9 @@ export default function StatusHeader() {
                                 boxShadow: "0 0 10px rgba(56, 189, 248, 0.4)",
                                 flexShrink: 0
                             }}
-                            title="⚡ Túnel Zero-Rating Activo. Clic para abrir control."
+                            title="Túnel Zero-Rating Activo. Clic para abrir control."
                         >
-                            <span>⚡</span>
+                            <TacIcon name="zap" size={12} color="#38bdf8" />
                             <span>SIN SALDO</span>
                         </button>
                     )}
@@ -349,6 +380,7 @@ export default function StatusHeader() {
                     {/* DEFCON Tactical Pill */}
                     <button
                         type="button"
+                        className="status-badge-hide-compact"
                         onClick={() => navigate("globalShield")}
                         style={{
                             display: "flex",
@@ -367,9 +399,9 @@ export default function StatusHeader() {
                             flexShrink: 0,
                             transition: "all 0.15s ease"
                         }}
-                        title={`🛡️ Escudo Global DEFCON ${shieldTelem.currentDefcon}: ${shieldTelem.activeProfile.label}. Clic para abrir matriz`}
+                        title={`Escudo Global DEFCON ${shieldTelem.currentDefcon}: ${shieldTelem.activeProfile.label}. Clic para abrir matriz`}
                     >
-                        <span style={{ fontSize: "11px" }}>🛡️</span>
+                        <TacIcon name="shield" size={12} color={shieldTelem.activeProfile.color || "#00E676"} />
                         <span style={{ letterSpacing: "0.4px" }}>D-{shieldTelem.currentDefcon}</span>
                     </button>
 
@@ -395,12 +427,12 @@ export default function StatusHeader() {
                             transition: "all 0.15s ease"
                         }}
                         title={satTelem.isUplinkAvailable
-                            ? `🛰️ Satélite LEO en AOS: ${satTelem.bestAvailableSatellite?.satelliteId} (${satTelem.bestAvailableSatellite?.constellation}) · Huella ~${satTelem.activeFootprintRadiusKm}km`
-                            : `🛰️ Satélites LEO en seguimiento orbital · Próximo AOS en ${satTelem.activePasses[0]?.timeToAosSec || 0}s`
+                            ? `Satélite LEO en AOS: ${satTelem.bestAvailableSatellite?.satelliteId} (${satTelem.bestAvailableSatellite?.constellation}) · Huella ~${satTelem.activeFootprintRadiusKm}km`
+                            : `Satélites LEO en seguimiento orbital · Próximo AOS en ${satTelem.activePasses[0]?.timeToAosSec || 0}s`
                         }
                     >
-                        <span style={{ fontSize: "11px" }}>🛰️</span>
-                        <span style={{ color: satTelem.isUplinkAvailable ? "#FFFFFF" : "#AAA", letterSpacing: "0.4px" }}>
+                        <TacIcon name="satellite" size={12} color={satTelem.isUplinkAvailable ? "#00E5FF" : "#94A3B8"} />
+                        <span className="status-text-hide-compact" style={{ color: satTelem.isUplinkAvailable ? "#FFFFFF" : "#AAA", letterSpacing: "0.4px" }}>
                             {satTelem.isUplinkAvailable ? "LEO AOS" : "LEO"}
                         </span>
                         {satTelem.isUplinkAvailable && (
@@ -461,82 +493,90 @@ export default function StatusHeader() {
                             }} />
                         </div>
 
-                        {batteryInfo.charging && <span style={{ color: "#FFD600", fontSize: "10px" }}>⚡</span>}
+                        {batteryInfo.charging && <TacIcon name="zap" size={10} color="#FFD600" />}
                         <span style={{ color: "#FFFFFF" }} className="tactical-tabular">{batteryLevel}%</span>
                     </div>
 
-                    {/* Tactical Action: IA Copilot */}
-                    <button
-                        type="button"
-                        onClick={() => navigate("aiCopilot")}
-                        style={{
-                            padding: "4px 8px",
-                            background: "linear-gradient(135deg, rgba(0, 229, 255, 0.16) 0%, rgba(0, 150, 255, 0.08) 100%)",
-                            border: "1px solid rgba(0, 229, 255, 0.5)",
-                            borderRadius: "9px",
-                            color: "var(--accent-cyan, #00E5FF)",
-                            fontWeight: 900,
-                            fontSize: "10px",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                            boxShadow: "0 0 10px rgba(0,229,255,0.2)",
-                            transition: "all 0.15s ease"
-                        }}
-                        title="Asistente de IA Táctico Offline"
-                    >
-                        <span>🧠</span>
-                        <span className="status-text-hide-compact">IA</span>
-                    </button>
+                    {/* Tactical Action Shortcuts: Only in Tactical Mode & hidden on ultra-compact */}
+                    {!isFamiliar && (
+                        <>
+                            {/* Tactical Action: IA Copilot */}
+                            <button
+                                type="button"
+                                className="status-badge-hide-compact"
+                                onClick={() => navigate("aiCopilot")}
+                                style={{
+                                    padding: "4px 8px",
+                                    background: "linear-gradient(135deg, rgba(0, 229, 255, 0.16) 0%, rgba(0, 150, 255, 0.08) 100%)",
+                                    border: "1px solid rgba(0, 229, 255, 0.5)",
+                                    borderRadius: "9px",
+                                    color: "var(--accent-cyan, #00E5FF)",
+                                    fontWeight: 900,
+                                    fontSize: "10px",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    boxShadow: "0 0 10px rgba(0,229,255,0.2)",
+                                    transition: "all 0.15s ease"
+                                }}
+                                title="Asistente de IA Táctico Offline"
+                            >
+                                <TacIcon name="cpu" size={12} color="var(--accent-cyan, #00E5FF)" />
+                                <span className="status-text-hide-compact">IA</span>
+                            </button>
 
-                    {/* Tactical Action: Commercial Hub */}
-                    <button
-                        type="button"
-                        onClick={() => navigate("commercialHub")}
-                        style={{
-                            padding: "4px 8px",
-                            background: "linear-gradient(135deg, rgba(0, 230, 118, 0.16) 0%, rgba(0, 180, 80, 0.08) 100%)",
-                            border: "1px solid rgba(0, 230, 118, 0.5)",
-                            borderRadius: "9px",
-                            color: "var(--accent-emerald, #00E676)",
-                            fontWeight: 900,
-                            fontSize: "10px",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                            boxShadow: "0 0 10px rgba(0,230,118,0.2)",
-                            transition: "all 0.15s ease"
-                        }}
-                        title="Hub Comercial y Vales P2P zk-Merkle"
-                    >
-                        <span>💳</span>
-                        <span className="status-text-hide-compact">HUB</span>
-                    </button>
+                            {/* Tactical Action: Commercial Hub */}
+                            <button
+                                type="button"
+                                className="status-badge-hide-compact"
+                                onClick={() => navigate("commercialHub")}
+                                style={{
+                                    padding: "4px 8px",
+                                    background: "linear-gradient(135deg, rgba(0, 230, 118, 0.16) 0%, rgba(0, 180, 80, 0.08) 100%)",
+                                    border: "1px solid rgba(0, 230, 118, 0.5)",
+                                    borderRadius: "9px",
+                                    color: "var(--accent-emerald, #00E676)",
+                                    fontWeight: 900,
+                                    fontSize: "10px",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    boxShadow: "0 0 10px rgba(0,230,118,0.2)",
+                                    transition: "all 0.15s ease"
+                                }}
+                                title="Hub Comercial y Vales P2P zk-Merkle"
+                            >
+                                <TacIcon name="wallet" size={12} color="var(--accent-emerald, #00E676)" />
+                                <span className="status-text-hide-compact">HUB</span>
+                            </button>
 
-                    {/* Tactical Action: Node Map */}
-                    <button
-                        type="button"
-                        onClick={() => navigate("nodemap")}
-                        style={{
-                            padding: "4px 8px",
-                            background: "rgba(255, 255, 255, 0.06)",
-                            border: "1px solid rgba(255, 255, 255, 0.16)",
-                            borderRadius: "9px",
-                            color: "#FFFFFF",
-                            fontWeight: 900,
-                            fontSize: "10px",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "3px",
-                            transition: "all 0.15s ease"
-                        }}
-                        title="Mapa Táctico de Nodos Mesh"
-                    >
-                        <span>🗺️</span>
-                    </button>
+                            {/* Tactical Action: Node Map */}
+                            <button
+                                type="button"
+                                className="status-badge-hide-compact"
+                                onClick={() => navigate("nodemap")}
+                                style={{
+                                    padding: "4px 8px",
+                                    background: "rgba(255, 255, 255, 0.06)",
+                                    border: "1px solid rgba(255, 255, 255, 0.16)",
+                                    borderRadius: "9px",
+                                    color: "#FFFFFF",
+                                    fontWeight: 900,
+                                    fontSize: "10px",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "3px",
+                                    transition: "all 0.15s ease"
+                                }}
+                                title="Mapa Táctico de Nodos Mesh"
+                            >
+                                <TacIcon name="compass" size={12} color="#FFFFFF" />
+                            </button>
+                        </>
+                    )}
                 </div>
             </header>
 
@@ -579,9 +619,9 @@ export default function StatusHeader() {
                                 <div style={{
                                     width: "40px", height: "40px", borderRadius: "12px",
                                     background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.3)",
-                                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem"
+                                    display: "flex", alignItems: "center", justifyContent: "center"
                                 }}>
-                                    🎛️
+                                    <TacIcon name="sliders" size={20} color="#00E5FF" />
                                 </div>
                                 <div>
                                     <h3 style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.8px", textTransform: "uppercase", margin: 0 }}>
@@ -634,7 +674,9 @@ export default function StatusHeader() {
                                             transition: "all 0.15s ease"
                                         }}
                                     >
-                                        <div style={{ fontSize: "1.8rem", width: "40px", textAlign: "center", flexShrink: 0 }}>{m.icon}</div>
+                                        <div style={{ width: "40px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                            <TacIcon name={m.icon} size={22} color={isSelected ? "#00E5FF" : "#94A3B8"} />
+                                        </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "3px" }}>
                                                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>

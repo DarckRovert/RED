@@ -14,7 +14,23 @@ import { GlobalSearchModal } from './GlobalSearchModal';
 import { toast } from './Toast';
 import { BackHandlerRegistry } from '../lib/navigation/BackHandlerRegistry';
 import { TacticalAudioEngine } from '../lib/audio/TacticalAudioEngine';
-import { TacIcon } from './ui/TacIcon';
+import TacIcon, { TacIconName } from './ui/TacIcon';
+
+const TAC_ICON_NAMES = new Set<string>([
+    "chats", "status", "calls", "tools", "settings", "search",
+    "shield", "lock", "qr", "radio", "compass", "wallet",
+    "hazard", "satellite", "beacon", "terminal", "arrow-left",
+    "check", "x", "plus", "trash", "refresh", "alert-triangle",
+    "info", "copy", "download", "upload", "share", "power",
+    "cpu", "hard-drive", "users", "user", "volume", "volume-x",
+    "mic", "mic-off", "camera", "camera-off", "map-pin", "navigation",
+    "crosshair", "sliders", "help-circle", "external-link", "layers",
+    "zap", "database", "image", "clipboard", "chevron-left", "chevron-right",
+    "chevron-up", "chevron-down", "sun", "moon", "play", "pause",
+    "activity", "more-vertical", "eye", "clock", "smile", "paperclip",
+    "send", "document", "phone", "wifi", "bluetooth", "ghost",
+    "battery", "battery-charging"
+]);
 
 type CommandDomain = 'favs' | 'comms' | 'nav' | 'survival' | 'security' | 'economy';
 
@@ -136,7 +152,7 @@ export const TacticalCommandCenter: React.FC = () => {
             {
                 id: 'channels',
                 action: 'channels',
-                icon: '📻',
+                icon: 'radio',
                 title: t('tactical_modules.channels_title'),
                 subtitle: t('tactical_modules.channels_sub'),
                 badge: t('tactical_modules.channels_badge'),
@@ -156,7 +172,7 @@ export const TacticalCommandCenter: React.FC = () => {
             {
                 id: 'call',
                 action: 'call',
-                icon: '📞',
+                icon: 'phone',
                 title: t('tactical_modules.call_title'),
                 subtitle: t('tactical_modules.call_sub'),
                 badge: t('tactical_modules.call_badge'),
@@ -166,7 +182,7 @@ export const TacticalCommandCenter: React.FC = () => {
             {
                 id: 'groups',
                 action: 'groups',
-                icon: '👥',
+                icon: 'users',
                 title: t('tactical_modules.groups_title'),
                 subtitle: t('tactical_modules.groups_sub'),
                 badge: t('tactical_modules.groups_badge'),
@@ -216,7 +232,7 @@ export const TacticalCommandCenter: React.FC = () => {
             {
                 id: 'broadcast',
                 action: 'broadcast',
-                icon: '📢',
+                icon: 'volume',
                 title: t('tactical_modules.broadcast_title'),
                 subtitle: t('tactical_modules.broadcast_sub'),
                 badge: t('tactical_modules.broadcast_badge'),
@@ -226,7 +242,7 @@ export const TacticalCommandCenter: React.FC = () => {
             {
                 id: 'loraTransceiver',
                 action: 'loraTransceiver',
-                icon: '📻',
+                icon: 'radio',
                 title: t('tactical_modules.loraTransceiver_title'),
                 subtitle: t('tactical_modules.loraTransceiver_sub'),
                 badge: t('tactical_modules.loraTransceiver_badge'),
@@ -236,7 +252,7 @@ export const TacticalCommandCenter: React.FC = () => {
             {
                 id: 'acousticWarfare',
                 action: 'acousticWarfare',
-                icon: '🔊',
+                icon: 'volume',
                 title: t('tactical_modules.acousticWarfare_title'),
                 subtitle: t('tactical_modules.acousticWarfare_sub'),
                 badge: t('tactical_modules.acousticWarfare_badge'),
@@ -268,7 +284,7 @@ export const TacticalCommandCenter: React.FC = () => {
             {
                 id: 'nodemap',
                 action: 'nodemap',
-                icon: '🗺️',
+                icon: 'compass',
                 title: t('tactical_modules.nodemap_title'),
                 subtitle: t('tactical_modules.nodemap_sub'),
                 badge: t('tactical_modules.nodemap_badge'),
@@ -724,7 +740,7 @@ export const TacticalCommandCenter: React.FC = () => {
             {
                 id: 'ecoMesh',
                 action: 'ecoMesh',
-                icon: '🔋',
+                icon: 'battery',
                 title: t('tactical_modules.ecoMesh_title'),
                 subtitle: t('tactical_modules.ecoMesh_sub'),
                 badge: t('tactical_modules.ecoMesh_badge'),
@@ -734,7 +750,7 @@ export const TacticalCommandCenter: React.FC = () => {
             {
                 id: 'swarmHealthHUD',
                 action: 'swarmHealthHUD',
-                icon: '📶',
+                icon: 'wifi',
                 title: t('tactical_modules.swarmHealthHUD_title'),
                 subtitle: t('tactical_modules.swarmHealthHUD_sub'),
                 badge: t('tactical_modules.swarmHealthHUD_badge'),
@@ -744,7 +760,7 @@ export const TacticalCommandCenter: React.FC = () => {
             {
                 id: 'settings',
                 action: 'settings',
-                icon: '⚙️',
+                icon: 'settings',
                 title: t('tactical_modules.settings_title'),
                 subtitle: t('tactical_modules.settings_sub'),
                 badge: t('tactical_modules.settings_badge'),
@@ -785,13 +801,13 @@ export const TacticalCommandCenter: React.FC = () => {
         return modulesByDomain[activeDomain] || [];
     }, [activeDomain, searchQuery, favoriteModules, allFlatModules, modulesByDomain]);
 
-    const domainCategories: { id: CommandDomain; label: string; icon: string; count: number }[] = [
-        { id: 'favs', label: t('tactical_modules.domain_favs') || 'Favoritos', icon: '⭐', count: favoriteModules.length },
-        { id: 'comms', label: t('tactical_modules.domain_comms') || 'Comunicaciones', icon: '💬', count: modulesByDomain.comms.length },
-        { id: 'nav', label: t('tactical_modules.domain_nav') || 'Navegación & Sensores', icon: '🧭', count: modulesByDomain.nav.length },
-        { id: 'survival', label: t('tactical_modules.domain_survival') || 'Supervivencia & Salud', icon: '🚨', count: modulesByDomain.survival.length },
-        { id: 'security', label: t('tactical_modules.domain_security') || 'Seguridad & Bóvedas', icon: '🛡️', count: modulesByDomain.security.length },
-        { id: 'economy', label: t('tactical_modules.domain_economy') || 'Economía & Sistema', icon: '⚡', count: modulesByDomain.economy.length },
+    const domainCategories: { id: CommandDomain; label: string; icon: TacIconName; count: number }[] = [
+        { id: 'favs', label: t('tactical_modules.domain_favs') || 'Favoritos', icon: 'zap', count: favoriteModules.length },
+        { id: 'comms', label: t('tactical_modules.domain_comms') || 'Comunicaciones', icon: 'radio', count: modulesByDomain.comms.length },
+        { id: 'nav', label: t('tactical_modules.domain_nav') || 'Navegación & Sensores', icon: 'compass', count: modulesByDomain.nav.length },
+        { id: 'survival', label: t('tactical_modules.domain_survival') || 'Supervivencia & Salud', icon: 'hazard', count: modulesByDomain.survival.length },
+        { id: 'security', label: t('tactical_modules.domain_security') || 'Seguridad & Bóvedas', icon: 'shield', count: modulesByDomain.security.length },
+        { id: 'economy', label: t('tactical_modules.domain_economy') || 'Economía & Sistema', icon: 'wallet', count: modulesByDomain.economy.length },
     ];
 
     return (
@@ -818,7 +834,7 @@ export const TacticalCommandCenter: React.FC = () => {
                                 style={{ width: '36px', height: '36px', color: '#00E5FF' }}
                                 title="Volver"
                             >
-                                ←
+                                <TacIcon name="arrow-left" size={18} color="#00E5FF" />
                             </button>
                         )}
                         <div style={{
@@ -925,7 +941,7 @@ export const TacticalCommandCenter: React.FC = () => {
                                     boxShadow: isSelected ? '0 0 15px rgba(0, 229, 255, 0.25)' : 'none'
                                 }}
                             >
-                                <span>{cat.icon}</span>
+                                <TacIcon name={cat.icon} size={15} color={isSelected ? '#00E5FF' : 'var(--text-secondary, #94A3B8)'} />
                                 <span>{cat.label}</span>
                                 <span style={{
                                     fontSize: '0.6rem', padding: '1px 5px', borderRadius: '4px',
@@ -971,9 +987,13 @@ export const TacticalCommandCenter: React.FC = () => {
                                     <div style={{
                                         width: '42px', height: '42px', borderRadius: '12px',
                                         background: 'rgba(255, 255, 255, 0.06)', border: '1px solid rgba(255, 255, 255, 0.12)',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center'
                                     }}>
-                                        {mod.icon}
+                                        {TAC_ICON_NAMES.has(mod.icon) ? (
+                                            <TacIcon name={mod.icon as TacIconName} size={22} color={mod.badgeColor || "var(--accent-cyan, #00E5FF)"} />
+                                        ) : (
+                                            <span style={{ fontSize: '1.3rem' }}>{mod.icon}</span>
+                                        )}
                                     </div>
                                     <div>
                                         <div style={{ fontSize: '0.9rem', fontWeight: 900, color: '#FFFFFF', letterSpacing: '0.3px' }}>

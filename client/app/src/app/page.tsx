@@ -138,7 +138,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
 
 // ── AppRouter ─────────────────────────────────────────────────────────────────
 export default function AppRouter() {
-  const { currentScreen, activeLiveStreamId, navigate } = useRedStore();
+  const { currentScreen, activeLiveStreamId, navigate, activeTab = "chats" } = useRedStore();
 
   const [mounted,      setMounted]      = useState(false);
   const [isTablet,     setIsTablet]     = useState(false);
@@ -327,8 +327,8 @@ export default function AppRouter() {
         <TacticalQuickActionHUD isTablet={isTablet} />
 
         <main className="app-main">
-          {/* StatusHeader: siempre en tablet, solo en sidebar en mobile */}
-          {isTablet ? <StatusHeader /> : (currentScreen === "sidebar" && <StatusHeader />)}
+          {/* StatusHeader: siempre en tablet; en mobile en sidebar excepto en tools, settings y status para evitar doble cabecera */}
+          {isTablet ? <StatusHeader /> : (currentScreen === "sidebar" && activeTab !== "tools" && activeTab !== "settings" && activeTab !== "status" && <StatusHeader />)}
 
           {isTablet ? (
             /* ── Master-Detail Tablet Layout (≥ 768px) ────────────────────── */

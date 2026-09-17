@@ -219,6 +219,9 @@ class MeshRouter {
   /** Listeners for Shake-to-Pair P2P signals */
   private shakePairListeners: Set<(peer: { identity_hash: string; display_name: string; public_key?: string; timestamp: number }) => void> = new Set();
 
+  /** Listeners notified whenever the mesh peer topology mutates (real-time reactive bus) */
+  private peerChangeListeners: Set<(peers: Map<string, MeshPeer>) => void> = new Set();
+
   private initialized = false;
   private unsubscribeNetwork: (() => void) | null = null;
 
@@ -514,6 +517,25 @@ class MeshRouter {
   }
 
   /**
+   * Subscribes to reactive peer topology mutations (additions, updates, removals).
+   * Returns an unsubscribe cleanup function.
+   */
+  onPeersChange(cb: (peers: Map<string, MeshPeer>) => void): () => void {
+    this.peerChangeListeners.add(cb);
+    return () => this.peerChangeListeners.delete(cb);
+  }
+
+  private notifyPeersChange(): void {
+    this.peerChangeListeners.forEach(listener => {
+      try {
+        listener(this.peers);
+      } catch (err) {
+        console.error('[MeshRouter] Error in peerChange listener:', err);
+      }
+    });
+  }
+
+  /**
    * Broadcasts a real P2P Shake & Pair pulse across all active transports.
    */
   async broadcastShakePair(displayName?: string, publicKey?: string | null): Promise<void> {
@@ -618,6 +640,7 @@ class MeshRouter {
         if (displayName && !existing.name?.startsWith('Operador ')) existing.name = displayName;
         if (publicKey) existing.publicKey = publicKey;
         this.peers.set(cleanCanonical, existing);
+        this.notifyPeersChange();
       }
     }
 
@@ -2079,12 +2102,16 @@ class MeshRouter {
   }
 
   removePeer(peerId: string) {
-    this.peers.delete(peerId);
+    let changed = false;
+    if (this.peers.delete(peerId)) changed = true;
     this.activeGateways.delete(peerId);
     const canonical = this.deviceToCanonicalMap.get(peerId);
     if (canonical) {
-      this.peers.delete(canonical);
+      if (this.peers.delete(canonical)) changed = true;
       this.activeGateways.delete(canonical);
+    }
+    if (changed) {
+      this.notifyPeersChange();
     }
   }
 
@@ -2200,6 +2227,7 @@ class MeshRouter {
     } else {
       this.activeGateways.delete(resolvedCanonical);
     }
+    this.notifyPeersChange();
   }
 
   getPeerList(): MeshPeer[] {

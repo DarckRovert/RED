@@ -11,6 +11,7 @@ import { ScreenView } from "../store/types";
 import { toast } from "./Toast";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import TacIcon from "./ui/TacIcon";
 
 interface BearerTacticalInfo {
     name: string;
@@ -160,18 +161,6 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
         toast.success(t('swarm_health_hud.auto_qos_restored') || '🔄 Enrutamiento Autónomo QoS Restablecido');
     };
 
-    const getBearerIcon = (b: string) => {
-        switch (b) {
-            case "WIFI_DIRECT": return "📶";
-            case "BLE": return "🔷";
-            case "LORA_RF": return "📻";
-            case "SOUNDMESH": return "🔊";
-            case "LIFI_OPTICAL": return "⚡";
-            case "SATELLITE_LEO": return "🛰️";
-            default: return "🌐";
-        }
-    };
-
     const getBearerColor = (b: string, isOnline: boolean) => {
         if (!isOnline) return "var(--text-muted, #64748B)";
         switch (b) {
@@ -181,6 +170,19 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
             case "SOUNDMESH": return "var(--accent-amber, #FFB300)";
             case "SATELLITE_LEO": return "var(--accent-cyan, #00E5FF)";
             default: return "#38BDF8";
+        }
+    };
+
+    const getBearerIcon = (b: string, isOnline: boolean): React.ReactNode => {
+        const iconColor = getBearerColor(b, isOnline);
+        switch (b) {
+            case "WIFI_DIRECT": return <TacIcon name="wifi" size={18} color={iconColor} />;
+            case "BLE": return <TacIcon name="bluetooth" size={18} color={iconColor} />;
+            case "LORA_RF": return <TacIcon name="radio" size={18} color={iconColor} />;
+            case "SOUNDMESH": return <TacIcon name="volume" size={18} color={iconColor} />;
+            case "LIFI_OPTICAL": return <TacIcon name="zap" size={18} color={iconColor} />;
+            case "SATELLITE_LEO": return <TacIcon name="satellite" size={18} color={iconColor} />;
+            default: return <TacIcon name="globe" size={18} color={iconColor} />;
         }
     };
 
@@ -209,9 +211,9 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                     <div style={{
                         width: "40px", height: "40px", borderRadius: "10px",
                         background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.3)",
-                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem"
+                        display: "flex", alignItems: "center", justifyContent: "center"
                     }}>
-                        🛰️
+                        <TacIcon name="satellite" size={22} color="#00E5FF" />
                     </div>
                     <div>
                         <div style={{ fontSize: "0.90rem", fontWeight: 900, color: "#00E5FF", letterSpacing: "0.5px" }}>
@@ -368,8 +370,8 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                                     }}
                                 >
                                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                        <span style={{ fontSize: "1.2rem", width: "24px", textAlign: "center" }}>
-                                            {getBearerIcon(b.bearer)}
+                                        <span style={{ width: "24px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                            {getBearerIcon(b.bearer, b.isOnline)}
                                         </span>
                                         <div>
                                             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>

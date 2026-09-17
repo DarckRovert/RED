@@ -603,6 +603,38 @@ export default function ChatWindow() {
         }
     };
 
+    useEffect(() => {
+        if (!isSecurityMenuOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setIsSecurityMenuOpen(false);
+            return true;
+        });
+    }, [isSecurityMenuOpen]);
+
+    useEffect(() => {
+        if (!isSafetyModalOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setIsSafetyModalOpen(false);
+            return true;
+        });
+    }, [isSafetyModalOpen]);
+
+    useEffect(() => {
+        if (!isWipeConfirmOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setIsWipeConfirmOpen(false);
+            return true;
+        });
+    }, [isWipeConfirmOpen]);
+
+    useEffect(() => {
+        if (!isPayModalOpen) return;
+        return BackHandlerRegistry.register(() => {
+            setIsPayModalOpen(false);
+            return true;
+        });
+    }, [isPayModalOpen]);
+
     const isAtBottomRef = useRef(true);
 
     const handleScroll = useCallback(() => {
@@ -666,6 +698,14 @@ export default function ChatWindow() {
         type: "image" | "video";
         mimeType: string;
     } | null>(null);
+
+    useEffect(() => {
+        if (!mediaSendPreviewData) return;
+        return BackHandlerRegistry.register(() => {
+            setMediaSendPreviewData(null);
+            return true;
+        });
+    }, [mediaSendPreviewData]);
 
     const handleConfirmMediaSend = async (caption: string) => {
         if (!mediaSendPreviewData || !peerHash) return;

@@ -7,6 +7,7 @@
 
 import { RedAPI } from '../../api';
 import { satelliteMeshGateway } from './SatelliteMeshGatewayEngine';
+import { meshRouter } from './meshRouter';
 
 export type TacticalBearerType = 'BLE' | 'WIFI_DIRECT' | 'LORA_RF' | 'SOUNDMESH' | 'LIFI_OPTICAL' | 'SATELLITE_LEO';
 
@@ -58,6 +59,7 @@ export class DynamicBearerGovernor {
 
     private listeners: Set<(t: SwarmHealthTelemetry) => void> = new Set();
     private pollingInterval: any = null;
+    private unsubMeshPeers?: () => void;
 
     private constructor() {
         const bearers: TacticalBearerType[] = ['WIFI_DIRECT', 'BLE', 'LORA_RF', 'SOUNDMESH', 'LIFI_OPTICAL', 'SATELLITE_LEO'];
@@ -75,10 +77,21 @@ export class DynamicBearerGovernor {
             });
         });
 
-        // Iniciar sincronización de telemetría física
+        // Iniciar sincronización de telemetría física reactiva + watchdog de forma asíncrona segura (evita TDZ circular)
         if (typeof window !== 'undefined') {
-            this.syncWithPhysicalMesh();
-            this.pollingInterval = setInterval(() => this.syncWithPhysicalMesh(), 3000);
+            setTimeout(() => {
+                try {
+                    this.syncWithPhysicalMesh();
+                    this.pollingInterval = setInterval(() => this.syncWithPhysicalMesh(), 3000);
+                    if (typeof meshRouter !== 'undefined' && meshRouter && typeof meshRouter.onPeersChange === 'function') {
+                        this.unsubMeshPeers = meshRouter.onPeersChange(() => {
+                            this.syncWithPhysicalMesh().catch(() => {});
+                        });
+                    }
+                } catch (err) {
+                    console.warn('[DynamicBearerGovernor] Deferred init warning:', err);
+                }
+            }, 0);
         }
     }
 

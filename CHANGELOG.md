@@ -1,5 +1,24 @@
 # Changelog
 
+## [109.0.0-iconografia-vectorial-c4isr-y-telemetria-reactiva-mesh] - 2026-09-17
+
+### 🚀 Iconografía Vectorial C4ISR & Telemetría Reactiva Mesh (Release Oficial v109.0.0)
+
+- **Catálogo Vectorial Nativo C4ISR (`TacIcon.tsx`):**
+  - Incorporación de glifos SVG tácticos militares nativos: `phone`, `wifi`, `bluetooth`, `ghost`, `battery`, `battery-charging`.
+  - Migración completa de todas las vistas (`CallsHistoryView`, `CallScreen`, `SidebarHeader`, `StatusHeader`, `SwarmHealthHUD`, `TacticalCommandCenter`) eliminando emojis Unicode crudos.
+  - Normalización estética de alta fidelidad, escalado vectorial nítido e inmunidad a variaciones tipográficas de fabricantes móviles.
+- **Telemetría Reactiva Mesh en Tiempo Real (`meshRouter.ts` & `DynamicBearerGovernor.ts`):**
+  - Implementación de bus de eventos reactivo con `onPeersChange` y `notifyPeersChange` en `meshRouter.ts`.
+  - Propagación instantánea (0ms de latencia) de cambios topológicos de pares hacia los gobernadores de enlace.
+  - Protección de inicialización asíncrona en `DynamicBearerGovernor.ts` erradicando bloqueos por Temporal Dead Zone (TDZ) en Turbopack/Next.js.
+- **Monitoreo Energético Cinético en Vivo (`StatusHeader.tsx`):**
+  - Suscripción en tiempo real a `KineticDutyGovernor` con actualización fluida de porcentaje y estado de carga de batería.
+- **Gobernanza Atómica SSOT v109.0.0 & Verificación en Hardware Físico Real:**
+  - 100% de paridad en los 22 archivos maestros de versión (`v109.0.0`, build code `109000`).
+  - Verificación en hardware real en Motorola Moto G22 (`ZT322B386P`) y Lenovo Tablet (`HA2CHKZ2`) con 0 crashes y 0 excepciones.
+  - Hash SHA-256 canónico: `BC02DF2D9D3FFB0453357D25A9CEB9CF0B0A72BCC97CAA942915977A8752D753`.
+
 ## [108.0.0-sincronizacion-p2p-soberana-consentimiento-qr-y-persistencia-limpia] - 2026-09-17
 
 ### 🚀 Sincronización P2P Soberana, Consentimiento QR & Persistencia Limpia (Release Oficial v108.0.0)

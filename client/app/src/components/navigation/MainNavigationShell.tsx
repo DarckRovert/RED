@@ -60,6 +60,15 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
         });
     }, [storyCreatorOpen]);
 
+    // Interceptor de navegación Atrás para retornar a la pestaña 'chats' desde pestañas secundarias
+    useEffect(() => {
+        if (activeTab === "chats") return;
+        return BackHandlerRegistry.register(() => {
+            setActiveTab("chats");
+            return true;
+        });
+    }, [activeTab, setActiveTab]);
+
     // Listen for tab switch requests
     useEffect(() => {
         const handleSwitchTab = (e: any) => {
@@ -97,6 +106,8 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
             flexDirection: isTablet ? "row" : "column",
             width: "100%",
             height: "100%",
+            flex: "1 1 0%",
+            minHeight: 0,
             background: isFamiliar ? "#0C1317" : "var(--bg-void, #020204)",
             position: "relative",
             overflow: "hidden"
@@ -284,7 +295,7 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
             )}
 
             {/* Dynamic Content Area based on Selected Tab */}
-            <div style={{ flex: 1, display: "flex", height: "100%", width: "100%", overflow: "hidden", position: "relative" }}>
+            <div style={{ flex: "1 1 0%", minHeight: 0, display: "flex", width: "100%", overflow: "hidden", position: "relative" }}>
                 {activeTab === "chats" && <Sidebar />}
                 {activeTab === "status" && <StatusView />}
                 {activeTab === "calls" && <CallsHistoryView />}

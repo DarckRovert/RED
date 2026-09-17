@@ -1958,16 +1958,22 @@ body.mode-defcon-survival {
   .quantum-shield-badge {
     display: flex;
   }
+  .chat-header-back-btn {
+    display: none !important;
+  }
 }
 
-@media (max-width: 380px) {
+@media (max-width: 440px) {
   .status-label-truncate {
-    max-width: 68px;
+    max-width: 74px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .status-text-hide-compact {
+    display: none !important;
+  }
+  .status-badge-hide-compact {
     display: none !important;
   }
 }

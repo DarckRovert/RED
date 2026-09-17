@@ -9,6 +9,7 @@ import { meshRouter } from "../../lib/mesh/meshRouter";
 import { toast } from "../Toast";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { TacIcon } from "../ui/TacIcon";
 
 export function CallsHistoryView() {
     const { t } = useTranslation();
@@ -17,10 +18,11 @@ export function CallsHistoryView() {
     const [history, setHistory] = useState<CallRecord[]>(() => callHistory.getHistory());
     const [filter, setFilter] = useState<"all" | "missed">("all");
     const [isPickerOpen, setIsPickerOpen] = useState(false);
+    const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
     const [pickerSearch, setPickerSearch] = useState("");
     const [manualHash, setManualHash] = useState("");
 
-    // Intercepción LIFO de hardware Android y tecla Escape para el selector de llamadas
+    // Intercepción LIFO de hardware Android y tecla Escape para el selector de llamadas y diálogo de vaciado
     useEffect(() => {
         if (!isPickerOpen) return;
         const unregister = BackHandlerRegistry.register(() => {
@@ -30,6 +32,16 @@ export function CallsHistoryView() {
         });
         return () => unregister();
     }, [isPickerOpen]);
+
+    useEffect(() => {
+        if (!isClearConfirmOpen) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            setIsClearConfirmOpen(false);
+            return true;
+        });
+        return () => unregister();
+    }, [isClearConfirmOpen]);
 
     useEffect(() => {
         const unsub = callHistory.subscribe(setHistory);
@@ -162,19 +174,15 @@ export function CallsHistoryView() {
 
                 {history.length > 0 && (
                     <button
-                        onClick={() => {
-                            if (window.confirm("¿Deseas vaciar el registro de llamadas?")) {
-                                callHistory.clearHistory();
-                                toast.info("Historial de llamadas limpiado");
-                            }
-                        }}
+                        onClick={() => setIsClearConfirmOpen(true)}
                         style={{
                             background: "transparent", border: "none",
                             color: isFamiliar ? "#8696A0" : "var(--text-muted, #777)", fontSize: "0.76rem",
-                            cursor: "pointer", fontWeight: 600
+                            cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: "5px"
                         }}
                     >
-                        🗑️ Limpiar
+                        <TacIcon name="trash" size={13} color="currentColor" />
+                        <span>Limpiar</span>
                     </button>
                 )}
             </div>
@@ -197,10 +205,9 @@ export function CallsHistoryView() {
                         <div style={{
                             width: "42px", height: "42px", borderRadius: "50%",
                             background: isFamiliar ? "#00A884" : "linear-gradient(135deg, #00E5FF, #0097A7)",
-                            color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: "1.3rem", fontWeight: 900
+                            color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center"
                         }}>
-                            📻
+                            <TacIcon name="radio" size={20} color="#FFFFFF" />
                         </div>
                         <div>
                             <div style={{ fontSize: "0.92rem", fontWeight: 700, color: isFamiliar ? "#E9EDEF" : "#FFFFFF" }}>
@@ -211,7 +218,7 @@ export function CallsHistoryView() {
                             </div>
                         </div>
                     </div>
-                    <span style={{ fontSize: "1.1rem", color: isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)" }}>➔</span>
+                    <TacIcon name="chevron-right" size={18} color={isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)"} />
                 </div>
 
                 {/* Section Title */}
@@ -229,9 +236,9 @@ export function CallsHistoryView() {
                             width: "68px", height: "68px", borderRadius: "50%",
                             background: isFamiliar ? "#202C33" : "rgba(255, 255, 255, 0.04)",
                             border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid rgba(255, 255, 255, 0.1)",
-                            display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.8rem"
+                            display: "flex", alignItems: "center", justifyContent: "center"
                         }}>
-                            📞
+                            <TacIcon name="calls" size={30} color={isFamiliar ? "#8696A0" : "#666"} />
                         </div>
                         <div style={{ fontSize: "0.95rem", fontWeight: 700, color: isFamiliar ? "#E9EDEF" : "#EEE" }}>
                             {filter === "missed" ? "No hay llamadas perdidas" : "No hay llamadas recientes"}
@@ -246,10 +253,12 @@ export function CallsHistoryView() {
                                 background: isFamiliar ? "#00A884" : "linear-gradient(135deg, #00E676, #00B368)",
                                 color: "#FFFFFF",
                                 fontWeight: 700, fontSize: "0.84rem", cursor: "pointer", border: "none",
-                                boxShadow: isFamiliar ? "0 4px 14px rgba(0, 168, 132, 0.4)" : "none"
+                                boxShadow: isFamiliar ? "0 4px 14px rgba(0, 168, 132, 0.4)" : "none",
+                                display: "inline-flex", alignItems: "center", gap: "8px"
                             }}
                         >
-                            📞 Iniciar Nueva Llamada
+                            <TacIcon name="calls" size={16} color="#FFFFFF" />
+                            <span>Iniciar Nueva Llamada</span>
                         </button>
                     </div>
                 ) : (
@@ -300,7 +309,7 @@ export function CallsHistoryView() {
                                                 }}>
                                                     {isMissed ? "↙" : (isOutgoing ? "↗" : "↙")}
                                                 </span>
-                                                <span>{isVideo ? "📹 " : ""}{formatTimestamp(record.timestamp)}</span>
+                                                <span>{isVideo && <TacIcon name="camera" size={13} color="currentColor" style={{ display: "inline-block", verticalAlign: "middle", marginRight: "4px" }} />}{formatTimestamp(record.timestamp)}</span>
                                                 {record.durationSeconds > 0 && (
                                                     <span style={{ color: isFamiliar ? "#8696A0" : "var(--accent-cyan, #00E5FF)", fontFamily: isFamiliar ? "inherit" : "JetBrains Mono, monospace" }}>
                                                         {formatDuration(record.durationSeconds)}
@@ -320,11 +329,11 @@ export function CallsHistoryView() {
                                                 border: isFamiliar ? "none" : "1px solid rgba(0, 230, 118, 0.3)",
                                                 color: isFamiliar ? "#00A884" : "var(--accent-emerald, #00E676)",
                                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                                cursor: "pointer", fontSize: "1.15rem"
+                                                cursor: "pointer"
                                             }}
                                             title={isVideo ? "Videollamada" : "Llamada de voz"}
                                         >
-                                            {isVideo ? "📹" : "📞"}
+                                            {isVideo ? <TacIcon name="camera" size={18} color="currentColor" /> : <TacIcon name="calls" size={18} color="currentColor" />}
                                         </button>
                                         <button
                                             onClick={() => {
@@ -338,7 +347,7 @@ export function CallsHistoryView() {
                                             }}
                                             title="Eliminar de historial"
                                         >
-                                            ✕
+                                            <TacIcon name="trash" size={14} color="currentColor" />
                                         </button>
                                     </div>
                                 </div>
@@ -353,8 +362,8 @@ export function CallsHistoryView() {
                 onClick={() => setIsPickerOpen(true)}
                 style={{
                     position: "absolute",
-                    bottom: "20px",
-                    right: "20px",
+                    bottom: "calc(76px + env(safe-area-inset-bottom, 0px))",
+                    right: "18px",
                     width: "56px",
                     height: "56px",
                     borderRadius: isFamiliar ? "50%" : "16px",
@@ -365,14 +374,13 @@ export function CallsHistoryView() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: "1.4rem",
                     cursor: "pointer",
                     zIndex: 100,
                     transition: "transform 0.15s ease"
                 }}
                 title="Nueva Llamada P2P"
             >
-                📞
+                <TacIcon name="calls" size={24} color="#FFFFFF" />
             </button>
 
             {/* Contact Picker Modal for New Call */}
@@ -475,12 +483,12 @@ export function CallsHistoryView() {
                                                     background: isFamiliar ? "rgba(0, 168, 132, 0.18)" : "rgba(0, 230, 118, 0.15)",
                                                     border: isFamiliar ? "none" : "1px solid rgba(0, 230, 118, 0.3)",
                                                     color: isFamiliar ? "#00A884" : "var(--accent-emerald, #00E676)",
-                                                    cursor: "pointer", fontSize: "1.05rem",
+                                                    cursor: "pointer",
                                                     display: "flex", alignItems: "center", justifyContent: "center"
                                                 }}
                                                 title="Llamada de voz"
                                             >
-                                                📞
+                                                <TacIcon name="calls" size={16} color="currentColor" />
                                             </button>
                                             <button
                                                 onClick={() => startCallWithPeer(c.identity_hash, "video")}
@@ -489,12 +497,12 @@ export function CallsHistoryView() {
                                                     background: isFamiliar ? "rgba(0, 168, 132, 0.18)" : "rgba(0, 229, 255, 0.15)",
                                                     border: isFamiliar ? "none" : "1px solid rgba(0, 229, 255, 0.3)",
                                                     color: isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)",
-                                                    cursor: "pointer", fontSize: "1.05rem",
+                                                    cursor: "pointer",
                                                     display: "flex", alignItems: "center", justifyContent: "center"
                                                 }}
                                                 title="Videollamada"
                                             >
-                                                📹
+                                                <TacIcon name="camera" size={16} color="currentColor" />
                                             </button>
                                         </div>
                                     </div>
@@ -523,24 +531,84 @@ export function CallsHistoryView() {
                                             style={{
                                                 padding: "6px 12px", borderRadius: "8px",
                                                 background: "#00A884", color: "#FFF",
-                                                fontWeight: 800, border: "none", cursor: "pointer"
+                                                fontWeight: 800, border: "none", cursor: "pointer",
+                                                display: "flex", alignItems: "center", justifyContent: "center"
                                             }}
                                         >
-                                            📞
+                                            <TacIcon name="calls" size={16} color="#FFFFFF" />
                                         </button>
                                         <button
                                             onClick={() => startCallWithPeer(pickerSearch.trim(), "video")}
                                             style={{
                                                 padding: "6px 12px", borderRadius: "8px",
                                                 background: "#00A884", color: "#FFF",
-                                                fontWeight: 800, border: "none", cursor: "pointer"
+                                                fontWeight: 800, border: "none", cursor: "pointer",
+                                                display: "flex", alignItems: "center", justifyContent: "center"
                                             }}
                                         >
-                                            📹
+                                            <TacIcon name="camera" size={16} color="#FFFFFF" />
                                         </button>
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Clear History Confirmation Modal */}
+            {isClearConfirmOpen && (
+                <div
+                    style={{
+                        position: "fixed", inset: 0, zIndex: 10000,
+                        background: "rgba(0, 0, 0, 0.7)", backdropFilter: "blur(8px)",
+                        display: "flex", alignItems: "center", justifyContent: "center", padding: "16px"
+                    }}
+                    onClick={() => setIsClearConfirmOpen(false)}
+                >
+                    <div
+                        style={{
+                            width: "100%", maxWidth: "340px",
+                            background: isFamiliar ? "#202C33" : "rgba(18, 22, 38, 0.98)",
+                            borderRadius: "16px", padding: "20px",
+                            boxShadow: "0 12px 36px rgba(0,0,0,0.6)",
+                            border: isFamiliar ? "1px solid rgba(255,255,255,0.08)" : "1px solid var(--glass-border)",
+                            display: "flex", flexDirection: "column", gap: "14px"
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "#E9EDEF" }}>
+                            ¿Vaciar registro de llamadas?
+                        </div>
+                        <div style={{ fontSize: "0.85rem", color: isFamiliar ? "#8696A0" : "var(--text-muted)", lineHeight: 1.4 }}>
+                            Se eliminará todo el historial de llamadas de audio y video en este dispositivo. Esta acción no se puede deshacer.
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "6px" }}>
+                            <button
+                                onClick={() => setIsClearConfirmOpen(false)}
+                                style={{
+                                    padding: "8px 16px", borderRadius: "8px",
+                                    background: "transparent", border: "none",
+                                    color: isFamiliar ? "#00A884" : "var(--text-muted)",
+                                    fontWeight: 600, fontSize: "0.85rem", cursor: "pointer"
+                                }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    callHistory.clearHistory();
+                                    setIsClearConfirmOpen(false);
+                                    toast.info("Historial de llamadas limpiado");
+                                }}
+                                style={{
+                                    padding: "8px 16px", borderRadius: "8px",
+                                    background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)",
+                                    color: "#EF4444", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer"
+                                }}
+                            >
+                                Vaciar
+                            </button>
                         </div>
                     </div>
                 </div>

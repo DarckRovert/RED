@@ -716,7 +716,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                 }}
                                 title="Emojis & Símbolos"
                             >
-                                😊
+                                <TacIcon name="smile" size={20} color="currentColor" />
                             </button>
 
                             {/* Text Area */}
@@ -778,7 +778,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                 }}
                                 title="Adjuntar multimedia"
                             >
-                                📎
+                                <TacIcon name="paperclip" size={20} color="currentColor" />
                             </button>
 
                             {/* AI Writing Assist Trigger (only when text is entered) */}
@@ -873,9 +873,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                 }}
                                 title="Enviar mensaje"
                             >
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                                </svg>
+                                <TacIcon name="send" size={20} color="#FFFFFF" />
                             </button>
                         ) : (
                             <button
@@ -897,9 +895,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                 }}
                                 title="Grabar nota de voz"
                             >
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-2.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-                                </svg>
+                                <TacIcon name="mic" size={20} color="#FFFFFF" />
                             </button>
                         )}
                     </>

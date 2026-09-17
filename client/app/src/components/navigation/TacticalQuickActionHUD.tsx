@@ -93,6 +93,13 @@ export const TacticalQuickActionHUD: React.FC<TacticalQuickActionHUDProps> = ({ 
         }
     }, [selectedProfile]);
 
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
+
+    // En Modo Familiar en pantalla principal móvil (sidebar), ocultar HUD para preservar la estética limpia de WhatsApp
+    if (isFamiliar && currentScreen === "sidebar" && !activeConversationId && !isTablet) {
+        return null;
+    }
+
     // Si el teclado está abierto en mobile, ocultamos temporalmente el HUD
     if (isKeyboardOpen && !isTablet) {
         return null;
@@ -124,11 +131,11 @@ export const TacticalQuickActionHUD: React.FC<TacticalQuickActionHUDProps> = ({ 
         });
     };
 
-    // Ajuste de posición vertical en mobile según si estamos en pantalla principal (con barra inferior) o interna
+    // Ajuste de posición vertical en mobile: en sidebar táctica se posiciona a 144px (sobre el FAB de 76px) para evitar colisiones
     const bottomPosition = isTablet 
         ? "24px" 
         : (currentScreen === "sidebar" && !activeConversationId
-            ? "calc(74px + env(safe-area-inset-bottom, 0px))" 
+            ? "calc(144px + env(safe-area-inset-bottom, 0px))" 
             : "calc(16px + env(safe-area-inset-bottom, 0px))");
 
     return (

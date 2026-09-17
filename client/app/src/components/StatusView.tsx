@@ -11,6 +11,7 @@ import { LiveStreamViewer } from "./LiveStreamViewer";
 import { EmptyState } from "./ui/EmptyState";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { TacIcon } from "./ui/TacIcon";
 
 const AVATAR_COLORS = [
     ["#E8213A","#C0152A"], ["#FF7043","#E64A19"], ["#FFA726","#F57C00"],
@@ -49,9 +50,19 @@ export default function StatusView() {
     const { t } = useTranslation();
     const {
         contacts, identity, goBack, peerStories,
-        myStories, liveStreams, navigate, preferences
+        myStories, liveStreams, navigate, preferences,
+        activeTab, setActiveTab
     } = useRedStore();
     const isFamiliar = (preferences?.uiMode ?? 'familiar') !== 'tactical';
+
+    const handleClose = useCallback(() => {
+        TacticalAudioEngine.playTap();
+        if (activeTab === "status") {
+            setActiveTab("chats");
+        } else {
+            goBack();
+        }
+    }, [activeTab, setActiveTab, goBack]);
 
     const [modal, setModal] = useState<Modal | null>(null);
     const now = Date.now();
@@ -87,20 +98,16 @@ export default function StatusView() {
         return arr.filter(s => (now - s.timestamp) < STATUS_TTL_MS);
     }, [myStories, now]);
 
-    // ── LIFO Back Navigation Handler: Sub-modales (Viewer/Creator/Live) -> Salir ──
+    // ── LIFO Back Navigation Handler: Cierre de Sub-modales (Viewer/Creator/Live) ──
     useEffect(() => {
+        if (!modal) return;
         const unreg = BackHandlerRegistry.register(() => {
-            if (modal !== null) {
-                setModal(null);
-                TacticalAudioEngine.playTap();
-                return true;
-            }
+            setModal(null);
             TacticalAudioEngine.playTap();
-            goBack();
             return true;
         });
         return unreg;
-    }, [modal, goBack]);
+    }, [modal]);
 
     const handleReply = useCallback((storyId: string, senderHash: string) => {
         setModal(null);
@@ -162,11 +169,12 @@ export default function StatusView() {
                             onClick={() => setModal({ type: "creator" })}
                             style={{
                                 background: "transparent", border: "none",
-                                color: "#AEBAC1", fontSize: "1.2rem", cursor: "pointer"
+                                color: "#AEBAC1", cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center"
                             }}
                             title="Buscar o publicar"
                         >
-                            📷
+                            <TacIcon name="camera" size={20} color="#AEBAC1" />
                         </button>
                         <button
                             onClick={() => setModal({ type: "broadcaster" })}
@@ -230,7 +238,7 @@ export default function StatusView() {
                                             border: myValidStories.length > 0 ? "2.5px solid #00A884" : "none",
                                             padding: myValidStories.length > 0 ? "2px" : "0"
                                         }}>
-                                            {identity?.nickname ? identity.nickname[0].toUpperCase() : "👤"}
+                                            {identity?.nickname ? identity.nickname[0].toUpperCase() : <TacIcon name="user" size={24} color="#FFFFFF" />}
                                         </div>
 
                                         {/* Badge '+' Verde si no tiene estados */}
@@ -265,12 +273,12 @@ export default function StatusView() {
                                         style={{
                                             width: 36, height: 36, borderRadius: "50%",
                                             background: "rgba(255, 255, 255, 0.06)", border: "none",
-                                            color: "#00A884", fontSize: "1rem", cursor: "pointer",
+                                            color: "#00A884", cursor: "pointer",
                                             display: "flex", alignItems: "center", justifyContent: "center"
                                         }}
                                         title="Publicar nuevo estado"
                                     >
-                                        📷
+                                        <TacIcon name="camera" size={18} color="#00A884" />
                                     </button>
                                 )}
                             </div>
@@ -320,7 +328,9 @@ export default function StatusView() {
 
                             {peerSenders.length === 0 ? (
                                 <div style={{ padding: "30px 16px", textAlign: "center", color: "#8696A0" }}>
-                                    <div style={{ fontSize: "2rem", marginBottom: "8px" }}>⭕</div>
+                                    <div style={{ display: "flex", justifyContent: "center", marginBottom: "8px" }}>
+                                        <TacIcon name="status" size={36} color="#8696A0" />
+                                    </div>
                                     <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
                                         Sin actualizaciones recientes
                                     </div>
@@ -392,7 +402,9 @@ export default function StatusView() {
 
                 {/* Floating Action Buttons (FABs) de WhatsApp */}
                 <div style={{
-                    position: "absolute", bottom: "24px", right: "20px",
+                    position: "absolute",
+                    bottom: "calc(76px + env(safe-area-inset-bottom, 0px))",
+                    right: "18px",
                     display: "flex", flexDirection: "column", alignItems: "center", gap: "14px",
                     zIndex: 40
                 }}>
@@ -402,14 +414,14 @@ export default function StatusView() {
                         style={{
                             width: "44px", height: "44px", borderRadius: "50%",
                             background: "#202C33", border: "1px solid rgba(255, 255, 255, 0.1)",
-                            color: "#00A884", fontSize: "1.15rem", cursor: "pointer",
+                            color: "#00A884", cursor: "pointer",
                             display: "flex", alignItems: "center", justifyContent: "center",
                             boxShadow: "0 3px 10px rgba(0, 0, 0, 0.35)",
                             transition: "transform 0.15s ease"
                         }}
                         title="Crear estado de texto"
                     >
-                        ✏️
+                        <TacIcon name="edit" size={18} color="#00A884" />
                     </button>
 
                     {/* Main Big FAB Camera */}
@@ -418,14 +430,14 @@ export default function StatusView() {
                         style={{
                             width: "56px", height: "56px", borderRadius: "50%",
                             background: "#00A884", border: "none",
-                            color: "#FFFFFF", fontSize: "1.35rem", cursor: "pointer",
+                            color: "#FFFFFF", cursor: "pointer",
                             display: "flex", alignItems: "center", justifyContent: "center",
                             boxShadow: "0 4px 16px rgba(0, 168, 132, 0.45)",
                             transition: "transform 0.15s ease"
                         }}
                         title="Tomar foto o video para estado"
                     >
-                        📷
+                        <TacIcon name="camera" size={24} color="#FFFFFF" />
                     </button>
                 </div>
             </div>
@@ -454,8 +466,10 @@ export default function StatusView() {
                         width: 40, height: 40, borderRadius: "12px",
                         background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(232,33,58,0.4)"
-                    }}>📺</div>
+                        boxShadow: "0 4px 16px rgba(232,33,58,0.4)"
+                    }}>
+                        <TacIcon name="radio" size={20} color="#FFFFFF" />
+                    </div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
                             Estados Efímeros & Streaming LIVE
@@ -467,15 +481,12 @@ export default function StatusView() {
                 </div>
 
                 <button
-                    onClick={() => {
-                        TacticalAudioEngine.playTap();
-                        goBack();
-                    }}
+                    onClick={handleClose}
                     className="btn-icon"
                     title="Cerrar vista"
-                    style={{ width: 38, height: 38 }}
+                    style={{ width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center" }}
                 >
-                    ✕
+                    <TacIcon name="x" size={18} color="currentColor" />
                 </button>
             </header>
 
@@ -507,8 +518,9 @@ export default function StatusView() {
                                                 <div style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>{stream.title || "Transmisión de Malla P2P"}</div>
                                             </div>
                                         </div>
-                                        <button className="btn-tactical-primary" style={{ padding: "6px 14px", fontSize: "0.76rem" }}>
-                                            Unirse 📺
+                                        <button className="btn-tactical-primary" style={{ padding: "6px 14px", fontSize: "0.76rem", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                            <span>Unirse</span>
+                                            <TacIcon name="radio" size={13} color="#FFFFFF" />
                                         </button>
                                     </div>
                                 ))}
@@ -546,7 +558,9 @@ export default function StatusView() {
                                     fontSize: "1.3rem", fontWeight: 900, color: "white",
                                     border: myValidStories.length > 0 ? "2px solid var(--accent-emerald)" : "none"
                                 }}>
-                                    {myValidStories.length > 0 ? "✨" : "+"}
+                                    {myValidStories.length > 0 ? (
+                                        <TacIcon name="status" size={22} color="#FFFFFF" />
+                                    ) : "+"}
                                 </div>
                                 <div>
                                     <div style={{ fontSize: "0.92rem", fontWeight: 800 }}>{t.stories_module?.my_story || "Mi Estado"}</div>
@@ -560,9 +574,10 @@ export default function StatusView() {
                                 <button
                                     onClick={() => setModal({ type: "creator" })}
                                     className="btn-tactical-secondary"
-                                    style={{ padding: "8px 12px", fontSize: "0.78rem" }}
+                                    style={{ padding: "8px 12px", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "6px" }}
                                 >
-                                    📷 {t.stories_module?.add_story || "Publicar"}
+                                    <TacIcon name="camera" size={14} color="currentColor" />
+                                    <span>{t.stories_module?.add_story || "Publicar"}</span>
                                 </button>
                                 <button
                                     onClick={() => setModal({ type: "broadcaster" })}
@@ -583,7 +598,7 @@ export default function StatusView() {
 
                         {peerSenders.length === 0 ? (
                             <EmptyState
-                                icon="✨"
+                                icon={<TacIcon name="status" size={32} color="var(--accent-cyan)" />}
                                 title={t.stories_module?.no_stories || "Sin Actualizaciones Recientes"}
                                 description={t.stories_module?.no_stories_desc || "Las historias de tus contactos de la malla aparecerán aquí durante 24 horas."}
                             />
@@ -616,7 +631,7 @@ export default function StatusView() {
                                                     fontWeight: 900, color: "white", fontSize: "1.1rem",
                                                     border: "2px solid var(--accent-emerald)"
                                                 }}>
-                                                    {displayName[0]?.toUpperCase() || "🔴"}
+                                                    {displayName[0]?.toUpperCase() || "U"}
                                                 </div>
                                                 <div>
                                                     <div style={{ fontSize: "0.90rem", fontWeight: 800 }}>{displayName}</div>
@@ -626,7 +641,7 @@ export default function StatusView() {
                                                 </div>
                                             </div>
 
-                                            <span style={{ fontSize: "1.2rem", color: "var(--accent-emerald)" }}>➔</span>
+                                            <TacIcon name="chevron-right" size={16} color="var(--accent-emerald)" />
                                         </div>
                                     );
                                 })}

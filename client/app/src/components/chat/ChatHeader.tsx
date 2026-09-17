@@ -164,7 +164,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, overflow: "hidden" }}>
                     <button
                         onClick={goBack}
-                        className="btn-icon"
+                        className="btn-icon chat-header-back-btn"
                         title={t.common?.back || "Volver"}
                         style={{ width: 36, height: 36, flexShrink: 0, color: isFamiliar ? "#D1D7DB" : "#FFFFFF" }}
                     >
@@ -381,7 +381,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                             title="Más opciones"
                             style={{ width: 36, height: 36, color: isFamiliar ? "#D1D7DB" : "var(--text-secondary)" }}
                         >
-                            ⋮
+                            <TacIcon name="more-vertical" size={18} color="currentColor" />
                         </button>
                         {isSecurityMenuOpen && (
                             <>
