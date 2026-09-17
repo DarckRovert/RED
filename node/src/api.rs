@@ -2390,7 +2390,7 @@ async fn handle_cybertunnel_status() -> impl IntoResponse {
         "ok": true,
         "active": true,
         "clearnet_gateway": true,
-        "version": "v106.0.0"
+        "version": format!("v{}", env!("CARGO_PKG_VERSION"))
     })).unwrap_or_default()));
     resp.headers_mut().insert(
         axum::http::header::CONTENT_TYPE,
@@ -2398,7 +2398,7 @@ async fn handle_cybertunnel_status() -> impl IntoResponse {
     );
     resp.headers_mut().insert(
         HeaderName::from_static("x-red-ack"),
-        HeaderValue::from_static("v106"),
+        HeaderValue::from_static(concat!("v", env!("CARGO_PKG_VERSION"))),
     );
     resp
 }
@@ -2436,7 +2436,7 @@ async fn handle_red_tunnel(
                 }
                 out_resp.headers_mut().insert(
                     HeaderName::from_static("x-red-ack"),
-                    HeaderValue::from_static("v106"),
+                    HeaderValue::from_static(concat!("v", env!("CARGO_PKG_VERSION"))),
                 );
                 return out_resp;
             }
@@ -2445,7 +2445,7 @@ async fn handle_red_tunnel(
                 *err_resp.status_mut() = StatusCode::BAD_GATEWAY;
                 err_resp.headers_mut().insert(
                     HeaderName::from_static("x-red-ack"),
-                    HeaderValue::from_static("v106"),
+                    HeaderValue::from_static(concat!("v", env!("CARGO_PKG_VERSION"))),
                 );
                 return err_resp;
             }
@@ -2455,7 +2455,7 @@ async fn handle_red_tunnel(
     let mut resp = Response::new(Body::from(serde_json::to_string(&serde_json::json!({
         "ok": true,
         "status": "RED_TUNNEL_PERMEABLE",
-        "ack": "v106",
+        "ack": concat!("v", env!("CARGO_PKG_VERSION")),
         "bytes_received": body.len()
     })).unwrap_or_default()));
     *resp.status_mut() = StatusCode::OK;
@@ -2465,7 +2465,7 @@ async fn handle_red_tunnel(
     );
     resp.headers_mut().insert(
         HeaderName::from_static("x-red-ack"),
-        HeaderValue::from_static("v106"),
+        HeaderValue::from_static(concat!("v", env!("CARGO_PKG_VERSION"))),
     );
     resp
 }

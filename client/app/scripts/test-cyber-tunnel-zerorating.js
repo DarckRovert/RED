@@ -82,12 +82,14 @@ runTest("5. SniSpoofEngine: Contiene catálogo de operadoras y portales cautivos
     assert(sniCode.includes("portal.entel.pe"), "Debe incluir Entel");
 });
 
+const pkgVersion = require('../package.json').version;
+
 function simulateSpoofedRequest(sniHost, url) {
     return {
         headers: {
             "Host": sniHost,
             "X-RED-Forward-URL": url,
-            "X-RED-ZeroRating-Tunnel": "v106",
+            "X-RED-ZeroRating-Tunnel": `v${pkgVersion}`,
             "User-Agent": "Mozilla/5.0 (Mobile; Android 14; RED Mesh Node)"
         }
     };
@@ -97,7 +99,7 @@ runTest("6. Generador de Cabeceras HTTP: Camuflaje de SNI con redirección X-RED
     const req = simulateSpoofedRequest("connectivitycheck.gstatic.com", "https://api.tiktokv.com/feed");
     assert.strictEqual(req.headers["Host"], "connectivitycheck.gstatic.com", "Host header debe ser el portal cautivo");
     assert.strictEqual(req.headers["X-RED-Forward-URL"], "https://api.tiktokv.com/feed", "Debe portar la URL destino");
-    assert.strictEqual(req.headers["X-RED-ZeroRating-Tunnel"], "v106", "Debe declarar la firma de túnel RED");
+    assert.strictEqual(req.headers["X-RED-ZeroRating-Tunnel"], `v${pkgVersion}`, "Debe declarar la firma de túnel RED");
 });
 
 // ── 4. Validación de Cálculo de Ancho de Banda Instantáneo ───────────────────

@@ -19,6 +19,7 @@
 
 import { SniSpoofEngine, SniTarget, SniProbeResult } from './sniSpoofEngine';
 import { meshGatewayEngine } from './MeshGatewayEngine';
+import { RED_VERSION } from '../version';
 
 export type CyberTunnelMode = 'ZERO_RATING_SNI' | 'MESH_GATEWAY' | 'DNS_STEALTH';
 
@@ -222,7 +223,7 @@ export class RedCyberTunnelEngine {
             const headers = new Headers(options?.headers || {});
             headers.set('Host', frontReq.sniHost);
             headers.set('X-RED-Forward-URL', url);
-            headers.set('X-RED-ZeroRating-Tunnel', 'v106');
+            headers.set('X-RED-ZeroRating-Tunnel', `v${RED_VERSION}`);
 
             try {
                 // Intento a través del puente de salida camuflado
