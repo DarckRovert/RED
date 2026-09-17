@@ -1359,6 +1359,28 @@ export class RedAPIClient {
         } catch {}
     }
 
+    async deleteContact(identity_hash: string): Promise<void> {
+        let cleanHash = identity_hash.trim().toLowerCase();
+        if (cleanHash.startsWith('did:red:')) cleanHash = cleanHash.replace(/^did:red:/i, '');
+        if (cleanHash.includes(':') && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(cleanHash)) {
+            const parts = cleanHash.split(':');
+            if (parts[0].length >= 16) cleanHash = parts[0].trim();
+        }
+
+        // 1. Remove from Web local storage
+        const contacts = this.getWebStore<any[]>('red_web_contacts', []);
+        const filtered = contacts.filter(c => {
+            const cHash = (c.identity_hash || '').toLowerCase();
+            return cHash !== cleanHash && !cHash.startsWith(cleanHash.slice(0, 8)) && !cleanHash.startsWith(cHash.slice(0, 8));
+        });
+        this.setWebStore('red_web_contacts', filtered);
+
+        // 2. Dispatch DELETE to Native Rust node
+        try {
+            await this.req(`/contacts/${cleanHash}`, { method: 'DELETE' });
+        } catch {}
+    }
+
     async blockContact(identity_hash: string): Promise<void> {
         await this.req(`/contacts/${identity_hash}/block`, { method: 'POST' });
     }

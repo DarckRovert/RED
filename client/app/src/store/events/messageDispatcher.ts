@@ -100,7 +100,14 @@ export async function dispatchIncomingMessage(
 ): Promise<void> {
     const handler = async (data: any) => {
         if (!data) return;
-        const item: MessageItem = data.message_item || data.payload || (data.id && data.sender ? data : null);
+        const effectiveSender = data.sender || data.sender_hash || data.senderHash;
+        const item: MessageItem = data.message_item || data.payload || (
+            effectiveSender ? {
+                ...data,
+                id: data.id || data.nonce || (data.timestamp ? generateDeterministicMsgId(effectiveSender, data.recipient || 'broadcast', data.content || '', typeof data.timestamp === 'number' ? data.timestamp : Date.now()) : `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`),
+                sender: effectiveSender
+            } : null
+        );
         if (!item) return;
 
         // 0. Global deduplication of incoming messages across transports/SSE strictly by unique message ID / deterministic hash
@@ -571,9 +578,16 @@ export async function dispatchIncomingMessage(
         }
 
         // ── Identity Handshake Protocol (contact_request / contact_response) ─────
+        const rawData = data as any;
         const isHandshakePacket = 
             item.msg_type === 'contact_request' || 
             item.msg_type === 'contact_response' ||
+            (item as any)?.type === 'contact_request' ||
+            (item as any)?.type === 'contact_response' ||
+            rawData?.type === 'contact_request' ||
+            rawData?.type === 'contact_response' ||
+            rawData?.msg_type === 'contact_request' ||
+            rawData?.msg_type === 'contact_response' ||
             (typeof item.content === 'string' && item.content.startsWith('{') && (
                 (item.content.includes('"sender_hash"') && item.content.includes('"sender_pk"')) ||
                 item.content.includes('"type":"contact_request"') ||
@@ -582,7 +596,14 @@ export async function dispatchIncomingMessage(
 
         if (isHandshakePacket) {
             try {
-                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : data;
+                let parsed: any = rawData;
+                if (typeof item.content === 'string' && item.content.startsWith('{')) {
+                    try { parsed = JSON.parse(item.content); } catch { parsed = rawData; }
+                } else if (item.payload && typeof item.payload === 'object') {
+                    parsed = item.payload;
+                } else if ((item as any)?.type || (item as any)?.sender_hash) {
+                    parsed = item;
+                }
                 const senderHash = meshRouter.getCanonicalId(parsed.sender_hash || item.sender);
                 const senderPk = parsed.sender_pk || null;
                 const myHash = get().identity?.identity_hash?.toLowerCase();
@@ -2240,18 +2261,9 @@ export async function dispatchIncomingMessage(
                         set({ contacts: updatedContacts });
                         RedAPI.setWebStore('red_web_contacts', updatedContacts);
                     }
-                } else {
-                    const newContact = {
-                        identity_hash: canonicalSender,
-                        display_name: resolvedName,
-                        public_key: resolvedPk || null,
-                        avatar_url: resolvedAvatar || null
-                    };
-                    const nextContacts = [...currentContacts, newContact];
-                    set({ contacts: nextContacts });
-                    RedAPI.setWebStore('red_web_contacts', nextContacts);
-                    RedAPI.addContact(canonicalSender, resolvedName, resolvedPk).catch(() => {});
                 }
+                // Si el contacto no existe en la agenda (contactIdx === -1), NO se auto-inserta.
+                // La presencia en la malla o recepción de mensaje no sustituye el consentimiento del usuario (Mesh presence ≠ user consent).
 
                 if (isNonGenericSender) {
                     const existingNonGenPeer = meshRouter.getPeerByAnyId(canonicalSender);

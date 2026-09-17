@@ -111,11 +111,11 @@ impl DnsTunnelServer {
         let payload_parts: Vec<&str> = zone_stripped
             .split('.')
             .filter(|label| {
-                !label.is_empty()
-                // drop session-id label: starts with S and rest is alnum
-                && !(label.starts_with('S') && label.len() >= 4 && label[1..].chars().all(|c| c.is_alphanumeric()))
-                // drop position label: starts with P and contains OF
-                && !(label.starts_with('P') && label.contains("OF"))
+                !(label.is_empty()
+                    // drop session-id label: starts with S and rest is alnum
+                    || (label.starts_with('S') && label.len() >= 4 && label[1..].chars().all(|c| c.is_alphanumeric()))
+                    // drop position label: starts with P and contains OF
+                    || (label.starts_with('P') && label.contains("OF")))
             })
             .collect();
         let payload_str = payload_parts.join("");

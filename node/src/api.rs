@@ -532,6 +532,10 @@ pub fn build_router(state: ApiState) -> Router {
         )
         .route("/api/contacts", get(handle_list_contacts))
         .route("/api/contacts", post(handle_add_contact))
+        .route(
+            "/api/contacts/:hash",
+            axum::routing::delete(handle_delete_contact),
+        )
         .route("/api/contacts/:hash/block", post(handle_block_contact))
         .route("/api/contacts/:hash/unblock", post(handle_unblock_contact))
         .route("/api/contacts/:hash/verify", post(handle_verify_contact))
@@ -1428,6 +1432,36 @@ async fn handle_add_contact(
     };
     match node.add_contact(contact).await {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+async fn handle_delete_contact(
+    State(state): State<ApiState>,
+    Path(hash_str): Path<String>,
+) -> impl IntoResponse {
+    let clean = hash_str.replace("did:red:", "");
+    let hash = match parse_identity_hash(&clean) {
+        Ok(h) => h,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e})),
+            )
+                .into_response()
+        }
+    };
+    let node = state.node.lock().await;
+    match node.remove_contact(&hash).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "identity_hash": hash.to_hex()})),
+        )
+            .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": format!("{}", e)})),

@@ -717,6 +717,7 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/conversations",   get(handle_list_conversations))
         .route("/api/conversations/:id/messages", get(handle_get_messages))
         .route("/api/contacts",        get(handle_list_contacts).post(handle_add_contact))
+        .route("/api/contacts/:hash",   delete(handle_delete_contact))
         .route("/api/groups",          get(handle_list_groups).post(handle_create_group))
         .route("/api/groups/:id/send", post(handle_send_group_message))
         .route("/api/groups/:id/members", post(handle_add_group_member))
@@ -1380,6 +1381,36 @@ async fn handle_add_contact(
     match node.add_contact(contact).await {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+    }
+}
+
+async fn handle_delete_contact(
+    State(state): State<ApiState>,
+    Path(hash_str): Path<String>,
+) -> impl IntoResponse {
+    let clean = hash_str.replace("did:red:", "");
+    let hash = match parse_identity_hash(&clean) {
+        Ok(h) => h,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e})),
+            )
+                .into_response()
+        }
+    };
+    let node = state.node.lock().await;
+    match node.remove_contact(&hash).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "identity_hash": hash.to_hex()})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
     }
 }
 
@@ -2060,6 +2091,7 @@ pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>
         .route("/v1/chat/completions", post(handle_openai_chat_completions_async))
         // All other routes: 503 if not ready, delegate to full router if ready
         .route("/api/contacts",                           get(handle_contacts_get_async).post(handle_contacts_post_async))
+        .route("/api/contacts/:hash",                     delete(handle_contacts_delete_async))
         .route("/api/conversations",                      get(handle_conversations_get_async))
         .route("/api/conversations/:id/messages",         get(handle_get_messages_async))
         .route("/api/messages/send",                      post(handle_send_message_async))
@@ -2291,6 +2323,18 @@ async_wrap_post!(handle_set_dms_async,         handle_set_dms_config,    DmsConf
 async_wrap_post!(handle_set_lora_async,        handle_set_lora_config,   LoraConfigRequest);
 
 // Path-param routes need manual wrappers (macros can't handle Path extractors generically)
+async fn handle_contacts_delete_async(
+    State(state): State<AsyncState>,
+    path: axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(ready) => handle_delete_contact(State(ready.clone()), path).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"}))).into_response(),
+    }
+}
+
 async fn handle_get_messages_async(
     State(state): State<AsyncState>,
     path: axum::extract::Path<String>,

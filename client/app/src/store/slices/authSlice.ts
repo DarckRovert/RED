@@ -19,6 +19,53 @@ let _identityResolvedUnsub: (() => void) | null = null;
 // Sin esto, múltiples login/logout acumulan handlers huérfanos en localDeliveryHandlers Set.
 let _meshLocalDeliveryUnsub: (() => void) | null = null;
 
+function registerMeshLocalDeliveryListener(get: () => RedStore) {
+    if (_meshLocalDeliveryUnsub) {
+        _meshLocalDeliveryUnsub();
+        _meshLocalDeliveryUnsub = null;
+    }
+    _meshLocalDeliveryUnsub = meshRouter.onLocalDelivery((packet) => {
+        try {
+            const payloadStr = new TextDecoder().decode(packet.payload);
+            let parsed: any;
+            const normTs = packet.timestamp ? (packet.timestamp > 1e11 ? packet.timestamp / 1000 : packet.timestamp) : Date.now() / 1000;
+            try {
+                parsed = JSON.parse(payloadStr);
+            } catch {
+                parsed = {
+                    id: packet.nonce || `msg_${packet.sender.slice(0, 8)}_${Math.floor(normTs)}`,
+                    content: payloadStr,
+                    sender: packet.sender,
+                    timestamp: normTs,
+                    is_mine: false,
+                    msg_type: 'text'
+                };
+            }
+            if (parsed) {
+                // If the inner packet has a nested content JSON string with type, extract it
+                if (typeof parsed.content === 'string' && parsed.content.trim().startsWith('{')) {
+                    try {
+                        const inner = JSON.parse(parsed.content);
+                        if (inner.type === 'contact_request' || inner.type === 'contact_response' || inner.msg_type) {
+                            parsed = { ...parsed, ...inner };
+                        }
+                    } catch {}
+                }
+                if (!parsed.id) parsed.id = packet.nonce || `mesh_${packet.sender.slice(0, 8)}_${Date.now()}`;
+                if (!parsed.sender) parsed.sender = packet.sender;
+                if (!parsed.msg_type && (parsed.type === 'contact_request' || parsed.type === 'contact_response')) {
+                    parsed.msg_type = parsed.type;
+                }
+                if (parsed.timestamp && parsed.timestamp > 1e11) parsed.timestamp = parsed.timestamp / 1000;
+                if (!parsed.timestamp) parsed.timestamp = normTs;
+                get().addIncomingMessage(parsed);
+            }
+        } catch (deliveryErr) {
+            console.warn('[RED] Error handling mesh packet delivery:', deliveryErr);
+        }
+    });
+}
+
 export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = (set, get) => ({
     isAuthenticated: false,
 
@@ -204,18 +251,16 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     get().navigate('chat', pending);
                 }
 
-                // Initialize Global WebRTC P2P Mesh & Blind Relay
-                localTransport.init(localHash).catch(e =>
-                    console.warn('[RED Web] Mesh init failed:', e)
-                );
+                // Initialize Global WebRTC P2P Mesh & Blind Relay & register delivery listener in Web
+                localTransport.init(localHash).then(() => {
+                    registerMeshLocalDeliveryListener(get);
+                }).catch(e => {
+                    console.warn('[RED Web] Mesh init failed:', e);
+                    registerMeshLocalDeliveryListener(get);
+                });
 
                 // Load initial data (conversations, contacts from web storage)
                 await get().fetchData();
-
-                // [BUG-01 FIX] El registro de onLocalDelivery se consolida en un único punto:
-                // initNodeConnection() → localTransport.init() → meshRouter.onLocalDelivery()
-                // Registrar aquí (path web) causaba mensajes duplicados porque localTransport.init()
-                // también registra el mismo handler. El handler unificado vive en L750+ de este archivo.
 
                 // Wire Live Companion Sync Bridge (WhatsApp Web Style Real-time Mirror)
                 companionSyncEngine.onLiveEvent((event) => {
@@ -746,38 +791,10 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 connectOutboundSSE();
 
                 localTransport.init(identity.identity_hash).then(() => {
-                    // [RIESGO-01 FIX] Cancelar handler previo antes de registrar uno nuevo.
-                    // Previene acumulación de handlers huérfanos tras múltiples login.
-                    if (_meshLocalDeliveryUnsub) { _meshLocalDeliveryUnsub(); _meshLocalDeliveryUnsub = null; }
-                    _meshLocalDeliveryUnsub = meshRouter.onLocalDelivery((packet) => {
-                        try {
-                            const payloadStr = new TextDecoder().decode(packet.payload);
-                            let parsed: any;
-                            const normTs = packet.timestamp ? (packet.timestamp > 1e11 ? packet.timestamp / 1000 : packet.timestamp) : Date.now() / 1000;
-                            try {
-                                parsed = JSON.parse(payloadStr);
-                            } catch {
-                                parsed = {
-                                    id: packet.nonce || `msg_${packet.sender.slice(0, 8)}_${Math.floor(normTs)}`,
-                                    content: payloadStr,
-                                    sender: packet.sender,
-                                    timestamp: normTs,
-                                    is_mine: false,
-                                    msg_type: 'text'
-                                };
-                            }
-                            if (parsed) {
-                                if (!parsed.sender) parsed.sender = packet.sender;
-                                if (parsed.timestamp && parsed.timestamp > 1e11) parsed.timestamp = parsed.timestamp / 1000;
-                                if (!parsed.timestamp) parsed.timestamp = normTs;
-                                get().addIncomingMessage(parsed);
-                            }
-                        } catch (deliveryErr) {
-                            console.warn('[RED Native] Error handling mesh packet delivery:', deliveryErr);
-                        }
-                    });
+                    registerMeshLocalDeliveryListener(get);
                 }).catch(err => {
                     console.warn('[RED Native] LocalTransport init failed:', err);
+                    registerMeshLocalDeliveryListener(get);
                 });
 
                 return true;

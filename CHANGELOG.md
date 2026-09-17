@@ -1,5 +1,26 @@
 # Changelog
 
+## [108.0.0-sincronizacion-p2p-soberana-consentimiento-qr-y-persistencia-limpia] - 2026-09-17
+
+### 🚀 Sincronización P2P Soberana, Consentimiento QR & Persistencia Limpia (Release Oficial v108.0.0)
+
+- **Protocolo de Consentimiento QR & Handshake de Contactos:**
+  - Unificación de `registerMeshLocalDeliveryListener` en `authSlice.ts` para modo Web SPA y Nativo.
+  - Soporte de desempaquetado de payloads anidados en `parsed.content` y extracción transparente de `sender_name`, `sender_pk` y `msg_type: 'contact_request'`.
+  - Detección exhaustiva de tramas de solicitud de contacto en `messageDispatcher.ts` evaluando `type` y `msg_type` en raíz y cuerpo.
+  - Emisión de broadcast estructurado en `ContactQrModal.tsx` con IDs unívocos deterministas.
+- **Persistencia y Eliminación Definitiva en Backend Rust (`DELETE /api/contacts/:hash`):**
+  - Implementación de `Node::remove_contact` en `core/src/network/node.rs` con borrado directo en base de datos Sled.
+  - Endpoints REST `DELETE /api/contacts/:hash` en `node/src/api.rs` y `red_mobile/src/api.rs` (síncrono y asíncrono).
+  - Purga en cascada en `contactsSlice.ts` (`red_web_messages_*`, `red_outbound_contact_requests`, `meshRouter.peers`) y llamadas de borrado a Rust para contacto y conversación.
+  - Erradicación de la auto-inserción no consentida de pares ante tráfico residual de malla en `messageDispatcher.ts`.
+- **Higiene, Poda & Linter Zero-Warnings:**
+  - Poda de 16 archivos de release notes obsoletos anteriores a v105.
+  - Corrección de expresión booleana en el servidor de túnel DNS (`node/src/dns_tunnel.rs`).
+  - Verificación `cargo clippy --workspace -- -D warnings` con 0 errores y 0 advertencias.
+- **Gobernanza Atómica SSOT v108.0.0:**
+  - 100% de paridad en los 22 archivos maestros de versión (v108.0.0 / 108000).
+
 ## [107.0.0-tunel-zero-rating-soberano-y-gps-tactico-senuelo] - 2026-09-16
 
 ### 🚀 Túnel Zero-Rating Soberano & GPS Táctico Señuelo Anti-Triangulación (Release Oficial v107.0.0)

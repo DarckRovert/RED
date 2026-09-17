@@ -255,11 +255,17 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
             await addContact(hash, name, pk || undefined);
 
             try {
+                const reqId = `creq_${Date.now()}_${identity?.identity_hash?.slice(0, 8) || 'node'}`;
                 const payload = new TextEncoder().encode(JSON.stringify({
+                    id: reqId,
                     type: "contact_request",
+                    msg_type: "contact_request",
+                    sender: identity?.identity_hash,
                     sender_hash: identity?.identity_hash,
                     sender_name: identity?.nickname || "Familiar",
                     sender_pk: identity?.public_key,
+                    recipient: hash,
+                    channel: "QR",
                     timestamp: Date.now()
                 }));
                 meshRouter.broadcast(payload);

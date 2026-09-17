@@ -1548,6 +1548,13 @@ impl Node {
             .map_err(|e: crate::storage::StorageError| NetworkError::TransportError(e.to_string()))
     }
 
+    /// Remove a contact from local storage (used by the HTTP API)
+    pub async fn remove_contact(&self, hash: &crate::identity::IdentityHash) -> NetworkResult<()> {
+        let mut s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
+        s.remove_contact(hash)
+            .map_err(|e: crate::storage::StorageError| NetworkError::TransportError(e.to_string()))
+    }
+
     /// Get synchronization payload (TD-2 FIX: return real conversations)
     pub async fn get_sync_payload(&self) -> NetworkResult<(Vec<crate::storage::Contact>, Vec<Group>, Vec<Conversation>)> {
         let s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;

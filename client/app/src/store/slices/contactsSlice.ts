@@ -132,7 +132,8 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         });
         set({ contacts: next });
         RedAPI.setWebStore('red_web_contacts', next);
-        // Also purge conversation
+
+        // Also purge conversation from Zustand & localStorage
         const convs = get().conversations || [];
         const nextConvs = convs.filter(c => {
             const cPeer = normalizeIdentity(c.peer || '');
@@ -144,7 +145,33 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         });
         set({ conversations: nextConvs });
         RedAPI.setWebStore('red_web_conversations', nextConvs);
-        try { await RedAPI.req(`/contacts/${hash}`, { method: 'DELETE' }); } catch {}
+
+        // Purge stored messages and outbound requests
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.removeItem(`red_web_messages_${target}`);
+                localStorage.removeItem(`red_web_messages_${hash}`);
+                if (target.length >= 8) {
+                    localStorage.removeItem(`red_web_messages_${target.slice(0, 8)}`);
+                }
+                const outbound: any[] = JSON.parse(localStorage.getItem('red_outbound_contact_requests') || '[]');
+                const filteredOutbound = outbound.filter((r: any) =>
+                    r && r.senderHash !== target && !r.senderHash?.startsWith(target.slice(0, 8))
+                );
+                localStorage.setItem('red_outbound_contact_requests', JSON.stringify(filteredOutbound));
+            } catch {}
+        }
+
+        // Remove from meshRouter routing table
+        meshRouter.removePeer(target);
+        if (target.length >= 8) {
+            meshRouter.removePeer(target.slice(0, 8));
+        }
+
+        // Send deletion to Rust backend (contacts & conversations)
+        try { await RedAPI.req(`/contacts/${target}`, { method: 'DELETE' }); } catch {}
+        try { await RedAPI.req(`/conversations/${target}/clear`, { method: 'DELETE' }); } catch {}
+
         toast.info('🗑️ Contacto eliminado');
     },
 
@@ -375,6 +402,7 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             trackProcessedHandshake(`${cleanHash.toLowerCase()}_res`);
             const reqPayload = JSON.stringify({
                 type: 'contact_request',
+                msg_type: 'contact_request',
                 id: `creq_${Date.now()}_${myIdentity.identity_hash.slice(0, 8)}`,
                 sender_hash: myIdentity.identity_hash,
                 sender_name: myName,
