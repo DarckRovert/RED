@@ -265,6 +265,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                     sender_name: identity?.nickname || "Familiar",
                     sender_pk: identity?.public_key,
                     recipient: hash,
+                    target_hash: hash,
                     channel: "QR",
                     timestamp: Date.now()
                 }));

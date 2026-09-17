@@ -121,7 +121,7 @@ export interface RedStore {
     sendReaction: (messageId: string, emoji: string) => Promise<void>;
     deleteMessageForEveryone: (messageId: string) => Promise<void>;
     addIncomingMessage: (rawEvent: any) => void;
-    addContact:   (identity_hash: string, display_name: string, public_key?: string | null) => Promise<string>;
+    addContact:   (identity_hash: string, display_name: string, public_key?: string | null, isAcceptingHandshake?: boolean) => Promise<string>;
     deleteMessage: (messageId: string) => Promise<void>;
     editMessage: (messageId: string, newContent: string) => Promise<void>;
     clearConversation: () => Promise<void>;

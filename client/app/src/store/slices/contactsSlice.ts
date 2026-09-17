@@ -53,7 +53,8 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         set({ pendingContactRequests: updated, activeContactRequestModal: updated[0] || null });
         
         // Persist contact using full addContact workflow (creates conversation + deduplicates + syncs to DB)
-        await get().addContact(req.senderHash, req.senderName, req.senderPk);
+        // Mark isAcceptingHandshake = true to prevent re-broadcasting a redundant contact_request
+        await get().addContact(req.senderHash, req.senderName, req.senderPk, true);
 
         // Send signed contact_response via direct message and local mesh broadcast
         if (identity?.identity_hash) {
@@ -179,7 +180,7 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
 
     // Real-time Mesh SSE Events State
 
-    addContact: async (identity_hash: string, display_name: string, public_key?: string | null) => {
+    addContact: async (identity_hash: string, display_name: string, public_key?: string | null, isAcceptingHandshake = false) => {
         const inputStr = identity_hash.trim();
         let cleanName = display_name ? display_name.trim() : '';
 
@@ -396,9 +397,10 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         }
 
         // 6. Send background contact request to peer with rich identity metadata
+        // IMPORTANT: If we are simply accepting an incoming contact request, skip broadcasting a new contact_request!
         const myIdentity = get().identity;
         const myName = myIdentity?.nickname || 'Operador RED';
-        if (myIdentity?.identity_hash) {
+        if (!isAcceptingHandshake && myIdentity?.identity_hash) {
             trackProcessedHandshake(`${cleanHash.toLowerCase()}_res`);
             const reqPayload = JSON.stringify({
                 type: 'contact_request',

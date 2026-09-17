@@ -612,6 +612,36 @@ export async function dispatchIncomingMessage(
                     return;
                 }
 
+                // ── Verificación de Destinatario en Handshake (Anti-Fuga Mesh) ──
+                // Si el paquete especifica un destinatario o target_hash no universal,
+                // solo este nodo debe procesarlo. Nodos vecinos en la malla deben ignorarlo.
+                const rawRecipient = (
+                    parsed.recipient || 
+                    parsed.target_hash || 
+                    (item as any).recipient || 
+                    rawData?.recipient || 
+                    rawData?.target_hash || 
+                    ''
+                );
+                const targetRecipient = typeof rawRecipient === 'string' ? rawRecipient.toLowerCase().trim() : '';
+
+                if (targetRecipient && myHash) {
+                    const isBroadcastTarget = 
+                        targetRecipient === '*' || 
+                        targetRecipient === 'all' || 
+                        targetRecipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
+                        targetRecipient === '0000000000000000000000000000000000000000000000000000000000000000';
+
+                    const isAddressedToMe = isBroadcastTarget ||
+                        targetRecipient === myHash ||
+                        (targetRecipient.length >= 8 && myHash.startsWith(targetRecipient)) ||
+                        (myHash.length >= 8 && targetRecipient.startsWith(myHash));
+
+                    if (!isAddressedToMe) {
+                        return;
+                    }
+                }
+
                 // ── Anti-Acoso: Silently discard messages from blocked nodes ─────
                 const blockedNodes = get().blockedNodes || [];
                 if (blockedNodes.includes(senderHash) || blockedNodes.some(b => senderHash.startsWith(b.slice(0, 8)))) {

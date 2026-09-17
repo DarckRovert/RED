@@ -1414,6 +1414,7 @@ class MeshRouter {
     }
 
     let isHandshakeMsg = false;
+    let isHandshakeTargetedToMe = true;
     let isLocationMsg = false;
     let isDeliveryAck = false;
     let ackNonce: string | null = null;
@@ -1635,7 +1636,7 @@ class MeshRouter {
 
       // 4. Contact & Location Signals
       isHandshakeMsg = payloadStr.includes('contact_request') || payloadStr.includes('contact_response') || payloadStr.includes('shake_pair_');
-      if (payloadStr.includes('contact_request')) {
+      if (payloadStr.includes('contact_request') || payloadStr.includes('contact_response')) {
         try {
           let parsedReq = JSON.parse(payloadStr);
           if (typeof parsedReq.content === 'string' && parsedReq.content.trim().startsWith('{')) {
@@ -1654,11 +1655,20 @@ class MeshRouter {
             currentMyHash = localStorage.getItem('red_identity_hash') || '';
           }
 
-          const isTargetedToMe = !reqRecipient || reqRecipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
-            (!!currentMyHash && reqRecipient.toLowerCase() === currentMyHash.toLowerCase()) ||
-            (!!currentMyHash && reqRecipient.length >= 8 && currentMyHash.toLowerCase().startsWith(reqRecipient.toLowerCase()));
+          const isBroadcastTarget = !reqRecipient || 
+            reqRecipient === '*' || 
+            reqRecipient === 'all' || 
+            reqRecipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
+            reqRecipient === '0000000000000000000000000000000000000000000000000000000000000000';
 
-          if (isTargetedToMe && reqSender) {
+          const isTargetedToMe = isBroadcastTarget ||
+            (!!currentMyHash && reqRecipient.toLowerCase() === currentMyHash.toLowerCase()) ||
+            (!!currentMyHash && reqRecipient.length >= 8 && currentMyHash.toLowerCase().startsWith(reqRecipient.toLowerCase())) ||
+            (!!currentMyHash && currentMyHash.length >= 8 && reqRecipient.toLowerCase().startsWith(currentMyHash.toLowerCase()));
+
+          isHandshakeTargetedToMe = isTargetedToMe;
+
+          if (isTargetedToMe && reqSender && payloadStr.includes('contact_request')) {
             if (fromTransportId) {
               this.bindDeviceToCanonical(fromTransportId, reqSender, reqName, reqPk);
             }
@@ -1702,7 +1712,7 @@ class MeshRouter {
       (!!myHash && packet.recipient.length >= 8 && myHash.toLowerCase().startsWith(packet.recipient.toLowerCase())) ||
       (!!myHash && packet.recipient.length >= 8 && packet.recipient.toLowerCase().startsWith(myHash.toLowerCase()));
 
-    const isForMe = isBroadcast || isDirectlyToMe || (isLocationMsg && isBroadcast) || isHandshakeMsg;
+    const isForMe = isBroadcast || isDirectlyToMe || (isLocationMsg && isBroadcast) || (isHandshakeMsg && isHandshakeTargetedToMe);
 
     if (isForMe) {
       // ── FINAL DELIVERY: packet is for us ──

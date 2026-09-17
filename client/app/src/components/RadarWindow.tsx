@@ -296,9 +296,12 @@ export default function RadarWindow() {
                 try {
                     const payload = new TextEncoder().encode(JSON.stringify({
                         type: "contact_request",
+                        msg_type: "contact_request",
                         sender_hash: identity?.identity_hash,
                         sender_name: identity?.nickname || "Operador RED",
                         sender_pk: identity?.public_key,
+                        recipient: cleanHash,
+                        target_hash: cleanHash,
                         timestamp: Date.now()
                     }));
                     meshRouter.broadcast(payload);
