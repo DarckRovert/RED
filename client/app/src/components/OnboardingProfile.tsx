@@ -24,6 +24,7 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
     const [avatarColor, setAvatarColor] = useState("#FF3355");
     const [saving, setSaving] = useState(false);
     const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+    const [legalTab, setLegalTab] = useState<"privacy" | "terms" | "data_safety">("privacy");
     // Step 4: QR real generado desde la librería qrcode
     const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
@@ -250,18 +251,31 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                         {t('common.confirm')} →
                     </button>
 
-                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", lineHeight: 1.4, marginTop: "-8px" }}>
-                        Al continuar, aceptas el{" "}
+                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", lineHeight: 1.5, marginTop: "-4px" }}>
+                        Al continuar, aceptas los{" "}
                         <button
                             type="button"
                             onClick={() => {
                                 TacticalAudioEngine.playTap();
+                                setLegalTab("terms");
                                 setIsLegalModalOpen(true);
                             }}
-                            style={{ background: "none", border: "none", color: "var(--accent-cyan)", textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: "inherit" }}
+                            style={{ background: "none", border: "none", color: "var(--accent-cyan)", textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: "inherit", fontWeight: 700 }}
                         >
-                            Marco Legal, Privacidad & Licencia AGPL
-                        </button>
+                            Términos de Servicio
+                        </button>{" "}
+                        y la{" "}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setLegalTab("privacy");
+                                setIsLegalModalOpen(true);
+                            }}
+                            style={{ background: "none", border: "none", color: "var(--accent-emerald)", textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: "inherit", fontWeight: 700 }}
+                        >
+                            Política de Privacidad Zero-Data (AGPL-3.0)
+                        </button>.
                     </div>
                 </div>
             )}
@@ -491,6 +505,22 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                         >
                             {saving ? "Inicializando Bóveda…" : "🚀 Ingresar al Centro de Mando"}
                         </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setLegalTab("terms");
+                                setIsLegalModalOpen(true);
+                            }}
+                            style={{
+                                background: "transparent", border: "none", color: "var(--text-muted)",
+                                fontSize: "0.70rem", cursor: "pointer", display: "flex", alignItems: "center",
+                                justifyContent: "center", gap: "6px", padding: "4px"
+                            }}
+                        >
+                            <span>⚖️</span>
+                            <span>Certificación Zero-Data, Términos EULA & Licencia AGPLv3</span>
+                        </button>
                     </div>
                 </div>
             )}
@@ -499,6 +529,7 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
             <LegalComplianceModal
                 isOpen={isLegalModalOpen}
                 onClose={() => setIsLegalModalOpen(false)}
+                initialTab={legalTab}
             />
         </div>
     );

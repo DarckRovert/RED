@@ -18,6 +18,7 @@ import { ContactList } from "./sidebar/ContactList";
 import { NewChatModal } from "./chat/NewChatModal";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacIcon } from "./ui/TacIcon";
+import { LegalComplianceModal } from "./legal/LegalComplianceModal";
 
 interface TacticalHubItem {
     id: string;
@@ -94,6 +95,7 @@ export default function Sidebar() {
     const [webPairingCode, setWebPairingCode] = useState<string | null>(null);
     const [storyModal, setStoryModal] = useState<"creator" | { type: "contact"; hash: string } | { type: "live"; id: string } | null>(null);
     const [drawerSearch, setDrawerSearch] = useState("");
+    const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
 
     const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
 
@@ -259,6 +261,7 @@ export default function Sidebar() {
                 { icon: "✨", label: t('tactical_hubs.tool_celestial_pdr'), action: "celestialPdr" },
                 { icon: "🦇", label: t('tactical_hubs.tool_sonar_seismic'), action: "sonarSeismic" },
                 { icon: "🦊", label: t('tactical_hubs.tool_foxhunt'), action: "tacticalFoxhunt" },
+                { icon: "👻", label: "Ghost GPS Señuelo", action: "tacticalGhostGps" },
                 { icon: "📳", label: t('tactical_hubs.tool_shake_pair'), action: "shakePair" },
                 { icon: "🌊", label: t('tactical_hubs.tool_proximity_wave'), action: "proximityWave" },
                 { icon: "📡", label: t('tactical_hubs.tool_nearby'), action: "nearby" },
@@ -366,6 +369,7 @@ export default function Sidebar() {
             tools: [
                 { icon: "🛒", label: t('tactical_hubs.tool_app_store'), action: "appStore" },
                 { icon: "🌐", label: t('tactical_hubs.tool_hyper_browser'), action: "hyperBrowser" },
+                { icon: "⚡", label: "Túnel Zero-Rating", action: "cyberTunnel" },
                 { icon: "⚡", label: t('tactical_hubs.tool_c4isr_drill'), action: "commandCenter" },
                 { icon: "📊", label: t('tactical_hubs.tool_system_health'), action: "health" },
                 { icon: "📋", label: t('tactical_hubs.tool_node_logs'), action: "nodeLogs" },
@@ -645,6 +649,21 @@ export default function Sidebar() {
                             <button
                                 onClick={() => {
                                     setMenuOpen(false);
+                                    setIsLegalModalOpen(true);
+                                }}
+                                style={{
+                                    width: "100%", padding: "9px", borderRadius: "10px",
+                                    background: "rgba(0, 230, 118, 0.08)", border: "1px solid rgba(0, 230, 118, 0.25)",
+                                    color: "var(--accent-emerald, #00E676)", fontSize: "0.75rem", fontWeight: 800,
+                                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                                }}
+                            >
+                                <span style={{ fontSize: "0.85rem" }}>⚖️</span> Marco Legal, Privacidad & Licencia
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    setMenuOpen(false);
                                     if (typeof window !== "undefined") {
                                         window.dispatchEvent(new CustomEvent("red:open_landing"));
                                     }
@@ -771,6 +790,12 @@ export default function Sidebar() {
                     onClose={() => setStoryModal(null)}
                 />
             )}
+
+            {/* Modal de Marco Legal, Privacidad y Licencia */}
+            <LegalComplianceModal
+                isOpen={isLegalModalOpen}
+                onClose={() => setIsLegalModalOpen(false)}
+            />
         </aside>
     );
 }

@@ -10,6 +10,8 @@ import { satelliteMeshGateway, SatelliteGatewayTelemetry } from "../lib/mesh/Sat
 import { globalShield, GlobalShieldTelemetry } from "../lib/network/GlobalShieldEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { tacticalGhostGps } from "../lib/sensors/TacticalGhostGpsEngine";
+import { redCyberTunnel } from "../lib/network/RedCyberTunnelEngine";
 
 export default function StatusHeader() {
     const { nodeOnline, status, navigate, preferences, updatePreferences } = useRedStore();
@@ -20,6 +22,8 @@ export default function StatusHeader() {
     const [loraActive, setLoraActive] = useState(false);
     const [satTelem, setSatTelem] = useState<SatelliteGatewayTelemetry>(() => satelliteMeshGateway.getTelemetry());
     const [shieldTelem, setShieldTelem] = useState<GlobalShieldTelemetry>(() => globalShield.getTelemetry());
+    const [isGhostGpsActive, setIsGhostGpsActive] = useState(() => tacticalGhostGps.isGhostActive());
+    const [isCyberTunnelActive, setIsCyberTunnelActive] = useState(() => redCyberTunnel.isTunnelActive());
     const [batteryInfo, setBatteryInfo] = useState<{ level: number; charging: boolean; profile: string }>({
         level: 100,
         charging: false,
@@ -85,11 +89,19 @@ export default function StatusHeader() {
 
         const unsubSat = satelliteMeshGateway.subscribe(setSatTelem);
         const unsubShield = globalShield.subscribe(setShieldTelem);
+        const unsubGhost = tacticalGhostGps.addListener(() => {
+            setIsGhostGpsActive(tacticalGhostGps.isGhostActive());
+        });
+        const unsubTunnel = redCyberTunnel.addListener((stats) => {
+            setIsCyberTunnelActive(stats.isActive);
+        });
         const timer = setInterval(syncTelemetry, 3500);
         return () => {
             clearInterval(timer);
             unsubSat();
             unsubShield();
+            unsubGhost();
+            unsubTunnel();
         };
     }, [syncTelemetry]);
 
@@ -278,6 +290,62 @@ export default function StatusHeader() {
 
                 {/* ── Right: Real Hardware Telemetry & Tactical Actions ── */}
                 <div style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0 }}>
+                    {/* Ghost GPS Active Tactical Badge */}
+                    {isGhostGpsActive && (
+                        <button
+                            type="button"
+                            onClick={() => navigate("tacticalGhostGps")}
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                background: "rgba(239, 68, 68, 0.2)",
+                                border: "1px solid #ef4444",
+                                padding: "4px 7px",
+                                borderRadius: "9px",
+                                fontSize: "10px",
+                                fontFamily: "JetBrains Mono, monospace",
+                                fontWeight: 900,
+                                color: "#fca5a5",
+                                cursor: "pointer",
+                                boxShadow: "0 0 10px rgba(239, 68, 68, 0.4)",
+                                flexShrink: 0
+                            }}
+                            title="👻 Modo Señuelo GPS Activo. Transmitiendo ubicación falsa. Clic para gestionar."
+                        >
+                            <span>👻</span>
+                            <span>SEÑUELO</span>
+                        </button>
+                    )}
+
+                    {/* Zero-Rating CyberTunnel Active Badge */}
+                    {isCyberTunnelActive && (
+                        <button
+                            type="button"
+                            onClick={() => navigate("cyberTunnel")}
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                background: "rgba(56, 189, 248, 0.2)",
+                                border: "1px solid #38bdf8",
+                                padding: "4px 7px",
+                                borderRadius: "9px",
+                                fontSize: "10px",
+                                fontFamily: "JetBrains Mono, monospace",
+                                fontWeight: 900,
+                                color: "#38bdf8",
+                                cursor: "pointer",
+                                boxShadow: "0 0 10px rgba(56, 189, 248, 0.4)",
+                                flexShrink: 0
+                            }}
+                            title="⚡ Túnel Zero-Rating Activo. Clic para abrir control."
+                        >
+                            <span>⚡</span>
+                            <span>SIN SALDO</span>
+                        </button>
+                    )}
+
                     {/* DEFCON Tactical Pill */}
                     <button
                         type="button"

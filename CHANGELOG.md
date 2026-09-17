@@ -1,5 +1,25 @@
 # Changelog
 
+## [107.0.0-tunel-zero-rating-soberano-y-gps-tactico-senuelo] - 2026-09-16
+
+### 🚀 Túnel Zero-Rating Soberano & GPS Táctico Señuelo Anti-Triangulación (Release Oficial v107.0.0)
+
+- **Motor de GPS Táctico Señuelo & Anti-Triangulación (`TacticalGhostGpsEngine.ts`):**
+  - Intercepción SSOT en `TacticalLocationEngine.ts` sin retardo ni lecturas residuales al desactivar.
+  - Modos operacionales: Señuelo estático (Decoy), Dispersión Jitter gaussiana anti-triangulación (50m a 2000m) y Patrulla Cinemática con cálculo Course-Over-Ground (COG).
+  - Bypass de seguridad `getTrueHardwareLocation()` para salvaguardar la vida en emergencias y alertas de pánico SOS.
+  - Puente hacia el proveedor Android Mock Location con guía táctica en UI.
+- **Motor de Túnel Zero-Rating Soberano (`RedCyberTunnelEngine.ts`):**
+  - Proxy local HTTP (127.0.0.1:8088) para bypass de saldo cero mediante dominios y cabeceras SNI de operadoras de telefonía (Claro, Movistar, Tigo, Digitel, Entel).
+  - Pruebas automatizadas de permeabilidad HTTP y latencia en tiempo real.
+  - Endpoint relay Rust `/red-tunnel` con validación estricta de cabecera `X-RED-ACK: v107` y out-proxy multi-hilo `reqwest`.
+  - Conmutación automática a ClearNet al restablecer datos y monitor en tiempo real de ancho de banda.
+- **HUD Táctico e Integración UI:**
+  - Badges interactivos `👻 SEÑUELO` y `⚡ SIN SALDO` en `StatusHeader.tsx`.
+  - Modales tácticos `TacticalGhostGpsModal.tsx` y `RedCyberTunnelModal.tsx` accesibles desde la barra lateral y cabecera.
+- **Gobernanza Atómica SSOT v107.0.0:**
+  - 100% de paridad en los 22 archivos maestros de versión (v107.0.0, build code 107000).
+
 ## [106.0.0-soberania-limpia] - 2026-09-16
 
 ### 🚀 Soberanía Limpia: Sanitización de Motores de Red, Túnel DNS Dual y Blindaje Daemon Android (Release Oficial v106.0.0)

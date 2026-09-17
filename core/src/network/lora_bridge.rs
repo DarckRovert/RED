@@ -74,11 +74,21 @@ impl LoraBridge {
                         }
                     }
                 }
-                Err(e) => info!("LoRa radio hardware COM3 not attached (skipping physical serial port: {})", e),
+                Err(e) => info!("LoRa radio hardware en {} no detectado (omitido puerto serial físico: {})", port_path, e),
             }
         });
 
         Ok(())
+    }
+
+    /// Retorna el nombre del puerto asignado a este puente
+    pub fn port(&self) -> &str {
+        &self.port
+    }
+
+    /// Retorna true si el puente serial fue inicializado
+    pub fn is_active(&self) -> bool {
+        self.is_active
     }
 
     /// Transmit a packet via long-range radio
@@ -99,3 +109,4 @@ impl LoraBridge {
         }
     }
 }
+

@@ -3,131 +3,525 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>RED — Red Encriptada Descentralizada</title>
+  <title>RED OS — Consola Táctica de Estación Base</title>
   <link rel="stylesheet" href="/app.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <!-- Loading Screen -->
+  <!-- Pantalla de Carga Táctica -->
   <div id="loading-screen">
-    <div class="loading-logo">🔴</div>
-    <div class="loading-title">RED</div>
-    <div class="loading-sub">Conectando al nodo...</div>
-    <div class="loading-spinner"></div>
+    <div class="loading-scanner">
+      <div class="radar-sweep"></div>
+      <div class="loading-logo">🛡️</div>
+    </div>
+    <div class="loading-title">RED SOVEREIGN NODE</div>
+    <div class="loading-sub">Inicializando bus criptográfico y enlaces locales...</div>
+    <div class="loading-progress-bar"><div class="loading-progress-fill"></div></div>
   </div>
 
-  <!-- Main App -->
+  <!-- Contenedor Principal de la Consola -->
   <div id="app" class="hidden">
-    <!-- Sidebar -->
+    <!-- Barra Lateral Táctica -->
     <aside class="sidebar">
       <div class="sidebar-header">
-        <div class="logo-mark">🔴</div>
-        <div class="logo-text">RED</div>
-        <div class="status-dot" id="status-dot" title="Conectado"></div>
+        <div class="logo-badge">
+          <span class="logo-shield">🛡️</span>
+          <div class="logo-info">
+            <span class="logo-brand">RED BASE</span>
+            <span class="logo-tag">v106.0.0 SOBERANÍA</span>
+          </div>
+        </div>
+        <div class="status-pill" id="global-status-pill">
+          <span class="beacon-pulse"></span>
+          <span id="global-status-text">ONLINE</span>
+        </div>
       </div>
 
+      <!-- Tarjeta de Identidad Criptográfica -->
       <div class="identity-card">
-        <div class="identity-label">Tu identidad</div>
-        <div class="identity-hash" id="identity-hash">—</div>
+        <div class="identity-header">
+          <span class="identity-label">Identidad Soberana DID</span>
+          <span class="pqc-tag">ML-KEM-768</span>
+        </div>
+        <div class="identity-hash" id="identity-hash">Cargando...</div>
         <div class="identity-short" id="identity-short">—</div>
-        <button class="copy-btn" onclick="copyIdentity()" title="Copiar">⎘ Copiar</button>
+        <button class="btn-tactical-sm" onclick="copyIdentity()">
+          <span>⎘</span> Copiar DID
+        </button>
       </div>
 
+      <!-- Navegación Primaria -->
       <nav class="sidebar-nav">
-        <button class="nav-btn active" onclick="setView('conversations')" id="nav-conversations">
-          💬 Mensajes
+        <button class="nav-btn active" onclick="setView('qr-pairing')" id="nav-qr-pairing">
+          <span class="nav-icon">📱</span>
+          <div class="nav-label-box">
+            <span class="nav-title">Enlace Móvil (QR)</span>
+            <span class="nav-sub">Emparejar app en red local</span>
+          </div>
         </button>
-        <button class="nav-btn" onclick="setView('contacts')" id="nav-contacts">
-          👥 Contactos
-        </button>
-        <button class="nav-btn" onclick="setView('groups')" id="nav-groups">
-          🔒 Grupos
-        </button>
+
         <button class="nav-btn" onclick="setView('status')" id="nav-status">
-          📡 Estado
+          <span class="nav-icon">📊</span>
+          <div class="nav-label-box">
+            <span class="nav-title">Telemetría & Malla</span>
+            <span class="nav-sub">Peers, ráfagas y salud</span>
+          </div>
+        </button>
+
+        <button class="nav-btn" onclick="setView('conversations')" id="nav-conversations">
+          <span class="nav-icon">💬</span>
+          <div class="nav-label-box">
+            <span class="nav-title">Mensajería Táctica</span>
+            <span class="nav-sub">Chat E2EE y canales</span>
+          </div>
+        </button>
+
+        <button class="nav-btn" onclick="setView('lora')" id="nav-lora">
+          <span class="nav-icon">📻</span>
+          <div class="nav-label-box">
+            <span class="nav-title">Pasarela LoRa SX1262</span>
+            <span class="nav-sub">Puente Serial / RF 915MHz</span>
+          </div>
+        </button>
+
+        <button class="nav-btn" onclick="setView('security')" id="nav-security">
+          <span class="nav-icon">🛡️</span>
+          <div class="nav-label-box">
+            <span class="nav-title">Bóveda Sled & Guardian</span>
+            <span class="nav-sub">Cifrado, PoW y filtros</span>
+          </div>
         </button>
       </nav>
 
-      <!-- List Panel -->
-      <div class="list-panel" id="list-panel">
-        <div class="list-header" id="list-header">
-          <span>Conversaciones</span>
-          <button class="add-btn" id="add-btn" onclick="showNewConversation()">+</button>
+      <!-- Panel Auxiliar de Conversaciones (Visible en vista Chat) -->
+      <div class="list-panel hidden" id="list-panel">
+        <div class="list-header">
+          <span id="list-title">Hilos Activos</span>
+          <button class="btn-icon-add" onclick="showNewConversation()" title="Nueva conversación">+</button>
         </div>
         <div class="list-items" id="list-items">
-          <div class="empty-state">Sin conversaciones todavía</div>
+          <div class="empty-state">Sin conversaciones registradas</div>
         </div>
+      </div>
+
+      <!-- Pie de Estado Rápido -->
+      <div class="sidebar-footer">
+        <div class="footer-stat">
+          <span class="f-lbl">IP LAN:</span>
+          <span class="f-val" id="sb-lan-ip">127.0.0.1</span>
+        </div>
+        <div class="footer-stat">
+          <span class="f-lbl">Relé WS:</span>
+          <span class="f-val" id="sb-relay-port">:7331</span>
+        </div>
+        <button class="btn-legal-link" onclick="openLegalModal('privacy')">
+          <span>⚖️</span> Marco Legal & Privacidad
+        </button>
       </div>
     </aside>
 
-    <!-- Main Panel -->
+    <!-- Panel de Visualización Principal -->
     <main class="main-panel">
-      <!-- Chat View -->
-      <div id="view-chat" class="view active">
-        <div class="chat-header" id="chat-header">
-          <div class="chat-placeholder-icon">🔴</div>
-          <div class="chat-placeholder-title">RED — Mensajería Privada</div>
-          <div class="chat-placeholder-sub">Selecciona una conversación o crea una nueva</div>
-        </div>
-        <div class="messages-area" id="messages-area"></div>
-        <div class="input-area" id="input-area" style="display:none">
-          <input id="msg-input" class="msg-input" type="text" placeholder="Escribe un mensaje..." autocomplete="off" />
-          <button class="send-btn" onclick="sendMessage()">→</button>
-        </div>
-      </div>
 
-      <!-- Status View -->
-      <div id="view-status" class="view">
-        <div class="view-title">📡 Estado del Nodo</div>
-        <div class="status-grid" id="status-grid">
-          <div class="stat-card"><div class="stat-val" id="st-running">—</div><div class="stat-label">Estado</div></div>
-          <div class="stat-card"><div class="stat-val" id="st-peers">—</div><div class="stat-label">Peers</div></div>
-          <div class="stat-card"><div class="stat-val" id="st-version">—</div><div class="stat-label">Versión</div></div>
+      <!-- ════════════════════════════════════════════════════════════════════════
+           VISTA 1: ENLACE MÓVIL (EMPAREJAMIENTO POR CÓDIGO QR Y RED LOCAL)
+           ════════════════════════════════════════════════════════════════════════ -->
+      <section id="view-qr-pairing" class="view-section active">
+        <div class="section-hero">
+          <div class="hero-badge">CONEXIÓN INSTANTÁNEA LOCAL</div>
+          <h2>📱 Emparejar Dispositivos Móviles (Wi-Fi / LAN)</h2>
+          <p>Tu computadora está operando como estación base y relé soberano. Cualquier teléfono en tu misma red Wi-Fi puede comunicarse a través de este nodo sin intermediarios en la nube.</p>
         </div>
-      </div>
 
-      <!-- Contacts View -->
-      <div id="view-contacts" class="view">
-        <div class="view-title">👥 Contactos</div>
-        <div class="form-card">
-          <div class="form-label">Añadir contacto</div>
-          <input id="new-contact-hash" class="form-input" type="text" placeholder="Identity hash (64 hex chars)" />
-          <input id="new-contact-name" class="form-input" type="text" placeholder="Nombre" />
-          <button class="form-btn" onclick="addContact()">Añadir Contacto</button>
-        </div>
-        <div id="contacts-list" class="contact-list"></div>
-      </div>
+        <div class="pairing-grid">
+          <!-- Tarjeta del Código QR -->
+          <div class="hud-card qr-card">
+            <div class="card-header">
+              <span class="hud-title">📡 CÓDIGO QR DE CONFIGURACIÓN RÁPIDA</span>
+              <span class="live-tag">GEN NATIVO</span>
+            </div>
+            
+            <div class="qr-canvas-container">
+              <canvas id="qr-code-canvas" width="220" height="220"></canvas>
+            </div>
+            
+            <div class="qr-instructions">
+              <div class="step-item">
+                <span class="step-num">1</span>
+                <span>Abre la app <strong>RED</strong> en tu teléfono Android o iOS.</span>
+              </div>
+              <div class="step-item">
+                <span class="step-num">2</span>
+                <span>Entra a <strong>Ajustes ➔ Red Mesh ➔ Servidor de Relé</strong>.</span>
+              </div>
+              <div class="step-item">
+                <span class="step-num">3</span>
+                <span>Escanea este código QR o ingresa la URL indicada a la derecha.</span>
+              </div>
+            </div>
+          </div>
 
-      <!-- Groups View -->
-      <div id="view-groups" class="view">
-        <div class="view-title">🔒 Grupos Cifrados</div>
-        <div class="form-card">
-          <div class="form-label">Crear grupo</div>
-          <input id="new-group-name" class="form-input" type="text" placeholder="Nombre del grupo" />
-          <button class="form-btn" onclick="createGroup()">Crear Grupo</button>
+          <!-- Parámetros de Enlace Directo -->
+          <div class="hud-card endpoints-card">
+            <div class="card-header">
+              <span class="hud-title">⚡ PARÁMETROS DE RED LOCAL (LAN)</span>
+              <button class="btn-tactical-refresh" onclick="refreshLanEndpoints()" title="Actualizar">↻ Detectar IP</button>
+            </div>
+
+            <div class="endpoint-group">
+              <label>Dirección WebSocket de Relé Ciego (Móviles & WebRTC):</label>
+              <div class="input-copy-group">
+                <input type="text" id="input-relay-url" readonly value="ws://127.0.0.1:7331/relay/ws" class="mono-input" />
+                <button class="btn-copy" onclick="copyInput('input-relay-url')">Copiar</button>
+              </div>
+              <small class="field-help">Pega esta dirección en tu app móvil para canalizar mensajes cuando caiga Internet.</small>
+            </div>
+
+            <div class="endpoint-group">
+              <label>Acceso a esta Consola Web desde otros dispositivos:</label>
+              <div class="input-copy-group">
+                <input type="text" id="input-web-url" readonly value="http://127.0.0.1:7333" class="mono-input" />
+                <button class="btn-copy" onclick="copyInput('input-web-url')">Copiar</button>
+              </div>
+              <small class="field-help">Abre este enlace desde cualquier laptop, tablet o teléfono conectado a la misma Wi-Fi.</small>
+            </div>
+
+            <div class="endpoint-status-box">
+              <div class="status-row">
+                <span>Estado del Relé Axum (RAM):</span>
+                <span class="badge-emerald" id="badge-relay-status">ESCUCHANDO EN 0.0.0.0:7331</span>
+              </div>
+              <div class="status-row">
+                <span>Túnel DNS Sin Saldo:</span>
+                <span class="badge-cyan" id="badge-dns-status">UDP 5353 ACTIVO</span>
+              </div>
+              <div class="status-row">
+                <span>Latencia de Bucle Local:</span>
+                <span class="badge-amber" id="badge-latency">&lt; 1 ms</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div id="groups-list" class="group-list"></div>
-      </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════════
+           VISTA 2: TELEMETRÍA Y ESTADO DE RED
+           ════════════════════════════════════════════════════════════════════════ -->
+      <section id="view-status" class="view-section">
+        <div class="section-hero">
+          <div class="hero-badge">TELEMETRÍA EN TIEMPO REAL</div>
+          <h2>📊 Rendimiento y Salud de la Estación Base</h2>
+          <p>Supervisión continua de nodos pares en el enjambre, ráfagas transitadas y consumo de recursos.</p>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="m-icon">👥</div>
+            <div class="m-data">
+              <span class="m-val" id="stat-peers">0</span>
+              <span class="m-lbl">Peers Libp2p</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="m-icon">⚡</div>
+            <div class="m-data">
+              <span class="m-val" id="stat-routed">0</span>
+              <span class="m-lbl">Ráfagas Relayed</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="m-icon">💾</div>
+            <div class="m-data">
+              <span class="m-val" id="stat-storage">Sled DB</span>
+              <span class="m-lbl">Almacenamiento Cifrado</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="m-icon">⏱️</div>
+            <div class="m-data">
+              <span class="m-val" id="stat-uptime">0s</span>
+              <span class="m-lbl">Tiempo Activo</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="m-icon">⛓️</div>
+            <div class="m-data">
+              <span class="m-val" id="stat-chain">Altura 0</span>
+              <span class="m-lbl">Blockchain PoS</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="m-icon">🛡️</div>
+            <div class="m-data">
+              <span class="m-val" id="stat-guardian">Nano-v3</span>
+              <span class="m-lbl">Guardian IA Offline</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Consola de Eventos en Vivo -->
+        <div class="hud-card log-card">
+          <div class="card-header">
+            <span class="hud-title">🖥️ TERMINAL DE EVENTOS DE RED (STREAM SSE /api/events)</span>
+            <button class="btn-tactical-sm" onclick="clearLogs()">Limpiar</button>
+          </div>
+          <div class="terminal-body" id="terminal-logs">
+            <div class="log-entry sys">[SYSTEM] Estación Base RED v106.0.0 enlazada a http://0.0.0.0:7333</div>
+            <div class="log-entry sys">[SYSTEM] Relé Ciego de tránsito listo para conexiones entrantes.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════════
+           VISTA 3: MENSAJERÍA TÁCTICA
+           ════════════════════════════════════════════════════════════════════════ -->
+      <section id="view-conversations" class="view-section">
+        <div class="chat-container">
+          <div class="chat-header" id="chat-header">
+            <div class="chat-peer-info">
+              <span class="chat-peer-avatar">🔴</span>
+              <div>
+                <div class="chat-peer-title" id="chat-title">Selecciona una conversación</div>
+                <div class="chat-peer-sub" id="chat-subtitle">Cifrado E2EE Double Ratchet + ML-KEM-768</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="messages-area" id="messages-area">
+            <div class="chat-placeholder">
+              <div class="placeholder-icon">💬</div>
+              <div class="placeholder-title">Canal Cifrado Local</div>
+              <p>Envía mensajes seguros a través de la malla local o hacia nodos conectados vía relé.</p>
+            </div>
+          </div>
+
+          <div class="chat-input-bar">
+            <input type="text" id="msg-input" placeholder="Escribe un mensaje táctico seguro..." autocomplete="off" onkeydown="if(event.key==='Enter') sendMessage()" />
+            <button class="btn-send" onclick="sendMessage()">Enviar ➔</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════════
+           VISTA 4: PASARELA LORA SX1262
+           ════════════════════════════════════════════════════════════════════════ -->
+      <section id="view-lora" class="view-section">
+        <div class="section-hero">
+          <div class="hero-badge">PUENTE FÍSICO DE RADIOFRECUENCIA</div>
+          <h2>📻 Pasarela de Hardware LoRa (SX1262 / 915 MHz)</h2>
+          <p>Conecta un transceptor Heltec LoRa 32 V3 o LilyGO T-Beam vía USB para actuar como estación base de largo alcance entre la radio y la red de datos.</p>
+        </div>
+
+        <div class="hud-card">
+          <div class="card-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="hud-title">⚙️ ESTADO DEL PUENTE SERIAL LORA</span>
+              <span class="badge-amber" id="lora-status-badge">STANDBY / DETECCIÓN USB</span>
+            </div>
+            <button class="action-btn" onclick="scanLoraHardware()" style="display:inline-flex; align-items:center; gap:6px; padding:6px 14px; font-size:0.75rem; background:rgba(0,229,255,0.12); color:#00e5ff; border:1px solid rgba(0,229,255,0.3); border-radius:8px; cursor:pointer;">
+              🔄 Escanear Puertos USB
+            </button>
+          </div>
+          <div class="lora-details-grid">
+            <div class="lora-stat-box">
+              <span class="lbl">Puerto Serial Asignado:</span>
+              <strong id="lora-port">Buscando...</strong>
+            </div>
+            <div class="lora-stat-box">
+              <span class="lbl">Chip / Transceptor:</span>
+              <strong id="lora-chip">Escaneando...</strong>
+            </div>
+            <div class="lora-stat-box">
+              <span class="lbl">Baudrate:</span>
+              <strong id="lora-baud">115,200 bps</strong>
+            </div>
+            <div class="lora-stat-box">
+              <span class="lbl">ID USB (VID:PID):</span>
+              <strong id="lora-vid-pid">--</strong>
+            </div>
+            <div class="lora-stat-box">
+              <span class="lbl">Banda de Frecuencia:</span>
+              <strong>US915 / EU868 (TDMA Ranurado)</strong>
+            </div>
+            <div class="lora-stat-box">
+              <span class="lbl">Modulación:</span>
+              <strong>SF7 / BW 125 kHz / CR 4/5</strong>
+            </div>
+          </div>
+
+          <div style="margin-top: 22px;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; margin-bottom: 10px;">
+              Puertos Seriales USB Detectados en el Host (<span id="lora-total-ports">0</span>)
+            </div>
+            <div id="lora-ports-list" style="display: flex; flex-direction: column; gap: 8px;">
+              <div style="color: var(--text-muted); font-size: 0.8rem; font-style: italic;">Iniciando escáner Plug & Play...</div>
+            </div>
+          </div>
+
+          <div class="lora-instructions" style="margin-top: 20px;">
+            💡 <strong>LoRa Plug & Play Activo:</strong> Cuando conectas tu radio LoRa por cable USB (LilyGO T-Beam, Heltec LoRa 32, ESP32-S3 o módem industrial), <code>red-node.exe</code> reconoce el chip UART de forma inmediata y retransmite los paquetes recibidos en el canal de radio hacia los teléfonos móviles en la red local y viceversa.
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════════
+           VISTA 5: BÓVEDA & SEGURIDAD
+           ════════════════════════════════════════════════════════════════════════ -->
+      <section id="view-security" class="view-section">
+        <div class="section-hero">
+          <div class="hero-badge">SEGURIDAD CRIPTOGRÁFICA</div>
+          <h2>🛡️ Bóveda Cifrada Sled & Blindaje Guardian IA</h2>
+          <p>Aislamiento estricto de claves, almacenamiento anti-forense y mitigación de inyecciones semánticas.</p>
+        </div>
+
+        <div class="security-grid">
+          <div class="hud-card">
+            <div class="card-header">
+              <span class="hud-title">🔒 ALMACENAMIENTO SLED DB</span>
+            </div>
+            <p style="color: var(--text-dim); font-size: 0.82rem; margin-bottom: 12px;">
+              Los datos se persisten cifrados en reposo utilizando <strong>AES-256-GCM</strong> con derivación de clave por <strong>Argon2id</strong>. No existen textos planos en disco.
+            </p>
+            <div class="status-row">
+              <span>Directorio Activo:</span>
+              <span class="mono-text" id="sec-data-dir">%APPDATA%/red</span>
+            </div>
+          </div>
+
+          <div class="hud-card">
+            <div class="card-header">
+              <span class="hud-title">🤖 GUARDIAN IA FIREWALL</span>
+              <span class="badge-emerald">ACTIVO (OFFLINE)</span>
+            </div>
+            <p style="color: var(--text-dim); font-size: 0.82rem; margin-bottom: 12px;">
+              Filtro heurístico de 64 bits por distancia de Hamming. Inspecciona las cargas entrantes para neutralizar ataques de manipulación sin conexión a Internet.
+            </p>
+            <div class="status-row">
+              <span>Modelo de Inferencia:</span>
+              <span class="badge-cyan">RED-Guardian-Nano-v3</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
     </main>
   </div>
 
-  <!-- New Conversation Modal -->
+  <!-- Modal de Nueva Conversación -->
   <div class="modal-overlay hidden" id="modal-overlay" onclick="closeModal()">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-title">Nueva Conversación</div>
-      <input id="modal-recipient" class="form-input" type="text" placeholder="Identity hash del destinatario" />
-      <input id="modal-first-msg" class="form-input" type="text" placeholder="Primer mensaje" />
-      <div class="modal-actions">
-        <button class="form-btn-secondary" onclick="closeModal()">Cancelar</button>
-        <button class="form-btn" onclick="startConversation()">Enviar</button>
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <span class="modal-title">Nueva Conversación Malla</span>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <label>Identity Hash del Destinatario (64 caracteres hex):</label>
+        <input id="modal-recipient" class="mono-input" type="text" placeholder="did:red:0123456789abcdef..." />
+        <label style="margin-top: 10px;">Primer Mensaje Cifrado:</label>
+        <input id="modal-first-msg" type="text" placeholder="Mensaje inicial..." />
+      </div>
+      <div class="modal-footer">
+        <button class="btn-tactical-sm" onclick="closeModal()">Cancelar</button>
+        <button class="btn-send" onclick="startConversation()">Iniciar Canal ➔</button>
       </div>
     </div>
   </div>
 
-  <!-- Toast -->
+  <!-- Modal Táctico de Marco Legal, Privacidad & Licencia -->
+  <div class="modal-overlay hidden" id="legal-modal-overlay" onclick="closeLegalModal()">
+    <div class="modal-box legal-modal-box" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.4rem;">⚖️</span>
+          <div>
+            <div class="modal-title">Marco Legal, Privacidad & Licencia</div>
+            <div style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono);">
+              RED OS v106.0.0 · Soberanía Criptográfica & Zero-Knowledge
+            </div>
+          </div>
+        </div>
+        <button class="modal-close" onclick="closeLegalModal()">✕</button>
+      </div>
+
+      <!-- Selector de Pestañas Legal -->
+      <div class="legal-tabs-bar">
+        <button class="legal-tab-btn active" id="legal-tab-btn-privacy" onclick="switchLegalTab('privacy')">
+          🛡️ Privacidad (Zero-Data)
+        </button>
+        <button class="legal-tab-btn" id="legal-tab-btn-terms" onclick="switchLegalTab('terms')">
+          📜 Términos & EULA
+        </button>
+        <button class="legal-tab-btn" id="legal-tab-btn-license" onclick="switchLegalTab('license')">
+          ⚖️ Licencia AGPL-3.0
+        </button>
+      </div>
+
+      <!-- Contenedor de Contenido Legal -->
+      <div class="legal-content-container">
+        <!-- Pestaña 1: Privacidad -->
+        <div class="legal-tab-pane" id="legal-pane-privacy">
+          <div class="legal-callout callout-emerald">
+            <strong>FILOSOFÍA ZERO-KNOWLEDGE & LOCAL-FIRST:</strong>
+            <p>RED no recopila, no transmite ni almacena telemetría o datos personales en servidores centrales. Toda la información permanece cifrada exclusivamente en su dispositivo local.</p>
+          </div>
+          <h4 style="color: #fff; margin: 12px 0 6px 0; font-size: 0.88rem;">1. Cero Rastreadores o SDKs Analíticos</h4>
+          <p style="color: var(--text-dim); font-size: 0.82rem; line-height: 1.5; margin: 0;">El nodo no contiene Google Analytics, Firebase SDK, Facebook Pixel ni servicios de telemetría de terceros. Ningún identificador publicitario es recopilado ni vendido.</p>
+          <h4 style="color: #fff; margin: 12px 0 6px 0; font-size: 0.88rem;">2. Cifrado en Reposo y en Tránsito</h4>
+          <p style="color: var(--text-dim); font-size: 0.82rem; line-height: 1.5; margin: 0;">Los datos persisten cifrados mediante AES-256-GCM con derivación Argon2id en Sled DB. La señalización peer-to-peer utiliza criptografía híbrida Post-Cuántica ML-KEM-768 y Noise Protocol.</p>
+          <h4 style="color: #fff; margin: 12px 0 6px 0; font-size: 0.88rem;">3. Purga Instantánea Anti-Forense</h4>
+          <p style="color: var(--text-dim); font-size: 0.82rem; line-height: 1.5; margin: 0;">El operador puede ejecutar la destrucción de claves y base de datos con sobrescritura criptográfica (0x00, 0xFF, CSPRNG) sin posibilidad de recuperación forense.</p>
+        </div>
+
+        <!-- Pestaña 2: Términos -->
+        <div class="legal-tab-pane hidden" id="legal-pane-terms">
+          <div class="legal-callout callout-red">
+            <strong>DESCARGO DE RESPONSABILIDAD EN CONTINGENCIA:</strong>
+            <p>RED es una herramienta descentralizada de resiliencia civil para comunicaciones fuera de línea. NO sustituye a los servicios oficiales de socorro (911/112) cuando se encuentren operativos.</p>
+          </div>
+          <h4 style="color: #fff; margin: 12px 0 6px 0; font-size: 0.88rem;">1. Soberanía Absoluta del Operador</h4>
+          <p style="color: var(--text-dim); font-size: 0.82rem; line-height: 1.5; margin: 0;">Usted es el único custodio de su semilla mnemónica y claves privadas. No existe un administrador ni puerta trasera que pueda restablecer contraseñas o descifrar sus hilos tácticos.</p>
+          <h4 style="color: #fff; margin: 12px 0 6px 0; font-size: 0.88rem;">2. Operación de Frecuencias de Radio (LoRa 915 MHz / 868 MHz)</h4>
+          <p style="color: var(--text-dim); font-size: 0.82rem; line-height: 1.5; margin: 0;">El usuario es responsable del cumplimiento de las normativas de telecomunicaciones de su país relativas al uso de bandas ISM no licenciadas y los límites de potencia de emisión.</p>
+        </div>
+
+        <!-- Pestaña 3: Licencia -->
+        <div class="legal-tab-pane hidden" id="legal-pane-license">
+          <div class="legal-callout callout-cyan">
+            <strong>GNU AFFERO GENERAL PUBLIC LICENSE v3.0 (AGPL-3.0):</strong>
+            <p>Software 100% libre, auditable y soberano. La libertad de usar, estudiar, modificar y redistribuir el software está garantizada legalmente para todos los seres humanos.</p>
+          </div>
+          <h4 style="color: #fff; margin: 12px 0 6px 0; font-size: 0.88rem;">1. Transparencia y Código Abierto</h4>
+          <p style="color: var(--text-dim); font-size: 0.82rem; line-height: 1.5; margin: 0;">Cualquier modificación o servicio derivado de RED debe publicar su código fuente bajo los mismos términos de la licencia AGPLv3, preservando la soberanía de la comunidad.</p>
+          <h4 style="color: #fff; margin: 12px 0 6px 0; font-size: 0.88rem;">2. Sin Garantía Implícita</h4>
+          <p style="color: var(--text-dim); font-size: 0.82rem; line-height: 1.5; margin: 0;">El software se distribuye sin garantía alguna de comerciabilidad o idoneidad para un fin determinado. La autoría intelectual pertenece a Rodrigo Alejandro Vega Rojas (DarckRovert).</p>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-dim);">
+        <div style="display: flex; gap: 14px; font-size: 0.75rem;">
+          <a href="/privacy.html" target="_blank" style="color: var(--emerald); text-decoration: underline; font-weight: 700;">
+            📄 Ver Privacidad Web
+          </a>
+          <a href="/terms.html" target="_blank" style="color: var(--cyan); text-decoration: underline; font-weight: 700;">
+            📄 Ver Términos Web
+          </a>
+        </div>
+        <button class="btn-send" onclick="closeLegalModal()">Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
   <div id="toast" class="toast hidden"></div>
 
+  <!-- Motor Táctico JS & QR Code -->
+  <script src="/qrcode.min.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

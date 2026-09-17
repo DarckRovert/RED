@@ -381,7 +381,7 @@ impl AICopilotEngine {
         };
 
         let initial_prompt_tokens_len = tokens.len();
-        let mut logits_processor = candle_transformers::generation::LogitsProcessor::new(299792458, Some(0.7), Some(0.9));
+        let mut logits_processor = candle_transformers::generation::LogitsProcessor::new(299792458, Some(0.35), Some(0.9));
         let mut generated_text = String::new();
         let max_tokens = 512; // Límite seguro para respuestas completas
 
@@ -423,8 +423,10 @@ impl AICopilotEngine {
             };
 
             // Interceptar Stop Tokens precisos según la arquitectura
-            let is_stop = if model_name_lower.contains("qwen") || model_name_lower.contains("smollm") {
+            let is_stop = if model_name_lower.contains("qwen") {
                 next_token == 151645 || next_token == 151643
+            } else if model_name_lower.contains("smollm") {
+                next_token == 0 || next_token == 2 || next_token == 7
             } else if model_name_lower.contains("phi") {
                 next_token == 32000 || next_token == 32001 || next_token == 32007
             } else {

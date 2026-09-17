@@ -599,7 +599,7 @@ class LocalAIEngineClass {
             // ─ Nivel 0: Off-main-thread via Worker (no bloquea UI) ──────────────────────────────
         try {
             const workerRes = await this.dispatchToWorker<any>(
-                'CLASSIFY_SAFETY', { text: trimmed }, 'CLASSIFY_SAFETY_RESULT', 15000
+                'CLASSIFY_SAFETY', { text: trimmed }, 'CLASSIFY_SAFETY_RESULT', 2000
             );
             if (workerRes?.data) {
                 const d = workerRes.data;
@@ -617,7 +617,7 @@ class LocalAIEngineClass {
             const classifier = await this.getClassifier();
             const results: Array<{ label: string; score: number }> = await this.withTimeout(
                 classifier(trimmed, { topk: null }),
-                15000,
+                2500,
                 'classifySafety'
             );
 
@@ -1005,13 +1005,13 @@ class LocalAIEngineClass {
                     if (generator) {
                     const genOutput = await this.withTimeout(
                         generator(formattedPrompt, {
-                            max_new_tokens: 220,
-                            temperature: 0.7,
+                            max_new_tokens: 160,
+                            temperature: 0.35,
                             top_p: 0.9,
-                            do_sample: true,
-                            repetition_penalty: 1.15,
+                            do_sample: false,
+                            repetition_penalty: 1.12,
                         }),
-                        25000,
+                        40000,
                         'Neural Generation'
                     );
 
@@ -1063,10 +1063,13 @@ class LocalAIEngineClass {
                 }
             }
 
+            const isTrulyNeural = Boolean(finalAnswer && !finalAnswer.startsWith('🛡️ **') && !finalAnswer.startsWith('🤖 **Copiloto Táctico RED'));
             thoughtSteps.push({
                 phase: 'Generación',
                 title: '4. Inferencia Neuronal en Español',
-                description: `Generación completada mediante ${activeModel?.name || 'Modelo Local'} (100% Offline).`,
+                description: isTrulyNeural 
+                    ? `Generación completada mediante ${activeModel?.name || 'Modelo Local'} (100% Offline).` 
+                    : 'Respuesta recuperada mediante RAG Táctico Vectorial INT8 y base de conocimiento de contingencia.',
                 status: 'completed',
                 metrics: {
                     'Tiempo Síntesis': `${Math.round(performance.now() - genStart)}ms`,
@@ -1094,10 +1097,13 @@ class LocalAIEngineClass {
         const totalExecTime = Math.round(performance.now() - start);
         const isSov = ModelManager.isSovereignActive();
         const activeModel = ModelManager.getActiveModel();
-        const activeModelName = isSov ? ModelManager.getActiveEndpointDescription() : (activeModel?.name || 'RAG Táctico Preinstalado INT8');
+        const isTrulyNeural = Boolean(finalAnswer && !finalAnswer.startsWith('🛡️ **') && !finalAnswer.startsWith('🤖 **Copiloto Táctico RED'));
+        const activeModelName = isSov ? ModelManager.getActiveEndpointDescription() : (isTrulyNeural ? (activeModel?.name || 'RAG Táctico Preinstalado INT8') : 'RAG Táctico Preinstalado INT8');
         const activeModelTag = isSov 
             ? ModelManager.getActiveEndpointDescription()
-            : (activeModel ? `${activeModel.name} (ARM64 / WASM Local)` : 'RAG Vectorial INT8 + Protocolos TCCC (100% Offline)');
+            : (isTrulyNeural 
+                ? (activeModel ? `${activeModel.name} (ARM64 / WASM Local)` : 'RAG Vectorial INT8 + Protocolos TCCC (100% Offline)')
+                : 'RAG Vectorial INT8 + Protocolos TCCC (100% Offline)');
         const memoryUsedMb = isSov ? 0 : (activeModel?.fileSizeMb ? Math.round(activeModel.fileSizeMb * 1.15) : 64);
 
         const telemetryPayload: NeuralTelemetryData = {

@@ -19,6 +19,7 @@ import { PaymentsTab } from "./PaymentsTab";
 import { LinkedDevicesView } from "./LinkedDevicesView";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacIcon } from "../ui/TacIcon";
+import { LegalComplianceModal } from "../legal/LegalComplianceModal";
 
 interface FamiliarSettingsViewProps {
     onClose?: () => void;
@@ -30,6 +31,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
     const { t } = useTranslation();
     const { identity, preferences, updatePreferences } = useRedStore();
     const [qrModalOpen, setQrModalOpen] = useState(false);
+    const [legalModalOpen, setLegalModalOpen] = useState(false);
     const [activeSection, setActiveSection] = useState<SubSection>(null);
 
     // Register back interceptor for sub-sections
@@ -391,7 +393,8 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             onClick={() => setActiveSection("updates")}
                             style={{
                                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                                padding: "14px 16px", cursor: "pointer"
+                                padding: "14px 16px", cursor: "pointer",
+                                borderBottom: "1px solid rgba(255, 255, 255, 0.04)"
                             }}
                         >
                             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
@@ -402,6 +405,28 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                                     </div>
                                     <div style={{ fontSize: "0.74rem", color: "#8696A0" }}>
                                         {`RED OS v${RED_VERSION} · Estado del sistema`}
+                                    </div>
+                                </div>
+                            </div>
+                            <TacIcon name="forward" size={13} color="#8696A0" />
+                        </div>
+
+                        {/* 8. Marco Legal, Términos & Privacidad */}
+                        <div
+                            onClick={() => setLegalModalOpen(true)}
+                            style={{
+                                display: "flex", alignItems: "center", justifyContent: "space-between",
+                                padding: "14px 16px", cursor: "pointer"
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                                <span style={{ fontSize: "18px", width: 18, textAlign: "center" }}>⚖️</span>
+                                <div>
+                                    <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
+                                        Términos y Política de Privacidad
+                                    </div>
+                                    <div style={{ fontSize: "0.74rem", color: "#8696A0" }}>
+                                        Licencia AGPLv3, protocolo Zero-Data y seguridad Play
                                     </div>
                                 </div>
                             </div>
@@ -478,6 +503,12 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                     onClose={() => setQrModalOpen(false)}
                 />
             )}
+
+            {/* Modal de Cumplimiento Legal y Privacidad */}
+            <LegalComplianceModal
+                isOpen={legalModalOpen}
+                onClose={() => setLegalModalOpen(false)}
+            />
         </div>
     );
 };

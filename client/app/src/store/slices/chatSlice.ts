@@ -181,25 +181,6 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 content.includes('"status":')
             ));
 
-        // ── RED GUARDIAN IA MODERATION EVALUATION ──────────────────────────────
-        if (content && !isControlMessage && (!options?.msg_type || options.msg_type === 'text')) {
-            const verdict = await GuardianEngine.evaluateTextAsync(content);
-            if (!verdict.allowed) {
-                toast.error(`⛔ RED Guardian: ${verdict.reason}`);
-                return;
-            }
-        }
-        if (options?.media_data || options?.msg_type === 'image') {
-            const imgData = options.media_data || content;
-            if (imgData) {
-                const verdict = await GuardianEngine.evaluateImage(imgData);
-                if (!verdict.allowed) {
-                    toast.error(`⛔ RED Guardian: ${verdict.reason}`);
-                    return;
-                }
-            }
-        }
-
         let tempId: string | null = null;
         const defaultTtlSec = SettingsManager.getAutoDestructSeconds(get().preferences?.autoDestructDefault);
         const effectiveTtl = options?.ttl || (defaultTtlSec > 0 ? defaultTtlSec : undefined);
@@ -208,6 +189,7 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
         const msgId = options?.id || generateDeterministicMsgId(myDid, cleanPeerHash, content);
         const detectedMediaData = options?.media_data || (content?.startsWith('data:') ? content : undefined);
 
+        // ── 1. ACTUALIZACIÓN OPTIMISTA INSTANTÁNEA (0 ms UI) ───────────────────
         if (!isControlMessage) {
             // Persist heavy media to IndexedDB
             if (detectedMediaData && detectedMediaData.length > 512) {
@@ -239,7 +221,7 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             };
             tempId = msgId;
 
-            // 1. Optimistically update conversations list in store and localStorage
+            // Optimistically update conversations list in store and localStorage
             const currentConvs = get().conversations || [];
             const msgType = optimisticMsg.msg_type;
             const snippet = msgType === 'image' ? (options?.caption ? `📷 ${options.caption}` : '📷 Foto') :
@@ -311,6 +293,35 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             });
             RedAPI.setWebStore('red_web_conversations', updatedConvs);
             recordProcessedMessageId(msgId);
+        }
+
+        // ── 2. RED GUARDIAN IA MODERATION EVALUATION ──────────────────────────
+        if (content && !isControlMessage && (!options?.msg_type || options.msg_type === 'text')) {
+            const verdict = await GuardianEngine.evaluateTextAsync(content);
+            if (!verdict.allowed) {
+                if (tempId) {
+                    set({ messages: get().messages.map(m =>
+                        m.id === tempId ? { ...m, status: 'Failed' as const } : m
+                    )});
+                }
+                toast.error(`⛔ RED Guardian: ${verdict.reason}`);
+                return;
+            }
+        }
+        if (options?.media_data || options?.msg_type === 'image') {
+            const imgData = options.media_data || content;
+            if (imgData) {
+                const verdict = await GuardianEngine.evaluateImage(imgData);
+                if (!verdict.allowed) {
+                    if (tempId) {
+                        set({ messages: get().messages.map(m =>
+                            m.id === tempId ? { ...m, status: 'Failed' as const } : m
+                        )});
+                    }
+                    toast.error(`⛔ RED Guardian: ${verdict.reason}`);
+                    return;
+                }
+            }
         }
 
         try {

@@ -20,6 +20,7 @@
  */
 
 import { meshSosBeacon } from '../emergency/MeshSosBeaconEngine';
+import { tacticalGhostGps } from './TacticalGhostGpsEngine';
 
 export interface TacticalLocation {
     lat?: number;
@@ -32,6 +33,7 @@ export interface TacticalLocation {
     isEstimated?: boolean; // True si proviene de la caché histórica por falta de satélites
     ageMs?: number;        // Antigüedad de la posición en ms
     source?: 'capacitor' | 'html5' | 'cache';
+    isGhost?: boolean;     // True si proviene del motor táctico señuelo
 }
 
 const STORAGE_KEY_GPS = 'red_last_known_gps';
@@ -44,6 +46,29 @@ export class TacticalLocationEngine {
     private static lastKnownCoordsForCog: { lat: number; lon: number; timestamp: number } | null = null;
     private static isCapacitorActive: boolean = false;
     private static isStartingWatch: boolean = false;
+    private static ghostBridgeInitialized: boolean = false;
+
+    private static ensureGhostBridge(): void {
+        if (this.ghostBridgeInitialized) return;
+        this.ghostBridgeInitialized = true;
+        tacticalGhostGps.addListener((ghostLoc) => {
+            if (tacticalGhostGps.isGhostActive()) {
+                this.lastReportedLocation = ghostLoc;
+                this.listeners.forEach(cb => {
+                    try { cb(ghostLoc); } catch {}
+                });
+            } else {
+                // Al desactivar el señuelo, restaurar inmediatamente la posición de hardware real
+                const realLoc = this.getTrueHardwareLocation();
+                if (realLoc) {
+                    this.lastReportedLocation = realLoc;
+                    this.listeners.forEach(cb => {
+                        try { cb(realLoc); } catch {}
+                    });
+                }
+            }
+        });
+    }
 
     /**
      * Valida que las coordenadas no sean nulas, indefinidas ni correspondan a Null Island (0,0)
@@ -92,6 +117,12 @@ export class TacticalLocationEngine {
      * Obtiene la última posición táctica registrada en la memoria del dispositivo
      */
     public static getLastKnownLocation(): TacticalLocation | null {
+        this.ensureGhostBridge();
+        if (tacticalGhostGps.isGhostActive()) {
+            const ghost = tacticalGhostGps.getCurrentGhostLocation();
+            if (ghost) return ghost;
+        }
+
         if (typeof window === 'undefined') return null;
         try {
             const raw = localStorage.getItem(STORAGE_KEY_GPS);
@@ -119,6 +150,44 @@ export class TacticalLocationEngine {
     }
 
     /**
+     * Retorna la verdadera posición de hardware real registrada (sin señuelo)
+     */
+    public static getTrueHardwareLocation(): TacticalLocation | null {
+        if (typeof window === 'undefined') return null;
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_GPS);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            const lat = parsed.lat;
+            const lon = parsed.lon !== undefined ? parsed.lon : parsed.lng;
+            if (this.isValidCoordinates(lat, lon)) {
+                const ts = parsed.timestamp || Date.now();
+                return {
+                    lat,
+                    lon,
+                    alt: parsed.alt,
+                    accuracy: parsed.accuracy,
+                    heading: typeof parsed.heading === 'number' && isFinite(parsed.heading) ? parsed.heading : undefined,
+                    speed: typeof parsed.speed === 'number' && isFinite(parsed.speed) ? parsed.speed : undefined,
+                    timestamp: ts,
+                    isEstimated: false,
+                    ageMs: Math.max(0, Date.now() - ts),
+                    source: 'cache',
+                    isGhost: false
+                };
+            }
+        } catch {}
+        return null;
+    }
+
+    /**
+     * Consulta si el modo señuelo anti-rastreo está activo
+     */
+    public static isGhostActive(): boolean {
+        return tacticalGhostGps.isGhostActive();
+    }
+
+    /**
      * Guarda una posición táctica válida en la caché persistente y notifica a todos los escuchas
      */
     public static saveLocation(
@@ -131,6 +200,9 @@ export class TacticalLocationEngine {
         source: 'capacitor' | 'html5' | 'cache' = 'html5'
     ): TacticalLocation | null {
         if (!this.isValidCoordinates(lat, lon)) return null;
+
+        // Registrar siempre la posición del hardware real para modo Jitter y rescate SOS
+        tacticalGhostGps.recordRealHardwareLocation(lat, lon, typeof alt === 'number' ? alt : undefined);
 
         let finalHeading: number | undefined = (typeof heading === 'number' && isFinite(heading) && heading >= 0)
             ? Math.round(heading)
@@ -202,6 +274,17 @@ export class TacticalLocationEngine {
             }
         } catch {}
 
+        // Si el modo señuelo está activo, propagar y retornar la posición falsa a los escuchas
+        if (tacticalGhostGps.isGhostActive()) {
+            const ghost = tacticalGhostGps.getCurrentGhostLocation();
+            if (ghost) {
+                this.listeners.forEach(cb => {
+                    try { cb(ghost); } catch {}
+                });
+                return ghost;
+            }
+        }
+
         this.listeners.forEach(cb => {
             try { cb(loc); } catch {}
         });
@@ -214,7 +297,13 @@ export class TacticalLocationEngine {
      * 1. Retorna inmediatamente la última conocida válida si no hay satélites al instante.
      * 2. Intenta fijación satelital con @capacitor/geolocation (o HTML5) con timeout configurado.
      */
-    public static async getEmergencyLocation(timeoutMs = 10000): Promise<TacticalLocation> {
+    public static async getEmergencyLocation(timeoutMs = 10000, allowGhost = true): Promise<TacticalLocation> {
+        this.ensureGhostBridge();
+        if (allowGhost && tacticalGhostGps.isGhostActive()) {
+            const ghost = tacticalGhostGps.getCurrentGhostLocation();
+            if (ghost) return ghost;
+        }
+
         const cached = this.getLastKnownLocation();
 
         // 1. Intento primario nativo con Capacitor

@@ -1,6 +1,6 @@
 {
   "name": "red-app",
-  "version": "106.0.0",
+  "version": "107.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -36,6 +36,8 @@
     "test:resilience": "node scripts/test-phase10-deep-resilience.js",
     "test:qr": "node scripts/test-offline-qr.js",
     "test:location": "node scripts/test-tactical-location.js",
+    "test:ghost-gps": "node scripts/test-tactical-ghost-gps.js",
+    "test:cyber-tunnel": "node scripts/test-cyber-tunnel-zerorating.js",
     "test:comms": "node scripts/test-tactical-comms.js",
     "test:mission-geo": "node scripts/test-mission-modules-geo.js",
     "test:economy": "node scripts/test-p2p-economy-security.js",

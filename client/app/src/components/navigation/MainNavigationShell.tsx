@@ -36,7 +36,6 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
 
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
     const [storyCreatorOpen, setStoryCreatorOpen] = useState(false);
-    const [topMenuOpen, setTopMenuOpen] = useState(false);
     const [callRecords, setCallRecords] = useState<CallRecord[]>(() => callHistory.getHistory());
 
     useEffect(() => {
@@ -60,14 +59,6 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
             return true;
         });
     }, [storyCreatorOpen]);
-
-    useEffect(() => {
-        if (!topMenuOpen) return;
-        return BackHandlerRegistry.register(() => {
-            setTopMenuOpen(false);
-            return true;
-        });
-    }, [topMenuOpen]);
 
     // Listen for tab switch requests
     useEffect(() => {

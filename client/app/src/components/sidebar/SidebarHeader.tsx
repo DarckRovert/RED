@@ -8,6 +8,7 @@ import { ContactQrModal } from "../chat/ContactQrModal";
 import { NewContactModal } from "../chat/NewContactModal";
 import { satelliteMeshGateway } from "../../lib/mesh/SatelliteMeshGatewayEngine";
 import { TacIcon } from "../ui/TacIcon";
+import { LegalComplianceModal } from "../legal/LegalComplianceModal";
 
 
 export type ChatFilterType = "all" | "unread" | "groups" | "contacts" | "channels";
@@ -55,6 +56,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     const [quickMenuOpen, setQuickMenuOpen] = useState(false);
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const [newContactOpen, setNewContactOpen] = useState(false);
+    const [legalModalOpen, setLegalModalOpen] = useState(false);
     const [satAos, setSatAos] = useState(() => satelliteMeshGateway.getTelemetry().isUplinkAvailable);
 
     useEffect(() => {
@@ -291,6 +293,19 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                 >
                                     <TacIcon name="shield" size={16} color="#8696A0" />
                                     <span>8 Hubs Tácticos</span>
+                                </button>
+                                <button
+                                    onClick={() => { setQuickMenuOpen(false); setLegalModalOpen(true); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                        background: "transparent", border: "none",
+                                        color: "#8696A0", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                >
+                                    <span style={{ fontSize: "14px" }}>⚖️</span>
+                                    <span>Términos & Privacidad</span>
                                 </button>
                             </div>
                         )}
@@ -603,6 +618,12 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
             <NewContactModal
                 isOpen={newContactOpen}
                 onClose={() => setNewContactOpen(false)}
+            />
+
+            {/* Legal & Compliance Modal */}
+            <LegalComplianceModal
+                isOpen={legalModalOpen}
+                onClose={() => setLegalModalOpen(false)}
             />
         </div>
     );

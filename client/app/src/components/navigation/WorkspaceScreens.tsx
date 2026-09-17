@@ -107,6 +107,8 @@ const TacticalCommandCenter  = dynamic(() => import("../TacticalCommandCenter").
 const RedHyperBrowserModal   = dynamic(() => import("../miniapp/RedHyperBrowserModal").then(m => ({ default: m.RedHyperBrowserModal })), { ssr: false, loading: () => <AppLoader /> });
 const SovereignAppStoreModal = dynamic(() => import("../miniapp/SovereignAppStoreModal").then(m => ({ default: m.SovereignAppStoreModal })), { ssr: false, loading: () => <AppLoader /> });
 const MiniAppContainerModal  = dynamic(() => import("../miniapp/MiniAppContainerModal").then(m => ({ default: m.MiniAppContainerModal })), { ssr: false, loading: () => <AppLoader /> });
+const TacticalGhostGpsModal  = dynamic(() => import("../modals/TacticalGhostGpsModal").then(m => ({ default: m.TacticalGhostGpsModal })), { ssr: false, loading: () => <AppLoader /> });
+const RedCyberTunnelModal    = dynamic(() => import("../modals/RedCyberTunnelModal").then(m => ({ default: m.RedCyberTunnelModal })), { ssr: false, loading: () => <AppLoader /> });
 
 // ── TacticalTabletWorkspace ───────────────────────────────────────────────────
 // Placeholder del pane derecho en tablet cuando currentScreen === "sidebar".
@@ -309,6 +311,8 @@ export function WorkspaceScreens({ isTablet, onOpenTool }: WorkspaceScreensProps
       {currentScreen === "celestialPdr"                                        && <CelestialPdrModal />}
       {currentScreen === "sonarSeismic"                                        && <SonarSeismicModal />}
       {currentScreen === "tacticalFoxhunt"                                     && <TacticalFoxhuntModal />}
+      {(currentScreen === "tacticalGhostGps" || currentScreen === "ghostGps")   && <TacticalGhostGpsModal />}
+      {(currentScreen === "cyberTunnel" || currentScreen === "zeroRating")     && <RedCyberTunnelModal />}
       {currentScreen === "shakePair"                                           && <ShakePairModal />}
       {(currentScreen === "proximity" || currentScreen === "proximityWave")   && <ProximityWaveModal />}
       {(currentScreen === "nearby"    || currentScreen === "contacts")         && <NearbyDevicesPanel />}

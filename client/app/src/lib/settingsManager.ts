@@ -327,7 +327,19 @@ export class SettingsManager {
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(this.currentPrefs));
                 if (patch.signalingServerUrl !== undefined) {
-                    localStorage.setItem('red_signaling_url', patch.signalingServerUrl);
+                    const rawUrl = (patch.signalingServerUrl || '').trim();
+                    localStorage.setItem('red_signaling_url', rawUrl);
+                    if (rawUrl) {
+                        let relayWsUrl = rawUrl;
+                        if (relayWsUrl.startsWith('http://')) relayWsUrl = 'ws://' + relayWsUrl.slice(7);
+                        else if (relayWsUrl.startsWith('https://')) relayWsUrl = 'wss://' + relayWsUrl.slice(8);
+                        if (!relayWsUrl.includes('/relay/ws') && (relayWsUrl.includes(':7331') || relayWsUrl.includes(':7333'))) {
+                            relayWsUrl = relayWsUrl.replace(/\/+$/, '') + '/relay/ws';
+                        }
+                        localStorage.setItem('red_blind_relay_url', relayWsUrl);
+                    } else {
+                        localStorage.removeItem('red_blind_relay_url');
+                    }
                 }
                 if (patch.customStunServer !== undefined) {
                     localStorage.setItem('red_custom_stun', patch.customStunServer);

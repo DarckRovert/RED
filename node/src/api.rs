@@ -4,7 +4,7 @@
 //! Includes an SSE endpoint for real-time message delivery.
 //! v19.0: Guardian IA + Sistema Alerta AMBER-RED integrados.
 
-use axum::http::HeaderValue;
+use axum::http::{header::HeaderName, HeaderValue};
 use axum::{
     body::Body,
     extract::{
@@ -91,30 +91,57 @@ async fn verify_session_token(
     next: axum::middleware::Next,
 ) -> Result<Response, StatusCode> {
     let path = req.uri().path().to_string();
-    // Endpoints públicos: status, SSE de health, y endpoints estándar de IA soberana
+    // Endpoints públicos de diagnóstico, identidad, assets web y relé ciego
     let public = [
         "/api/status",
+        "/api/identity",
+        "/api/network/lan-endpoints",
         "/api/events",
         "/local-signal",
+        "/relay/stats",
+        "/relay/health",
+        "/relay/ws",
         "/",
         "/app.css",
         "/app.js",
+        "/qrcode.min.js",
+        "/privacy.html",
+        "/privacy",
+        "/terms.html",
+        "/terms",
         "/api/ai/status",
         "/api/tags",
         "/v1/models",
         "/v1/chat/completions",
         "/api/generate",
+        "/api/conversations",
+        "/api/mesh/apk",
     ];
-    if public.iter().any(|p| path == *p) {
+    if public.iter().any(|p| path == *p || path.starts_with("/relay/") || path.starts_with("/api/messages/")) {
         return Ok(next.run(req).await);
     }
-    // Verificar token en header X-Red-Session-Token
+
+    // Acceso desde consola local de escritorio (loopback)
+    let is_loopback = req
+        .headers()
+        .get("host")
+        .and_then(|h| h.to_str().ok())
+        .map(|h| h.starts_with("localhost:") || h.starts_with("127.0.0.1:") || h == "localhost" || h == "127.0.0.1")
+        .unwrap_or(false);
+
+    // Verificar token en header X-Red-Session-Token o Authorization Bearer
     let provided = req
         .headers()
         .get("x-red-session-token")
         .and_then(|v| v.to_str().ok())
+        .or_else(|| {
+            req.headers().get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.strip_prefix("Bearer "))
+        })
         .unwrap_or("");
-    if provided == state.session_token.as_str() {
+
+    if is_loopback || provided == state.session_token.as_str() {
         Ok(next.run(req).await)
     } else {
         Err(StatusCode::UNAUTHORIZED)
@@ -568,10 +595,15 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/settings/dms/panic_wipe", post(handle_panic_wipe))
         // C1: LoRa config — persists serial port + baud so LoraBridge picks it up on restart
         .route("/api/settings/lora", post(handle_set_lora_config))
-        // GAP-06: Local IP for NetworkPanel
+        // LoRa Plug & Play: auto-detección en caliente de transceptores USB
+        .route("/api/hardware/lora/ports", get(handle_scan_lora_ports))
         .route("/api/network/ip", get(handle_network_ip))
         .route("/api/network/connect", post(handle_network_connect))
         .route("/api/dns/query", post(handle_dns_query))
+        // Zero-Rating SNI Fronting & CyberTunnel ClearNet Gateway
+        .route("/red-tunnel", post(handle_red_tunnel).get(handle_red_tunnel))
+        .route("/api/cybertunnel/status", get(handle_cybertunnel_status))
+        .route("/api/cybertunnel/proxy", post(handle_cybertunnel_proxy))
         // GAP-02: Outbound mesh payloads SSE (Rust → JS radio bridge)
         .route("/api/network/outbound", get(handle_outbound_sse))
         // GAP-01: Inbound mesh payload injection (BLE/LoRa → Rust node)
@@ -597,6 +629,7 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/relay/ws", get(handle_api_relay_ws))
         .route("/relay/stats", get(handle_api_relay_stats))
         .route("/relay/health", get(handle_api_relay_health))
+        .route("/api/network/lan-endpoints", get(handle_lan_endpoints))
         // ── v19.0: Sistema Alerta AMBER-RED ─────────────────────────────────
         .route("/api/amber/alert", post(handle_create_amber_alert))
         .route("/api/amber/alerts", get(handle_list_amber_alerts))
@@ -651,6 +684,11 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/", get(serve_index))
         .route("/app.css", get(serve_css))
         .route("/app.js", get(serve_js))
+        .route("/qrcode.min.js", get(serve_qrcode_js))
+        .route("/privacy.html", get(serve_privacy))
+        .route("/privacy", get(serve_privacy))
+        .route("/terms.html", get(serve_terms))
+        .route("/terms", get(serve_terms))
         .with_state(state.clone())
         .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024))
         .layer(axum::middleware::from_fn_with_state(
@@ -688,6 +726,30 @@ async fn serve_js() -> impl IntoResponse {
     Response::builder()
         .header("Content-Type", "application/javascript; charset=utf-8")
         .body(js.to_string())
+        .unwrap_or_else(|_| Response::new(String::new()))
+}
+
+async fn serve_qrcode_js() -> impl IntoResponse {
+    let js = include_str!("web/qrcode.min.js");
+    Response::builder()
+        .header("Content-Type", "application/javascript; charset=utf-8")
+        .body(js.to_string())
+        .unwrap_or_else(|_| Response::new(String::new()))
+}
+
+async fn serve_privacy() -> impl IntoResponse {
+    let html = include_str!("web/privacy.html");
+    Response::builder()
+        .header("Content-Type", "text/html; charset=utf-8")
+        .body(html.to_string())
+        .unwrap_or_else(|_| Response::new(String::new()))
+}
+
+async fn serve_terms() -> impl IntoResponse {
+    let html = include_str!("web/terms.html");
+    Response::builder()
+        .header("Content-Type", "text/html; charset=utf-8")
+        .body(html.to_string())
         .unwrap_or_else(|_| Response::new(String::new()))
 }
 
@@ -1924,24 +1986,23 @@ async fn handle_set_lora_config(
     State(state): State<ApiState>,
     Json(req): Json<LoraConfigRequest>,
 ) -> impl IntoResponse {
-    // Persist to encrypted storage so the LoraBridge picks it up on next start
-    let node = state.node.lock().await;
-    // Reuse the set_dms_config pattern: store as config key/value pairs
-    // (set_config is on the Storage, accessed through the Node's internal mutex)
-    // We call set_nickname as a proxy since there's no generic set_config on the public API yet —
-    // instead we store in the well-known config namespace.
-    drop(node); // release lock before calling internal storage
-
     let mut node = state.node.lock().await;
-    // Persist via DMS storage path (all config goes to same SQLite table)
-    // This is read back by LoraBridge on startup via storage.get_config()
     futures::executor::block_on(async {
         node.set_nickname(&format!("__lora_port__:{}", req.port))
             .await
     });
+    drop(node);
+
+    if req.enabled {
+        let _ = red_core::network::Node::attach_lora_bridge(
+            state.node.clone(),
+            req.port.clone(),
+            req.baud,
+        ).await;
+    }
 
     tracing::info!(
-        "[API] LoRa config saved: port={}, baud={}, enabled={}",
+        "[API] LoRa config saved and attached: port={}, baud={}, enabled={}",
         req.port,
         req.baud,
         req.enabled
@@ -1953,9 +2014,31 @@ async fn handle_set_lora_config(
             "ok": true,
             "port": req.port,
             "baud": req.baud,
-            "note": "Config persisted. Restart LoraBridge to apply."
+            "note": "Config persisted and radio bridge attached in hot runtime."
         })),
     )
+}
+
+/// Handler para auto-detección Plug & Play de hardware LoRa USB
+async fn handle_scan_lora_ports(State(state): State<ApiState>) -> impl IntoResponse {
+    let scan_result = crate::lora_pnp::scan_lora_hardware();
+    if let Some(ref dev) = scan_result.primary_device {
+        let should_attach = {
+            let n = state.node.lock().await;
+            match &n.lora_bridge {
+                Some(b) => b.port() != dev.port_name || !b.is_active(),
+                None => true,
+            }
+        };
+        if should_attach {
+            let _ = red_core::network::Node::attach_lora_bridge(
+                state.node.clone(),
+                dev.port_name.clone(),
+                dev.recommended_baud,
+            ).await;
+        }
+    }
+    (StatusCode::OK, Json(scan_result))
 }
 
 async fn handle_get_profile(State(state): State<ApiState>) -> impl IntoResponse {
@@ -2283,6 +2366,160 @@ async fn handle_dns_query(
                 "error": "Timeout esperando respuesta UDP 53 del servidor DNS",
                 "latency_ms": latency_ms,
                 "server": target_addr
+            })),
+        )
+            .into_response(),
+    }
+}
+
+// ─── Zero-Rating SNI Fronting & CyberTunnel ClearNet Gateway ─────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct CyberTunnelProxyRequest {
+    pub url: String,
+    #[serde(default)]
+    pub method: Option<String>,
+    #[serde(default)]
+    pub headers: Option<std::collections::HashMap<String, String>>,
+    #[serde(default)]
+    pub body: Option<String>,
+}
+
+async fn handle_cybertunnel_status() -> impl IntoResponse {
+    let mut resp = Response::new(Body::from(serde_json::to_string(&serde_json::json!({
+        "ok": true,
+        "active": true,
+        "clearnet_gateway": true,
+        "version": "v106.0.0"
+    })).unwrap_or_default()));
+    resp.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    resp.headers_mut().insert(
+        HeaderName::from_static("x-red-ack"),
+        HeaderValue::from_static("v106"),
+    );
+    resp
+}
+
+async fn handle_red_tunnel(
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> impl IntoResponse {
+    let forward_url = headers
+        .get("x-red-forward-url")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string());
+
+    if let Some(target_url) = forward_url {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap_or_default();
+
+        match client.get(&target_url).send().await {
+            Ok(resp) => {
+                let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::OK);
+                let content_type = resp
+                    .headers()
+                    .get(reqwest::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("text/html")
+                    .to_string();
+                let bytes = resp.bytes().await.unwrap_or_default();
+
+                let mut out_resp = Response::new(Body::from(bytes));
+                *out_resp.status_mut() = status;
+                if let Ok(ct_val) = HeaderValue::from_str(&content_type) {
+                    out_resp.headers_mut().insert(axum::http::header::CONTENT_TYPE, ct_val);
+                }
+                out_resp.headers_mut().insert(
+                    HeaderName::from_static("x-red-ack"),
+                    HeaderValue::from_static("v106"),
+                );
+                return out_resp;
+            }
+            Err(e) => {
+                let mut err_resp = Response::new(Body::from(format!("Gateway fetch error: {}", e)));
+                *err_resp.status_mut() = StatusCode::BAD_GATEWAY;
+                err_resp.headers_mut().insert(
+                    HeaderName::from_static("x-red-ack"),
+                    HeaderValue::from_static("v106"),
+                );
+                return err_resp;
+            }
+        }
+    }
+
+    let mut resp = Response::new(Body::from(serde_json::to_string(&serde_json::json!({
+        "ok": true,
+        "status": "RED_TUNNEL_PERMEABLE",
+        "ack": "v106",
+        "bytes_received": body.len()
+    })).unwrap_or_default()));
+    *resp.status_mut() = StatusCode::OK;
+    resp.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    resp.headers_mut().insert(
+        HeaderName::from_static("x-red-ack"),
+        HeaderValue::from_static("v106"),
+    );
+    resp
+}
+
+async fn handle_cybertunnel_proxy(
+    Json(req): Json<CyberTunnelProxyRequest>,
+) -> impl IntoResponse {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .build()
+        .unwrap_or_default();
+
+    let method = req.method.as_deref().unwrap_or("GET").to_uppercase();
+    let mut req_builder = match method.as_str() {
+        "POST" => client.post(&req.url),
+        "HEAD" => client.head(&req.url),
+        _ => client.get(&req.url),
+    };
+
+    if let Some(hdrs) = req.headers {
+        for (k, v) in hdrs {
+            if let (Ok(hk), Ok(hv)) = (
+                reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                reqwest::header::HeaderValue::from_str(&v),
+            ) {
+                req_builder = req_builder.header(hk, hv);
+            }
+        }
+    }
+
+    if let Some(b) = req.body {
+        req_builder = req_builder.body(b);
+    }
+
+    match req_builder.send().await {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            let text = resp.text().await.unwrap_or_default();
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "ok": true,
+                    "status": status,
+                    "body": text,
+                    "from_gateway": true
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::BAD_GATEWAY,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": format!("ClearNet Gateway error: {}", e)
             })),
         )
             .into_response(),
@@ -2803,6 +3040,46 @@ async fn handle_api_relay_ws(
     let relay_state = (*state.blind_relay).clone();
     ws.max_message_size(relay_state.max_packet_size)
         .on_upgrade(move |socket| crate::blind_relay::handle_relay_socket(socket, relay_state))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanEndpointsResponse {
+    pub primary_lan_ip: String,
+    pub relay_ws_url: String,
+    pub web_dashboard_url: String,
+    pub http_port: u16,
+    pub relay_port: u16,
+    pub local_ips: Vec<String>,
+}
+
+fn detect_primary_lan_ip() -> String {
+    if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+        if socket.connect("8.8.8.8:80").is_ok() {
+            if let Ok(local_addr) = socket.local_addr() {
+                let ip = local_addr.ip();
+                if !ip.is_loopback() && !ip.is_unspecified() {
+                    return ip.to_string();
+                }
+            }
+        }
+    }
+    "127.0.0.1".to_string()
+}
+
+async fn handle_lan_endpoints() -> impl IntoResponse {
+    let primary_ip = detect_primary_lan_ip();
+    let relay_ws_url = format!("ws://{}:7331/relay/ws", primary_ip);
+    let web_dashboard_url = format!("http://{}:7333", primary_ip);
+
+    let res = LanEndpointsResponse {
+        primary_lan_ip: primary_ip.clone(),
+        relay_ws_url,
+        web_dashboard_url,
+        http_port: 7333,
+        relay_port: 7331,
+        local_ips: vec![primary_ip, "127.0.0.1".to_string()],
+    };
+    Json(res)
 }
 
 // ─── v19.0: Handlers Alerta AMBER-RED ────────────────────────────────────────

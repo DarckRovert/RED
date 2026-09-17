@@ -26,7 +26,7 @@ function runTest(name, fn) {
 }
 
 console.log('\n================================================================================');
-console.log('🎖️  SUITE DE PRUEBAS AUTOMATIZADA: FASE 2 (v106.0.0) C4ISR & MBTILES');
+console.log('🎖️  SUITE DE PRUEBAS AUTOMATIZADA: FASE 2 C4ISR & MBTILES');
 console.log('================================================================================\n');
 
 // ── 1. AUDITORÍA DE ARCHIVOS NATIVOS JAVA (ANDROID) ───────────────────────────
@@ -187,7 +187,7 @@ console.log(`📊 RESULTADOS DE LA SUITE: ${passedTests} / ${totalTests} PRUEBAS
 console.log('================================================================================\n');
 
 if (passedTests === totalTests) {
-    console.log('🎖️  FASE 2 (v106.0.0) VERIFICADA CON ÉXITO: ARQUITECTURA C4ISR Y CARTOGRAFÍA COMPLETA.\n');
+    console.log('🎖️  FASE 2 VERIFICADA CON ÉXITO: ARQUITECTURA C4ISR Y CARTOGRAFÍA COMPLETA.\n');
     process.exit(0);
 } else {
     console.error('⚠️  ALGUNAS PRUEBAS DE FASE 2 FALLARON. REVISAR LOGS ANTERIORES.\n');

@@ -25,6 +25,7 @@ mod voice;
 mod weather;
 mod social;
 pub mod blind_relay;
+pub mod lora_pnp;
 
 use clap::{Parser, Subcommand};
 use red_core::crypto::hashing::derive_symmetric_key;
@@ -66,6 +67,14 @@ struct Cli {
     /// Enable verbose logging
     #[arg(short, long)]
     verbose: bool,
+
+    /// Automatically launch tactical dashboard in browser
+    #[arg(long)]
+    gui: bool,
+
+    /// Suppress automatic browser launch
+    #[arg(long)]
+    no_browser: bool,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -157,6 +166,12 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Some(Commands::Start { bootstrap }) => {
+            if cli.gui && !cli.no_browser {
+                tokio::spawn(async {
+                    tokio::time::sleep(Duration::from_millis(1500)).await;
+                    open_browser_dashboard("http://localhost:7333");
+                });
+            }
             start_node(data_dir, cli.port, bootstrap).await?;
         }
         Some(Commands::Init { force }) => {
@@ -175,12 +190,44 @@ async fn main() -> anyhow::Result<()> {
             handle_identity(data_dir, action).await?;
         }
         None => {
-            // Default: start node
+            // Default: start node and launch tactical dashboard
+            if !cli.no_browser {
+                tokio::spawn(async {
+                    tokio::time::sleep(Duration::from_millis(1500)).await;
+                    open_browser_dashboard("http://localhost:7333");
+                });
+            }
             start_node(data_dir, cli.port, vec![]).await?;
         }
     }
 
     Ok(())
+}
+
+/// Abre el panel táctico en el navegador del sistema operativo
+fn open_browser_dashboard(url: &str) {
+    if std::env::var("RED_HEADLESS").is_ok() || std::env::var("RED_NO_BROWSER").is_ok() {
+        return;
+    }
+    info!("🌐 Abriendo consola táctica en el navegador: {}", url);
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", url])
+            .spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg(url)
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg(url)
+            .spawn();
+    }
 }
 
 /// Genera un token de sesión local de 32 bytes (256 bits) usando el CSPRNG del OS.
@@ -617,15 +664,16 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
 
         let router = build_router(state).layer(axum::middleware::from_fn(auth::auth_middleware));
 
-        let http_addr = "127.0.0.1:7333";
-        let listener = match tokio::net::TcpListener::bind(http_addr).await {
+        let http_host = std::env::var("RED_HTTP_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+        let http_addr = format!("{}:7333", http_host);
+        let listener = match tokio::net::TcpListener::bind(&http_addr).await {
             Ok(l) => l,
             Err(e) => {
-                error!("❌ Failed to bind HTTP API port 7333: {}. A previous instance may be running.", e);
+                error!("❌ Failed to bind HTTP API port {}: {}. A previous instance may be running.", http_addr, e);
                 return;
             }
         };
-        info!("Web UI + HTTP API listening locally on http://{}", http_addr);
+        info!("Web UI + HTTP API listening on http://{} (LAN & Local)", http_addr);
         let _ = axum::serve(
             listener,
             router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
@@ -657,6 +705,19 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     info!("║                                                                         ║");
     info!("║  Altura de Cadena: {:<5} bloques                                        ║", chain.height());
     info!("╚═════════════════════════════════════════════════════════════════════════╝");
+
+    let lora_scan = lora_pnp::scan_lora_hardware();
+    if let Some(ref dev) = lora_scan.primary_device {
+        info!("📻 [LoRa Plug & Play] Transceptor detectado: {} en {}", dev.chip_name, dev.port_name);
+        let _ = red_core::network::Node::attach_lora_bridge(
+            node.clone(),
+            dev.port_name.clone(),
+            dev.recommended_baud,
+        ).await;
+    } else {
+        info!("📻 [LoRa Plug & Play] Monitoreando puertos serie (En espera de transceptor USB)");
+    }
+
     info!("💡 Nodo activo y operando. Presiona Ctrl+C para detener.");
 
     // Simple API loop

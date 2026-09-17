@@ -124,19 +124,19 @@ export const MeshTab: React.FC = () => {
                 </div>
             </div>
 
-            {/* Servidor de Señalización */}
+            {/* Servidor de Señalización & Relé Soberano */}
             <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
                 <div>
-                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Servidor de Señalización & Relé Global (WebRTC)</div>
+                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Servidor de Relé Soberano & Señalización (PC / Laptop / VPS)</div>
                     <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                        URL del servidor de relé ciego para comunicación Web a Móvil por Internet.
+                        URL WebSocket de tu red-node.exe propio o relé comunitario (ej. red local Wi-Fi o Internet).
                     </div>
                 </div>
 
                 <div style={{ display: "flex", gap: "8px" }}>
                     <input
                         type="text"
-                        placeholder="wss://darckrovert.github.io:3001 ó ws://localhost:3001"
+                        placeholder="ws://192.168.1.50:7331/relay/ws ó wss://mi-nodo.org/relay/ws"
                         value={preferences.signalingServerUrl || ""}
                         onChange={(e) => updatePreferences({ signalingServerUrl: e.target.value })}
                         style={{
@@ -153,7 +153,7 @@ export const MeshTab: React.FC = () => {
                     <button
                         onClick={() => {
                             SettingsManager.triggerHaptic("light");
-                            toast.success("🌐 Servidor de señalización actualizado.");
+                            toast.success("🌐 Servidor de relé soberano y señalización actualizado.");
                         }}
                         className="btn-tactical-pill active"
                         style={{ padding: "8px 14px", fontSize: "0.75rem", whiteSpace: "nowrap" }}

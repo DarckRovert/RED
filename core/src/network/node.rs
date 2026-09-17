@@ -329,9 +329,10 @@ impl Node {
         info!("RED node is now running on {}", n.config.listen_addr);
 
         // Phase 18: Spin up the 915MHz LoRaWAN Radio Link
+        let default_port = if cfg!(windows) { "COM3".into() } else { "/dev/ttyUSB0".into() };
         let mut lora = crate::network::lora_bridge::LoraBridge::new(
             node_ref.clone(), 
-            if cfg!(windows) { "COM3".into() } else { "/dev/ttyUSB0".into() }, 
+            default_port, 
             115200
         );
         let _ = lora.start().await;
@@ -341,6 +342,20 @@ impl Node {
         Self::start_background_tasks(node_ref.clone()).await;
         
         Ok(())
+    }
+
+    /// Enlaza o re-enlaza dinámicamente un transceptor físico LoRa (Plug & Play)
+    pub async fn attach_lora_bridge(
+        node_ref: Arc<Mutex<Self>>,
+        port: String,
+        baud_rate: u32,
+    ) -> Result<(), String> {
+        info!("📻 [LoRa PnP] Enlazando transceptor físico en {} @ {} bps...", port, baud_rate);
+        let mut lora = crate::network::lora_bridge::LoraBridge::new(node_ref.clone(), port, baud_rate);
+        let start_res = lora.start().await;
+        let mut n = node_ref.lock().await;
+        n.lora_bridge = Some(lora);
+        start_res
     }
 
     /// Start periodic background maintenance tasks
@@ -1122,7 +1137,10 @@ impl Node {
             // Emit to BLE/WiFi-Direct frontend channel first
             if let Some(tx) = &self.outbound_payload_tx {
                 if let Ok(serialized_packet) = bincode::serialize(&packet) {
-                    let _ = tx.send(serialized_packet);
+                    let _ = tx.send(serialized_packet.clone());
+                    if let Some(ref lora) = self.lora_bridge {
+                        let _ = lora.transmit(&serialized_packet).await;
+                    }
                 }
             }
 
@@ -1235,7 +1253,10 @@ impl Node {
                 if let Ok(packet) = self.onion_router.create_packet(&single_hop_route, &payload, &[shared_secret], my_pub_bytes) {
                     if let Some(tx) = &self.outbound_payload_tx {
                         if let Ok(serialized_packet) = bincode::serialize(&packet) {
-                            let _ = tx.send(serialized_packet);
+                            let _ = tx.send(serialized_packet.clone());
+                            if let Some(ref lora) = self.lora_bridge {
+                                let _ = lora.transmit(&serialized_packet).await;
+                            }
                         }
                     }
                     use crate::network::transport::TransportMessage;
@@ -1262,6 +1283,11 @@ impl Node {
         // Push to local frontend outbound channel (Bluetooth / WiFi Direct Mesh)
         if let Some(tx) = &self.outbound_payload_tx {
             let _ = tx.send(payload.clone());
+        }
+
+        // Push to hardware LoRa bridge if active
+        if let Some(ref lora) = self.lora_bridge {
+            let _ = lora.transmit(&payload).await;
         }
 
         // Publish to internal Libp2p gossipsub mesh
