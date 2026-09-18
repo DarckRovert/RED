@@ -15,10 +15,13 @@
  *                    maneja el padre en page.tsx)
  */
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useRedStore, ScreenView } from "../../store/useRedStore";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
+import { TacIcon } from "../ui/TacIcon";
+import { meshRouter } from "../../lib/mesh/meshRouter";
+import { satelliteMeshGateway } from "../../lib/mesh/SatelliteMeshGatewayEngine";
 
 // ── Loader local ──────────────────────────────────────────────────────────────
 function AppLoader() {
@@ -116,85 +119,182 @@ const RedCyberTunnelModal    = dynamic(() => import("../modals/RedCyberTunnelMod
 interface TacticalTabletWorkspaceProps { onOpenTool: (screen: ScreenView) => void; }
 
 const TABLET_QUICK_TOOLS = [
-  { screen: "nodemap",      icon: "🗺️", colorKey: "var(--accent-cyan)" },
-  { screen: "radar",        icon: "📡", colorKey: "var(--accent-emerald)" },
-  { screen: "channels",     icon: "📻", colorKey: "var(--accent-amber)" },
-  { screen: "canvas",       icon: "🎨", colorKey: "var(--accent-purple)" },
-  { screen: "appStore",     icon: "🛒", colorKey: "var(--accent-emerald)",
-    bg: "linear-gradient(135deg, rgba(0,230,118,0.12) 0%, rgba(0,229,255,0.06) 100%)",
-    border: "1px solid rgba(0,230,118,0.3)" },
-  { screen: "hyperBrowser", icon: "🌐", colorKey: "var(--accent-cyan)",
-    bg: "linear-gradient(135deg, rgba(0,229,255,0.12) 0%, rgba(138,43,226,0.06) 100%)",
-    border: "1px solid rgba(0,229,255,0.3)" },
-  { screen: "updater",      icon: "🚀", colorKey: "var(--accent-cyan)",
-    bg: "linear-gradient(135deg, rgba(0,229,255,0.16) 0%, rgba(0,150,255,0.08) 100%)",
-    border: "1px solid rgba(0,229,255,0.4)" },
-  { screen: "settings",     icon: "⚙️", colorKey: "var(--primary-bright)" },
+  { screen: "nodemap",      iconName: "map" as const,      colorKey: "var(--accent-cyan)",    bg: "rgba(0, 229, 255, 0.08)", border: "1px solid rgba(0, 229, 255, 0.25)" },
+  { screen: "radar",        iconName: "radio" as const,    colorKey: "var(--accent-emerald)", bg: "rgba(0, 230, 118, 0.08)", border: "1px solid rgba(0, 230, 118, 0.25)" },
+  { screen: "channels",     iconName: "radio" as const,    colorKey: "var(--accent-amber)",   bg: "rgba(255, 179, 0, 0.08)",  border: "1px solid rgba(255, 179, 0, 0.25)" },
+  { screen: "canvas",       iconName: "palette" as const,  colorKey: "var(--accent-purple)",  bg: "rgba(179, 136, 255, 0.08)", border: "1px solid rgba(179, 136, 255, 0.25)" },
+  { screen: "appStore",     iconName: "box" as const,      colorKey: "var(--accent-emerald)", bg: "linear-gradient(135deg, rgba(0,230,118,0.12) 0%, rgba(0,229,255,0.06) 100%)", border: "1px solid rgba(0,230,118,0.3)" },
+  { screen: "hyperBrowser", iconName: "globe" as const,    colorKey: "var(--accent-cyan)",    bg: "linear-gradient(135deg, rgba(0,229,255,0.12) 0%, rgba(138,43,226,0.06) 100%)", border: "1px solid rgba(0,229,255,0.3)" },
+  { screen: "updater",      iconName: "zap" as const,      colorKey: "var(--accent-cyan)",    bg: "linear-gradient(135deg, rgba(0,229,255,0.16) 0%, rgba(0,150,255,0.08) 100%)", border: "1px solid rgba(0,229,255,0.4)" },
+  { screen: "settings",     iconName: "settings" as const, colorKey: "var(--primary-bright)", bg: "rgba(255, 51, 85, 0.08)",  border: "1px solid rgba(255, 51, 85, 0.25)" },
 ] as const;
 
 function TacticalTabletWorkspace({ onOpenTool }: TacticalTabletWorkspaceProps) {
   const { identity } = useRedStore();
   const { t } = useTranslation();
+  const [peerCount, setPeerCount] = useState(() => meshRouter.peers.size);
+  const [satAos, setSatAos] = useState(() => satelliteMeshGateway.getTelemetry().isUplinkAvailable);
+
+  useEffect(() => {
+    setPeerCount(meshRouter.peers.size);
+    const unsubPeers = meshRouter.onPeersChange(p => setPeerCount(p.size));
+    const unsubSat = satelliteMeshGateway.subscribe(tel => setSatAos(tel.isUplinkAvailable));
+    return () => {
+      unsubPeers();
+      unsubSat();
+    };
+  }, []);
 
   return (
     <div
       style={{
-        flex: 1, height: "100%", display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "flex-start", padding: "28px 24px",
-        textAlign: "center", gap: "18px", overflowY: "auto",
+        flex: 1,
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "stretch",
+        justifyContent: "flex-start",
+        padding: "32px 32px",
+        gap: "24px",
+        overflowY: "auto",
+        width: "100%",
+        maxWidth: "1380px",
+        margin: "0 auto",
       }}
     >
-      {/* Identity Badge */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", maxWidth: "560px" }}>
-        <div
-          style={{
-            width: 64, height: 64, borderRadius: "18px",
-            background: "linear-gradient(135deg, rgba(232,33,58,0.25) 0%, rgba(0,229,255,0.18) 100%)",
-            border: "1px solid rgba(0, 229, 255, 0.35)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "2.2rem", boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-          }}
-        >
-          🛡️
+      {/* Top Panoramic Header & Identity */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        width: "100%",
+        flexWrap: "wrap",
+        gap: "16px",
+        paddingBottom: "18px",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div
+            style={{
+              width: 52, height: 52, borderRadius: "14px",
+              background: "linear-gradient(135deg, rgba(232,33,58,0.25) 0%, rgba(0,229,255,0.18) 100%)",
+              border: "1px solid rgba(0, 229, 255, 0.35)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+            }}
+          >
+            <TacIcon name="shield" size={28} color="#00E5FF" />
+          </div>
+          <div style={{ textAlign: "left" }}>
+            <h2 style={{ fontSize: "1.3rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.5px", margin: 0 }}>
+              {t("tablet.title")}
+            </h2>
+            <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginTop: "3px", margin: 0 }}>
+              {t("tablet.subtitle")}
+            </p>
+          </div>
         </div>
-        <div>
-          <h2 style={{ fontSize: "1.3rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.4px" }}>
-            {t("tablet.title")}
-          </h2>
-          <p style={{ fontSize: "0.80rem", color: "var(--text-secondary)", marginTop: "4px", lineHeight: 1.4 }}>
-            {t("tablet.subtitle")}
-          </p>
+
+        {/* Live Sovereign Badge */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          padding: "8px 16px",
+          borderRadius: "20px",
+          background: "rgba(0,230,118,0.06)",
+          border: "1px solid rgba(0,230,118,0.25)",
+        }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#00E676", boxShadow: "0 0 8px #00E676", display: "inline-block" }} />
+          <span style={{ fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-emerald)", fontWeight: 700 }}>
+            NODO SOBERANO · {identity?.short_id || "OFFLINE"} · ED25519 / SLED
+          </span>
         </div>
       </div>
 
-      {/* C4ISR Hero Card */}
+      {/* C4ISR Tactical Operations Banner (Panorámico) */}
       <div
         onClick={() => onOpenTool("commandCenter")}
         className="card-tactical-interactive"
         style={{
-          width: "100%", maxWidth: "620px", padding: "16px 20px",
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: "14px",
-          background: "linear-gradient(135deg, rgba(0,229,255,0.15) 0%, rgba(179,136,255,0.10) 100%)",
-          border: "1.5px solid rgba(0,229,255,0.45)", borderRadius: "14px", cursor: "pointer",
-          boxShadow: "0 4px 20px rgba(0,229,255,0.15)",
+          width: "100%",
+          padding: "20px 24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "20px",
+          background: "linear-gradient(135deg, rgba(0,229,255,0.14) 0%, rgba(179,136,255,0.08) 50%, rgba(10,25,45,0.6) 100%)",
+          border: "1.5px solid rgba(0,229,255,0.45)",
+          borderRadius: "16px",
+          cursor: "pointer",
+          boxShadow: "0 8px 30px rgba(0,229,255,0.12)",
+          flexWrap: "wrap",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "14px", textAlign: "left" }}>
-          <span style={{ fontSize: "2.2rem" }}>⚡</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", textAlign: "left", flex: 1, minWidth: "260px" }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: "12px",
+            background: "rgba(0, 229, 255, 0.15)",
+            border: "1px solid rgba(0, 229, 255, 0.4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <TacIcon name="zap" size={26} color="#00E5FF" />
+          </div>
           <div>
-            <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.5px" }}>
+            <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.6px" }}>
               {t("tablet.c4isr_title")}
             </div>
-            <div style={{ fontSize: "0.72rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, marginTop: "2px" }}>
+            <div style={{ fontSize: "0.76rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, marginTop: "2px" }}>
               {t("tablet.c4isr_sub")}
             </div>
           </div>
         </div>
-        <span style={{ fontSize: "1.2rem", color: "var(--accent-cyan)", fontWeight: 900 }}>›</span>
+
+        {/* Live HUD Telemetry Chips inside C4ISR Hero */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <div style={{
+            padding: "6px 12px", borderRadius: "8px",
+            background: "rgba(0,0,0,0.45)", border: "1px solid rgba(255,255,255,0.1)",
+            display: "flex", alignItems: "center", gap: "8px",
+          }}>
+            <TacIcon name="users" size={14} color="#00E5FF" />
+            <span style={{ fontSize: "0.74rem", fontFamily: "JetBrains Mono, monospace", color: "#E0E6ED" }}>
+              MALLA P2P: <strong style={{ color: "#00E5FF" }}>{peerCount} NODOS</strong>
+            </span>
+          </div>
+
+          <div style={{
+            padding: "6px 12px", borderRadius: "8px",
+            background: "rgba(0,0,0,0.45)", border: "1px solid rgba(255,255,255,0.1)",
+            display: "flex", alignItems: "center", gap: "8px",
+          }}>
+            <TacIcon name="satellite" size={14} color={satAos ? "#00E676" : "#8696A0"} />
+            <span style={{ fontSize: "0.74rem", fontFamily: "JetBrains Mono, monospace", color: satAos ? "#00E676" : "#8696A0" }}>
+              SAT LEO: {satAos ? "AOS ACTIVO" : "STANDBY"}
+            </span>
+          </div>
+
+          <div style={{
+            padding: "6px 14px", borderRadius: "10px",
+            background: "rgba(0, 229, 255, 0.2)",
+            border: "1px solid rgba(0, 229, 255, 0.5)",
+            color: "#00E5FF", fontWeight: 900, fontSize: "0.82rem",
+            display: "flex", alignItems: "center", gap: "6px",
+          }}>
+            <span>ENTRAR</span>
+            <TacIcon name="chevron-right" size={14} color="#00E5FF" />
+          </div>
+        </div>
       </div>
 
-      {/* Quick-access grid (8 tools) */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))", gap: "12px", width: "100%", maxWidth: "620px" }}>
+      {/* Quick-access grid (8 Tactical Tools) - Responsive Fluid Grid */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+        gap: "14px",
+        width: "100%",
+      }}>
         {TABLET_QUICK_TOOLS.map(tool => {
           const screenKey = tool.screen === "hyperBrowser" ? "browser" : tool.screen === "appStore" ? "appstore" : tool.screen === "nodemap" ? "map" : tool.screen;
           const titleKey = `tablet.${screenKey}_title` as any;
@@ -205,16 +305,31 @@ function TacticalTabletWorkspace({ onOpenTool }: TacticalTabletWorkspaceProps) {
               onClick={() => onOpenTool(tool.screen)}
               className="card-tactical-interactive"
               style={{
-                padding: "14px 10px", display: "flex", flexDirection: "column",
-                alignItems: "center", gap: "6px", borderRadius: "12px",
-                background: (tool as any).bg, border: (tool as any).border,
+                padding: "18px 14px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "10px",
+                borderRadius: "14px",
+                background: (tool as any).bg,
+                border: (tool as any).border,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
               }}
             >
-              <span style={{ fontSize: "1.6rem" }}>{tool.icon}</span>
-              <span style={{ fontSize: "0.82rem", fontWeight: 800, color: (tool as any).bg ? tool.colorKey : "#FFFFFF" }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: "12px",
+                background: "rgba(0,0,0,0.35)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: `0 4px 14px ${tool.colorKey}22`,
+              }}>
+                <TacIcon name={tool.iconName} size={22} color={tool.colorKey} />
+              </div>
+              <span style={{ fontSize: "0.86rem", fontWeight: 800, color: "#FFFFFF" }}>
                 {t(titleKey) || (tool.screen === "nodemap" ? "Mapa Táctico GPS" : tool.screen)}
               </span>
-              <span style={{ fontSize: "0.64rem", color: tool.colorKey, fontFamily: "JetBrains Mono, monospace" }}>
+              <span style={{ fontSize: "0.66rem", color: tool.colorKey, fontFamily: "JetBrains Mono, monospace", fontWeight: 700, letterSpacing: "0.4px" }}>
                 {t(subKey) || (tool.screen === "nodemap" ? "OFFLINE OPENSTREETMAP" : "")}
               </span>
             </div>
@@ -222,16 +337,50 @@ function TacticalTabletWorkspace({ onOpenTool }: TacticalTabletWorkspaceProps) {
         })}
       </div>
 
-      {/* Sovereign node status badge */}
-      <div
-        style={{
-          padding: "6px 14px", borderRadius: "8px",
-          background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.25)",
-          color: "var(--accent-emerald)", fontSize: "0.70rem",
-          fontFamily: "JetBrains Mono, monospace", fontWeight: 700, marginTop: "4px",
-        }}
-      >
-        ● NODO SOBERANO OPERACIONAL · {identity?.short_id || "OFFLINE"} · ED25519 / SLED
+      {/* Real-time Hardware & Telemetry Bar */}
+      <div style={{
+        width: "100%",
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+        gap: "12px",
+        marginTop: "auto",
+        paddingTop: "12px",
+      }}>
+        <div style={{
+          padding: "10px 14px", borderRadius: "10px",
+          background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", alignItems: "center", gap: "10px", textAlign: "left",
+        }}>
+          <TacIcon name="lock" size={16} color="var(--accent-cyan)" />
+          <div>
+            <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>CIFRADO POST-CUÁNTICO</div>
+            <div style={{ fontSize: "0.74rem", fontWeight: 700, color: "#FFFFFF" }}>AES-256-GCM + Kyber</div>
+          </div>
+        </div>
+
+        <div style={{
+          padding: "10px 14px", borderRadius: "10px",
+          background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", alignItems: "center", gap: "10px", textAlign: "left",
+        }}>
+          <TacIcon name="radio" size={16} color="var(--accent-emerald)" />
+          <div>
+            <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>ENLACE DE RADIO</div>
+            <div style={{ fontSize: "0.74rem", fontWeight: 700, color: "#FFFFFF" }}>TDMA LoRa + BLE MESH</div>
+          </div>
+        </div>
+
+        <div style={{
+          padding: "10px 14px", borderRadius: "10px",
+          background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", alignItems: "center", gap: "10px", textAlign: "left",
+        }}>
+          <TacIcon name="shield" size={16} color="var(--accent-amber)" />
+          <div>
+            <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>INTEGRIDAD DE BÓVEDA</div>
+            <div style={{ fontSize: "0.74rem", fontWeight: 700, color: "#FFFFFF" }}>SLED AIR-GAP ACTIVO</div>
+          </div>
+        </div>
       </div>
     </div>
   );

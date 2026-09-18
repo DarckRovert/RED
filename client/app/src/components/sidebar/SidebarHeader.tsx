@@ -405,7 +405,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
             </div>
 
             {/* Contact QR Modal */}
-
             <ContactQrModal
                 isOpen={qrModalOpen}
                 onClose={() => setQrModalOpen(false)}
@@ -415,6 +414,12 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
             <NewContactModal
                 isOpen={newContactOpen}
                 onClose={() => setNewContactOpen(false)}
+            />
+
+            {/* Legal & Compliance Modal */}
+            <LegalComplianceModal
+                isOpen={legalModalOpen}
+                onClose={() => setLegalModalOpen(false)}
             />
             </>
         );
@@ -597,6 +602,17 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     }}
                                 >
                                     <TacIcon name="shield" size={16} color="var(--accent-cyan, #00E5FF)" /> Centro de Comando (8 Hubs)
+                                </button>
+                                <button
+                                    onClick={() => { setQuickMenuOpen(false); setLegalModalOpen(true); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
+                                        background: "transparent", border: "none", borderRadius: "8px",
+                                        color: "var(--text-secondary, #A0A5B5)", fontSize: "0.82rem", fontWeight: 700,
+                                        cursor: "pointer", textAlign: "left"
+                                    }}
+                                >
+                                    <TacIcon name="shield" size={16} color="var(--text-secondary, #A0A5B5)" /> Términos & Privacidad
                                 </button>
                             </div>
                         </>

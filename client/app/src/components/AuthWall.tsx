@@ -18,6 +18,7 @@ import { companionSyncEngine, PairingSession, CompanionSyncPayload } from "../li
 import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
+import { TacIcon } from "./ui/TacIcon";
 
 /**
  * Authentication Wall — RED Unified Tactical Lockscreen & Biometric Sentinel
@@ -818,47 +819,114 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
             padding: "24px 20px", overflowY: "auto"
         }}>
-            <div style={{ maxWidth: "340px", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+            <div style={{
+                maxWidth: isDesktopWeb ? "780px" : "340px",
+                width: "100%",
+                display: "flex",
+                flexDirection: isDesktopWeb ? "row" : "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: isDesktopWeb ? "44px" : "24px",
+                padding: isDesktopWeb ? "36px 40px" : "0",
+                background: isDesktopWeb ? "rgba(10, 15, 28, 0.75)" : "transparent",
+                border: isDesktopWeb ? "1px solid rgba(0, 229, 255, 0.25)" : "none",
+                borderRadius: isDesktopWeb ? "24px" : "0",
+                boxShadow: isDesktopWeb ? "0 24px 70px rgba(0,0,0,0.85), inset 0 0 30px rgba(0, 229, 255, 0.05)" : "none",
+                backdropFilter: isDesktopWeb ? "blur(20px)" : "none",
+            }}>
 
-                {/* Botón para regresar al QR si está en Web Desktop Onboarding */}
-                {isDesktopWeb && mode === "onboarding" && (
-                    <button
-                        onClick={() => setWebOnboardingTab("qr_link")}
-                        style={{
-                            background: "transparent", border: "none",
-                            color: "#00A884", fontSize: "0.82rem", fontWeight: 700,
-                            cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
-                            padding: "6px 14px", borderRadius: "14px",
-                            backgroundColor: "rgba(0, 168, 132, 0.12)"
-                        }}
-                    >
-                        ← Volver a Vincular con Teléfono (QR)
-                    </button>
+                {/* Panel Táctico Informativo en Escritorio */}
+                {isDesktopWeb && (
+                    <div style={{
+                        flex: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "18px",
+                        textAlign: "left",
+                        borderRight: "1px solid rgba(255, 255, 255, 0.08)",
+                        paddingRight: "36px",
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                            <div style={{
+                                width: 44, height: 44, borderRadius: "14px",
+                                background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                boxShadow: "0 0 20px rgba(232,33,58,0.5)"
+                            }}>
+                                <TacIcon name="shield" size={24} color="#FFFFFF" />
+                            </div>
+                            <div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.5px" }}>
+                                    RED SOVEREIGN OS
+                                </div>
+                                <div style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                                    AIR-GAPPED MILITARY GRADE
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                            Bóveda de soberanía criptográfica P2P. Desbloquea tu terminal local mediante tu PIN de seguridad de 6 dígitos o enlace biométrico vinculado.
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "8px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.74rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)" }}>
+                                <TacIcon name="lock" size={14} color="var(--accent-cyan)" />
+                                <span>Cifrado AES-256-GCM / Post-Quantum</span>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.74rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)" }}>
+                                <TacIcon name="radio" size={14} color="var(--accent-emerald)" />
+                                <span>Malla Local P2P TDMA + BLE</span>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.74rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)" }}>
+                                <TacIcon name="check" size={14} color="#00E676" />
+                                <span>Zeroize Panic PIN Soportado</span>
+                            </div>
+                        </div>
+                    </div>
                 )}
 
-                {/* Insignia y Título */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
-                    <div style={{
-                        width: 54, height: 54, borderRadius: "18px",
-                        background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.5rem", fontWeight: 900, color: "white",
-                        boxShadow: "0 0 30px rgba(232,33,58,0.4)"
-                    }}>
-                        🛡️
-                    </div>
+                {/* Contenedor del PIN Pad */}
+                <div style={{ maxWidth: "340px", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
 
-                    <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: "1.25rem", fontWeight: 900, letterSpacing: "0.5px" }}>
-                            {mode === "onboarding" ? "Crear PIN Maestro" : t('auth.title')}
+                    {/* Botón para regresar al QR si está en Web Desktop Onboarding */}
+                    {isDesktopWeb && mode === "onboarding" && (
+                        <button
+                            onClick={() => setWebOnboardingTab("qr_link")}
+                            style={{
+                                background: "transparent", border: "none",
+                                color: "#00A884", fontSize: "0.82rem", fontWeight: 700,
+                                cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
+                                padding: "6px 14px", borderRadius: "14px",
+                                backgroundColor: "rgba(0, 168, 132, 0.12)"
+                            }}
+                        >
+                            ← Volver a Vincular con Teléfono (QR)
+                        </button>
+                    )}
+
+                    {/* Insignia y Título */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+                        <div style={{
+                            width: 54, height: 54, borderRadius: "18px",
+                            background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            boxShadow: "0 0 30px rgba(232,33,58,0.4)"
+                        }}>
+                            <TacIcon name="shield" size={28} color="#FFFFFF" />
                         </div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "3px" }}>
-                            {mode === "onboarding"
-                                ? (step === "enter" ? "Define tu clave de acceso (6 dígitos)" : "Confirma tu PIN maestro de 6 dígitos")
-                                : (lockoutRemaining > 0 ? `Bóveda bloqueada (${lockoutRemaining}s)` : t('auth.enter_pin'))}
+
+                        <div style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: "1.25rem", fontWeight: 900, letterSpacing: "0.5px" }}>
+                                {mode === "onboarding" ? "Crear PIN Maestro" : t('auth.title')}
+                            </div>
+                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "3px" }}>
+                                {mode === "onboarding"
+                                    ? (step === "enter" ? "Define tu clave de acceso (6 dígitos)" : "Confirma tu PIN maestro de 6 dígitos")
+                                    : (lockoutRemaining > 0 ? `Bóveda bloqueada (${lockoutRemaining}s)` : t('auth.enter_pin'))}
+                            </div>
                         </div>
                     </div>
-                </div>
 
                 {/* Indicador de Dígitos (6 Puntos Neón) */}
                 <div style={{ display: "flex", gap: "12px", alignItems: "center", height: "24px" }}>
@@ -923,7 +991,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                             }}
                             title={`Desbloqueo con ${biometryType}`}
                         >
-                            <span>🖐️</span>
+                            <TacIcon name="lock" size={18} color="var(--accent-cyan)" />
                             <span style={{ fontSize: "9px", fontWeight: 800, letterSpacing: "0.5px" }}>BIOMETRÍA</span>
                         </button>
                     ) : (
@@ -1028,6 +1096,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                         </button>
                     </div>
                 )}
+                </div>
             </div>
 
             {/* Modal de Enrolamiento Biométrico Post-Onboarding */}
@@ -1047,8 +1116,10 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                             <div style={{
                                 width: "44px", height: "44px", borderRadius: "14px",
                                 background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.3)",
-                                display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem"
-                            }}>🖐️</div>
+                                display: "flex", alignItems: "center", justifyContent: "center"
+                            }}>
+                                <TacIcon name="shield" size={24} color="#00E5FF" />
+                            </div>
                             <div>
                                 <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#fff", margin: 0 }}>
                                     Activar Llave Biométrica
