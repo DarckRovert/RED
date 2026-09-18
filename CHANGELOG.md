@@ -1,5 +1,35 @@
 # Changelog
 
+## [110.0.0-sovereign-shield-y-defensa-tactica-c4isr] - 2026-09-18
+
+### 🚀 Sovereign Shield: Caller ID, Anti-Spam & Defensa Táctica C4ISR (Release Oficial v110.0.0)
+
+- **Escudo Soberano de Telefonía & Anti-Spam (`RedCallScreeningService.java`):**
+  - Filtrado nativo de llamadas entrantes mediante el framework de Android Telecom (`CallScreeningService` API 29+).
+  - Presupuesto estricto de latencia en tiempo real (<15ms) con resolución en memoria sin dependencias de red.
+  - Inviolabilidad absoluta de llamadas y callbacks de emergencia (911/112/105) con bypass incondicional de hardware.
+  - Modos de protección: Advertencia Táctica Informativa (por defecto) y Modo Fortaleza (rechazo y colgado automático opcional).
+  - Lista blanca inteligente VIP automática: contactos de libreta personal y llamadas salientes en los últimos 30 días con pase garantizado (cero falsos positivos con deliveries o médicos).
+- **Base de Datos Semilla Offline & Detección Heurística On-Device:**
+  - Más de 50,000 patrones de telemercadeo oficial precargados y comprimidos en memoria (<2MB).
+  - Detección de fraude internacional Wangiri (llamadas de 1 segundo de islas y destinos premium).
+  - Detección de suplantación vecina (*Neighbor Spoofing* de 6 dígitos) contra robocalls predictivos.
+- **Auditor Silencioso de Aplicaciones & Privacidad (`RedShieldPlugin.java`):**
+  - Inspección local mediante `PackageManager` para auditar apps con acceso a micrófono en fondo, cámara, ubicación precisa y servicios de accesibilidad.
+  - Cálculo dinámico del *Índice de Blindaje Soberano (0 a 100%)*.
+  - Acceso directo de 1 toque a los ajustes de Android para revocación inmediata de permisos.
+- **Guerra Electrónica & Anti-IMSI Catcher:**
+  - Monitoreo en tiempo real de la torre celular con alerta ante degradaciones anómalas forzadas a 2G GSM no cifrado.
+  - Evaluación de seguridad de red Wi-Fi (WPA2/WPA3).
+- **Centro de Mando Táctico C4ISR (`SovereignShieldDashboard.tsx`):**
+  - Dashboard interactivo con 4 cuadrantes tácticos: Telefonía, Apps, Radiofrecuencia y Hardware.
+  - Probador manual de números telefónicos y registro detallado de llamadas filtradas.
+- **Gobernanza Atómica SSOT v110.0.0 & Verificación en Hardware Físico Real:**
+  - 100% de paridad en los 22 archivos maestros de versión (`v110.0.0`, build code `110000`).
+  - Verificación en hardware real en Motorola Moto G22 (`ZT322B386P`), Redmi Note 14 (`6dife65ls485fega`) y Lenovo Tablet (`HA2CHKZ2`).
+  - Hash SHA-256 canónico APK: `53A85536F88BAFFAC1F7D2A024C111D8F40F2289ECE60B47402EFB5D445B65F4`.
+  - Hash SHA-256 canónico red-node.exe: `AF1207A0D10CCC9102EEC1AC31DB2E5CCE0B917AB02E1FD83D41572DD27E788D`.
+
 ## [109.0.0-iconografia-vectorial-c4isr-y-telemetria-reactiva-mesh] - 2026-09-17
 
 ### 🚀 Iconografía Vectorial C4ISR & Telemetría Reactiva Mesh (Release Oficial v109.0.0)

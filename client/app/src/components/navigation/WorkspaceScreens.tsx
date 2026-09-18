@@ -112,6 +112,7 @@ const SovereignAppStoreModal = dynamic(() => import("../miniapp/SovereignAppStor
 const MiniAppContainerModal  = dynamic(() => import("../miniapp/MiniAppContainerModal").then(m => ({ default: m.MiniAppContainerModal })), { ssr: false, loading: () => <AppLoader /> });
 const TacticalGhostGpsModal  = dynamic(() => import("../modals/TacticalGhostGpsModal").then(m => ({ default: m.TacticalGhostGpsModal })), { ssr: false, loading: () => <AppLoader /> });
 const RedCyberTunnelModal    = dynamic(() => import("../modals/RedCyberTunnelModal").then(m => ({ default: m.RedCyberTunnelModal })), { ssr: false, loading: () => <AppLoader /> });
+const SovereignShieldDashboard = dynamic(() => import("../SovereignShieldDashboard"), { ssr: false, loading: () => <AppLoader /> });
 
 // ── TacticalTabletWorkspace ───────────────────────────────────────────────────
 // Placeholder del pane derecho en tablet cuando currentScreen === "sidebar".
@@ -508,6 +509,7 @@ export function WorkspaceScreens({ isTablet, onOpenTool }: WorkspaceScreensProps
       )}
 
       {/* ── Defense ── */}
+      {(currentScreen === "sovereignShield" || currentScreen === "shield")     && <SovereignShieldDashboard onClose={goBack} />}
       {currentScreen === "globalShield"                                        && <GlobalShieldPanel />}
       {currentScreen === "cbrnSatellite"                                       && <CbrnSatelliteModal />}
       {currentScreen === "blackout"                                            && <BlackoutSimulatorModal onClose={goBack} />}

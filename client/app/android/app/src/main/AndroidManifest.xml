@@ -20,6 +20,10 @@
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <!-- Autonomous P2P/OTA updates via APK package installation (Android 8.0+ / API 26+) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Sovereign Shield: Caller ID & Anti-Spam (API 29+ CallScreeningService) -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- Bluetooth LE & P2P Mesh Permissions (Android 12+ / API 31+) -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
@@ -49,10 +53,13 @@
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
-    <!-- Package visibility queries for Android 11+ (API 30+) speech recognition service -->
+    <!-- Package visibility queries for Android 11+ (API 30+) app audit and speech recognition -->
     <queries>
         <intent>
             <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
         </intent>
     </queries>
 
@@ -114,6 +121,17 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Emergency off-grid P2P mesh communication node (BLE + WebRTC + MQTT). Requires continuous background execution to relay encrypted messages in disaster or infrastructure-down scenarios where there is no internet connectivity." />
+        </service>
+
+        <!-- Sovereign Shield: Native Call Screening Service (API 29+) -->
+        <service
+            android:name=".RedCallScreeningService"
+            android:permission="android.permission.BIND_SCREENING_SERVICE"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
         </service>
 
         <receiver

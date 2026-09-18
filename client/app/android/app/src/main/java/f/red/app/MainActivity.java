@@ -22,6 +22,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(RedNodePlugin.class);
         registerPlugin(RedDisguisePlugin.class);
+        registerPlugin(RedShieldPlugin.class);
         super.onCreate(savedInstanceState);
         
         // Critical: Force WebView to use proper device-width scaling for CSS media queries

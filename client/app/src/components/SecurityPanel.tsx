@@ -418,6 +418,47 @@ export default function SecurityPanel() {
                         </div>
                     </div>
 
+                    {/* ── Tarjeta Sovereign Shield (Caller ID & Auditoría de Apps) ── */}
+                    <div className="card-tactical animate-enter" style={{
+                        padding: "16px 18px",
+                        background: "linear-gradient(135deg, rgba(26, 18, 38, 0.95) 0%, rgba(13, 10, 24, 0.98) 100%)",
+                        border: "1px solid rgba(255, 51, 85, 0.35)",
+                        borderRadius: "16px", display: "flex", flexDirection: "column", gap: "10px",
+                        boxShadow: "0 8px 32px rgba(255, 51, 85, 0.15)"
+                    }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span style={{ fontSize: "1.15rem" }}>🛡️</span>
+                                <div>
+                                    <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#FF3355" }}>
+                                        SOVEREIGN SHIELD // DEFENSA DE DISPOSITIVO
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                                        Caller ID Anti-Spam, Detección IMSI-Catcher & Auditoría de Apps
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => navigate("sovereignShield")}
+                                style={{
+                                    background: "rgba(255, 51, 85, 0.2)",
+                                    border: "1px solid #FF3355",
+                                    color: "#FFF",
+                                    borderRadius: "8px",
+                                    padding: "6px 12px",
+                                    fontSize: "0.72rem",
+                                    fontWeight: 800,
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px"
+                                }}
+                            >
+                                ABRIR DASHBOARD →
+                            </button>
+                        </div>
+                    </div>
+
                     {/* ── Tarjeta HUD Criptográfica Soberana & Post-Cuántica (PQC) ── */}
                     <div className="card-tactical animate-enter" style={{
                         padding: "16px 18px",

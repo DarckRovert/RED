@@ -1,18 +1,18 @@
 /**
  * RED Sovereign Mesh — Single Source of Truth for System Version
- * Version: 109.0.0 RED Sovereign Mesh — Iconografía Vectorial C4ISR & Telemetría Reactiva Mesh
+ * Version: 110.0.0 RED Sovereign Mesh — Sovereign Shield & Defensa Táctica C4ISR
  */
 
-export const RED_VERSION = "109.0.0";
-export const RED_VERSION_MAJOR = 109;
+export const RED_VERSION = "110.0.0";
+export const RED_VERSION_MAJOR = 110;
 export const RED_VERSION_MINOR = 0;
 export const RED_VERSION_PATCH = 0;
-export const RED_VERSION_CODE = 109000;
-export const RED_BUILD_CODE = 109000;
-export const RED_VERSION_NAME = "RED v109.0.0 Sovereign Mesh — Iconografía Vectorial C4ISR & Telemetría Reactiva Mesh";
-export const RED_BUILD_DATE = "2026-09-17";
-export const RED_PROTOCOL_VERSION = "RED/109.0-NOISE-PQC";
+export const RED_VERSION_CODE = 110000;
+export const RED_BUILD_CODE = 110000;
+export const RED_VERSION_NAME = "RED v110.0.0 Sovereign Mesh — Sovereign Shield & Defensa Táctica C4ISR";
+export const RED_BUILD_DATE = "2026-09-18";
+export const RED_PROTOCOL_VERSION = "RED/110.0-NOISE-PQC";
 export const RED_RELEASE_CHANNEL = "stable-p2p";
 export const RED_APK_NAME = "red-latest.apk";
 export const RED_APK_CANONICAL = "red-latest.apk";
-export const RED_APK_SHA256 = "B0286FA3FA0B2762E617C8AC4BDD72DE60071915DB7194457D69E0F4FB1EF025";
+export const RED_APK_SHA256 = "53A85536F88BAFFAC1F7D2A024C111D8F40F2289ECE60B47402EFB5D445B65F4";
