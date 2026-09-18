@@ -35,9 +35,10 @@ export function RedCyberTunnelModal() {
         return () => unsub();
     }, []);
 
-    // Autodetección al montar el modal si no se ha detectado aún
+    // Autodetección y verificación de proxy nativo al montar el modal
     useEffect(() => {
         redCyberTunnel.autoDetectCarrier().catch(() => {});
+        redCyberTunnel.checkNativeProxyStatus().catch(() => {});
     }, []);
 
     // Conmutar estado del túnel

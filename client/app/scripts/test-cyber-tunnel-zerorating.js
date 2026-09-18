@@ -122,6 +122,7 @@ const redProxyJavaCode = fs.readFileSync(redProxyJavaPath, 'utf8');
 runTest("8. RedProxyServer.java: Implementación de ServerSocket local multihilo y túnel CONNECT", () => {
     assert(redProxyJavaCode.includes("class RedProxyServer"), "Debe definir RedProxyServer");
     assert(redProxyJavaCode.includes("new ServerSocket"), "Debe instanciar ServerSocket");
+    assert(redProxyJavaCode.includes("setReuseAddress(true)"), "Debe habilitar reciclaje de puertos SO_REUSEADDR");
     assert(redProxyJavaCode.includes("CONNECT"), "Debe soportar método CONNECT para túneles HTTPS");
     assert(redProxyJavaCode.includes("bytesUploaded"), "Debe registrar bytesUploaded");
     assert(redProxyJavaCode.includes("bytesDownloaded"), "Debe registrar bytesDownloaded");
@@ -129,6 +130,7 @@ runTest("8. RedProxyServer.java: Implementación de ServerSocket local multihilo
 
 runTest("9. RedCyberTunnelEngine: Autodetección de operador y sincronización nativa de sockets", () => {
     assert(tunnelEngineCode.includes("autoDetectCarrier("), "Debe implementar autoDetectCarrier");
+    assert(tunnelEngineCode.includes("checkNativeProxyStatus("), "Debe implementar checkNativeProxyStatus");
     assert(tunnelEngineCode.includes("RedNode.startProxyServer"), "Debe invocar inicio de proxy nativo");
     assert(tunnelEngineCode.includes("RedNode.getProxyStats"), "Debe sincronizar estadísticas nativas");
     assert(tunnelEngineCode.includes("isProxyRunning: boolean;"), "Debe rastrear estado del socket proxy");

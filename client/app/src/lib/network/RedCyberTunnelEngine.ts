@@ -70,11 +70,11 @@ export class RedCyberTunnelEngine {
         }
     }
 
-    public async checkNativeProxyStatus(): Promise<void> {
+    public async checkNativeProxyStatus(): Promise<boolean> {
         try {
             if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
                 const nativeStats = await RedNode.getProxyStats();
-                if (nativeStats && nativeStats.isRunning) {
+                if (nativeStats && (nativeStats.isRunning || nativeStats.running || nativeStats.success)) {
                     this.stats.isActive = true;
                     this.stats.isProxyRunning = true;
                     this.stats.localProxyPort = nativeStats.port || 8088;
@@ -86,9 +86,11 @@ export class RedCyberTunnelEngine {
                     this.startBandwidthMonitor();
                     await this.autoDetectCarrier();
                     this.notifyListeners();
+                    return true;
                 }
             }
         } catch {}
+        return false;
     }
 
     public static getInstance(): RedCyberTunnelEngine {
@@ -231,7 +233,7 @@ export class RedCyberTunnelEngine {
         try {
             if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
                 const res = await RedNode.startProxyServer({ port: this.stats.localProxyPort });
-                if (res && res.running) {
+                if (res && (res.running || res.isRunning || res.success)) {
                     proxyStarted = true;
                     this.stats.isProxyRunning = true;
                     this.stats.localProxyPort = res.port || this.stats.localProxyPort;
@@ -415,7 +417,7 @@ export class RedCyberTunnelEngine {
             if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
                 try {
                     const nativeStats = await RedNode.getProxyStats();
-                    if (nativeStats && nativeStats.running) {
+                    if (nativeStats && (nativeStats.running || nativeStats.isRunning || nativeStats.success)) {
                         this.stats.isProxyRunning = true;
                         this.stats.activeConnections = nativeStats.activeConnections || 0;
                         this.stats.totalRequests = nativeStats.totalRequests || 0;

@@ -1711,6 +1711,8 @@ public class RedNodePlugin extends Plugin {
         boolean started = RedNodeService.startProxyServer(port);
         com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
         ret.put("success", started);
+        ret.put("running", started);
+        ret.put("isRunning", started);
         ret.put("port", port);
         ret.put("host", "127.0.0.1");
         call.resolve(ret);
@@ -1721,14 +1723,19 @@ public class RedNodePlugin extends Plugin {
         RedNodeService.stopProxyServer();
         com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
         ret.put("success", true);
+        ret.put("running", false);
+        ret.put("isRunning", false);
         call.resolve(ret);
     }
 
     @PluginMethod
     public void getProxyStats(PluginCall call) {
         RedProxyServer proxy = RedNodeService.getProxyServer();
+        boolean running = proxy != null && proxy.isRunning();
         com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
-        ret.put("isRunning", proxy != null && proxy.isRunning());
+        ret.put("success", true);
+        ret.put("running", running);
+        ret.put("isRunning", running);
         ret.put("port", proxy != null ? proxy.getBoundPort() : 8088);
         ret.put("host", "127.0.0.1");
         ret.put("bytesUploaded", proxy != null ? proxy.getBytesUploaded() : 0);

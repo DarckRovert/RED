@@ -75,8 +75,10 @@ public class RedProxyServer {
 
         this.boundPort = port;
         try {
-            // Enlazar estrictamente a 127.0.0.1 para seguridad local
-            serverSocket = new ServerSocket(boundPort, 50, InetAddress.getByName("127.0.0.1"));
+            // Enlazar con setReuseAddress a 127.0.0.1 para evitar BindException en reinicios rápidos
+            serverSocket = new ServerSocket();
+            serverSocket.setReuseAddress(true);
+            serverSocket.bind(new java.net.InetSocketAddress(InetAddress.getByName("127.0.0.1"), boundPort), 50);
             isRunning.set(true);
             workerPool = Executors.newCachedThreadPool();
 
@@ -85,7 +87,8 @@ public class RedProxyServer {
                 while (isRunning.get() && !serverSocket.isClosed()) {
                     try {
                         Socket clientSocket = serverSocket.accept();
-                        clientSocket.setSoTimeout(30000); // 30 segundos timeout
+                        clientSocket.setKeepAlive(true);
+                        clientSocket.setSoTimeout(60000); // 60 segundos timeout
                         activeConnections.incrementAndGet();
                         totalRequests.incrementAndGet();
 
@@ -226,7 +229,8 @@ public class RedProxyServer {
         Socket remoteSocket = null;
         try {
             remoteSocket = new Socket(host, port);
-            remoteSocket.setSoTimeout(30000);
+            remoteSocket.setKeepAlive(true);
+            remoteSocket.setSoTimeout(60000);
 
             // Responder 200 Connection Established al cliente
             byte[] okResponse = "HTTP/1.1 200 Connection Established\r\nProxy-Agent: RED-Sovereign-Proxy/1.0\r\n\r\n".getBytes();
