@@ -251,28 +251,39 @@ export class RedAPIClient {
     }
 
     private deduplicateMessagesList(messages: MessageItem[]): MessageItem[] {
-    const deduped: MessageItem[] = [];
-    for (const msg of messages) {
-        if (!msg) continue;
-        const msgTs = msg.timestamp ? (msg.timestamp > 1e11 ? msg.timestamp / 1000 : msg.timestamp) : 0;
-        const isDup = deduped.some(d => {
-            if (d.id && msg.id && d.id === msg.id) return true;
-            if (!d.is_mine && !msg.is_mine) {
-                const sA = (d.sender || '').toLowerCase().replace(/^did:red:/i, '').trim();
-                const sB = (msg.sender || '').toLowerCase().replace(/^did:red:/i, '').trim();
-                const sameSender = sA === sB || (sA.length >= 8 && sB.length >= 8 && (sA.startsWith(sB) || sB.startsWith(sA)));
+        const deduped: MessageItem[] = [];
+        for (const msg of messages) {
+            if (!msg) continue;
+            const msgTs = msg.timestamp ? (msg.timestamp > 1e11 ? msg.timestamp / 1000 : msg.timestamp) : 0;
+            const existingIdx = deduped.findIndex(d => {
+                if (d.id && msg.id && d.id === msg.id) return true;
                 const dTs = d.timestamp ? (d.timestamp > 1e11 ? d.timestamp / 1000 : d.timestamp) : 0;
-                if (sameSender && d.content && msg.content && d.content === msg.content && Math.abs(dTs - msgTs) < 15) return true;
-                if (sameSender && d.media_data && msg.media_data && (d.media_data === msg.media_data || d.media_data.length === msg.media_data.length) && Math.abs(dTs - msgTs) < 15) return true;
+                const sameContent = (d.content && msg.content && d.content === msg.content) ||
+                                    (d.media_data && msg.media_data && (d.media_data === msg.media_data || d.media_data.length === msg.media_data.length));
+
+                if (!d.is_mine && !msg.is_mine) {
+                    const sA = (d.sender || '').toLowerCase().replace(/^did:red:/i, '').trim();
+                    const sB = (msg.sender || '').toLowerCase().replace(/^did:red:/i, '').trim();
+                    const sameSender = sA === sB || (sA.length >= 8 && sB.length >= 8 && (sA.startsWith(sB) || sB.startsWith(sA)));
+                    if (sameSender && sameContent && Math.abs(dTs - msgTs) < 15) return true;
+                } else if (d.is_mine && msg.is_mine) {
+                    if (sameContent && Math.abs(dTs - msgTs) < 15) return true;
+                }
+                return false;
+            });
+
+            if (existingIdx !== -1) {
+                // Si el nuevo mensaje tiene un ID definitivo de servidor y el anterior era provisional (temp_), actualizarlo
+                const existing = deduped[existingIdx];
+                if ((existing.id?.startsWith('temp_') || existing.id?.startsWith('msg_pending_')) && msg.id && !msg.id.startsWith('temp_') && !msg.id.startsWith('msg_pending_')) {
+                    deduped[existingIdx] = msg;
+                }
+            } else {
+                deduped.push(msg);
             }
-            return false;
-        });
-        if (!isDup) {
-            deduped.push(msg);
         }
+        return deduped;
     }
-    return deduped;
-}
 
     async getMessages(conversationId: string): Promise<MessageItem[]> {
         const cleanId = conversationId.toLowerCase().replace(/^did:red:/i, '').trim();

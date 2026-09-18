@@ -475,8 +475,14 @@ export default function ChatWindow() {
             const contentKey = `${m.is_mine ? '1' : '0'}_${m.msg_type || 'text'}_${(m.content || '').trim()}_${mLat}_${mLon}`;
             
             const existingEntry = contentWindowMap.get(contentKey);
-            if (existingEntry && Math.abs(existingEntry.ts - mTs) < 15 && (!m.id || m.id === deduped[existingEntry.index]?.id)) {
-                // Duplicate within 15s window — skip redundant render bubble
+            if (existingEntry && Math.abs(existingEntry.ts - mTs) < 15) {
+                // Si el nuevo mensaje tiene un ID definitivo de servidor/base de datos y el anterior era provisional (temp_/mesh_), actualizarlo
+                const prev = deduped[existingEntry.index];
+                if (prev && (prev.id?.startsWith('temp_') || prev.id?.startsWith('mesh_') || prev.id?.startsWith('msg_pending_')) && m.id && !m.id.startsWith('temp_') && !m.id.startsWith('mesh_') && !m.id.startsWith('msg_pending_')) {
+                    deduped[existingEntry.index] = m;
+                    seenIds.add(m.id);
+                }
+                // Duplicado idéntico dentro de la ventana de 15s — omitir burbuja redundante
                 continue;
             }
 

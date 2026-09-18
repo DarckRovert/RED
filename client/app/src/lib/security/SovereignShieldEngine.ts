@@ -142,6 +142,7 @@ export class SovereignShieldEngine {
 
     private constructor() {
         this.loadPersistentState();
+        this.initNativeBridge();
     }
 
     public static getInstance(): SovereignShieldEngine {
@@ -149,6 +150,22 @@ export class SovereignShieldEngine {
             SovereignShieldEngine.instance = new SovereignShieldEngine();
         }
         return SovereignShieldEngine.instance;
+    }
+
+    private initNativeBridge(): void {
+        if (typeof window !== "undefined" && (window as any).Capacitor?.isPluginAvailable("RedShield")) {
+            try {
+                RedShield.addListener("onCallScreened", (event: any) => {
+                    if (event && event.number) {
+                        this.logScreenedCall(event.number, 0, event.label);
+                    }
+                });
+                // Sincronizar configuración actual hacia el servicio nativo al arrancar
+                this.syncNativeConfig();
+            } catch (e) {
+                console.warn("[SovereignShieldEngine] Error inicializando puente nativo:", e);
+            }
+        }
     }
 
     private loadPersistentState(): void {
@@ -189,6 +206,23 @@ export class SovereignShieldEngine {
         }
     }
 
+    public async syncNativeConfig(): Promise<void> {
+        if (typeof window === "undefined" || !(window as any).Capacitor?.isPluginAvailable("RedShield")) return;
+        try {
+            const customBlacklist = Array.from(this.customBlacklist.keys());
+            const customWhitelist = Array.from(this.customWhitelist.keys());
+            await RedShield.syncShieldConfig({
+                shieldEnabled: this.isShieldEnabled,
+                strictMode: this.isStrictMode,
+                simPrefix: this.simPrefix,
+                customBlacklist,
+                customWhitelist
+            });
+        } catch (e) {
+            console.warn("[SovereignShieldEngine] Error sincronizando configuración hacia RedShield:", e);
+        }
+    }
+
     private savePersistentState(): void {
         if (typeof window === "undefined" || !window.localStorage) return;
         try {
@@ -200,9 +234,13 @@ export class SovereignShieldEngine {
             localStorage.setItem("red_shield_call_history", JSON.stringify(this.callHistory.slice(0, 100)));
             localStorage.setItem("red_shield_enabled", this.isShieldEnabled ? "true" : "false");
             localStorage.setItem("red_shield_strict_mode", this.isStrictMode ? "true" : "false");
+            localStorage.setItem("red_shield_sim_prefix", this.simPrefix);
         } catch (e) {
             console.warn("[SovereignShieldEngine] Error guardando estado persistente:", e);
         }
+
+        // Sincronizar atómicamente con SharedPreferences de Android Telecom
+        this.syncNativeConfig();
     }
 
     // ── Normalización de Número Telefónico ────────────────────────────────────
@@ -229,20 +267,19 @@ export class SovereignShieldEngine {
         const norm = this.normalizeNumber(rawNumber);
 
         // 1. Inviolabilidad de Emergencias
-        for (const em of EMERGENCY_NUMBERS) {
-            if (norm === em || norm.endsWith(em)) {
-                return {
-                    number: norm,
-                    isSpam: false,
-                    category: "emergency",
-                    label: "Servicio de Emergencia Oficial",
-                    severity: "safe",
-                    confidenceScore: 100,
-                    actionRecommended: "allow",
-                    reason: "Protocolo de Inviolabilidad de Emergencia (Pase Directo de Hardware)",
-                    isVipBypass: true
-                };
-            }
+        const cleanDigits = norm.replace(/^\+/, '');
+        if (EMERGENCY_NUMBERS.has(cleanDigits) || EMERGENCY_NUMBERS.has(norm)) {
+            return {
+                number: norm,
+                isSpam: false,
+                category: "emergency",
+                label: "Servicio de Emergencia Oficial",
+                severity: "safe",
+                confidenceScore: 100,
+                actionRecommended: "allow",
+                reason: "Protocolo de Inviolabilidad de Emergencia (Pase Directo de Hardware)",
+                isVipBypass: true
+            };
         }
 
         // 2. Lista Blanca Personal y Contactos Verificados
@@ -407,9 +444,67 @@ export class SovereignShieldEngine {
         return [...this.callHistory];
     }
 
-    public clearCallHistory(): void {
+    public async fetchNativeCallLogs(): Promise<CallLogEntry[]> {
+        try {
+            if (typeof window !== "undefined" && (window as any).Capacitor?.isPluginAvailable("RedShield")) {
+                const res = await RedShield.getScreenedCallLogs();
+                if (res && Array.isArray(res.logs)) {
+                    for (const item of res.logs) {
+                        const exists = this.callHistory.some(c => c.id === item.id || (c.phoneNumber === item.number && Math.abs(c.timestamp - item.timestamp) < 5000));
+                        if (!exists) {
+                            const verdict = this.evaluateIncomingNumber(item.number);
+                            this.callHistory.unshift({
+                                id: item.id || `call_${item.timestamp}_${Math.random().toString(36).slice(2, 6)}`,
+                                timestamp: item.timestamp || Date.now(),
+                                phoneNumber: item.number,
+                                simSlot: 0,
+                                verdict: {
+                                    ...verdict,
+                                    isSpam: item.isSpam !== undefined ? item.isSpam : verdict.isSpam,
+                                    label: item.label || verdict.label
+                                },
+                                userAction: item.isSpam ? (this.isStrictMode ? "blocked" : "allowed") : "allowed"
+                            });
+                        }
+                    }
+                    if (this.callHistory.length > 100) this.callHistory = this.callHistory.slice(0, 100);
+                    this.savePersistentState();
+                }
+            }
+        } catch (e) {
+            console.warn("[SovereignShieldEngine] Error obteniendo registros nativos:", e);
+        }
+        return [...this.callHistory];
+    }
+
+    public async clearCallHistory(): Promise<void> {
         this.callHistory = [];
         this.savePersistentState();
+        try {
+            if (typeof window !== "undefined" && (window as any).Capacitor?.isPluginAvailable("RedShield")) {
+                await RedShield.clearScreenedCallLogs();
+            }
+        } catch {}
+    }
+
+    public async checkRoleStatus(): Promise<{ isHeld: boolean; isRoleAvailable: boolean; isVoiceCapable: boolean }> {
+        try {
+            if (typeof window !== "undefined" && (window as any).Capacitor?.isPluginAvailable("RedShield")) {
+                const res = await RedShield.isCallScreeningRoleHeld();
+                if (res) return res;
+            }
+        } catch {}
+        return { isHeld: true, isRoleAvailable: false, isVoiceCapable: false };
+    }
+
+    public async requestScreeningRole(): Promise<{ requested: boolean; notSupported?: boolean; alreadyHeld?: boolean; reason?: string }> {
+        try {
+            if (typeof window !== "undefined" && (window as any).Capacitor?.isPluginAvailable("RedShield")) {
+                const res = await RedShield.requestCallScreeningRole();
+                if (res) return res;
+            }
+        } catch {}
+        return { requested: false, alreadyHeld: true };
     }
 
     public setShieldEnabled(enabled: boolean): void {

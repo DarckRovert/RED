@@ -27,7 +27,7 @@
 - **Gobernanza Atómica SSOT v110.0.0 & Verificación en Hardware Físico Real:**
   - 100% de paridad en los 22 archivos maestros de versión (`v110.0.0`, build code `110000`).
   - Verificación en hardware real en Motorola Moto G22 (`ZT322B386P`), Redmi Note 14 (`6dife65ls485fega`) y Lenovo Tablet (`HA2CHKZ2`).
-  - Hash SHA-256 canónico APK: `53A85536F88BAFFAC1F7D2A024C111D8F40F2289ECE60B47402EFB5D445B65F4`.
+  - Hash SHA-256 canónico APK: `A39D4E29BD4D3BF847FDFD3E9B4CE258A8F0A66E72F55AD08CF09B52BF905C09`.
   - Hash SHA-256 canónico red-node.exe: `AF1207A0D10CCC9102EEC1AC31DB2E5CCE0B917AB02E1FD83D41572DD27E788D`.
 
 ## [109.0.0-iconografia-vectorial-c4isr-y-telemetria-reactiva-mesh] - 2026-09-17

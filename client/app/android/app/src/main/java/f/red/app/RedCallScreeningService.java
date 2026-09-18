@@ -80,30 +80,49 @@ public class RedCallScreeningService extends CallScreeningService {
             return;
         }
 
-        // 4. Leer preferencias de RED
+        // 4. Leer preferencias sincronizadas de RED
         SharedPreferences prefs = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         boolean isEnabled = prefs.getBoolean("shield_enabled", true);
         boolean isStrict = prefs.getBoolean("strict_mode", false);
+        String simPrefix = prefs.getString("sim_prefix", "");
+        String customWhitelistRaw = prefs.getString("custom_whitelist", "[]");
+        String customBlacklistRaw = prefs.getString("custom_blacklist", "[]");
 
         if (!isEnabled) {
             respondToCall(details, new CallResponse.Builder().build());
             return;
         }
 
-        // 5. Evaluación de Spam
+        // 4.1. Verificación de Lista Blanca Personal (Pase VIP Soberano)
+        if (isNumberInList(normNumber, customWhitelistRaw)) {
+            Log.d(TAG, "🟢 Pase VIP: Número en Lista Blanca Personal -> " + normNumber);
+            respondToCall(details, new CallResponse.Builder().build());
+            logCallEvent(normNumber, false, "Lista Blanca Personal");
+            return;
+        }
+
+        // 5. Evaluación de Amenazas y Spam
         boolean isSpam = false;
         String reason = "Número Desconocido";
 
-        // A. Detección Wangiri
-        for (String wp : WANGIRI_PREFIXES) {
-            if (normNumber.startsWith(wp)) {
-                isSpam = true;
-                reason = "Fraude Internacional Wangiri (" + wp + ")";
-                break;
+        // A. Verificación de Lista Negra Personal
+        if (isNumberInList(normNumber, customBlacklistRaw)) {
+            isSpam = true;
+            reason = "Lista Negra Personal";
+        }
+
+        // B. Detección Wangiri (Tarificación abusiva)
+        if (!isSpam) {
+            for (String wp : WANGIRI_PREFIXES) {
+                if (normNumber.startsWith(wp)) {
+                    isSpam = true;
+                    reason = "Fraude Internacional Wangiri (" + wp + ")";
+                    break;
+                }
             }
         }
 
-        // B. Detección Base Semilla
+        // C. Detección Base Semilla Regulatoria
         if (!isSpam) {
             for (Pattern p : SEED_PATTERNS) {
                 if (p.matcher(normNumber).find()) {
@@ -111,6 +130,14 @@ public class RedCallScreeningService extends CallScreeningService {
                     reason = "Telemercadeo / Call Center Regulatorio";
                     break;
                 }
+            }
+        }
+
+        // D. Detección de Suplantación Vecina (Neighbor Spoofing Heuristic)
+        if (!isSpam && simPrefix != null && simPrefix.length() >= 6) {
+            if (normNumber.startsWith(simPrefix) && !normNumber.equals(simPrefix)) {
+                isSpam = true;
+                reason = "Posible Suplantación Vecina (Neighbor Spoofing)";
             }
         }
 
@@ -158,6 +185,24 @@ public class RedCallScreeningService extends CallScreeningService {
         }
     }
 
+    private boolean isNumberInList(String normNumber, String jsonArrayRaw) {
+        if (jsonArrayRaw == null || jsonArrayRaw.trim().isEmpty() || jsonArrayRaw.equals("[]")) {
+            return false;
+        }
+        try {
+            JSONArray arr = new JSONArray(jsonArrayRaw);
+            String cleanTarget = normNumber.replace("+", "");
+            for (int i = 0; i < arr.length(); i++) {
+                String item = arr.getString(i).trim();
+                String cleanItem = item.replace("+", "");
+                if (normNumber.equals(item) || cleanTarget.equals(cleanItem)) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
     private void logCallEvent(String number, boolean isSpam, String label) {
         try {
             SharedPreferences prefs = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
@@ -179,6 +224,10 @@ public class RedCallScreeningService extends CallScreeningService {
             }
 
             prefs.edit().putString("call_log", newArr.toString()).apply();
+
+            // Notificar en tiempo real al plugin si la app está en memoria
+            RedShieldPlugin.notifyCallScreened(number, isSpam, label);
         } catch (Exception ignored) {}
     }
 }
+

@@ -33,6 +33,7 @@
     "test:tdma": "node scripts/test-lora-tdma-scheduler.js",
     "test:geohash": "node scripts/test-geohash-spatial-pruning.js",
     "test:ai": "node scripts/test-ai-orchestrator.js",
+    "test:shield": "node scripts/test-sovereign-shield-heuristics.js",
     "test:resilience": "node scripts/test-phase10-deep-resilience.js",
     "test:qr": "node scripts/test-offline-qr.js",
     "test:location": "node scripts/test-tactical-location.js",

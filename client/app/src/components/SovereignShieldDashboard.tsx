@@ -32,6 +32,11 @@ export default function SovereignShieldDashboard({ onClose }: SovereignShieldDas
     const [rfStatus, setRfStatus] = useState<RfThreatStatus | null>(null);
     const [hardware, setHardware] = useState<HardwareKineticHealth | null>(null);
     const [callHistory, setCallHistory] = useState<CallLogEntry[]>([]);
+    const [roleStatus, setRoleStatus] = useState<{ isHeld: boolean; isRoleAvailable: boolean; isVoiceCapable: boolean }>({
+        isHeld: true,
+        isRoleAvailable: false,
+        isVoiceCapable: true
+    });
 
     // Sub-vistas y modales
     const [activeTab, setActiveTab] = useState<"overview" | "calls" | "apps" | "rf">("overview");
@@ -57,18 +62,21 @@ export default function SovereignShieldDashboard({ onClose }: SovereignShieldDas
     const refreshData = useCallback(async () => {
         setShieldActive(sovereignShieldEngine.isShieldActive());
         setStrictMode(sovereignShieldEngine.isStrict());
-        setCallHistory(sovereignShieldEngine.getCallHistory());
         setSimPrefixInput(sovereignShieldEngine.getSimPrefix());
 
         try {
-            const [auditRes, rfRes, hwRes] = await Promise.all([
+            const [auditRes, rfRes, hwRes, callsRes, roleRes] = await Promise.all([
                 sovereignShieldEngine.auditInstalledApps(),
                 sovereignShieldEngine.getRfThreatStatus(),
-                sovereignShieldEngine.getHardwareTelemetry()
+                sovereignShieldEngine.getHardwareTelemetry(),
+                sovereignShieldEngine.fetchNativeCallLogs(),
+                sovereignShieldEngine.checkRoleStatus()
             ]);
             setAppAudit(auditRes);
             setRfStatus(rfRes);
             setHardware(hwRes);
+            setCallHistory(callsRes);
+            setRoleStatus(roleRes);
 
             const score = sovereignShieldEngine.computeShieldIndex(auditRes, rfRes);
             setShieldIndex(score);
@@ -80,6 +88,22 @@ export default function SovereignShieldDashboard({ onClose }: SovereignShieldDas
     useEffect(() => {
         refreshData();
     }, [refreshData]);
+
+    const handleRequestRole = async () => {
+        try {
+            const res = await sovereignShieldEngine.requestScreeningRole();
+            if (res.notSupported) {
+                toast.info("ℹ️ Este dispositivo no posee módem de voz celular.");
+            } else if (res.alreadyHeld) {
+                toast.success("✅ Rol de Filtrado de Llamadas ya concedido a RED.");
+            } else {
+                toast.info("Confirma la asignación del rol de filtrado en el diálogo del sistema.");
+            }
+            setTimeout(() => refreshData(), 1500);
+        } catch (e) {
+            toast.error("Error solicitando rol de filtrado.");
+        }
+    };
 
     const handleToggleShield = (val: boolean) => {
         setShieldActive(val);
@@ -339,6 +363,50 @@ export default function SovereignShieldDashboard({ onClose }: SovereignShieldDas
                             </div>
                         </div>
 
+                        {/* Banner de Autorización de Rol Android Telecom (si está pendiente) */}
+                        {roleStatus.isVoiceCapable && roleStatus.isRoleAvailable && !roleStatus.isHeld && (
+                            <div style={{
+                                background: "rgba(245, 158, 11, 0.12)",
+                                border: "1px solid rgba(245, 158, 11, 0.4)",
+                                borderRadius: "12px",
+                                padding: "14px 18px",
+                                marginBottom: "16px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: "14px",
+                                flexWrap: "wrap"
+                            }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                    <TacIcon name="phone" size={24} color="#F59E0B" />
+                                    <div>
+                                        <div style={{ fontSize: "13px", fontWeight: 800, color: "#F59E0B", letterSpacing: "0.5px" }}>
+                                            AUTORIZACIÓN DE FILTRADO DE LLAMADAS PENDIENTE
+                                        </div>
+                                        <div style={{ fontSize: "12px", color: "#CBD5E1", marginTop: "2px" }}>
+                                            Para que RED intercepte y filtre llamadas fraudulentas en Android, concédele el Rol de Detección de Llamadas.
+                                        </div>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={handleRequestRole}
+                                    style={{
+                                        background: "#F59E0B",
+                                        color: "#000",
+                                        border: "none",
+                                        borderRadius: "8px",
+                                        padding: "8px 16px",
+                                        fontSize: "12px",
+                                        fontWeight: 800,
+                                        cursor: "pointer",
+                                        letterSpacing: "0.5px"
+                                    }}
+                                >
+                                    ACTIVAR PROTECCIÓN AHORA
+                                </button>
+                            </div>
+                        )}
+
                         {/* Matriz 2x2 de Cuadrantes Tácticos */}
                         <div style={{
                             display: "grid",
@@ -376,6 +444,40 @@ export default function SovereignShieldDashboard({ onClose }: SovereignShieldDas
 
                                 <div style={{ fontSize: "12px", color: "#94A3B8", lineHeight: "1.4" }}>
                                     Detección local instantánea (<span style={{ color: "#FFF", fontWeight: 700 }}>&lt;15ms</span>) de telemercadeo, robocalls y estafas con base de datos semilla offline.
+                                </div>
+
+                                {/* Estado de Rol Telecom Android */}
+                                <div style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    background: "rgba(0, 0, 0, 0.3)",
+                                    padding: "8px 10px",
+                                    borderRadius: "8px",
+                                    fontSize: "11px"
+                                }}>
+                                    <span style={{ color: "#94A3B8" }}>Rol Android:</span>
+                                    {!roleStatus.isVoiceCapable ? (
+                                        <span style={{ color: "#64748B", fontWeight: 700 }}>TABLET / SIN VOZ</span>
+                                    ) : roleStatus.isHeld ? (
+                                        <span style={{ color: "#10B981", fontWeight: 800 }}>ASIGNADO ✓</span>
+                                    ) : (
+                                        <button
+                                            onClick={handleRequestRole}
+                                            style={{
+                                                background: "#F59E0B",
+                                                color: "#000",
+                                                border: "none",
+                                                borderRadius: "6px",
+                                                padding: "3px 8px",
+                                                fontSize: "10px",
+                                                fontWeight: 800,
+                                                cursor: "pointer"
+                                            }}
+                                        >
+                                            ACTIVAR ROL
+                                        </button>
+                                    )}
                                 </div>
 
                                 <div style={{
@@ -792,10 +894,10 @@ export default function SovereignShieldDashboard({ onClose }: SovereignShieldDas
                                 </div>
                                 {callHistory.length > 0 && (
                                     <button
-                                        onClick={() => {
-                                            sovereignShieldEngine.clearCallHistory();
+                                        onClick={async () => {
+                                            await sovereignShieldEngine.clearCallHistory();
                                             setCallHistory([]);
-                                            toast.info("Historial limpiado");
+                                            toast.info("Historial limpiado en memoria y almacenamiento nativo");
                                         }}
                                         style={{
                                             background: "none",

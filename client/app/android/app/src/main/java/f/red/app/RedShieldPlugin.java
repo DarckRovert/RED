@@ -5,6 +5,7 @@ import android.app.role.RoleManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -32,6 +33,26 @@ import java.util.List;
 
 @CapacitorPlugin(name = "RedShield")
 public class RedShieldPlugin extends Plugin {
+
+    private static RedShieldPlugin instance;
+
+    @Override
+    public void load() {
+        super.load();
+        instance = this;
+    }
+
+    public static void notifyCallScreened(String number, boolean isSpam, String label) {
+        if (instance != null) {
+            JSObject data = new JSObject();
+            data.put("id", "call_" + System.currentTimeMillis());
+            data.put("number", number);
+            data.put("isSpam", isSpam);
+            data.put("label", label);
+            data.put("timestamp", System.currentTimeMillis());
+            instance.notifyListeners("onCallScreened", data);
+        }
+    }
 
     @PluginMethod
     public void auditAppPermissions(PluginCall call) {
@@ -284,24 +305,109 @@ public class RedShieldPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void syncShieldConfig(PluginCall call) {
+        try {
+            Context context = getContext();
+            SharedPreferences prefs = context.getSharedPreferences("red_shield_prefs", Context.MODE_PRIVATE);
+            SharedPreferences.Editor editor = prefs.edit();
+
+            if (call.hasOption("shieldEnabled")) {
+                editor.putBoolean("shield_enabled", call.getBoolean("shieldEnabled", true));
+            }
+            if (call.hasOption("strictMode")) {
+                editor.putBoolean("strict_mode", call.getBoolean("strictMode", false));
+            }
+            if (call.hasOption("simPrefix")) {
+                editor.putString("sim_prefix", call.getString("simPrefix", ""));
+            }
+            if (call.hasOption("customBlacklist")) {
+                JSArray bl = call.getArray("customBlacklist");
+                editor.putString("custom_blacklist", bl != null ? bl.toString() : "[]");
+            }
+            if (call.hasOption("customWhitelist")) {
+                JSArray wl = call.getArray("customWhitelist");
+                editor.putString("custom_whitelist", wl != null ? wl.toString() : "[]");
+            }
+
+            editor.apply();
+            JSObject ret = new JSObject();
+            ret.put("synced", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Error sincronizando configuración de escudo: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void getScreenedCallLogs(PluginCall call) {
+        try {
+            Context context = getContext();
+            SharedPreferences prefs = context.getSharedPreferences("red_shield_prefs", Context.MODE_PRIVATE);
+            String raw = prefs.getString("call_log", "[]");
+            JSArray arr = new JSArray(raw);
+            JSObject ret = new JSObject();
+            ret.put("logs", arr);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Error obteniendo registros de llamadas: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void clearScreenedCallLogs(PluginCall call) {
+        try {
+            Context context = getContext();
+            SharedPreferences prefs = context.getSharedPreferences("red_shield_prefs", Context.MODE_PRIVATE);
+            prefs.edit().putString("call_log", "[]").apply();
+            JSObject ret = new JSObject();
+            ret.put("cleared", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Error vaciando registros de llamadas: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
     public void isCallScreeningRoleHeld(PluginCall call) {
+        Context context = getContext();
+        TelephonyManager tm = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+        boolean isVoiceCapable = (tm != null && tm.isVoiceCapable());
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            RoleManager roleManager = (RoleManager) getContext().getSystemService(Context.ROLE_SERVICE);
-            boolean held = roleManager != null && roleManager.isRoleHeld(RoleManager.ROLE_CALL_SCREENING);
+            RoleManager roleManager = (RoleManager) context.getSystemService(Context.ROLE_SERVICE);
+            boolean isRoleAvailable = roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING);
+            boolean held = isRoleAvailable && roleManager.isRoleHeld(RoleManager.ROLE_CALL_SCREENING);
             JSObject ret = new JSObject();
             ret.put("isHeld", held);
+            ret.put("isRoleAvailable", isRoleAvailable);
+            ret.put("isVoiceCapable", isVoiceCapable);
             call.resolve(ret);
         } else {
             JSObject ret = new JSObject();
-            ret.put("isHeld", true); // En versiones previas no existía RoleManager
+            ret.put("isHeld", isVoiceCapable);
+            ret.put("isRoleAvailable", false);
+            ret.put("isVoiceCapable", isVoiceCapable);
             call.resolve(ret);
         }
     }
 
     @PluginMethod
     public void requestCallScreeningRole(PluginCall call) {
+        Context context = getContext();
+        TelephonyManager tm = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+        boolean isVoiceCapable = (tm != null && tm.isVoiceCapable());
+
+        if (!isVoiceCapable) {
+            JSObject ret = new JSObject();
+            ret.put("requested", false);
+            ret.put("notSupported", true);
+            ret.put("reason", "Dispositivo sin capacidad de llamadas celulares");
+            call.resolve(ret);
+            return;
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            RoleManager roleManager = (RoleManager) getContext().getSystemService(Context.ROLE_SERVICE);
+            RoleManager roleManager = (RoleManager) context.getSystemService(Context.ROLE_SERVICE);
             if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING)) {
                 if (!roleManager.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)) {
                     Intent intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING);
@@ -338,3 +444,4 @@ public class RedShieldPlugin extends Plugin {
         }
     }
 }
+
