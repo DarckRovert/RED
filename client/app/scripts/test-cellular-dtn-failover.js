@@ -39,14 +39,14 @@ runTest('Brokers MQTT en WSS (EMQX 8084 / HiveMQ 8884)', () => {
 // ─── 2. Verificación de WebRTC ICE & Servidores TURN sobre 443 ──────────────────
 console.log('\n🌐 2. Probando WebRTC ICE Candidates y Servidores TURN 443...');
 
-runTest('Candidatos TURN y STUN sobre puerto 443 para Symmetric NAT celular', () => {
+runTest('Candidatos WebRTC ICE y soporte dinámico TURN para Symmetric NAT celular', () => {
   const fs = require('fs');
   const path = require('path');
   const fileContent = fs.readFileSync(path.join(__dirname, '../src/lib/mesh/wifiDirectTransport.ts'), 'utf-8');
 
-  assert(fileContent.includes('stun:stun.services.mozilla.com:443'), 'STUN Mozilla sobre 443 debe estar presente');
-  assert(fileContent.includes('turn:openrelay.metered.ca:443'), 'TURN OpenRelay sobre 443 debe estar presente');
-  assert(fileContent.includes('turn:openrelay.metered.ca:443?transport=tcp'), 'TURN OpenRelay sobre TCP 443 debe estar presente');
+  assert(fileContent.includes('stun:stun.l.google.com:19302'), 'STUN Google debe estar presente');
+  assert(fileContent.includes('stun:stun.cloudflare.com:3478'), 'STUN Cloudflare debe estar presente');
+  assert(fileContent.includes('red_custom_turn_config'), 'Soporte dinámico para red_custom_turn_config debe estar presente');
   assert(fileContent.includes('mqttRelay.reconnect()'), 'reconnect() debe activar mqttRelay.reconnect()');
 });
 

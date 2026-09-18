@@ -432,17 +432,6 @@ export class WifiDirectTransport {
             }
         }
 
-        // Public OpenRelay TURN fallback for strict symmetric CGNAT on mobile cellular networks
-        list.push({
-            urls: [
-                'turn:openrelay.metered.ca:80',
-                'turn:openrelay.metered.ca:443',
-                'turn:openrelay.metered.ca:443?transport=tcp',
-            ],
-            username: 'openrelay',
-            credential: 'openrelay',
-        });
-
         return list;
     }
 

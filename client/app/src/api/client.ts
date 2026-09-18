@@ -250,6 +250,30 @@ export class RedAPIClient {
         }
     }
 
+    private deduplicateMessagesList(messages: MessageItem[]): MessageItem[] {
+    const deduped: MessageItem[] = [];
+    for (const msg of messages) {
+        if (!msg) continue;
+        const msgTs = msg.timestamp ? (msg.timestamp > 1e11 ? msg.timestamp / 1000 : msg.timestamp) : 0;
+        const isDup = deduped.some(d => {
+            if (d.id && msg.id && d.id === msg.id) return true;
+            if (!d.is_mine && !msg.is_mine) {
+                const sA = (d.sender || '').toLowerCase().replace(/^did:red:/i, '').trim();
+                const sB = (msg.sender || '').toLowerCase().replace(/^did:red:/i, '').trim();
+                const sameSender = sA === sB || (sA.length >= 8 && sB.length >= 8 && (sA.startsWith(sB) || sB.startsWith(sA)));
+                const dTs = d.timestamp ? (d.timestamp > 1e11 ? d.timestamp / 1000 : d.timestamp) : 0;
+                if (sameSender && d.content && msg.content && d.content === msg.content && Math.abs(dTs - msgTs) < 15) return true;
+                if (sameSender && d.media_data && msg.media_data && (d.media_data === msg.media_data || d.media_data.length === msg.media_data.length) && Math.abs(dTs - msgTs) < 15) return true;
+            }
+            return false;
+        });
+        if (!isDup) {
+            deduped.push(msg);
+        }
+    }
+    return deduped;
+}
+
     async getMessages(conversationId: string): Promise<MessageItem[]> {
         const cleanId = conversationId.toLowerCase().replace(/^did:red:/i, '').trim();
         const localKey = `red_web_messages_${cleanId}`;
@@ -289,7 +313,11 @@ export class RedAPIClient {
             const rustMsgs = await this.reqList<MessageItem>(`/conversations/${cleanId}/messages`);
             if (!rustMsgs || rustMsgs.length === 0) {
                 // Rust returned empty (conversation only exists in local mesh cache) — use local vault
-                return localMsgs;
+                const dedupedLocal = this.deduplicateMessagesList(localMsgs);
+                if (dedupedLocal.length < localMsgs.length) {
+                    this.setWebStore(localKey, dedupedLocal);
+                }
+                return dedupedLocal;
             }
             // Merge: deduplicate by exact ID AND by (sender + content/media payload + time window)
             const mergedList: MessageItem[] = [...localMsgs];
@@ -359,7 +387,12 @@ export class RedAPIClient {
                 return m;
             });
 
-            return filteredList.sort((a, b) => {
+            const dedupedFinal = this.deduplicateMessagesList(filteredList);
+            if (dedupedFinal.length < localMsgs.length) {
+                this.setWebStore(localKey, dedupedFinal);
+            }
+
+            return dedupedFinal.sort((a, b) => {
                 const tsA = a.timestamp ? (a.timestamp > 1e11 ? a.timestamp / 1000 : a.timestamp) : 0;
                 const tsB = b.timestamp ? (b.timestamp > 1e11 ? b.timestamp / 1000 : b.timestamp) : 0;
                 return tsA - tsB;
@@ -367,13 +400,18 @@ export class RedAPIClient {
         } catch {
             const groups = this.getWebStore<any[]>('red_web_groups', []);
             const isGroupConv = groups.some(g => g.id === cleanId || g.group_id === cleanId);
-            return localMsgs.filter(m => {
+            const filtered = localMsgs.filter(m => {
                 if (!m) return false;
                 if (!isGroupConv) {
                     if (m.msg_type === 'group_invite' || m.msg_type === 'group_message' || m.msg_type === 'squad_msg') return false;
                     if (typeof m.content === 'string' && m.content.startsWith('{') && (m.content.includes('"type":"group_invite"') || m.content.includes('"type":"group_message"'))) return false;
                 }
                 return true;
+            });
+            return this.deduplicateMessagesList(filtered).sort((a, b) => {
+                const tsA = a.timestamp ? (a.timestamp > 1e11 ? a.timestamp / 1000 : a.timestamp) : 0;
+                const tsB = b.timestamp ? (b.timestamp > 1e11 ? b.timestamp / 1000 : b.timestamp) : 0;
+                return tsA - tsB;
             });
         }
     }

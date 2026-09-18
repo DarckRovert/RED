@@ -93,6 +93,25 @@ function debouncedFetchData(get: () => RedStore) {
     }, 300);
 }
 
+export function isSameSender(senderA?: string, senderB?: string): boolean {
+    if (!senderA || !senderB) return false;
+    const sA = normalizeIdentity(senderA);
+    const sB = normalizeIdentity(senderB);
+    if (sA === sB) return true;
+    if (sA.length >= 8 && sB.length >= 8) {
+        if (sA.startsWith(sB) || sB.startsWith(sA)) return true;
+    }
+    return false;
+}
+
+interface MultiTransportDigest {
+    senderPrefix: string;
+    contentKey: string;
+    timestampSec: number;
+}
+const _recentMultiTransportDigests: MultiTransportDigest[] = [];
+const MAX_DIGESTS = 300;
+
 export async function dispatchIncomingMessage(
     item: MessageItem,
     set: any,
@@ -100,7 +119,7 @@ export async function dispatchIncomingMessage(
 ): Promise<void> {
     const handler = async (data: any) => {
         if (!data) return;
-        const effectiveSender = data.sender || data.sender_hash || data.senderHash;
+        const effectiveSender = data.sender || data.sender_hash || data.senderHash || (data.message_item && data.message_item.sender);
         const item: MessageItem = data.message_item || data.payload || (
             effectiveSender ? {
                 ...data,
@@ -116,6 +135,41 @@ export async function dispatchIncomingMessage(
             if (_processedMessageIds.has(dedupId)) return;
             recordProcessedMessageId(dedupId);
             if (!item.id) item.id = dedupId;
+        }
+
+        // 0.05 Multi-transport concurrent packet deduplication (Rust libp2p local mesh + WAN MQTT blind relay)
+        // If an identical incoming message from the same sender arrives over a parallel transport within 6 seconds, drop it early.
+        const cleanSender = normalizeIdentity(item.sender || effectiveSender || '').slice(0, 16);
+        const normContent = (item.content || '').trim();
+        const rawTs = typeof item.timestamp === 'number' ? item.timestamp : (typeof (data as any).timestamp === 'number' ? (data as any).timestamp : Date.now());
+        const normTsSec = rawTs > 1e11 ? Math.floor(rawTs / 1000) : Math.floor(rawTs);
+
+        if (!item.is_mine && cleanSender && (normContent || (item as any).media_data)) {
+            const contentKey = normContent ? normContent.slice(0, 64) : `media_${(item as any).media_data?.length || 0}`;
+            const isDuplicateTransport = _recentMultiTransportDigests.some(d =>
+                d.senderPrefix === cleanSender &&
+                d.contentKey === contentKey &&
+                Math.abs(d.timestampSec - normTsSec) <= 6
+            );
+            if (isDuplicateTransport) {
+                console.log(`[RED MessageDispatcher] Dropping concurrent multi-transport duplicate from ${cleanSender}`);
+                if (dedupId) recordProcessedMessageId(dedupId);
+                return;
+            }
+
+            // Prune expired digests (> 30s) and record current packet
+            const nowSec = Math.floor(Date.now() / 1000);
+            while (_recentMultiTransportDigests.length > 0 && (nowSec - _recentMultiTransportDigests[0].timestampSec > 30)) {
+                _recentMultiTransportDigests.shift();
+            }
+            if (_recentMultiTransportDigests.length >= MAX_DIGESTS) {
+                _recentMultiTransportDigests.shift();
+            }
+            _recentMultiTransportDigests.push({
+                senderPrefix: cleanSender,
+                contentKey,
+                timestampSec: normTsSec
+            });
         }
 
         // 0.1 Stateful Packet Inspection (SPI) Firewall verification via GlobalShield
@@ -2040,8 +2094,9 @@ export async function dispatchIncomingMessage(
                 }
 
                 // 4. Duplicate incoming bubble protection (same sender, same content within 15s)
-                if (!m.is_mine && !normalizedItem.is_mine && (m.sender || '').toLowerCase() === (item.sender || '').toLowerCase()) {
+                if (!m.is_mine && !normalizedItem.is_mine && isSameSender(m.sender, item.sender)) {
                     if (m.content && item.content && m.content === item.content && timeDiff < 15) return true;
+                    if (m.media_data && item.media_data && (m.media_data === item.media_data || m.media_data.length === item.media_data.length) && timeDiff < 15) return true;
                 }
 
                 return false;
@@ -2152,7 +2207,16 @@ export async function dispatchIncomingMessage(
                     const convKey = `red_web_messages_${convId}`;
                     const rawMsgs = localStorage.getItem(convKey);
                     const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
-                    if (!list.some(m => m.id === item.id)) {
+                    const isAlreadyInList = list.some(m => {
+                        if (m.id === item.id) return true;
+                        if (!m.is_mine && !normalizedItem.is_mine && isSameSender(m.sender, item.sender)) {
+                            const mTs = m.timestamp ? (m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp) : 0;
+                            const itemTs = normalizedItem.timestamp ? (normalizedItem.timestamp > 1e11 ? normalizedItem.timestamp / 1000 : normalizedItem.timestamp) : 0;
+                            if (m.content && normalizedItem.content && m.content === normalizedItem.content && Math.abs(mTs - itemTs) < 15) return true;
+                        }
+                        return false;
+                    });
+                    if (!isAlreadyInList) {
                         const rawMedia = normalizedItem.media_data || (normalizedItem.content?.startsWith('data:') ? normalizedItem.content : undefined);
                         if (rawMedia && rawMedia.length > 512) {
                             indexedMediaVault.saveMedia(normalizedItem.id, rawMedia, normalizedItem.mime_type).catch(() => {});
@@ -2310,7 +2374,16 @@ export async function dispatchIncomingMessage(
                     const convKey = `red_web_messages_${convId || canonicalSender}`;
                     const rawMsgs = localStorage.getItem(convKey);
                     const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
-                    if (!list.some(m => m.id === item.id)) {
+                    const isAlreadyInList = list.some(m => {
+                        if (m.id === item.id) return true;
+                        if (!m.is_mine && !item.is_mine && isSameSender(m.sender, item.sender)) {
+                            const mTs = m.timestamp ? (m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp) : 0;
+                            const itemTs = (item as any).timestamp ? ((item as any).timestamp > 1e11 ? (item as any).timestamp / 1000 : (item as any).timestamp) : 0;
+                            if (m.content && item.content && m.content === item.content && Math.abs(mTs - itemTs) < 15) return true;
+                        }
+                        return false;
+                    });
+                    if (!isAlreadyInList) {
                         const rawMedia = item.media_data || (item.content?.startsWith('data:') ? item.content : undefined);
                         if (rawMedia && rawMedia.length > 512) {
                             indexedMediaVault.saveMedia(item.id, rawMedia, (item as any).mime_type).catch(() => {});
