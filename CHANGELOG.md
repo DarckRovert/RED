@@ -17,7 +17,7 @@
 - **Gobernanza Atómica SSOT v109.0.0 & Verificación en Hardware Físico Real:**
   - 100% de paridad en los 22 archivos maestros de versión (`v109.0.0`, build code `109000`).
   - Verificación en hardware real en Motorola Moto G22 (`ZT322B386P`) y Lenovo Tablet (`HA2CHKZ2`) con 0 crashes y 0 excepciones.
-  - Hash SHA-256 canónico: `BC02DF2D9D3FFB0453357D25A9CEB9CF0B0A72BCC97CAA942915977A8752D753`.
+  - Hash SHA-256 canónico: `B0286FA3FA0B2762E617C8AC4BDD72DE60071915DB7194457D69E0F4FB1EF025`.
 
 ## [108.0.0-sincronizacion-p2p-soberana-consentimiento-qr-y-persistencia-limpia] - 2026-09-17
 

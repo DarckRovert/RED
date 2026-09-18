@@ -51,6 +51,6 @@ RED v109.0.0 culmina la modernización integral de la arquitectura visual milita
 
 ## Criptografía & Certificación
 
-- **Hash SHA-256 APK Oficial:** `BC02DF2D9D3FFB0453357D25A9CEB9CF0B0A72BCC97CAA942915977A8752D753`
+- **Hash SHA-256 APK Oficial:** `B0286FA3FA0B2762E617C8AC4BDD72DE60071915DB7194457D69E0F4FB1EF025`
 - **Keystore de Firma:** RSA 4096-bit (`red-release.keystore`) con algoritmo de firma SHA256withRSA.
 - **Gobernanza SSOT:** 100% de paridad en los 22 archivos maestros de versión (`v109.0.0` / `109000`).
