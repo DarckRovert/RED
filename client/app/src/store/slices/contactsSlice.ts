@@ -502,6 +502,7 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
                             timestamp: Date.now() / 1000
                         }));
                         meshRouter.send(req.senderHash, rawBytes).catch(() => {});
+                        mqttRelay.sendPacket(req.senderHash, rawBytes);
                     } catch {}
                 }
             }

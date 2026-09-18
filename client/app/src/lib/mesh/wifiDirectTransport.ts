@@ -41,19 +41,6 @@ export class WifiDirectTransport {
         { urls: 'stun:stun3.l.google.com:19302' },
         { urls: 'stun:stun4.l.google.com:19302' },
         { urls: 'stun:stun.cloudflare.com:3478' },
-        { urls: 'stun:stun.services.mozilla.com:443' },
-        { urls: 'stun:stun.nextcloud.com:443' },
-        { urls: 'stun:stun.sipgate.net:3478' },
-        { urls: 'stun:turn.matrix.org:3478' },
-        {
-            urls: [
-                'turn:openrelay.metered.ca:80',
-                'turn:openrelay.metered.ca:443',
-                'turn:openrelay.metered.ca:443?transport=tcp',
-            ],
-            username: 'openrelay',
-            credential: 'openrelay',
-        },
     ];
 
     constructor(myId: string) {
@@ -741,12 +728,9 @@ export class WifiDirectTransport {
         const blindSent = blindRelay.sendPacket(peerId, payload);
 
         // 3. High-Availability Global MQTT Blind Relay (Multi-Rail WAN Delivery)
-        // Concurrently transmitted over verified global MQTT clusters (EMQX / HiveMQ)
+        // Concurrently transmitted over verified global MQTT clusters (EMQX / HiveMQ / Mosquitto)
         // to guarantee instant cross-carrier delivery across different cellular operators / networks.
-        let mqttSent = false;
-        if (mqttRelay.isConnected) {
-            mqttSent = mqttRelay.sendPacket(peerId, payload);
-        }
+        const mqttSent = mqttRelay.sendPacket(peerId, payload);
 
         // 4. Encrypted Blind WebSocket Relay Fallback (Fallback 3, Zero-Knowledge Local)
         let wsSent = false;

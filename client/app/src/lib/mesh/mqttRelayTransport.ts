@@ -17,6 +17,14 @@ export interface MqttMessage {
   payload: Uint8Array;
 }
 
+export interface OutboxItem {
+  id: string;
+  topic: string;
+  packetBuffer: ArrayBuffer;
+  timestamp: number;
+  dispatchedBrokers: Set<string>;
+}
+
 export class MqttRelayTransport {
   private brokerSockets: Map<string, { ws: WebSocket; isAuthed: boolean }> = new Map();
   private myId: string;
@@ -28,10 +36,15 @@ export class MqttRelayTransport {
   private seenMqttHashes: Set<string> = new Set();
   private reconnectTimers: Map<string, any> = new Map();
   private reconnectAttempts: Map<string, number> = new Map();
+  private pendingOutbox: OutboxItem[] = [];
+
+  private static readonly MAX_OUTBOX_CAPACITY = 1000;
+  private static readonly OUTBOX_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
   private static readonly BROKER_POOL: string[] = [
     'wss://broker.emqx.io:8084/mqtt',
     'wss://broker.hivemq.com:8884/mqtt',
+    'wss://test.mosquitto.org:8081/mqtt',
   ];
 
   private static readonly HEX_LUT: string[] = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
@@ -424,17 +437,67 @@ export class MqttRelayTransport {
     // Payload
     packet.set(payloadBytes, offset);
 
+    const now = Date.now();
+    const packetBuffer = packet.buffer.slice(packet.byteOffset, packet.byteOffset + packet.byteLength);
+    const dispatchedBrokers = new Set<string>();
+
     let publishedCount = 0;
-    for (const [, entry] of this.brokerSockets) {
-      if (entry.ws.readyState === WebSocket.OPEN) {
+    for (const [url, entry] of this.brokerSockets) {
+      if (entry.isAuthed && entry.ws.readyState === WebSocket.OPEN) {
         try {
-          entry.ws.send(packet.buffer);
+          entry.ws.send(packetBuffer);
+          dispatchedBrokers.add(url);
           publishedCount++;
         } catch {}
       }
     }
 
+    // Retain in pendingOutbox if not all brokers in BROKER_POOL have dispatched this packet
+    if (dispatchedBrokers.size < MqttRelayTransport.BROKER_POOL.length) {
+      const id = `${topic}_${now}_${(Math.random() * 1e6) | 0}`;
+      this.pendingOutbox.push({
+        id,
+        topic,
+        packetBuffer,
+        timestamp: now,
+        dispatchedBrokers,
+      });
+
+      if (this.pendingOutbox.length > MqttRelayTransport.MAX_OUTBOX_CAPACITY) {
+        this.pendingOutbox.shift();
+      }
+    }
+
     return publishedCount > 0;
+  }
+
+  private flushOutboxForBroker(url: string, socket: WebSocket) {
+    if (socket.readyState !== WebSocket.OPEN) return;
+    const now = Date.now();
+
+    // Filter out expired items
+    this.pendingOutbox = this.pendingOutbox.filter(item => (now - item.timestamp) < MqttRelayTransport.OUTBOX_TTL_MS);
+
+    let flushed = 0;
+    for (const item of this.pendingOutbox) {
+      if (!item.dispatchedBrokers.has(url)) {
+        try {
+          socket.send(item.packetBuffer);
+          item.dispatchedBrokers.add(url);
+          flushed++;
+        } catch (err) {
+          console.warn(`[MqttRelay] Failed to flush packet ${item.id} to broker ${url}:`, err);
+        }
+      }
+    }
+
+    // Remove items that have been dispatched to all brokers in BROKER_POOL
+    const totalBrokers = MqttRelayTransport.BROKER_POOL.length;
+    this.pendingOutbox = this.pendingOutbox.filter(item => item.dispatchedBrokers.size < totalBrokers);
+
+    if (flushed > 0) {
+      console.log(`[MqttRelay] 🚀 Flushed ${flushed} pending outbox packet(s) to newly authenticated broker: ${url}`);
+    }
   }
 
   // ─── Packet Dispatcher ──────────────────────────────────────────────────────
@@ -468,6 +531,7 @@ export class MqttRelayTransport {
           this.updateConnectedState();
           console.log(`[MqttRelay] ✅ Connected and authenticated with broker: ${url}`);
           this.subscribeToMyTopics(socket);
+          this.flushOutboxForBroker(url, socket);
           this.connectListeners.forEach(cb => {
             try { cb(); } catch (err) { console.warn('[MqttRelay] Error in connect listener:', err); }
           });
@@ -662,6 +726,7 @@ export class MqttRelayTransport {
       } catch {}
     }
     this.brokerSockets.clear();
+    this.pendingOutbox = [];
     this.messageListeners = [];
     this.signalingListeners = [];
     this.connectListeners = [];

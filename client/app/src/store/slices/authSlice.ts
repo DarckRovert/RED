@@ -835,8 +835,13 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                         isAuthenticated: true
                     });
 
-                    // Init local mesh transport
-                    localTransport.init(localHash).catch(() => {});
+                    // Init local mesh transport & ensure mesh delivery listener is registered
+                    localTransport.init(localHash).then(() => {
+                        registerMeshLocalDeliveryListener(get);
+                    }).catch((err) => {
+                        console.warn('[RED Native Fallback] LocalTransport init warning:', err);
+                        registerMeshLocalDeliveryListener(get);
+                    });
                     await get().fetchData();
                     return true;
                 }
