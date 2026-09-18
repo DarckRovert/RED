@@ -78,6 +78,7 @@ const sniCode = fs.readFileSync(sniPath, 'utf8');
 runTest("5. SniSpoofEngine: Contiene catálogo de operadoras y portales cautivos universales", () => {
     assert(sniCode.includes("connectivitycheck.gstatic.com"), "Debe incluir Google Captive");
     assert(sniCode.includes("recargas.claro.com"), "Debe incluir Claro");
+    assert(sniCode.includes("www.claro.com.pe"), "Debe incluir portal web oficial Claro PE");
     assert(sniCode.includes("mi.movistar.com"), "Debe incluir Movistar");
     assert(sniCode.includes("portal.entel.pe"), "Debe incluir Entel");
 });

@@ -357,16 +357,17 @@ public class RedProxyServer {
             remoteOut.write(newFirstLine.getBytes());
             bytesUploaded.addAndGet(newFirstLine.length());
 
-            // Escribir cabeceras filtrando cabeceras hop-by-hop
+            // Escribir cabeceras filtrando cabeceras hop-by-hop y forzar Connection: close
             for (String h : headers) {
-                if (h.toLowerCase().startsWith("proxy-connection:")) {
+                String lower = h.toLowerCase();
+                if (lower.startsWith("proxy-connection:") || lower.startsWith("connection:")) {
                     continue;
                 }
                 remoteOut.write((h + "\r\n").getBytes());
                 bytesUploaded.addAndGet(h.length() + 2);
             }
-            remoteOut.write("\r\n".getBytes());
-            bytesUploaded.addAndGet(2);
+            remoteOut.write("Connection: close\r\n\r\n".getBytes());
+            bytesUploaded.addAndGet("Connection: close\r\n\r\n".length());
 
             // Reenviar cuerpo de petición si existe (POST/PUT)
             if (contentLength > 0) {
@@ -392,12 +393,24 @@ public class RedProxyServer {
             }
             clientOut.flush();
 
+        } catch (SocketTimeoutException ste) {
+            // Si ya se transmitieron bytes al cliente, el timeout es natural por inactividad al finalizar
+            if (bytesDownloaded.get() == 0) {
+                try {
+                    byte[] err = "HTTP/1.1 504 Gateway Timeout\r\nContent-Type: text/plain\r\n\r\nRED Proxy Gateway Timeout\r\n".getBytes();
+                    clientOut.write(err);
+                    clientOut.flush();
+                } catch (Exception ignored) {}
+            }
         } catch (Exception e) {
-            try {
-                byte[] err = ("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\nRED Proxy Gateway Error: " + e.getMessage()).getBytes();
-                clientOut.write(err);
-                clientOut.flush();
-            } catch (Exception ignored) {}
+            // Solo responder 502 si aún no se había emitido la cabecera/cuerpo HTTP del servidor remoto
+            if (bytesDownloaded.get() == 0) {
+                try {
+                    byte[] err = ("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\nRED Proxy Gateway Error: " + e.getMessage()).getBytes();
+                    clientOut.write(err);
+                    clientOut.flush();
+                } catch (Exception ignored) {}
+            }
         } finally {
             closeQuietly(remoteSocket);
         }

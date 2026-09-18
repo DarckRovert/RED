@@ -1744,4 +1744,80 @@ public class RedNodePlugin extends Plugin {
         ret.put("totalRequests", proxy != null ? proxy.getTotalRequests() : 0);
         call.resolve(ret);
     }
+
+    /**
+     * Sondeo de Permeabilidad de Portales Cautivos / Zero-Rating Nativo
+     * Ejecuta una consulta directa por socket TCP crudo al puerto 80 del destino,
+     * midiendo latencia real RTT y detectando redirecciones 301/302 de operadores celulares.
+     */
+    @PluginMethod
+    public void probeCaptivePermeability(PluginCall call) {
+        String host = call.getString("host", "www.claro.com.pe");
+        int port = call.getInt("port", 80);
+        long startTime = System.currentTimeMillis();
+
+        new Thread(() -> {
+            java.net.Socket socket = null;
+            try {
+                socket = new java.net.Socket();
+                socket.connect(new java.net.InetSocketAddress(host, port), 4000);
+                socket.setSoTimeout(4000);
+
+                java.io.OutputStream out = socket.getOutputStream();
+                String req = "GET / HTTP/1.1\r\nHost: " + host + "\r\nUser-Agent: Mozilla/5.0 (Android; Mobile)\r\nConnection: close\r\n\r\n";
+                out.write(req.getBytes());
+                out.flush();
+
+                java.io.InputStream in = socket.getInputStream();
+                java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(in));
+                String statusLine = reader.readLine();
+
+                long latencyMs = System.currentTimeMillis() - startTime;
+                int statusCode = 0;
+                String location = "";
+
+                if (statusLine != null) {
+                    String[] parts = statusLine.split("\\s+");
+                    if (parts.length > 1) {
+                        try {
+                            statusCode = Integer.parseInt(parts[1]);
+                        } catch (Exception ignored) {}
+                    }
+
+                    String line;
+                    while ((line = reader.readLine()) != null && !line.trim().isEmpty()) {
+                        if (line.toLowerCase().startsWith("location:")) {
+                            location = line.substring(9).trim();
+                        }
+                    }
+                }
+
+                boolean permeable = (statusCode == 200 || statusCode == 204 || statusCode == 301 || statusCode == 302 || statusCode == 307);
+
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("success", true);
+                ret.put("isCaptivePermeable", permeable);
+                ret.put("statusCode", statusCode);
+                ret.put("location", location);
+                ret.put("latencyMs", latencyMs);
+                ret.put("host", host);
+                ret.put("statusLine", statusLine != null ? statusLine : "");
+                call.resolve(ret);
+
+            } catch (Exception e) {
+                long latencyMs = System.currentTimeMillis() - startTime;
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("success", false);
+                ret.put("isCaptivePermeable", false);
+                ret.put("statusCode", 0);
+                ret.put("latencyMs", latencyMs);
+                ret.put("error", e.getMessage());
+                call.resolve(ret);
+            } finally {
+                if (socket != null && !socket.isClosed()) {
+                    try { socket.close(); } catch (Exception ignored) {}
+                }
+            }
+        }, "CaptiveProbeThread").start();
+    }
 }

@@ -65,7 +65,7 @@ RED v110.0.0 introduce el módulo **Sovereign Shield**, transformando el sistema
 
 ## Criptografía & Certificación
 
-- **Hash SHA-256 APK Oficial:** `26026A9A2D9D12752338393B538246D454B75A228E6D9A722B07A72426BFA048`
+- **Hash SHA-256 APK Oficial:** `7B460682D459BE028791334EF3F7F67E455624C7BE378C1780ACA65EF3E8124E`
 - **Hash SHA-256 Desktop Node (`red-node.exe`):** `AF1207A0D10CCC9102EEC1AC31DB2E5CCE0B917AB02E1FD83D41572DD27E788D`
 - **Keystore de Firma:** RSA 4096-bit (`red-release.keystore`) con algoritmo de firma SHA256withRSA.
 - **Gobernanza SSOT:** 100% de paridad en los 22 archivos maestros de versión (`v110.0.0` / `110000`).

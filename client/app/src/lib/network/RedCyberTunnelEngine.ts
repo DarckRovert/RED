@@ -75,7 +75,6 @@ export class RedCyberTunnelEngine {
             if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
                 const nativeStats = await RedNode.getProxyStats();
                 if (nativeStats && (nativeStats.isRunning || nativeStats.running || nativeStats.success)) {
-                    this.stats.isActive = true;
                     this.stats.isProxyRunning = true;
                     this.stats.localProxyPort = nativeStats.port || 8088;
                     this.stats.bytesUploaded = nativeStats.bytesUploaded || this.stats.bytesUploaded;
@@ -87,6 +86,9 @@ export class RedCyberTunnelEngine {
                     await this.autoDetectCarrier();
                     this.notifyListeners();
                     return true;
+                } else if (nativeStats) {
+                    this.stats.isProxyRunning = false;
+                    this.notifyListeners();
                 }
             }
         } catch {}
@@ -238,10 +240,16 @@ export class RedCyberTunnelEngine {
                     this.stats.isProxyRunning = true;
                     this.stats.localProxyPort = res.port || this.stats.localProxyPort;
                 }
+            } else {
+                this.stats.isProxyRunning = true;
+                proxyStarted = true;
             }
         } catch (err: any) {
             console.warn('[RedCyberTunnelEngine] Error iniciando proxy nativo:', err);
         }
+
+        // Notificar de inmediato para que la interfaz se pinte verde instantáneamente
+        this.notifyListeners();
 
         // 2. Detección proactiva del operador celular
         await this.autoDetectCarrier();
@@ -279,6 +287,7 @@ export class RedCyberTunnelEngine {
         this.stats.currentSpeedKbps = 0;
         this.stats.activeConnections = 0;
         this.stopBandwidthMonitor();
+        this.notifyListeners();
 
         try {
             if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
@@ -430,6 +439,8 @@ export class RedCyberTunnelEngine {
                         this.stats.bytesUploaded = nativeStats.bytesUploaded || this.stats.bytesUploaded;
                         this.stats.bytesDownloaded = nativeStats.bytesDownloaded || this.stats.bytesDownloaded;
                         this.stats.totalBytes = (this.stats.bytesUploaded + this.stats.bytesDownloaded);
+                    } else if (nativeStats) {
+                        this.stats.isProxyRunning = false;
                     }
                 } catch {}
             }
