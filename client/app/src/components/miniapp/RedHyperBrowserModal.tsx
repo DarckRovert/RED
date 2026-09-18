@@ -12,6 +12,7 @@ import { useTranslation } from '../../lib/i18n/i18nEngine';
 import { toast } from '../Toast';
 import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
 import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
+import { redCyberTunnel, CyberTunnelStats } from '../../lib/network/RedCyberTunnelEngine';
 
 /** Clipboard with <textarea> fallback for environments without Clipboard API */
 function copyToClipboard(text: string): void {
@@ -92,6 +93,11 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [showSecurityShield, setShowSecurityShield] = useState<boolean>(false);
     const [currentAppBundle, setCurrentAppBundle] = useState<RedAppBundle | null>(null);
+    const [tunnelStats, setTunnelStats] = useState<CyberTunnelStats>(() => redCyberTunnel.getStats());
+
+    useEffect(() => {
+        return redCyberTunnel.addListener(setTunnelStats);
+    }, []);
 
     // Active Checkout Modal state for in-browser dApp purchases
     const [activeCheckoutIntent, setActiveCheckoutIntent] = useState<{
@@ -305,9 +311,34 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
             // Case 2: ClearNet Web (https:// or http://)
             else {
                 setCurrentAppBundle(null);
-                const hasInternet = await meshGatewayEngine.checkInternetConnectivity();
                 let hostname = 'Sitio Web';
                 try { hostname = new URL(cleanUrl).hostname; } catch {}
+
+                // Si el túnel Zero-Rating está activo, priorizar enrutamiento soberano
+                if (redCyberTunnel.isTunnelActive()) {
+                    try {
+                        const tunneled = await redCyberTunnel.fetchTunneled(cleanUrl);
+                        setRenderedContent({ 
+                            type: 'html', 
+                            src: tunneled.body, 
+                            title: `${hostname} (Zero-Rating: ${tunneled.carrierHost})` 
+                        });
+                        updateTab(activeTabId, {
+                            url: cleanUrl,
+                            title: `${hostname} (Zero-Rating)`,
+                            icon: '⚡',
+                            isProxy: true,
+                            hops: tunneled.fromGateway ? 2 : 1,
+                            relayDid: tunneled.carrierHost
+                        });
+                        setIsLoading(false);
+                        return;
+                    } catch (tunErr) {
+                        console.warn('[RedHyperBrowser] Fallo fetch tunneled, reintentando reader:', tunErr);
+                    }
+                }
+
+                const hasInternet = await meshGatewayEngine.checkInternetConnectivity();
 
                 if (hasInternet) {
                     // Para sitios externos con posibles restricciones de iframe (Google, Wikipedia, etc.)
@@ -684,6 +715,24 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
                                 }}>
                                     <span>⚡</span>
                                     <span>red://</span>
+                                </span>
+                            ) : tunnelStats.isActive ? (
+                                <span style={{
+                                    fontSize: "0.68rem",
+                                    padding: "2px 8px",
+                                    background: "rgba(56, 189, 248, 0.25)",
+                                    border: "1px solid rgba(56, 189, 248, 0.6)",
+                                    color: "#38bdf8",
+                                    borderRadius: "6px",
+                                    fontFamily: "JetBrains Mono, monospace",
+                                    fontWeight: 900,
+                                    whiteSpace: "nowrap",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px"
+                                }}>
+                                    <span>⚡</span>
+                                    <span>ZERO-RATING: {tunnelStats.activeProvider.split(' ')[0]}</span>
                                 </span>
                             ) : activeTab.isProxy ? (
                                 <span style={{

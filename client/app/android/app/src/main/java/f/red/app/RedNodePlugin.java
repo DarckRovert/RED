@@ -1704,4 +1704,37 @@ public class RedNodePlugin extends Plugin {
         ret.put("success", true);
         call.resolve(ret);
     }
+
+    @PluginMethod
+    public void startProxyServer(PluginCall call) {
+        int port = call.getInt("port", 8088);
+        boolean started = RedNodeService.startProxyServer(port);
+        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+        ret.put("success", started);
+        ret.put("port", port);
+        ret.put("host", "127.0.0.1");
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void stopProxyServer(PluginCall call) {
+        RedNodeService.stopProxyServer();
+        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+        ret.put("success", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getProxyStats(PluginCall call) {
+        RedProxyServer proxy = RedNodeService.getProxyServer();
+        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+        ret.put("isRunning", proxy != null && proxy.isRunning());
+        ret.put("port", proxy != null ? proxy.getBoundPort() : 8088);
+        ret.put("host", "127.0.0.1");
+        ret.put("bytesUploaded", proxy != null ? proxy.getBytesUploaded() : 0);
+        ret.put("bytesDownloaded", proxy != null ? proxy.getBytesDownloaded() : 0);
+        ret.put("activeConnections", proxy != null ? proxy.getActiveConnections() : 0);
+        ret.put("totalRequests", proxy != null ? proxy.getTotalRequests() : 0);
+        call.resolve(ret);
+    }
 }

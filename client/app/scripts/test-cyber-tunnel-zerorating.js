@@ -115,6 +115,35 @@ runTest("7. Monitor de Ancho de Banda: Cálculo matemático riguroso de velocida
     assert.strictEqual(kbps, 4000, `Velocidad esperada 4000 Kbps, calculada: ${kbps}`);
 });
 
+// ── 5. Integración con RedNodePlugin y RedProxyServer (Android Nativo) ──────
+const redProxyJavaPath = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'java', 'f', 'red', 'app', 'RedProxyServer.java');
+const redProxyJavaCode = fs.readFileSync(redProxyJavaPath, 'utf8');
+
+runTest("8. RedProxyServer.java: Implementación de ServerSocket local multihilo y túnel CONNECT", () => {
+    assert(redProxyJavaCode.includes("class RedProxyServer"), "Debe definir RedProxyServer");
+    assert(redProxyJavaCode.includes("new ServerSocket"), "Debe instanciar ServerSocket");
+    assert(redProxyJavaCode.includes("CONNECT"), "Debe soportar método CONNECT para túneles HTTPS");
+    assert(redProxyJavaCode.includes("bytesUploaded"), "Debe registrar bytesUploaded");
+    assert(redProxyJavaCode.includes("bytesDownloaded"), "Debe registrar bytesDownloaded");
+});
+
+runTest("9. RedCyberTunnelEngine: Autodetección de operador y sincronización nativa de sockets", () => {
+    assert(tunnelEngineCode.includes("autoDetectCarrier("), "Debe implementar autoDetectCarrier");
+    assert(tunnelEngineCode.includes("RedNode.startProxyServer"), "Debe invocar inicio de proxy nativo");
+    assert(tunnelEngineCode.includes("RedNode.getProxyStats"), "Debe sincronizar estadísticas nativas");
+    assert(tunnelEngineCode.includes("isProxyRunning: boolean;"), "Debe rastrear estado del socket proxy");
+});
+
+// ── 6. Integración de RedHyperBrowserModal con RedCyberTunnelEngine ─────────
+const hyperBrowserPath = path.join(__dirname, '..', 'src', 'components', 'miniapp', 'RedHyperBrowserModal.tsx');
+const hyperBrowserCode = fs.readFileSync(hyperBrowserPath, 'utf8');
+
+runTest("10. RedHyperBrowserModal: Enrutamiento soberano Zero-Rating y badge activo", () => {
+    assert(hyperBrowserCode.includes("redCyberTunnel.isTunnelActive()"), "Debe consultar estado del túnel");
+    assert(hyperBrowserCode.includes("redCyberTunnel.fetchTunneled("), "Debe ejecutar fetch a través del túnel");
+    assert(hyperBrowserCode.includes("ZERO-RATING"), "Debe mostrar badge táctico de Zero-Rating");
+});
+
 console.log("\n================================================================================");
 console.log(`📊 RESULTADO FINAL SUITE CYBERTUNNEL: ${passedTests}/${totalTests} PRUEBAS EXITOSAS`);
 console.log("================================================================================\n");
@@ -122,3 +151,4 @@ console.log("===================================================================
 if (passedTests !== totalTests) {
     process.exit(1);
 }
+

@@ -15,6 +15,7 @@ export function RedCyberTunnelModal() {
     const [stats, setStats] = useState<CyberTunnelStats>(() => redCyberTunnel.getStats());
     const [targets, setTargets] = useState<SniTarget[]>(() => redCyberTunnel.getTargets());
     const [isTesting, setIsTesting] = useState<boolean>(false);
+    const [isDetecting, setIsDetecting] = useState<boolean>(false);
     const [showApnGuide, setShowApnGuide] = useState<boolean>(false);
 
     // Manejo de retroceso Android y ESC
@@ -34,11 +35,16 @@ export function RedCyberTunnelModal() {
         return () => unsub();
     }, []);
 
+    // Autodetección al montar el modal si no se ha detectado aún
+    useEffect(() => {
+        redCyberTunnel.autoDetectCarrier().catch(() => {});
+    }, []);
+
     // Conmutar estado del túnel
     const handleToggleTunnel = async () => {
         if (stats.isActive) {
-            redCyberTunnel.deactivateTunnel();
-            toast.info("🔌 Túnel Zero-Rating desactivado.");
+            await redCyberTunnel.deactivateTunnel();
+            toast.info("🔌 Túnel Zero-Rating y proxy local 8088 desactivados.");
         } else {
             const res = await redCyberTunnel.activateTunnel();
             if (res.success) {
@@ -61,6 +67,19 @@ export function RedCyberTunnelModal() {
         toast.info(`⚙️ Modo de túnel establecido en: [${mode}]`);
     };
 
+    // Autodetectar operador SIM
+    const handleAutoDetectCarrier = async () => {
+        setIsDetecting(true);
+        try {
+            const detected = await redCyberTunnel.autoDetectCarrier();
+            toast.success(`📡 Operador SIM detectado: [${detected}]`);
+        } catch (err: any) {
+            toast.error(`❌ Error al detectar operador: ${err.message}`);
+        } finally {
+            setIsDetecting(false);
+        }
+    };
+
     // Test empírico de permeabilidad
     const handleTestPermeability = async () => {
         setIsTesting(true);
@@ -79,6 +98,7 @@ export function RedCyberTunnelModal() {
     };
 
     const formatBytes = (bytes: number) => {
+        if (!bytes || bytes <= 0) return "0 B";
         if (bytes < 1024) return `${bytes} B`;
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
         return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
@@ -101,7 +121,7 @@ export function RedCyberTunnelModal() {
             <div style={{
                 padding: "16px 20px",
                 borderBottom: "1px solid rgba(56, 189, 248, 0.3)",
-                backgroundColor: "rgba(15, 23, 42, 0.8)",
+                backgroundColor: "rgba(15, 23, 42, 0.85)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
@@ -109,8 +129,8 @@ export function RedCyberTunnelModal() {
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                     <div style={{
-                        width: "36px",
-                        height: "36px",
+                        width: "38px",
+                        height: "38px",
                         borderRadius: "8px",
                         backgroundColor: stats.isActive ? "rgba(56, 189, 248, 0.2)" : "rgba(148, 163, 184, 0.15)",
                         border: `1px solid ${stats.isActive ? "#38bdf8" : "#64748b"}`,
@@ -123,11 +143,11 @@ export function RedCyberTunnelModal() {
                     </div>
                     <div>
                         <div style={{ fontSize: "16px", fontWeight: "bold", letterSpacing: "1px", color: stats.isActive ? "#38bdf8" : "#94a3b8" }}>
-                            CYBERTUNNEL // TÚNEL ZERO-RATING
+                            CYBERTUNNEL // TÚNEL ZERO-RATING & PROXY
                         </div>
-                        <div style={{ fontSize: "11px", color: "#94a3b8" }}>
+                        <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
                             {stats.isActive
-                                ? `ESTADO: ACTIVO // PROXY 127.0.0.1:${stats.localProxyPort} // [${stats.activeProvider}]`
+                                ? `ESTADO: ACTIVO // PROXY ${stats.localProxyHost}:${stats.localProxyPort} [${stats.isProxyRunning ? 'LISTEN' : 'INIT'}] // OPERADOR: [${stats.detectedCarrier || stats.activeProvider}]`
                                 : "ESTADO: DESCONECTADO (TRÁFICO CONVENCIONAL)"}
                         </div>
                     </div>
@@ -163,8 +183,8 @@ export function RedCyberTunnelModal() {
                 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                         <span style={{ fontSize: "18px" }}>🌐</span>
-                        <span style={{ fontSize: "13px", color: "#bae6fd" }}>
-                            Túnel enrutando tráfico celular sin saldo a través de <strong>{stats.activeSniHost}</strong>.
+                        <span style={{ fontSize: "12px", color: "#bae6fd" }}>
+                            Túnel enrutando tráfico celular a través de <strong>{stats.activeSniHost}</strong>. Socket local en <strong>127.0.0.1:{stats.localProxyPort}</strong> ({stats.isProxyRunning ? 'Activo' : 'Iniciando'}).
                         </span>
                     </div>
                     <div style={{ display: "flex", gap: "8px" }}>
@@ -175,22 +195,22 @@ export function RedCyberTunnelModal() {
                                 color: "#fff",
                                 border: "none",
                                 borderRadius: "6px",
-                                padding: "6px 14px",
+                                padding: "7px 14px",
                                 fontWeight: "bold",
                                 fontSize: "12px",
                                 cursor: "pointer",
                             }}
                         >
-                            ABRIR NAVEGADOR RED
+                            🌐 ABRIR NAVEGADOR RED
                         </button>
                         <button
                             onClick={handleToggleTunnel}
                             style={{
-                                backgroundColor: "rgba(239, 68, 68, 0.8)",
+                                backgroundColor: "rgba(239, 68, 68, 0.85)",
                                 color: "#fff",
                                 border: "none",
                                 borderRadius: "6px",
-                                padding: "6px 14px",
+                                padding: "7px 14px",
                                 fontWeight: "bold",
                                 fontSize: "12px",
                                 cursor: "pointer",
@@ -203,12 +223,12 @@ export function RedCyberTunnelModal() {
             )}
 
             {/* Cuerpo */}
-            <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: "20px" }}>
+            <div style={{ padding: "20px", maxWidth: "920px", margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: "20px" }}>
 
                 {/* Switch de Activación Primario */}
                 <div style={{
-                    backgroundColor: "rgba(15, 23, 42, 0.6)",
-                    border: `1px solid ${stats.isActive ? "#38bdf8" : "rgba(255, 255, 255, 0.1)"}`,
+                    backgroundColor: "rgba(15, 23, 42, 0.65)",
+                    border: `1px solid ${stats.isActive ? "#38bdf8" : "rgba(255, 255, 255, 0.12)"}`,
                     borderRadius: "14px",
                     padding: "20px",
                     display: "flex",
@@ -219,10 +239,10 @@ export function RedCyberTunnelModal() {
                 }}>
                     <div>
                         <div style={{ fontSize: "16px", fontWeight: "bold", color: "#f8fafc" }}>
-                            INTERRUPTOR MAESTRO DEL TÚNEL DE DATOS
+                            INTERRUPTOR MAESTRO DEL TÚNEL SOBERANO
                         </div>
                         <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "4px" }}>
-                            Permite acceder a internet sin saldo activo evadiendo el portal cautivo del operador.
+                            Inicia un socket proxy local multihilo en 127.0.0.1:8088 y activa el camuflaje TLS SNI Zero-Rating.
                         </div>
                     </div>
                     <button
@@ -247,73 +267,114 @@ export function RedCyberTunnelModal() {
                 {/* Dashboard de Telemetría en Tiempo Real */}
                 <div style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
                     gap: "12px",
                 }}>
-                    <div style={{ backgroundColor: "rgba(15, 23, 42, 0.6)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
-                        <div style={{ fontSize: "11px", color: "#94a3b8" }}>VELOCIDAD INSTANTÁNEA</div>
-                        <div style={{ fontSize: "20px", fontWeight: "bold", color: "#38bdf8", marginTop: "4px" }}>
+                    <div style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", letterSpacing: "0.5px" }}>VELOCIDAD INSTANTÁNEA</div>
+                        <div style={{ fontSize: "19px", fontWeight: "bold", color: "#38bdf8", marginTop: "4px" }}>
                             {stats.currentSpeedKbps} Kbps
                         </div>
                     </div>
 
-                    <div style={{ backgroundColor: "rgba(15, 23, 42, 0.6)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
-                        <div style={{ fontSize: "11px", color: "#94a3b8" }}>DATOS EVADIDOS / AHORRADOS</div>
-                        <div style={{ fontSize: "20px", fontWeight: "bold", color: "#4ade80", marginTop: "4px" }}>
+                    <div style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", letterSpacing: "0.5px" }}>DATOS TUNELIZADOS</div>
+                        <div style={{ fontSize: "19px", fontWeight: "bold", color: "#4ade80", marginTop: "4px" }}>
                             {formatBytes(stats.totalBytes)}
                         </div>
-                    </div>
-
-                    <div style={{ backgroundColor: "rgba(15, 23, 42, 0.6)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
-                        <div style={{ fontSize: "11px", color: "#94a3b8" }}>LATENCIA RTT</div>
-                        <div style={{ fontSize: "20px", fontWeight: "bold", color: "#facc15", marginTop: "4px" }}>
-                            {stats.latencyMs > 0 ? `${stats.latencyMs} ms` : "---"}
+                        <div style={{ fontSize: "9px", color: "#64748b", marginTop: "2px" }}>
+                            ▲ {formatBytes(stats.bytesUploaded)} | ▼ {formatBytes(stats.bytesDownloaded)}
                         </div>
                     </div>
 
-                    <div style={{ backgroundColor: "rgba(15, 23, 42, 0.6)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
-                        <div style={{ fontSize: "11px", color: "#94a3b8" }}>PUERTO PROXY LOCAL</div>
-                        <div style={{ fontSize: "20px", fontWeight: "bold", color: "#c084fc", marginTop: "4px" }}>
-                            {stats.localProxyHost}:{stats.localProxyPort}
+                    <div style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", letterSpacing: "0.5px" }}>SERVIDOR PROXY LOCAL</div>
+                        <div style={{ fontSize: "17px", fontWeight: "bold", color: "#c084fc", marginTop: "4px" }}>
+                            127.0.0.1:{stats.localProxyPort}
+                        </div>
+                        <div style={{ fontSize: "10px", color: stats.isProxyRunning ? "#4ade80" : "#94a3b8", marginTop: "2px" }}>
+                            {stats.isProxyRunning ? "● LISTEN (ACTIVO)" : "○ DESCONECTADO"}
+                        </div>
+                    </div>
+
+                    <div style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", letterSpacing: "0.5px" }}>OPERADOR DETECTADO</div>
+                        <div style={{ fontSize: "17px", fontWeight: "bold", color: "#38bdf8", marginTop: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {stats.detectedCarrier || "Auto"}
+                        </div>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {stats.activeProvider}
+                        </div>
+                    </div>
+
+                    <div style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", letterSpacing: "0.5px" }}>CONEXIONES / REQS</div>
+                        <div style={{ fontSize: "19px", fontWeight: "bold", color: "#facc15", marginTop: "4px" }}>
+                            {stats.activeConnections} / {stats.totalRequests}
+                        </div>
+                    </div>
+
+                    <div style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", letterSpacing: "0.5px" }}>LATENCIA RTT</div>
+                        <div style={{ fontSize: "19px", fontWeight: "bold", color: "#fb923c", marginTop: "4px" }}>
+                            {stats.latencyMs > 0 ? `${stats.latencyMs} ms` : "---"}
                         </div>
                     </div>
                 </div>
 
                 {/* Selector de Perfil del Operador Celular */}
                 <div style={{
-                    backgroundColor: "rgba(15, 23, 42, 0.6)",
+                    backgroundColor: "rgba(15, 23, 42, 0.65)",
                     border: "1px solid rgba(255, 255, 255, 0.1)",
                     borderRadius: "12px",
                     padding: "20px",
                 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", flexWrap: "wrap", gap: "10px" }}>
                         <div>
                             <div style={{ fontSize: "14px", fontWeight: "bold", color: "#38bdf8" }}>
                                 PERFIL DEL OPERADOR / PORTAL CAUTIVO (SNI SPOOF):
                             </div>
                             <div style={{ fontSize: "11px", color: "#94a3b8" }}>
-                                Selecciona el operador correspondiente a tu tarjeta SIM para camuflar el encabezado TLS.
+                                Selecciona el operador correspondiente a tu SIM para camuflar el tráfico HTTP/TLS.
                             </div>
                         </div>
-                        <button
-                            onClick={handleTestPermeability}
-                            disabled={isTesting}
-                            style={{
-                                backgroundColor: "rgba(56, 189, 248, 0.15)",
-                                border: "1px solid #38bdf8",
-                                color: "#38bdf8",
-                                borderRadius: "6px",
-                                padding: "6px 14px",
-                                fontSize: "12px",
-                                fontWeight: "bold",
-                                cursor: isTesting ? "not-allowed" : "pointer",
-                            }}
-                        >
-                            {isTesting ? "SONDEANDO..." : "🔍 PROBAR PERMEABILIDAD"}
-                        </button>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                            <button
+                                onClick={handleAutoDetectCarrier}
+                                disabled={isDetecting}
+                                style={{
+                                    backgroundColor: "rgba(34, 197, 94, 0.15)",
+                                    border: "1px solid #22c55e",
+                                    color: "#4ade80",
+                                    borderRadius: "6px",
+                                    padding: "6px 12px",
+                                    fontSize: "12px",
+                                    fontWeight: "bold",
+                                    cursor: isDetecting ? "not-allowed" : "pointer",
+                                }}
+                            >
+                                {isDetecting ? "DETECTANDO..." : "📡 AUTODETECTAR SIM"}
+                            </button>
+                            <button
+                                onClick={handleTestPermeability}
+                                disabled={isTesting}
+                                style={{
+                                    backgroundColor: "rgba(56, 189, 248, 0.15)",
+                                    border: "1px solid #38bdf8",
+                                    color: "#38bdf8",
+                                    borderRadius: "6px",
+                                    padding: "6px 12px",
+                                    fontSize: "12px",
+                                    fontWeight: "bold",
+                                    cursor: isTesting ? "not-allowed" : "pointer",
+                                }}
+                            >
+                                {isTesting ? "SONDEANDO..." : "🔍 PROBAR PERMEABILIDAD"}
+                            </button>
+                        </div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "10px" }}>
                         {targets.map((tgt, idx) => (
                             <button
                                 key={tgt.provider}
@@ -341,7 +402,7 @@ export function RedCyberTunnelModal() {
 
                 {/* Guía Paso a Paso para Enrutar TikTok y Apps Externas */}
                 <div style={{
-                    backgroundColor: "rgba(15, 23, 42, 0.6)",
+                    backgroundColor: "rgba(15, 23, 42, 0.65)",
                     border: "1px solid rgba(255, 255, 255, 0.1)",
                     borderRadius: "12px",
                     padding: "16px 20px",
@@ -352,7 +413,7 @@ export function RedCyberTunnelModal() {
                                 📱 CÓMO CONECTAR TIKTOK, YOUTUBE Y NAVEGADORES EXTERNOS:
                             </div>
                             <div style={{ fontSize: "11px", color: "#94a3b8" }}>
-                                Instrucciones para derivar todo el tráfico de datos del teléfono a través del puerto proxy local de RED.
+                                Instrucciones para derivar el tráfico del teléfono a través del socket proxy nativo de RED en 127.0.0.1:8088.
                             </div>
                         </div>
                         <button

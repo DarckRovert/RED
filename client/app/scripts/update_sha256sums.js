@@ -61,6 +61,14 @@ for (const apkName of apkEntries) {
     console.log(`  ✅  ${hash.slice(0, 16)}…  ${apkName}`);
 }
 
+// Binario de nodo Windows (red-node.exe)
+const nodeExePath = path.join(RELEASE_ASSETS, 'red-node.exe');
+if (fs.existsSync(nodeExePath)) {
+    const nodeHash = sha256File(nodeExePath);
+    lines.push(`${nodeHash}  red-node.exe`);
+    console.log(`  ✅  ${nodeHash.slice(0, 16)}…  red-node.exe`);
+}
+
 if (anyMissing) {
     console.error('\n❌  SHA256SUMS.txt NO fue actualizado (faltan APKs).\n');
     process.exit(1);

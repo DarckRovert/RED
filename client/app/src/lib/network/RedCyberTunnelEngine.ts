@@ -6,25 +6,35 @@
  * Arquitectura de Evasión y Enrutamiento Celular sin Saldo:
  * 1. Modo Zero-Rating SNI (High-Speed Line Rate):
  *    Aprovecha la permeabilidad de portales cautivos y dominios exentos de cobro
- *    (Google Captive, Claro, Movistar, Tigo, Entel, Cloudflare Anycast) para tunelizar
+ *    (Google Captive, Claro PE, Movistar, Entel, Bitel, Cloudflare Anycast) para tunelizar
  *    tráfico TCP/TLS a través del firewall del operador sin consumir saldo prepago/postpago.
  * 2. Modo Mesh ClearNet Gateway:
  *    Rutea peticiones a través de vecinos de la malla con enlace a internet activo.
- * 3. Servidor Proxy Local (127.0.0.1:8088):
- *    Provee el punto de enlace para que el sistema operativo Android (mediante proxy APN o Wi-Fi)
- *    o aplicaciones externas (TikTok, navegadores web, YouTube) deriven su tráfico por RED.
+ * 3. Servidor Proxy Local Nativo (127.0.0.1:8088):
+ *    Provee un socket ServerSocket multihilo real en Android ejecutado en RedProxyServer.java.
+ *    Permite que el sistema Android (mediante proxy APN o Wi-Fi) o aplicaciones externas
+ *    (TikTok, navegadores web, YouTube) deriven su tráfico por RED sin CONNECTION_REFUSED.
  * 4. Telemetría y Contabilidad Criptográfica en Tiempo Real:
- *    Monitorea velocidad instantánea (Kbps/Mbps), bytes transferidos, latencia RTT y estado de penetración.
+ *    Monitorea velocidad instantánea (Kbps/Mbps), bytes transferidos, conexiones activas,
+ *    latencia RTT y estado de penetración en tiempo real.
  */
 
+import { registerPlugin } from '@capacitor/core';
 import { SniSpoofEngine, SniTarget, SniProbeResult } from './sniSpoofEngine';
 import { meshGatewayEngine } from './MeshGatewayEngine';
 import { RED_VERSION } from '../version';
+
+const RedNode = registerPlugin<any>('RedNode');
+const RedShield = registerPlugin<any>('RedShield');
 
 export type CyberTunnelMode = 'ZERO_RATING_SNI' | 'MESH_GATEWAY' | 'DNS_STEALTH';
 
 export interface CyberTunnelStats {
     isActive: boolean;
+    isProxyRunning: boolean;
+    detectedCarrier: string;
+    activeConnections: number;
+    totalRequests: number;
     mode: CyberTunnelMode;
     selectedTargetIndex: number;
     activeProvider: string;
@@ -53,6 +63,32 @@ export class RedCyberTunnelEngine {
 
     private constructor() {
         this.stats = this.loadInitialStats();
+        if (typeof window !== 'undefined') {
+            setTimeout(() => {
+                this.checkNativeProxyStatus().catch(() => {});
+            }, 100);
+        }
+    }
+
+    public async checkNativeProxyStatus(): Promise<void> {
+        try {
+            if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
+                const nativeStats = await RedNode.getProxyStats();
+                if (nativeStats && nativeStats.isRunning) {
+                    this.stats.isActive = true;
+                    this.stats.isProxyRunning = true;
+                    this.stats.localProxyPort = nativeStats.port || 8088;
+                    this.stats.bytesUploaded = nativeStats.bytesUploaded || this.stats.bytesUploaded;
+                    this.stats.bytesDownloaded = nativeStats.bytesDownloaded || this.stats.bytesDownloaded;
+                    this.stats.totalBytes = (this.stats.bytesUploaded + this.stats.bytesDownloaded);
+                    this.stats.activeConnections = nativeStats.activeConnections || 0;
+                    this.stats.totalRequests = nativeStats.totalRequests || 0;
+                    this.startBandwidthMonitor();
+                    await this.autoDetectCarrier();
+                    this.notifyListeners();
+                }
+            }
+        } catch {}
     }
 
     public static getInstance(): RedCyberTunnelEngine {
@@ -66,6 +102,10 @@ export class RedCyberTunnelEngine {
         const defaultTarget = SniSpoofEngine.ZERO_RATING_TARGETS[0];
         const defaults: CyberTunnelStats = {
             isActive: false,
+            isProxyRunning: false,
+            detectedCarrier: 'Auto (Detectando...)',
+            activeConnections: 0,
+            totalRequests: 0,
             mode: 'ZERO_RATING_SNI',
             selectedTargetIndex: 0,
             activeProvider: defaultTarget.provider,
@@ -87,7 +127,7 @@ export class RedCyberTunnelEngine {
             const raw = localStorage.getItem(STORAGE_KEY_CYBER_TUNNEL);
             if (raw) {
                 const parsed = JSON.parse(raw);
-                return { ...defaults, ...parsed, isActive: false }; // Iniciar desactivado por seguridad
+                return { ...defaults, ...parsed, isActive: false, isProxyRunning: false }; // Iniciar desactivado por seguridad
             }
         } catch {}
         return defaults;
@@ -117,6 +157,46 @@ export class RedCyberTunnelEngine {
     }
 
     /**
+     * Detección automática del operador celular y auto-asignación de portal zero-rating
+     */
+    public async autoDetectCarrier(): Promise<string> {
+        let detected = 'Desconocido';
+        try {
+            if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedShield')) {
+                const rf = await RedShield.getRfStatus();
+                if (rf && rf.carrierName && rf.carrierName.trim() !== '') {
+                    detected = rf.carrierName;
+                }
+            }
+        } catch {}
+
+        this.stats.detectedCarrier = detected;
+
+        // Auto-selección inteligente del perfil si coincide con operadores soportados
+        const targets = SniSpoofEngine.ZERO_RATING_TARGETS;
+        const upper = detected.toUpperCase();
+
+        let matchIdx = -1;
+        if (upper.includes('CLARO') || upper.includes('71610')) {
+            matchIdx = targets.findIndex(t => t.provider.includes('Claro PE') || t.sniHost.includes('claro.com.pe'));
+        } else if (upper.includes('MOVISTAR') || upper.includes('TELEFONICA') || upper.includes('71606')) {
+            matchIdx = targets.findIndex(t => t.provider.includes('Movistar PE') || t.sniHost.includes('movistar.com.pe'));
+        } else if (upper.includes('ENTEL') || upper.includes('71617')) {
+            matchIdx = targets.findIndex(t => t.provider.includes('Entel PE') || t.sniHost.includes('entel.pe'));
+        } else if (upper.includes('BITEL') || upper.includes('VIETTEL') || upper.includes('71615')) {
+            matchIdx = targets.findIndex(t => t.provider.includes('Bitel PE') || t.sniHost.includes('bitel.com.pe'));
+        }
+
+        if (matchIdx !== -1) {
+            this.selectTarget(matchIdx);
+        } else {
+            this.notifyListeners();
+        }
+
+        return detected;
+    }
+
+    /**
      * Selecciona el perfil del operador o portal cautivo preferido
      */
     public selectTarget(index: number): void {
@@ -141,36 +221,71 @@ export class RedCyberTunnelEngine {
     }
 
     /**
-     * Activa el túnel soberano de datos
+     * Activa el túnel soberano de datos y el servidor proxy local
      */
     public async activateTunnel(): Promise<{ success: boolean; message: string }> {
         this.stats.isActive = true;
+
+        // 1. Iniciar Servidor Proxy Nativo en Android (127.0.0.1:8088)
+        let proxyStarted = false;
+        try {
+            if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
+                const res = await RedNode.startProxyServer({ port: this.stats.localProxyPort });
+                if (res && res.running) {
+                    proxyStarted = true;
+                    this.stats.isProxyRunning = true;
+                    this.stats.localProxyPort = res.port || this.stats.localProxyPort;
+                }
+            }
+        } catch (err: any) {
+            console.warn('[RedCyberTunnelEngine] Error iniciando proxy nativo:', err);
+        }
+
+        // 2. Detección proactiva del operador celular
+        await this.autoDetectCarrier();
+
+        // 3. Iniciar telemetría de ancho de banda y sincronización periódica de sockets
         this.startBandwidthMonitor();
 
-        // Realizar comprobación inmediata de permeabilidad
+        // 4. Realizar comprobación inmediata de permeabilidad
         const probe = await this.testPermeability();
         this.notifyListeners();
+
+        const proxyMsg = proxyStarted 
+            ? `Socket local 127.0.0.1:${this.stats.localProxyPort} [EN ESCUCHA]`
+            : `Modo Web/Mesh activo en puerto ${this.stats.localProxyPort}`;
 
         if (probe.isCaptivePermeable) {
             return {
                 success: true,
-                message: `Túnel Zero-Rating activo vía [${this.stats.activeProvider}]. Red celular permeable.`,
+                message: `Túnel Zero-Rating activo vía [${this.stats.activeProvider}]. ${proxyMsg}.`,
             };
         } else {
             return {
-                success: true, // Se mantiene activo para reintentos o tráfico local
-                message: `Túnel iniciado en 127.0.0.1:${this.stats.localProxyPort}. Sin respuesta del portal seleccionado aún.`,
+                success: true,
+                message: `Túnel iniciado. ${proxyMsg}. Operador: ${this.stats.detectedCarrier}.`,
             };
         }
     }
 
     /**
-     * Desactiva el túnel
+     * Desactiva el túnel y el servidor proxy local
      */
     public deactivateTunnel(): void {
         this.stats.isActive = false;
+        this.stats.isProxyRunning = false;
         this.stats.currentSpeedKbps = 0;
+        this.stats.activeConnections = 0;
         this.stopBandwidthMonitor();
+
+        try {
+            if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
+                RedNode.stopProxyServer().catch(() => {});
+            }
+        } catch (err) {
+            console.warn('[RedCyberTunnelEngine] Error deteniendo proxy nativo:', err);
+        }
+
         this.notifyListeners();
     }
 
@@ -233,7 +348,6 @@ export class RedCyberTunnelEngine {
                 });
 
                 const text = await response.text();
-                const totalBytes = text.length + (options?.body ? String(options.body).length : 0);
                 this.recordBytes(options?.body ? String(options.body).length : 256, text.length);
 
                 this.stats.latencyMs = Math.round(performance.now() - startTime);
@@ -296,7 +410,28 @@ export class RedCyberTunnelEngine {
         this.lastSampleTime = Date.now();
         this.bytesSinceLastSample = 0;
 
-        this.bandwidthIntervalTimer = setInterval(() => {
+        this.bandwidthIntervalTimer = setInterval(async () => {
+            // Si estamos en entorno Capacitor nativo, consultar estadísticas del socket Java
+            if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
+                try {
+                    const nativeStats = await RedNode.getProxyStats();
+                    if (nativeStats && nativeStats.running) {
+                        this.stats.isProxyRunning = true;
+                        this.stats.activeConnections = nativeStats.activeConnections || 0;
+                        this.stats.totalRequests = nativeStats.totalRequests || 0;
+
+                        const upDelta = Math.max(0, (nativeStats.bytesUploaded || 0) - this.stats.bytesUploaded);
+                        const downDelta = Math.max(0, (nativeStats.bytesDownloaded || 0) - this.stats.bytesDownloaded);
+                        if (upDelta > 0 || downDelta > 0) {
+                            this.bytesSinceLastSample += (upDelta + downDelta);
+                        }
+                        this.stats.bytesUploaded = nativeStats.bytesUploaded || this.stats.bytesUploaded;
+                        this.stats.bytesDownloaded = nativeStats.bytesDownloaded || this.stats.bytesDownloaded;
+                        this.stats.totalBytes = (this.stats.bytesUploaded + this.stats.bytesDownloaded);
+                    }
+                } catch {}
+            }
+
             const now = Date.now();
             const elapsedSec = Math.max(0.1, (now - this.lastSampleTime) / 1000);
             const kbps = Math.round(((this.bytesSinceLastSample * 8) / 1024) / elapsedSec);

@@ -74,6 +74,18 @@ public class RedNodeService extends Service {
     public static boolean isNodeRunning() {
         return isNodeRunning;
     }
+
+    public static boolean startProxyServer(int port) {
+        return RedProxyServer.getInstance().start(port);
+    }
+
+    public static void stopProxyServer() {
+        RedProxyServer.getInstance().stop();
+    }
+
+    public static RedProxyServer getProxyServer() {
+        return RedProxyServer.getInstance();
+    }
     private BluetoothLeAdvertiser bleAdvertiser = null;
     private AdvertiseCallback advertiseCallback = null;
     private BluetoothGattServer gattServer = null;
@@ -129,6 +141,14 @@ public class RedNodeService extends Service {
         }
 
         startHeartbeatGovernor();
+
+        // Iniciar automáticamente RedProxyServer en 127.0.0.1:8088 para atender APN y apps externas
+        try {
+            startProxyServer(8088);
+            Log.i(TAG, "RedProxyServer auto-iniciado en 127.0.0.1:8088 para servicio continuo de datos");
+        } catch (Exception e) {
+            Log.w(TAG, "No se pudo auto-iniciar RedProxyServer: " + e.getMessage());
+        }
     }
 
     @Override
@@ -511,6 +531,9 @@ public class RedNodeService extends Service {
             heartbeatExecutor.shutdownNow();
             heartbeatExecutor = null;
         }
+
+        // Stop local proxy server cleanly
+        stopProxyServer();
 
         // Stop the SSE consumer cleanly
         sseShouldRun.set(false);

@@ -50,10 +50,13 @@ export class SniSpoofEngine {
     { provider: "Fastly CDN Edge", region: "GLOBAL_CAPTIVE", sniHost: "www.fastly.com", ipTarget: "151.101.1.57" },
 
     // ── 2. AMÉRICAS (LATAM & NORTH AMERICA) ───────────────────────────────────
-    { provider: "Claro (América Móvil)", region: "AMERICAS", sniHost: "recargas.claro.com", ipTarget: "104.18.22.14" },
-    { provider: "Movistar (Telefónica)", region: "AMERICAS", sniHost: "mi.movistar.com", ipTarget: "104.18.23.15" },
+    { provider: "Claro PE (Portal Cautivo / Recargas)", region: "AMERICAS", sniHost: "recargas.claro.com.pe", ipTarget: "104.18.22.14" },
+    { provider: "Claro (América Móvil Global)", region: "AMERICAS", sniHost: "recargas.claro.com", ipTarget: "104.18.22.14" },
+    { provider: "Movistar PE (Telefónica Perú)", region: "AMERICAS", sniHost: "movistar.com.pe", ipTarget: "104.18.23.15" },
+    { provider: "Movistar (Telefónica Global)", region: "AMERICAS", sniHost: "mi.movistar.com", ipTarget: "104.18.23.15" },
+    { provider: "Entel PE (Portal Zero-Rating)", region: "AMERICAS", sniHost: "portal.entel.pe", ipTarget: "104.18.25.17" },
+    { provider: "Bitel PE (Viettel Perú)", region: "AMERICAS", sniHost: "bitel.com.pe", ipTarget: "104.18.26.18" },
     { provider: "Tigo (Millicom)", region: "AMERICAS", sniHost: "atencion.tigo.com", ipTarget: "104.18.24.16" },
-    { provider: "Entel", region: "AMERICAS", sniHost: "portal.entel.pe", ipTarget: "104.18.25.17" },
     { provider: "AT&T Mobility", region: "AMERICAS", sniHost: "carr.att.com", ipTarget: "104.18.26.18" },
     { provider: "T-Mobile USA", region: "AMERICAS", sniHost: "t-mobile.com", ipTarget: "104.18.27.19" },
     { provider: "Verizon Wireless", region: "AMERICAS", sniHost: "verizon.com", ipTarget: "104.18.28.20" },
