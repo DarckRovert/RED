@@ -2087,7 +2087,7 @@ export async function dispatchIncomingMessage(
                 if ((m as any).nonce && (item as any).nonce && (m as any).nonce === (item as any).nonce) return true;
 
                 // 3. Pending optimistic local message replacement (replaces optimistic bubble with confirmed server/mesh message)
-                if (m.is_mine && normalizedItem.is_mine && (m.status === 'Pending' || m.id.startsWith('temp_') || m.id.startsWith('msg_pending_'))) {
+                if (m.is_mine && normalizedItem.is_mine && (m.status === 'Pending' || m.id?.startsWith('temp_') || m.id?.startsWith('mesh_') || m.id?.startsWith('msg_pending_'))) {
                     if (m.content && item.content && m.content === item.content) return true;
                     if (m.media_data && item.media_data && (m.media_data === item.media_data || m.media_data.length === item.media_data.length)) return true;
                     if (m.msg_type === item.msg_type && timeDiff < 60) return true;
@@ -2103,10 +2103,16 @@ export async function dispatchIncomingMessage(
             });
             
             if (existingIndex !== -1) {
+                const prev = messages[existingIndex];
+                const prevIsTemp = prev.id && (prev.id.startsWith('temp_') || prev.id.startsWith('mesh_') || prev.id.startsWith('msg_pending_'));
+                const newIsTemp = normalizedItem.id && (normalizedItem.id.startsWith('temp_') || normalizedItem.id.startsWith('mesh_') || normalizedItem.id.startsWith('msg_pending_'));
+                const targetId = (!prevIsTemp && newIsTemp) ? prev.id : (normalizedItem.id || prev.id);
+
                 const updated = [...messages];
                 updated[existingIndex] = {
                     ...updated[existingIndex],
                     ...normalizedItem,
+                    id: targetId,
                     timestamp: updated[existingIndex].timestamp || normalizedItem.timestamp,
                     media_data: normalizedItem.media_data || updated[existingIndex].media_data
                 };

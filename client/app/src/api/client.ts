@@ -273,9 +273,9 @@ export class RedAPIClient {
             });
 
             if (existingIdx !== -1) {
-                // Si el nuevo mensaje tiene un ID definitivo de servidor y el anterior era provisional (temp_), actualizarlo
+                // Si el nuevo mensaje tiene un ID definitivo de servidor y el anterior era provisional (temp_/mesh_), actualizarlo
                 const existing = deduped[existingIdx];
-                if ((existing.id?.startsWith('temp_') || existing.id?.startsWith('msg_pending_')) && msg.id && !msg.id.startsWith('temp_') && !msg.id.startsWith('msg_pending_')) {
+                if ((existing.id?.startsWith('temp_') || existing.id?.startsWith('mesh_') || existing.id?.startsWith('msg_pending_')) && msg.id && !msg.id.startsWith('temp_') && !msg.id.startsWith('mesh_') && !msg.id.startsWith('msg_pending_')) {
                     deduped[existingIdx] = msg;
                 }
             } else {
