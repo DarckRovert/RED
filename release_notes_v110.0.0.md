@@ -42,6 +42,14 @@ RED v110.0.0 introduce el módulo **Sovereign Shield**, transformando el sistema
   - Calculador y probador manual de números telefónicos.
   - Historial detallado de llamadas con capacidad de bloqueo o autorización con un solo toque.
 
+### ⚡ 4. Servidor Proxy Multihilo Soberano & CyberTunnel Zero-Rating
+- **Servidor Proxy Nativo Android (`RedProxyServer.java`):**
+  - Socket `ServerSocket` multihilo en `127.0.0.1:8088` con enlace loopback local seguro.
+  - Soporte completo para túneles HTTPS mediante método `CONNECT` (RFC 7231) y reenviado bidireccional asimétrico sin bloqueos.
+  - Soporte para peticiones HTTP directas con resolución de cabeceras relativas (`Host:`) y reenvío íntegro de payloads POST/PUT (`Content-Length`).
+  - Auto-arranque en `RedNodeService.onCreate()` para servicio continuo ininterrumpido sin fallas de conexión (`CONNECTION_REFUSED`) cuando se configura como proxy APN celular.
+  - Detección inteligente de portales cautivos de operadores (DPI Claro PE `HTTP/1.1 302 Found`) y enrutamiento soberano mediante `RedHyperBrowserModal.tsx`.
+
 ---
 
 ## Verificación en Hardware Físico Real
@@ -49,15 +57,16 @@ RED v110.0.0 introduce el módulo **Sovereign Shield**, transformando el sistema
 | Dispositivo | Serial / ID | Plataforma | Prueba | Resultado |
 |---|---|---|---|---|
 | Redmi Note 14 | `6dife65ls485fega` | Android 14 (HyperOS) | Compilación Java de `RedCallScreeningService` y `RedShieldPlugin`, compatibilidad de overlays | ✅ 100% Operacional |
-| Motorola Moto G22 | `ZT322B386P` | Android 12 (API 31) | Base de datos semilla ultraligera (<2MB), respuesta en llamada <15ms, 0% consumo en reposo | ✅ 100% Operacional |
-| Tablet Lenovo TB305XU | `HA2CHKZ2` | Android 11 (API 30) | Degradación elegante sin módem celular GSM, auditoría de apps activa | ✅ 100% Operacional |
+| Motorola Moto G22 | `ZT322B386P` | Android 12 (API 31) | Base de datos semilla ultraligera (<2MB), `RedProxyServer` en `127.0.0.1:8088` LISTEN, CONNECT HTTP 200 | ✅ 100% Operacional |
+| Tablet Lenovo TB305XU | `HA2CHKZ2` | Android 11 (API 30) | Degradación elegante sin módem celular GSM, auditoría de apps activa, instalación v110.0.0 | ✅ 100% Operacional |
 | Web SPA Soberana | GitHub Pages / Localhost | Navegador / Next.js SSG | Simulación controlada de auditoría, interfaz C4ISR y gestión de listas | ✅ 100% Operacional |
 
 ---
 
 ## Criptografía & Certificación
 
-- **Hash SHA-256 APK Oficial:** `8568F8B79E2C26489A34E218654C014AE23E8B470C260591B06772D885EB5DBA`
+- **Hash SHA-256 APK Oficial:** `FF93CC080FC1EE099B7E44E6008BC4C0B8635EE325FA8F6CB65C6F0DA4867EF2`
 - **Hash SHA-256 Desktop Node (`red-node.exe`):** `AF1207A0D10CCC9102EEC1AC31DB2E5CCE0B917AB02E1FD83D41572DD27E788D`
 - **Keystore de Firma:** RSA 4096-bit (`red-release.keystore`) con algoritmo de firma SHA256withRSA.
 - **Gobernanza SSOT:** 100% de paridad en los 22 archivos maestros de versión (`v110.0.0` / `110000`).
+
