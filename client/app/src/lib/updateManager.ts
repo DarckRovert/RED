@@ -201,15 +201,42 @@ export class UpdateManager {
     /**
      * Dispara la instalación directa del APK existente en caché.
      */
-    public static async installCachedApk(filePath?: string): Promise<boolean> {
-        if (!Capacitor.isNativePlatform()) return false;
+    public static async installCachedApk(filePath?: string): Promise<{ success: boolean; promptedPermission?: boolean }> {
+        if (!Capacitor.isNativePlatform()) return { success: false };
         try {
             const res = await RedNode.installApk({ filePath });
-            return !!res?.success;
+            return {
+                success: !!res?.success,
+                promptedPermission: !!res?.promptedPermission,
+            };
         } catch (e) {
             console.error('[UpdateManager] Fallo al instalar APK desde caché:', e);
             throw e;
         }
+    }
+
+    /**
+     * Reanuda la instalación del APK en caché si el usuario ya concedió el permiso en Ajustes.
+     */
+    public static async resumePendingInstall(): Promise<{ resumed: boolean; reason?: string }> {
+        if (!Capacitor.isNativePlatform()) return { resumed: false };
+        try {
+            const res = await RedNode.resumePendingInstall();
+            return {
+                resumed: !!res?.resumed,
+                reason: res?.reason,
+            };
+        } catch {
+            return { resumed: false };
+        }
+    }
+
+    /**
+     * Escucha el evento nativo de instalación reanudada automáticamente por handleOnResume.
+     */
+    public static async onApkInstallResumed(callback: (data: { resumed: boolean; filePath: string }) => void): Promise<{ remove: () => void }> {
+        if (!Capacitor.isNativePlatform()) return { remove: () => {} };
+        return await RedNode.addListener('apkInstallResumed', callback);
     }
 
     /**
@@ -292,13 +319,18 @@ export class UpdateManager {
             }
 
             // Iniciar instalación nativa
-            await RedNode.installApk({
+            const installRes = await RedNode.installApk({
                 filePath: downloadResult.filePath,
             });
 
             if (progressSub && typeof progressSub.remove === 'function') {
                 progressSub.remove();
                 progressSub = null;
+            }
+
+            // Si el sistema requirió solicitar permiso en Ajustes, el usuario fue redirigido
+            if (installRes?.promptedPermission) {
+                return false;
             }
 
             return true;

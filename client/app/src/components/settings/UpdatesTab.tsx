@@ -5,6 +5,7 @@ import { SettingsManager } from "../../lib/settingsManager";
 import { toast } from "../Toast";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { LegalComplianceModal } from "../legal/LegalComplianceModal";
+import { App } from "@capacitor/app";
 
 export const UpdatesTab: React.FC = () => {
     const { t } = useTranslation();
@@ -27,8 +28,39 @@ export const UpdatesTab: React.FC = () => {
 
     useEffect(() => {
         refreshStatus();
+
+        let appSub: any = null;
+        try {
+            appSub = App.addListener("appStateChange", async (state) => {
+                if (state.isActive) {
+                    await refreshStatus();
+                    const granted = await UpdateManager.checkInstallPermission();
+                    if (granted) {
+                        setPermissionNeeded(false);
+                        const res = await UpdateManager.resumePendingInstall();
+                        if (res.resumed) {
+                            toast.success("📦 Permiso concedido: abriendo instalador...");
+                        }
+                    }
+                }
+            });
+        } catch {}
+
+        const resumedSubPromise = UpdateManager.onApkInstallResumed((data) => {
+            if (data.resumed) {
+                toast.success("📦 Permiso concedido. Abriendo instalador...");
+                refreshStatus();
+            }
+        });
+
         window.addEventListener("focus", refreshStatus);
-        return () => window.removeEventListener("focus", refreshStatus);
+        return () => {
+            if (appSub) {
+                appSub.then((h: any) => h.remove?.()).catch(() => {});
+            }
+            resumedSubPromise.then((h) => h.remove?.()).catch(() => {});
+            window.removeEventListener("focus", refreshStatus);
+        };
     }, []);
 
     const handleCheckUpdates = async () => {
@@ -54,7 +86,11 @@ export const UpdatesTab: React.FC = () => {
         SettingsManager.triggerHaptic("heavy");
         try {
             toast.info("📦 Abriendo instalador con APK descargado...");
-            await UpdateManager.installCachedApk(cachedApk?.filePath);
+            const res = await UpdateManager.installCachedApk(cachedApk?.filePath);
+            if (res.promptedPermission) {
+                setPermissionNeeded(true);
+                toast.info("⚙️ Concede el permiso en Ajustes. La instalación continuará automáticamente.");
+            }
         } catch (e: any) {
             toast.error(`Fallo al instalar paquete: ${e.message || e}`);
         }
@@ -77,17 +113,23 @@ export const UpdatesTab: React.FC = () => {
         });
 
         try {
-            await UpdateManager.downloadAndInstall(targetUrl, (prog) => {
+            const success = await UpdateManager.downloadAndInstall(targetUrl, (prog) => {
                 setDownloadProgress(prog);
                 if (prog.error) {
                     toast.error(`Error: ${prog.error}`);
                     setDownloading(false);
                 } else if (prog.done) {
-                    toast.success("📦 Descarga completada. Abriendo instalador nativo...");
                     setDownloading(false);
                     refreshStatus();
                 }
             });
+
+            if (!success) {
+                setPermissionNeeded(true);
+                toast.info("⚙️ Activa 'Permitir desde esta fuente' en Ajustes. La instalación se reanudará al volver.");
+            } else {
+                toast.success("📦 Descarga completada. Abriendo instalador nativo...");
+            }
         } catch (e: any) {
             toast.error(`Error de instalación: ${e.message || e}`);
             setDownloading(false);

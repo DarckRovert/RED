@@ -9,6 +9,7 @@ import { toast } from "./Toast";
 import { SettingsManager } from "../lib/settingsManager";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { App } from "@capacitor/app";
 
 interface UpdateModalProps {
     onClose?: () => void;
@@ -50,8 +51,42 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
 
     useEffect(() => {
         refreshStatus();
+
+        let appSub: any = null;
+        try {
+            appSub = App.addListener("appStateChange", async (state) => {
+                if (state.isActive) {
+                    await refreshStatus();
+                    // Al volver de Ajustes, comprobar si el permiso fue otorgado para reanudar instalación
+                    const granted = await UpdateManager.checkInstallPermission();
+                    if (granted) {
+                        setPermissionNeeded(false);
+                        const res = await UpdateManager.resumePendingInstall();
+                        if (res.resumed) {
+                            TacticalAudioEngine.playRogerBeep();
+                            toast.success("📦 Permiso concedido: abriendo instalador...");
+                        }
+                    }
+                }
+            });
+        } catch {}
+
+        const resumedSubPromise = UpdateManager.onApkInstallResumed((data) => {
+            if (data.resumed) {
+                TacticalAudioEngine.playRogerBeep();
+                toast.success("📦 Permiso concedido. Abriendo diálogo de instalación...");
+                refreshStatus();
+            }
+        });
+
         window.addEventListener("focus", refreshStatus);
-        return () => window.removeEventListener("focus", refreshStatus);
+        return () => {
+            if (appSub) {
+                appSub.then((h: any) => h.remove?.()).catch(() => {});
+            }
+            resumedSubPromise.then((h) => h.remove?.()).catch(() => {});
+            window.removeEventListener("focus", refreshStatus);
+        };
     }, []);
 
     const checkUpdates = async (force = true) => {
@@ -86,7 +121,11 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
         SettingsManager.triggerHaptic("heavy");
         try {
             toast.info("📦 Abriendo instalador con APK descargado...");
-            await UpdateManager.installCachedApk(cachedApk?.filePath);
+            const res = await UpdateManager.installCachedApk(cachedApk?.filePath);
+            if (res.promptedPermission) {
+                setPermissionNeeded(true);
+                toast.info("⚙️ Concede el permiso en Ajustes. La instalación continuará automáticamente.");
+            }
         } catch (e: any) {
             TacticalAudioEngine.playWarning();
             toast.error(`Fallo al instalar paquete: ${e.message || e}`);
@@ -112,7 +151,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
         });
 
         try {
-            await UpdateManager.downloadAndInstall(targetUrl, (prog) => {
+            const success = await UpdateManager.downloadAndInstall(targetUrl, (prog) => {
                 setDownloadProgress(prog);
                 if (prog.error) {
                     TacticalAudioEngine.playWarning();
@@ -121,11 +160,17 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
                 } else if (prog.done) {
                     TacticalAudioEngine.playRogerBeep();
                     SettingsManager.triggerHaptic("heavy");
-                    toast.success("📦 Descarga completada. Abriendo instalador...");
                     setDownloading(false);
                     refreshStatus();
                 }
             });
+
+            if (!success) {
+                setPermissionNeeded(true);
+                toast.info("⚙️ Activa 'Permitir desde esta fuente' en Ajustes. La instalación se reanudará al volver.");
+            } else {
+                toast.success("📦 Descarga completada. Abriendo instalador...");
+            }
         } catch (e: any) {
             console.error("Update failed", e);
             TacticalAudioEngine.playWarning();
@@ -234,6 +279,13 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
                             </div>
                         </div>
                     </div>
+
+                    {!updateInfo?.hasUpdate && (
+                        <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", background: "rgba(0,230,118,0.06)", border: "1px solid rgba(0,230,118,0.2)", borderRadius: "var(--radius-sm)", padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span>✓</span>
+                            <span>Tu nodo está sincronizado con la última versión canónica en GitHub. Puedes reinstalar limpiamente el binario oficial cuando desees.</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Advertencia de Permiso Android Unknown Sources */}

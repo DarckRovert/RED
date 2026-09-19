@@ -80,11 +80,40 @@ public class RedNodePlugin extends Plugin {
     public static native void injectBlePayload(byte[] payload, String fromDevice);
 
     private static RedNodePlugin instance;
+    private String pendingApkInstallPath = null;
 
     @Override
     public void load() {
         super.load();
         instance = this;
+    }
+
+    @Override
+    protected void handleOnResume() {
+        super.handleOnResume();
+        if (pendingApkInstallPath != null) {
+            boolean canInstall = false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    canInstall = getContext().getPackageManager().canRequestPackageInstalls();
+                } catch (Throwable t) {
+                    android.util.Log.w("RedNodePlugin", "canRequestPackageInstalls check in onResume failed: " + t.getMessage());
+                }
+            } else {
+                canInstall = true;
+            }
+
+            if (canInstall) {
+                String apkPathToLaunch = pendingApkInstallPath;
+                pendingApkInstallPath = null;
+                android.util.Log.i("RedNodePlugin", "Auto-resuming APK installation after permission granted: " + apkPathToLaunch);
+                boolean launched = launchInstallerIntent(apkPathToLaunch);
+                com.getcapacitor.JSObject evt = new com.getcapacitor.JSObject();
+                evt.put("resumed", launched);
+                evt.put("filePath", apkPathToLaunch);
+                notifyListeners("apkInstallResumed", evt);
+            }
+        }
     }
 
     @Override
@@ -743,6 +772,102 @@ public class RedNodePlugin extends Plugin {
     }
 
     /**
+     * Retorna la ubicación óptima para descargar el APK: almacenamiento de caché externo
+     * (accesible por PackageInstaller sin restricciones SELinux en Android 14/15) con fallback a caché interno.
+     */
+    private File getOptimalApkFile(String fileName) {
+        File ext = getContext().getExternalCacheDir();
+        if (ext != null && (ext.exists() || ext.mkdirs()) && ext.canWrite()) {
+            return new File(ext, fileName);
+        }
+        return new File(getContext().getCacheDir(), fileName);
+    }
+
+    /**
+     * Localiza un APK en caché comprobando tanto almacenamiento externo como interno.
+     */
+    private File locateCachedApk(String fileName) {
+        File ext = getContext().getExternalCacheDir();
+        if (ext != null) {
+            File extFile = new File(ext, fileName);
+            if (extFile.exists() && extFile.length() > 1024 * 1024) {
+                return extFile;
+            }
+        }
+        File intFile = new File(getContext().getCacheDir(), fileName);
+        if (intFile.exists() && intFile.length() > 1024 * 1024) {
+            return intFile;
+        }
+        return null;
+    }
+
+    /**
+     * Lanza el Intent nativo de instalación con FileProvider y concesión explícita de permisos URI.
+     */
+    private boolean launchInstallerIntent(String filePath) {
+        File file;
+        if (filePath == null || filePath.isEmpty()) {
+            file = locateCachedApk("red_update.apk");
+            if (file == null) {
+                file = new File(getContext().getCacheDir(), "red_update.apk");
+            }
+        } else {
+            file = new File(filePath);
+        }
+
+        if (!file.exists() || file.length() == 0) {
+            android.util.Log.e("RedNodePlugin", "Cannot launch installer: APK file missing or empty: " + file.getAbsolutePath());
+            return false;
+        }
+
+        try {
+            Uri apkUri;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                apkUri = FileProvider.getUriForFile(
+                    getContext(),
+                    getContext().getPackageName() + ".fileprovider",
+                    file
+                );
+            } else {
+                apkUri = Uri.fromFile(file);
+            }
+
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.setClipData(android.content.ClipData.newRawUri("RED Update", apkUri));
+
+            // Concesión explícita de URI para todas las actividades del instalador del sistema (Android 11/14/15)
+            try {
+                android.content.pm.PackageManager pm = getContext().getPackageManager();
+                java.util.List<android.content.pm.ResolveInfo> resInfoList = pm.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+                for (android.content.pm.ResolveInfo resolveInfo : resInfoList) {
+                    String packageName = resolveInfo.activityInfo.packageName;
+                    getContext().grantUriPermission(packageName, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                }
+            } catch (Throwable t) {
+                android.util.Log.w("RedNodePlugin", "grantUriPermission resolution warning: " + t.getMessage());
+            }
+
+            // Concesión explícita adicional para instaladores de sistema conocidos (blindaje contra filtros de queries)
+            String[] commonInstallers = {"com.google.android.packageinstaller", "com.android.packageinstaller"};
+            for (String pkg : commonInstallers) {
+                try {
+                    getContext().grantUriPermission(pkg, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (Throwable ignored) {}
+            }
+
+            android.content.Context launchCtx = getActivity() != null ? getActivity() : getContext();
+            launchCtx.startActivity(intent);
+            return true;
+        } catch (Exception e) {
+            android.util.Log.e("RedNodePlugin", "launchInstallerIntent exception: " + e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
      * Descarga de APK en streaming nativo de alta eficiencia directamente al almacenamiento caché.
      * Cero uso de Base64 ni saturación del heap de V8 JS.
      * Emite eventos 'apkDownloadProgress' con bytes recibidos, total, porcentaje y velocidad en KB/s.
@@ -799,8 +924,7 @@ public class RedNodePlugin extends Plugin {
                 }
 
                 long totalBytes = conn.getContentLengthLong();
-                File cacheDir = getContext().getCacheDir();
-                File targetFile = new File(cacheDir, fileName);
+                File targetFile = getOptimalApkFile(fileName);
                 if (targetFile.exists()) {
                     targetFile.delete();
                 }
@@ -868,13 +992,17 @@ public class RedNodePlugin extends Plugin {
 
     /**
      * Inicia la instalación del APK nativo mediante FileProvider e Intent(ACTION_VIEW).
+     * Si no tiene permiso de fuentes desconocidas, guarda la ruta para auto-reanudar tras volver de Ajustes.
      */
     @PluginMethod
     public void installApk(PluginCall call) {
         String filePath = call.getString("filePath");
         File file;
         if (filePath == null || filePath.isEmpty()) {
-            file = new File(getContext().getCacheDir(), "red_update.apk");
+            file = locateCachedApk("red_update.apk");
+            if (file == null) {
+                file = new File(getContext().getCacheDir(), "red_update.apk");
+            }
         } else {
             file = new File(filePath);
         }
@@ -893,6 +1021,7 @@ public class RedNodePlugin extends Plugin {
                     android.util.Log.w("RedNodePlugin", "canRequestPackageInstalls check in installApk failed: " + t.getMessage());
                 }
                 if (!canInstall) {
+                    pendingApkInstallPath = file.getAbsolutePath();
                     Intent permIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
                     permIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     getContext().startActivity(permIntent);
@@ -904,44 +1033,52 @@ public class RedNodePlugin extends Plugin {
                 }
             }
 
-            Uri apkUri;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                apkUri = FileProvider.getUriForFile(
-                    getContext(),
-                    getContext().getPackageName() + ".fileprovider",
-                    file
-                );
+            boolean ok = launchInstallerIntent(file.getAbsolutePath());
+            if (ok) {
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("success", true);
+                call.resolve(ret);
             } else {
-                apkUri = Uri.fromFile(file);
+                call.reject("Failed to trigger package installer intent");
             }
-
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            intent.setClipData(android.content.ClipData.newRawUri("RED Update", apkUri));
-
-            // Concesión explícita de URI para todas las actividades del instalador del sistema (Android 11/14/15)
-            try {
-                android.content.pm.PackageManager pm = getContext().getPackageManager();
-                java.util.List<android.content.pm.ResolveInfo> resInfoList = pm.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
-                for (android.content.pm.ResolveInfo resolveInfo : resInfoList) {
-                    String packageName = resolveInfo.activityInfo.packageName;
-                    getContext().grantUriPermission(packageName, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                }
-            } catch (Throwable t) {
-                android.util.Log.w("RedNodePlugin", "grantUriPermission resolution warning: " + t.getMessage());
-            }
-
-            android.content.Context launchCtx = getActivity() != null ? getActivity() : getContext();
-            launchCtx.startActivity(intent);
-
-            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
-            ret.put("success", true);
-            call.resolve(ret);
         } catch (Exception e) {
             android.util.Log.e("RedNodePlugin", "Failed to trigger APK install: " + e.getMessage(), e);
             call.reject("Failed to trigger installer: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Reanuda la instalación pendiente si el permiso ya fue concedido.
+     */
+    @PluginMethod
+    public void resumePendingInstall(PluginCall call) {
+        try {
+            boolean canInstall = true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                canInstall = getContext().getPackageManager().canRequestPackageInstalls();
+            }
+            if (!canInstall) {
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("resumed", false);
+                ret.put("reason", "permission_denied");
+                call.resolve(ret);
+                return;
+            }
+            File file = locateCachedApk("red_update.apk");
+            if (file != null && file.exists()) {
+                boolean launched = launchInstallerIntent(file.getAbsolutePath());
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("resumed", launched);
+                ret.put("filePath", file.getAbsolutePath());
+                call.resolve(ret);
+            } else {
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("resumed", false);
+                ret.put("reason", "no_cached_apk");
+                call.resolve(ret);
+            }
+        } catch (Exception e) {
+            call.reject("Error al reanudar instalación: " + e.getMessage());
         }
     }
 
@@ -951,10 +1088,9 @@ public class RedNodePlugin extends Plugin {
     @PluginMethod
     public void getCachedApkInfo(PluginCall call) {
         try {
-            File cacheDir = getContext().getCacheDir();
-            File file = new File(cacheDir, "red_update.apk");
+            File file = locateCachedApk("red_update.apk");
             com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
-            if (file.exists() && file.length() > 1024 * 1024) { // mayor a 1MB
+            if (file != null && file.exists() && file.length() > 1024 * 1024) { // mayor a 1MB
                 ret.put("exists", true);
                 ret.put("filePath", file.getAbsolutePath());
                 ret.put("size", file.length());
@@ -969,17 +1105,20 @@ public class RedNodePlugin extends Plugin {
     }
 
     /**
-     * Elimina el APK en caché tras la instalación o descarte.
+     * Elimina el APK en caché tras la instalación o descarte en ambas rutas de almacenamiento.
      */
     @PluginMethod
     public void deleteCachedApk(PluginCall call) {
         try {
-            File cacheDir = getContext().getCacheDir();
-            File file = new File(cacheDir, "red_update.apk");
             boolean deleted = false;
-            if (file.exists()) {
-                deleted = file.delete();
+            File ext = getContext().getExternalCacheDir();
+            if (ext != null) {
+                File f = new File(ext, "red_update.apk");
+                if (f.exists()) deleted = f.delete() || deleted;
             }
+            File internal = new File(getContext().getCacheDir(), "red_update.apk");
+            if (internal.exists()) deleted = internal.delete() || deleted;
+
             com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
             ret.put("deleted", deleted);
             call.resolve(ret);
