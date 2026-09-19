@@ -759,9 +759,15 @@ public class RedNodePlugin extends Plugin {
     public void openInstallPermissionSettings(PluginCall call) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                getContext().startActivity(intent);
+                try {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    getContext().startActivity(intent);
+                } catch (android.content.ActivityNotFoundException anfe) {
+                    Intent fallback = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
+                    fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    getContext().startActivity(fallback);
+                }
                 call.resolve();
             } else {
                 call.resolve();
@@ -1022,9 +1028,15 @@ public class RedNodePlugin extends Plugin {
                 }
                 if (!canInstall) {
                     pendingApkInstallPath = file.getAbsolutePath();
-                    Intent permIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
-                    permIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    getContext().startActivity(permIntent);
+                    try {
+                        Intent permIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
+                        permIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        getContext().startActivity(permIntent);
+                    } catch (android.content.ActivityNotFoundException anfe) {
+                        Intent fallback = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
+                        fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        getContext().startActivity(fallback);
+                    }
 
                     com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
                     ret.put("promptedPermission", true);
