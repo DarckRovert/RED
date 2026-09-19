@@ -91,7 +91,7 @@ export class UpdateManager {
                             : 'Estás ejecutando la versión canónica actual del sistema.',
                         publishedAt: new Date().toISOString(),
                         apkUrl: fallbackApkUrl,
-                        apkSize: 66699615,
+                        apkSize: 0,
                     };
                     this.cachedUpdateInfo = fallbackInfo;
                     return fallbackInfo;
@@ -149,7 +149,7 @@ export class UpdateManager {
                 releaseNotes: 'Operando en modo autónomo/offline. Puedes reinstalar el paquete local o verificar conectividad.',
                 publishedAt: new Date().toISOString(),
                 apkUrl: fallbackApkUrl,
-                apkSize: 66699615,
+                apkSize: 0,
                 error: e.message || 'Error de conexión',
             };
         }

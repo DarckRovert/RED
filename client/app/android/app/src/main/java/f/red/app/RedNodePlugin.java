@@ -919,6 +919,7 @@ public class RedNodePlugin extends Plugin {
             intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.setClipData(android.content.ClipData.newRawUri("RED Update", apkUri));
 
             // Concesión explícita de URI para todas las actividades del instalador del sistema (Android 11/14/15)
             try {

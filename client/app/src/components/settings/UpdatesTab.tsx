@@ -71,7 +71,7 @@ export const UpdatesTab: React.FC = () => {
         setDownloadProgress({
             progress: 0,
             receivedBytes: 0,
-            totalBytes: updateInfo?.apkSize || 66699615,
+            totalBytes: updateInfo?.apkSize || 0,
             speedKbps: 0,
             done: false,
         });
