@@ -22,6 +22,7 @@ import { LowBitrateVocoder } from "../lib/LowBitrateVocoder";
 import { AudioContextManager } from "../lib/audio/AudioContextManager";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { tacticalCompass } from "../lib/sensors/TacticalCompassEngine";
+import { metabolicGovernor } from "../lib/neuro/MetabolicNeuromorphicGovernor";
 import { toast } from "./Toast";
 
 interface TacticalWaypoint {
@@ -50,6 +51,27 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
     const [rustBeaconId, setRustBeaconId] = useState<string | null>(null);
     const [heading, setHeading] = useState<number>(0);
     const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
+    const [isForcedTorpor, setIsForcedTorpor] = useState<boolean>(() => metabolicGovernor.isForcedTorpor());
+
+    useEffect(() => {
+        const unsub = metabolicGovernor.subscribe(() => {
+            setIsForcedTorpor(metabolicGovernor.isForcedTorpor());
+        });
+        return unsub;
+    }, []);
+
+    const handleToggleTorpor = () => {
+        const next = !isForcedTorpor;
+        metabolicGovernor.setForcedTorpor(next);
+        setIsForcedTorpor(next);
+        if (next) {
+            TacticalAudioEngine.playAlarm();
+            toast.warning("🧊 Torpor Forzado: Radio LoRa 5 min, workers IA pausados (x3.5 batería)");
+        } else {
+            TacticalAudioEngine.playTap();
+            toast.success("⚡ Torpor Desactivado: CNS restaurado a régimen dinámico");
+        }
+    };
     
     // Estroboscopio de Emergencia
     const [strobeActive, setStrobeActive] = useState(false);
@@ -651,6 +673,40 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                         {ecoState.mode.toUpperCase()}
                     </span>
                 </div>
+            </div>
+
+            {/* Banner de Torpor Forzado (Gobernador Metabólico CNS) */}
+            <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "8px 14px",
+                background: isForcedTorpor ? "rgba(255, 30, 64, 0.22)" : "rgba(10, 15, 28, 0.85)",
+                borderBottom: `1.5px solid ${isForcedTorpor ? "#FF1E40" : "rgba(255, 255, 255, 0.1)"}`,
+                fontFamily: "JetBrains Mono, monospace"
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "0.95rem" }}>{isForcedTorpor ? "🧊" : "🔋"}</span>
+                    <div>
+                        <div style={{ fontSize: "0.72rem", fontWeight: 800, color: isForcedTorpor ? "#FF6680" : "#8892B0" }}>
+                            {isForcedTorpor ? "TORPOR NEUROMÓRFICO FORZADO (REPOSO TÁCTICO)" : "GOBERNADOR METABÓLICO CNS"}
+                        </div>
+                        <div style={{ fontSize: "0.62rem", color: isForcedTorpor ? "#FFF" : "#64748B" }}>
+                            {isForcedTorpor ? "Radio LoRa 5 min · Workers IA Pausados · Longevidad ~3.5x" : "Régimen Dinámico según Batería"}
+                        </div>
+                    </div>
+                </div>
+                <button
+                    onClick={handleToggleTorpor}
+                    style={{
+                        padding: "5px 12px", borderRadius: "6px",
+                        fontSize: "0.72rem", fontWeight: 900,
+                        background: isForcedTorpor ? "#FF1E40" : "rgba(0, 229, 255, 0.15)",
+                        border: `1px solid ${isForcedTorpor ? "#FFFFFF" : "#00E5FF"}`,
+                        color: isForcedTorpor ? "#FFFFFF" : "#00E5FF",
+                        cursor: "pointer", letterSpacing: "0.5px"
+                    }}
+                >
+                    {isForcedTorpor ? "DESPERTAR" : "FORZAR TORPOR"}
+                </button>
             </div>
 
             {/* CUERPO PRINCIPAL: 3 TARJETAS GIGANTES DE ALTO CONTRASTE */}

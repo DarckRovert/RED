@@ -96,6 +96,17 @@ export class MetabolicNeuromorphicGovernor {
   }
 
   /**
+   * Conmuta el modo de hibernación forzada táctica (TORPOR) para supervivencia extrema.
+   */
+  public setForcedTorpor(enabled: boolean): void {
+    this.setOverrideRegime(enabled ? 'TORPOR' : null);
+  }
+
+  public isForcedTorpor(): boolean {
+    return this.overrideRegime === 'TORPOR';
+  }
+
+  /**
    * Inyecta telemetría directa de batería y temperatura (útil en pruebas y pasarelas de hardware).
    */
   public injectBatteryTelemetry(batteryPct: number, isCharging: boolean, temperatureC = 25.0): void {

@@ -584,6 +584,12 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 if (finalIdentity.identity_hash) {
                     meshRouter.init(finalIdentity.identity_hash);
                     meshRouter.updateIdentity(finalIdentity.identity_hash);
+                    try {
+                        const { connectomeOrchestrator } = await import('../../lib/neuro/ConnectomeEcosystemOrchestrator');
+                        connectomeOrchestrator.start();
+                    } catch (e) {
+                        console.warn('[RED] Failed to auto-start Connectome CNS:', e);
+                    }
                 }
 
                 set({ identity: finalIdentity, status, nodeOnline: true });

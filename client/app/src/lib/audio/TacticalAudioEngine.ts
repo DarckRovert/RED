@@ -238,6 +238,16 @@ export class TacticalAudioEngine {
         } catch {}
     }
 
+    /** Alias canónico para alarmas tácticas */
+    public static playAlarm(): void {
+        this.playEmergencyAlarm();
+    }
+
+    /** Alias canónico para alertas y advertencias tácticas */
+    public static playAlert(): void {
+        this.playWarning();
+    }
+
     /** Ping de sonar acústico / detección de proximidad ultrasónica (2048Hz -> 1024Hz, 120ms) */
     public static playSonarPing(): void {
         const prefs = SettingsManager.getPreferences();

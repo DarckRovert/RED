@@ -101,7 +101,13 @@ export class ConnectomeEcosystemOrchestrator {
     const unSubCompass = ringAttractor.subscribe(() => this.notifyListeners());
     const unSubFb = fanShapedBody.subscribe(() => this.notifyListeners());
     const unSubMb = dtnMushroomBody.subscribe(() => this.notifyListeners());
-    const unSubGfs = giantFiberReflex.subscribe(() => this.notifyListeners());
+    const unSubSyn = synapticMeshRouter.subscribe(() => this.notifyListeners());
+    const unSubGfs = giantFiberReflex.subscribe((gfsTelem: GiantFiberTelemetry) => {
+      if (gfsTelem.isReflexActive) {
+        tacticalMotorActuator.triggerEmergencyBurst();
+      }
+      this.notifyListeners();
+    });
     const unSubOptic = opticLobe.subscribe((opticTelem: OpticLobeTelemetry) => {
       if (opticTelem.loomingThreat.isThreatDetected) {
         tacticalMotorActuator.triggerEmergencyBurst();
@@ -110,7 +116,18 @@ export class ConnectomeEcosystemOrchestrator {
     });
     const unSubMotor = tacticalMotorActuator.subscribe(() => this.notifyListeners());
 
-    this.unsubs.push(unSubCompass, unSubFb, unSubMb, unSubGfs, unSubOptic, unSubMotor);
+    this.unsubs.push(unSubCompass, unSubFb, unSubMb, unSubSyn, unSubGfs, unSubOptic, unSubMotor);
+    console.log('[ConnectomeOrchestrator] 🦗 Drosophila MaleCNS living organism initialized and active in background');
+    this.notifyListeners();
+  }
+
+  public isOrganismRunning(): boolean {
+    return this.isRunning;
+  }
+
+  public triggerEmergencyBurst(reason: string = 'MANUAL_OVERRIDE'): void {
+    giantFiberReflex.triggerEmergencyJump(reason);
+    tacticalMotorActuator.triggerEmergencyBurst();
     this.notifyListeners();
   }
 

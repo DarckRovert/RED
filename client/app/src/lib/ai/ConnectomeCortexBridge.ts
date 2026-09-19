@@ -22,6 +22,8 @@ import { dtnMushroomBody } from '../neuro/DtnMushroomBodyEngine';
 import { giantFiberReflex } from '../neuro/GiantFiberReflexEngine';
 import { johnstonOrgan } from '../neuro/JohnstonOrganEngine';
 import { metabolicGovernor } from '../neuro/MetabolicNeuromorphicGovernor';
+import { opticLobe } from '../neuro/OpticLobeEngine';
+import { tacticalMotorActuator } from '../neuro/TacticalMotorActuatorEngine';
 
 export interface ConnectomeSnapshot {
   timestamp: number;
@@ -85,6 +87,20 @@ export interface ConnectomeSnapshot {
     neuralClockIntervalMs: number;
     estimatedStandbyHours: number;
   };
+  opticLobe: {
+    translationalVelocity: number;
+    rotationalVelocityDps: number;
+    loomingDetected: boolean;
+    loomingExpansionRate: number;
+    activeOmmatidiaCount: number;
+  };
+  motorActuator: {
+    currentMode: string;
+    steeringErrorDeg: number;
+    dna01Excitation: number;
+    dna02Excitation: number;
+    totalPulsesDispatched: number;
+  };
   tacticalEvaluation: {
     meshHealth: 'OPTIMAL' | 'DEGRADED' | 'EMCON_REFLEX' | 'CRITICAL' | 'TORPOR';
     aoaBearingsActive: number;
@@ -116,6 +132,8 @@ export class ConnectomeCortexBridge {
     const gfsTelem = giantFiberReflex.getTelemetry();
     const joTelem = johnstonOrgan.getTelemetry();
     const metTelem = metabolicGovernor.getTelemetry();
+    const opticTelem = opticLobe.getTelemetry();
+    const motorTelem = tacticalMotorActuator.getTelemetry();
     const activeBearings = synapticMeshRouter.getAllActiveBearings();
 
     const topBearing = activeBearings.length > 0 ? activeBearings[0] : null;
@@ -134,7 +152,8 @@ export class ConnectomeCortexBridge {
     const summary = `Conectoma Drosophila MaleCNS activo [Régimen: ${metTelem.regime}]. Brújula E-PG a ${cxTelem.headingDeg}° (${cxTelem.cardinal}). ` +
       `Home Vector FB a ${fbTelem.homeVector.distanceMeters}m rumbo ${fbTelem.homeVector.bearingDeg}° (${fbTelem.homeVector.cardinal}). ` +
       `Red sináptica con ${synTelem.totalSynapses} pares (${synTelem.richClubHubs.length} hubs), DTN: ${mbTelem.totalEnqueuedRecords} engramas (${mbTelem.behavioralDrive}). ` +
-      `Sensor acústico JO: ${(joTelem.acousticEnergyLevel * 100).toFixed(0)}% energía. Fibras gigantes: ${gfsTelem.emconLockActive ? 'EMCON SILENCIO RADIO' : 'RADAR ACTIVO'}.`;
+      `Visión T4/T5: ${opticTelem.translationalFlow.magnitude} m/s, Looming: ${opticTelem.loomingThreat.isThreatDetected ? 'AMENAZA' : 'OK'}. ` +
+      `Actuador DNa: ${motorTelem.currentHapticMode}. Fibras gigantes: ${gfsTelem.emconLockActive ? 'EMCON SILENCIO RADIO' : 'RADAR ACTIVO'}.`;
 
     return {
       timestamp: Date.now(),
@@ -202,6 +221,20 @@ export class ConnectomeCortexBridge {
         neuralClockIntervalMs: metTelem.neuralClockIntervalMs,
         estimatedStandbyHours: metTelem.estimatedStandbyHours,
       },
+      opticLobe: {
+        translationalVelocity: opticTelem.translationalFlow.magnitude,
+        rotationalVelocityDps: opticTelem.visualAngularVelocityDegPerSec,
+        loomingDetected: opticTelem.loomingThreat.isThreatDetected,
+        loomingExpansionRate: opticTelem.loomingThreat.expansionRate,
+        activeOmmatidiaCount: 256,
+      },
+      motorActuator: {
+        currentMode: motorTelem.currentHapticMode,
+        steeringErrorDeg: motorTelem.steeringErrorDeg,
+        dna01Excitation: motorTelem.dna01IpsilateralExcitation,
+        dna02Excitation: motorTelem.dna02ContralateralExcitation,
+        totalPulsesDispatched: motorTelem.totalPulsesDispatched,
+      },
       tacticalEvaluation: {
         meshHealth,
         aoaBearingsActive: activeBearings.length,
@@ -228,10 +261,12 @@ export class ConnectomeCortexBridge {
       `• Rumbo E-PG: ${s.compass.headingDeg}° (${s.compass.cardinal}, Conf: ${(s.compass.confidence * 100).toFixed(0)}%, Anclaje: ${s.compass.isSensoryAnchored ? 'OK' : 'INERCIAL'})\n` +
       `• Navegación FB (Home Vector): ${s.fanShapedBody.homeDistanceMeters}m hacia ${s.fanShapedBody.homeBearingDeg}° (${s.fanShapedBody.homeCardinal}) | Recorrido: ${s.fanShapedBody.totalDistanceTraveledMeters}m\n` +
       `• Red Sináptica: ${s.synapticRouter.totalSynapses} pares | Conductancia: ${s.synapticRouter.meanWeight.toFixed(2)} | Rich-Club: ${s.synapticRouter.richClubHubsCount}\n` +
-      `• Memoria MB: ${s.mushroomBody.enqueuedRecords} engramas | Conducta: ${s.mushroomBody.behavioralDrive} (${s.mushroomBody.behavioralValenceScore > 0 ? '+' : ''}${s.mushroomBody.behavioralValenceScore}) | Feromonas: ${s.mushroomBody.activePheromonesCount}\n` +
+      `• Memoria MB: ${s.mushroomBody.enqueuedRecords} engramas | Conducta: ${s.mushroomBody.behavioralDrive} | Feromonas: ${s.mushroomBody.activePheromonesCount}\n` +
+      `• Visión T4/T5 & LC4: Flujo ${s.opticLobe.translationalVelocity.toFixed(2)} m/s | Looming: ${s.opticLobe.loomingDetected ? '🚨 AMENAZA BALÍSTICA' : 'DESPEJADO'}\n` +
+      `• Actuador Háptico DNa: Modo ${s.motorActuator.currentMode} (Error: ${s.motorActuator.steeringErrorDeg}°)\n` +
       `• Fibras Gigantes: ${s.giantFiber.state} (EMCON: ${s.giantFiber.isRadioSilenced ? 'ACTIVO' : 'NO'})\n` +
       `• Sensor JO: ${(s.johnstonOrgan.acousticEnergyLevel * 100).toFixed(0)}% energía acústica (${s.johnstonOrgan.vibrationFrequencyHz} Hz)\n` +
-      `• Metabolismo IPC/NPF: Régimen ${s.metabolicGovernor.regime} (Batería: ${s.metabolicGovernor.batteryPct}%, Autonomía est: ${s.metabolicGovernor.estimatedStandbyHours}h)${bearingSection}`;
+      `• Metabolismo IPC/NPF: Régimen ${s.metabolicGovernor.regime} (Batería: ${s.metabolicGovernor.batteryPct}%, Autonomía: ${s.metabolicGovernor.estimatedStandbyHours}h)${bearingSection}`;
   }
 
   /**
@@ -241,13 +276,43 @@ export class ConnectomeCortexBridge {
     const s = this.getConnectomeSnapshot();
     const cleanQ = (query || '').toLowerCase();
 
+    // Consulta sobre Visión, Lóbulos Ópticos o Detección Looming
+    if (/optic|visi[oó]n|looming|amenaza.*visual|centinela|colisi[oó]n/i.test(cleanQ)) {
+      return `👁️ **Lóbulos Ópticos Neuromórficos (T4/T5 & LC4 Looming)**\n\n` +
+        `• **Detección Balística Looming:** ${s.opticLobe.loomingDetected ? '🚨 ¡AMENAZA EN APROXIMACIÓN RÁPIDA DETECTADA!' : '🟢 Espacio visual despejado'}\n` +
+        `• **Tasa de Expansión Angular η(t):** ${s.opticLobe.loomingExpansionRate.toFixed(2)}/s (Umbral balístico: 1.20/s)\n` +
+        `• **Odometría Visual (LPTC VS):** ${s.opticLobe.translationalVelocity.toFixed(2)} m/s\n` +
+        `• **Rotación Angular Visual (LPTC HS):** ${s.opticLobe.rotationalVelocityDps.toFixed(1)} °/s\n` +
+        `• **Receptores Omatidiales:** 256 sensores (malla 16x16) activos`;
+    }
+
+    // Consulta sobre Háptica o Guía Ojos-Libres (DNa01/DNa02)
+    if (/h[aá]ptic|vibraci[oó]n|ojos.*libres|cieg|gui[aá].*h[aá]ptic|timoneo|dna/i.test(cleanQ)) {
+      return `📳 **Actuador Somatosensorial Háptico (DNa01/DNa02)**\n\n` +
+        `• **Modo Háptico Actual:** **${s.motorActuator.currentMode}**\n` +
+        `• **Error de Timoneo:** ${s.motorActuator.steeringErrorDeg > 0 ? `+${s.motorActuator.steeringErrorDeg}° (Virar a Estribor / Derecha)` : `${s.motorActuator.steeringErrorDeg}° (Virar a Babor / Izquierda)`}\n` +
+        `• **Excitación DNa01 (Babor):** ${s.motorActuator.dna01Excitation.toFixed(2)}\n` +
+        `• **Excitación DNa02 (Estribor):** ${s.motorActuator.dna02Excitation.toFixed(2)}\n` +
+        `• **Pulsos Hápticos Despachados:** ${s.motorActuator.totalPulsesDispatched}\n` +
+        `• **Navegación en Sigilo:** Permite avance táctico nocturno sin encender la pantalla hacia el Home Vector o Goal Vector.`;
+    }
+
+    // Consulta sobre Feromonas de Enjambre y Estigmergia
+    if (/feromona|pheromone|estigmergia|rastro|enjambre.*olor|alerta.*zona/i.test(cleanQ)) {
+      return `🍄 **Estigmergia de Malla & Feromonas de Enjambre (Mushroom Body)**\n\n` +
+        `• **Feromonas Activas en Memoria:** ${s.mushroomBody.activePheromonesCount}\n` +
+        `• **Propensión Conductual:** **${s.mushroomBody.behavioralDrive}** (${s.mushroomBody.behavioralValenceScore})\n` +
+        `• **Dinámica de Desvío:** Las feromonas ALARM deprimen la conductancia sináptica de la ruta, provocando evasión automática del tráfico en el sector hostil.\n` +
+        `• **Emisión:** Puedes difundir feromonas ALARM, TRAIL o AGGREGATION desde el Mapa Táctico o el Centro de Comando.`;
+    }
+
     // Consulta específica sobre navegación vectorial 3D / Retorno a Casa
     if (/home.*vector|retorno|volver|nido|casa|odometr|fan.*shaped|rumbo.*casa/i.test(cleanQ)) {
       return `🧭 **Navegación Vectorial 3D Fan-Shaped Body (Retorno a Casa)**\n\n` +
         `• **Distancia al Punto de Partida:** ${s.fanShapedBody.homeDistanceMeters} metros\n` +
         `• **Rumbo Azimutal de Retorno:** ${s.fanShapedBody.homeBearingDeg}° (${s.fanShapedBody.homeCardinal})\n` +
         `• **Distancia Total Recorrida:** ${s.fanShapedBody.totalDistanceTraveledMeters} metros\n` +
-        `• **Posición Relativa:** X=${s.fanShapedBody.position.x}m (Este), Y=${s.fanShapedBody.position.y}m (Norte), Z=${s.fanShapedBody.position.z}m (Altitud)\n` +
+        `• **Posición Relativa:** X=${s.fanShapedBody.position.x}m (Este), Y=${s.fanShapedBody.position.y}m (Norte), Z=${s.fanShapedBody.position.z}m (Altitud Barométrica)\n` +
         (s.fanShapedBody.hasTarget ? `• **Objetivo Activo:** ${s.fanShapedBody.targetDistanceMeters}m hacia ${s.fanShapedBody.targetBearingDeg}° (Error de timoneo: ${s.fanShapedBody.steeringErrorDeg}°)\n` : '') +
         `• **Integración:** Matriz de 16 columnas x 9 capas P-FN y Δ7 activas en tiempo real.`;
     }

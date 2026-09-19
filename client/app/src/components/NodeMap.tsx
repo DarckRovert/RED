@@ -25,7 +25,13 @@ import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { copyToClipboard } from "../lib/clipboard";
 import { TacIcon } from "./ui/TacIcon";
 import { mbtilesReader } from "../lib/storage/MbtilesReaderEngine";
+import { GeohashSpatialRouting } from "../lib/mesh/GeohashSpatialRouting";
 import { RfLinkProfileModal } from "./tactical/RfLinkProfileModal";
+import { ringAttractor, RingAttractorTelemetry } from "../lib/neuro/RingAttractorEngine";
+import { fanShapedBody, FanShapedBodyTelemetry } from "../lib/neuro/FanShapedBodyEngine";
+import { dtnMushroomBody, SwarmPheromone } from "../lib/neuro/DtnMushroomBodyEngine";
+import { PheromoneBroadcastModal } from "./tactical/PheromoneBroadcastModal";
+import { EyesFreeHapticModal } from "./tactical/EyesFreeHapticModal";
 
 function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
@@ -145,6 +151,25 @@ export default function NodeMap() {
 
     // ── Reportes de Situación (SITREPs Tácticos de Escuadrón)
     const [sitreps, setSitreps] = useState<SitrepReport[]>(() => sitrepEngine.getSitreps());
+
+    // ── Conectoma Drosophila MaleCNS v1.0 (Ring Attractor, FB 3D & Swarm Pheromones) ──
+    const [cxTelem, setCxTelem] = useState<RingAttractorTelemetry>(() => ringAttractor.getTelemetry());
+    const [fbTelem, setFbTelem] = useState<FanShapedBodyTelemetry>(() => fanShapedBody.getTelemetry());
+    const [activePheromones, setActivePheromones] = useState<SwarmPheromone[]>(() => dtnMushroomBody.getActivePheromones());
+    const [showHomeVector] = useState<boolean>(true);
+    const [isPheromoneModalOpen, setIsPheromoneModalOpen] = useState<boolean>(false);
+    const [isEyesFreeModalOpen, setIsEyesFreeModalOpen] = useState<boolean>(false);
+
+    useEffect(() => {
+        const unsubCx = ringAttractor.subscribe(setCxTelem);
+        const unsubFb = fanShapedBody.subscribe(setFbTelem);
+        const unsubMb = dtnMushroomBody.subscribe(() => setActivePheromones(dtnMushroomBody.getActivePheromones()));
+        return () => {
+            unsubCx();
+            unsubFb();
+            unsubMb();
+        };
+    }, []);
 
     // ── Navegación Inercial Pedestrian Dead Reckoning (PDR) ───────────────
     const [pdrState, setPdrState] = useState<PdrState>(() => pedestrianDeadReckoning.getState());
@@ -346,8 +371,15 @@ export default function NodeMap() {
         };
         setTacticalTarget(newTarget, 'NodeMap');
 
-        if (gpsData.lat !== 0 && gpsData.lng !== 0) {
-            const g = OffGridNavigationEngine.calculateTacticalGuidance(gpsData.lat, gpsData.lng, newTarget.lat, newTarget.lon, effectiveHeading);
+        const curLat = effectiveLat !== 0 ? effectiveLat : gpsData.lat;
+        const curLng = effectiveLng !== 0 ? effectiveLng : gpsData.lng;
+        if (curLat !== 0 && curLng !== 0) {
+            const deltaLat = newTarget.lat - curLat;
+            const deltaLon = newTarget.lon - curLng;
+            const yMeters = deltaLat * 111000;
+            const xMeters = deltaLon * 111000 * Math.cos(curLat * Math.PI / 180);
+            fanShapedBody.setTarget(xMeters, yMeters, 0);
+            const g = OffGridNavigationEngine.calculateTacticalGuidance(curLat, curLng, newTarget.lat, newTarget.lon, effectiveHeading);
             toast.success(`🎯 Objetivo Fijado: ${g.formattedDistance} | Rumbo ${g.bearingDegrees}° ${g.cardinal}`);
         } else {
             toast.success(`🎯 Objetivo Fijado: [${newTarget.lat.toFixed(5)}, ${newTarget.lon.toFixed(5)}]`);
@@ -356,6 +388,7 @@ export default function NodeMap() {
 
     const handleClearTarget = () => {
         clearTacticalTarget();
+        fanShapedBody.clearTarget();
         toast.info("Objetivo táctico cancelado");
     };
 
@@ -900,6 +933,77 @@ export default function NodeMap() {
                     });
                 } catch {}
 
+                // ── Feromonas de Enjambre (Drosophila Mushroom Body Stigmergy) ──
+                try {
+                    activePheromones.forEach(ph => {
+                        if (!ph.geohash) return;
+                        const coords = GeohashSpatialRouting.decode(ph.geohash);
+                        if (!coords) return;
+                        const color = ph.type === 'ALARM' ? '#FF1E40' : ph.type === 'TRAIL' ? '#00E676' : '#00E5FF';
+                        const now = Date.now();
+                        const ageMs = Math.max(0, now - ph.createdAt);
+                        const remainingRatio = Math.max(0, Math.min(1, 1 - ageMs / ph.ttlMs));
+                        const currentOpacity = Math.max(0.12, ph.intensity * remainingRatio * 0.40);
+                        const radiusMeters = ph.geohash.length <= 6 ? 600 : ph.geohash.length === 7 ? 150 : 50;
+
+                        const circle = L.circle([coords.lat, coords.lon], {
+                            radius: radiusMeters,
+                            color,
+                            weight: 1.5,
+                            fillColor: color,
+                            fillOpacity: currentOpacity,
+                            dashArray: ph.type === 'ALARM' ? '4, 4' : undefined
+                        }).addTo(markersGroupRef.current);
+
+                        circle.bindPopup(`
+                            <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#000;padding:2px;">
+                                <strong>${ph.type === 'ALARM' ? '🚨 FEROMONA ALARMA' : ph.type === 'TRAIL' ? '🟢 FEROMONA RASTRO' : '🔵 FEROMONA ENCUENTRO'}</strong><br/>
+                                Intensidad: ${(ph.intensity * remainingRatio * 100).toFixed(0)}%<br/>
+                                Geohash: ${ph.geohash}<br/>
+                                Origen: ${ph.originPeerId.slice(0, 8)}...<br/>
+                                Notas: ${ph.notes || 'Sin notas'}<br/>
+                                Expira en: ${Math.round((ph.ttlMs - ageMs) / 60000)} min
+                            </div>
+                        `);
+                    });
+                } catch {}
+
+                // ── Vector de Retorno a Casa 3D (Fan-Shaped Body Home Vector) ──
+                try {
+                    if (showHomeVector && fbTelem.homeVector.distanceMeters > 5 && effectiveLat !== 0 && effectiveLng !== 0) {
+                        const homeBearing = fbTelem.homeVector.bearingDeg;
+                        const distM = fbTelem.homeVector.distanceMeters;
+                        const angleRad = (homeBearing * Math.PI) / 180;
+                        const deltaLat = (distM * Math.cos(angleRad)) / 111000;
+                        const deltaLng = (distM * Math.sin(angleRad)) / (111000 * Math.max(0.01, Math.cos((effectiveLat * Math.PI) / 180)));
+                        const homeLat = effectiveLat + deltaLat;
+                        const homeLng = effectiveLng + deltaLng;
+
+                        const homeIcon = L.divIcon({
+                            className: "custom-home-vector-marker",
+                            html: `<div style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(0,229,255,0.25);border:2px solid #00E5FF;box-shadow:0 0 14px #00E5FF;font-size:12px;">🏠</div>`,
+                            iconSize: [28, 28],
+                            iconAnchor: [14, 14]
+                        });
+                        const hMarker = L.marker([homeLat, homeLng], { icon: homeIcon }).addTo(markersGroupRef.current);
+                        hMarker.bindPopup(`
+                            <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#000;padding:2px;">
+                                <strong>🏠 HOME VECTOR (Fan-Shaped Body 3D)</strong><br/>
+                                Distancia Retorno: ${distM} m<br/>
+                                Rumbo: ${homeBearing}° (${fbTelem.homeVector.cardinal})<br/>
+                                Desnivel Barométrico Δz: ${fbTelem.homeVector.deltaAltitudeMeters.toFixed(1)} m
+                            </div>
+                        `);
+
+                        L.polyline([[effectiveLat, effectiveLng], [homeLat, homeLng]], {
+                            color: "#00E5FF",
+                            weight: 2.5,
+                            dashArray: "6, 6",
+                            opacity: 0.85
+                        }).addTo(markersGroupRef.current);
+                    }
+                } catch {}
+
                 // Superposición de Línea de Demora Foxhunting (RDF LOB)
                 try {
                     const rdfState = tacticalRdf.getState();
@@ -1012,7 +1116,7 @@ export default function NodeMap() {
         return () => {
             isCancelled = true;
         };
-    }, [effectiveLat, effectiveLng, peers, target, isPdrActive, sitreps]);
+    }, [effectiveLat, effectiveLng, peers, target, isPdrActive, sitreps, activePheromones, showHomeVector, fbTelem]);
 
     const recenterMap = () => {
         if (leafletMapRef.current) {
@@ -1108,6 +1212,26 @@ export default function NodeMap() {
                         <span>RF</span>
                     </button>
                     <button
+                        onClick={() => setIsEyesFreeModalOpen(true)}
+                        className={isEyesFreeModalOpen ? "btn-tactical-primary" : "btn-tactical-secondary"}
+                        style={{ padding: "6px 8px", fontSize: "0.74rem", display: "flex", alignItems: "center", gap: "3px" }}
+                        title="Navegación Táctil Eyes-Free (Guía Háptica Subconsciente)"
+                    >
+                        <span>📳</span>
+                        <span>HAPTIC</span>
+                    </button>
+                    <button
+                        onClick={() => setIsPheromoneModalOpen(true)}
+                        className={isPheromoneModalOpen ? "btn-tactical-primary" : "btn-tactical-secondary"}
+                        style={{ padding: "6px 8px", fontSize: "0.74rem", display: "flex", alignItems: "center", gap: "3px" }}
+                        title="Difundir Feromona Swarm (Estigmergia de Malla)"
+                    >
+                        <span>🍄</span>
+                        <span style={{ color: activePheromones.length > 0 ? "var(--accent-amber)" : undefined }}>
+                            {activePheromones.length > 0 ? activePheromones.length : "SWARM"}
+                        </span>
+                    </button>
+                    <button
                         onClick={handleTogglePdr}
                         className={isPdrActive ? "btn-tactical-primary" : "btn-tactical-secondary"}
                         style={{ padding: "6px 9px", fontSize: "0.74rem", background: isPdrActive ? "#FF9100" : undefined, borderColor: isPdrActive ? "#FFB74D" : undefined, display: "flex", alignItems: "center", gap: "4px" }}
@@ -1199,10 +1323,52 @@ export default function NodeMap() {
                 </div>
             </div>
 
+            {/* Cinta Flotante del Conectoma Drosophila MaleCNS */}
+            <div style={{
+                position: "absolute", top: "114px", left: "10px", right: "10px",
+                zIndex: 890, pointerEvents: "none",
+            }}>
+                <div className="card-tactical" style={{
+                    padding: "4px 10px", pointerEvents: "auto",
+                    background: "rgba(6, 9, 18, 0.88)", backdropFilter: "blur(12px)",
+                    border: "1px solid rgba(0, 229, 255, 0.2)",
+                    borderRadius: "6px",
+                    display: "flex", justifyContent: "space-between", alignItems: "center", gap: "6px",
+                    fontSize: "0.62rem", fontFamily: "JetBrains Mono, monospace"
+                }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "var(--accent-cyan)" }}>
+                        <span style={{ fontSize: "0.75rem" }}>🧠</span>
+                        <span style={{ fontWeight: 800 }}>E-PG:</span>
+                        <span style={{ color: "#FFF" }}>{cxTelem.headingDeg.toFixed(0)}°</span>
+                        <span style={{ color: "var(--text-muted)", fontSize: "0.56rem" }}>
+                            ({cxTelem.angularVelocityDps >= 0 ? '+' : ''}{cxTelem.angularVelocityDps.toFixed(0)}°/s)
+                        </span>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "#69F0AE" }}>
+                        <span style={{ fontSize: "0.75rem" }}>🏠</span>
+                        <span style={{ fontWeight: 800 }}>FB:</span>
+                        <span style={{ color: "#FFF" }}>{fbTelem.homeVector.distanceMeters.toFixed(0)}m</span>
+                        <span style={{ color: "var(--text-muted)", fontSize: "0.56rem" }}>
+                            Az {fbTelem.homeVector.bearingDeg.toFixed(0)}° Δz {fbTelem.homeVector.deltaAltitudeMeters >= 0 ? '+' : ''}{fbTelem.homeVector.deltaAltitudeMeters.toFixed(0)}m
+                        </span>
+                    </div>
+
+                    <div 
+                        onClick={() => setIsPheromoneModalOpen(true)}
+                        style={{ display: "flex", alignItems: "center", gap: "4px", color: activePheromones.length > 0 ? "var(--accent-amber)" : "var(--text-muted)", cursor: "pointer" }}
+                        title="Ver / Emitir Feromonas Swarm"
+                    >
+                        <span>🍄</span>
+                        <span style={{ fontWeight: 700 }}>{activePheromones.length}</span>
+                    </div>
+                </div>
+            </div>
+
             {/* Tarjeta Flotante de Navegación Táctica Activa */}
             {target && tacticalGuidance && (
                 <div style={{
-                    position: "absolute", top: "124px", left: "10px", right: "10px",
+                    position: "absolute", top: "156px", left: "10px", right: "10px",
                     zIndex: 900, pointerEvents: "none", maxWidth: "460px", margin: "0 auto"
                 }}>
                     <div className="card-tactical animate-pop" style={{
@@ -1407,6 +1573,31 @@ export default function NodeMap() {
                             >
                                 <TacIcon name="pin" size={14} color="var(--accent-cyan)" />
                                 <span>Añadir Waypoint</span>
+                            </button>
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                            <button
+                                onClick={() => {
+                                    handleSetTarget(contextActionPoint.lat, contextActionPoint.lng);
+                                    setContextActionPoint(null);
+                                    setIsEyesFreeModalOpen(true);
+                                }}
+                                className="btn-tactical-secondary"
+                                style={{ padding: "8px", fontSize: "0.74rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", color: "#FF9100", borderColor: "rgba(255, 145, 0, 0.4)" }}
+                            >
+                                <span>📳</span>
+                                <span>Guía Háptica</span>
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setIsPheromoneModalOpen(true);
+                                }}
+                                className="btn-tactical-secondary"
+                                style={{ padding: "8px", fontSize: "0.74rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", color: "var(--accent-amber)", borderColor: "rgba(255, 171, 0, 0.4)" }}
+                            >
+                                <span>🍄</span>
+                                <span>Feromona</span>
                             </button>
                         </div>
 
@@ -1859,6 +2050,25 @@ export default function NodeMap() {
                     />
                 );
             })()}
+
+            {/* Modal de Difusión de Feromonas Swarm */}
+            <PheromoneBroadcastModal
+                isOpen={isPheromoneModalOpen}
+                onClose={() => setIsPheromoneModalOpen(false)}
+                currentLocation={(() => {
+                    const lastLoc = TacticalLocationEngine.getLastKnownLocation();
+                    const lat = (gpsData.lat && gpsData.lat !== 0) ? gpsData.lat : (lastLoc?.lat || 0);
+                    const lon = (gpsData.lng && gpsData.lng !== 0) ? gpsData.lng : (lastLoc?.lon || 0);
+                    const alt = gpsData.altitude || lastLoc?.alt || 0;
+                    return { lat, lon, alt };
+                })()}
+            />
+
+            {/* Modal de Navegación Háptica Eyes-Free */}
+            <EyesFreeHapticModal
+                isOpen={isEyesFreeModalOpen}
+                onClose={() => setIsEyesFreeModalOpen(false)}
+            />
         </div>
     );
 }

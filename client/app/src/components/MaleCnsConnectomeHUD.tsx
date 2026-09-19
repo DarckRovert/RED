@@ -13,6 +13,10 @@ import { tacticalMotorActuator, TacticalMotorActuatorTelemetry } from "../lib/ne
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacIcon } from "./ui/TacIcon";
+import { toast } from "./Toast";
+import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
+import { PheromoneBroadcastModal } from "./tactical/PheromoneBroadcastModal";
+import { EyesFreeHapticModal } from "./tactical/EyesFreeHapticModal";
 
 interface Point3D {
   x: number;
@@ -67,6 +71,121 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const [stimulationActive, setStimulationActive] = useState<boolean>(false);
   const [showAttributionModal, setShowAttributionModal] = useState<boolean>(false);
   const [optogeneticFeedback, setOptogeneticFeedback] = useState<string | null>(null);
+
+  // Estados y refs del Centinela Óptico (Cámara real 16x16) y Gobernador Forzado
+  const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
+  const [ommatidiaPixels, setOmmatidiaPixels] = useState<number[]>(() => new Array(256).fill(0.1));
+  const [isForcedTorpor, setIsForcedTorpor] = useState<boolean>(() => metabolicGovernor.isForcedTorpor());
+  const [isPheromoneModalOpen, setIsPheromoneModalOpen] = useState<boolean>(false);
+  const [isHapticModalOpen, setIsHapticModalOpen] = useState<boolean>(false);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const cameraFrameRef = useRef<number | null>(null);
+  const lastCaptureTimeRef = useRef<number>(0);
+  const canvas16Ref = useRef<HTMLCanvasElement | null>(null);
+
+  const startCamera = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error("API de cámara no disponible en este dispositivo");
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 320 }, height: { ideal: 240 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setIsCameraActive(true);
+      opticLobe.start();
+      TacticalAudioEngine.playTap();
+      toast.success("👁️ Centinela Óptico activado: 256 omatidios en línea");
+    } catch (e: any) {
+      toast.error("Error al acceder a la cámara: " + (e.message || e));
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    if (cameraFrameRef.current) {
+      cancelAnimationFrame(cameraFrameRef.current);
+      cameraFrameRef.current = null;
+    }
+    setIsCameraActive(false);
+    opticLobe.stop();
+    TacticalAudioEngine.playTap();
+  };
+
+  // Bucle de ingestión de cuadros de la cámara a 16x16 Float32
+  useEffect(() => {
+    if (!isCameraActive) return;
+
+    let animId: number;
+    const processLoop = () => {
+      const now = Date.now();
+      if (now - lastCaptureTimeRef.current >= 50) {
+        lastCaptureTimeRef.current = now;
+        const video = videoRef.current;
+        if (video && video.readyState >= 2) {
+          if (!canvas16Ref.current) {
+            canvas16Ref.current = document.createElement("canvas");
+            canvas16Ref.current.width = 16;
+            canvas16Ref.current.height = 16;
+          }
+          const ctx = canvas16Ref.current.getContext("2d", { willReadFrequently: true });
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, 16, 16);
+            const imgData = ctx.getImageData(0, 0, 16, 16);
+            const pixels = new Float32Array(256);
+            const numArr: number[] = new Array(256);
+            for (let i = 0; i < 256; i++) {
+              const r = imgData.data[i * 4];
+              const g = imgData.data[i * 4 + 1];
+              const b = imgData.data[i * 4 + 2];
+              const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
+              pixels[i] = lum;
+              numArr[i] = lum;
+            }
+            const telem = opticLobe.ingestVisualFrame(pixels, now);
+            setOmmatidiaPixels(numArr);
+
+            if (telem.loomingThreat.isThreatDetected) {
+              TacticalAudioEngine.playAlarm();
+              if (typeof navigator !== "undefined" && navigator.vibrate) {
+                navigator.vibrate([150, 50, 150]);
+              }
+            }
+          }
+        }
+      }
+      animId = requestAnimationFrame(processLoop);
+      cameraFrameRef.current = animId;
+    };
+
+    animId = requestAnimationFrame(processLoop);
+    return () => {
+      cancelAnimationFrame(animId);
+    };
+  }, [isCameraActive]);
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+    };
+  }, []);
 
   // Registro de botón Atrás LIFO (Cierre modal interno prioritario)
   useEffect(() => {
@@ -1039,28 +1158,58 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           style={{
             padding: "10px",
             borderRadius: "10px",
-            background: metTelemetry.regime === 'TORPOR' ? "rgba(255, 51, 85, 0.1)" : "rgba(118, 255, 3, 0.05)",
-            border: `1px solid ${metTelemetry.regime === 'TORPOR' ? '#FF3355' : 'rgba(118, 255, 3, 0.25)'}`,
+            background: (metTelemetry.regime === 'TORPOR' || isForcedTorpor) ? "rgba(255, 51, 85, 0.12)" : "rgba(118, 255, 3, 0.05)",
+            border: `1px solid ${(metTelemetry.regime === 'TORPOR' || isForcedTorpor) ? '#FF3355' : 'rgba(118, 255, 3, 0.25)'}`,
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-            <span style={{ fontSize: "0.65rem", color: metTelemetry.regime === 'TORPOR' ? '#FF3355' : '#76FF03', fontWeight: 900 }}>
+            <span style={{ fontSize: "0.65rem", color: (metTelemetry.regime === 'TORPOR' || isForcedTorpor) ? '#FF3355' : '#76FF03', fontWeight: 900 }}>
               🔋 METABOLISMO (IPC / NPF)
             </span>
-            <span style={{
-              fontSize: "0.58rem",
-              padding: "2px 6px",
-              borderRadius: "4px",
-              fontWeight: 900,
-              background: metTelemetry.regime === 'TORPOR' ? '#FF3355' : metTelemetry.regime === 'CONSERVATIVE' ? '#FFB300' : '#00E676',
-              color: '#000000',
-            }}>
-              {metTelemetry.regime}
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{
+                fontSize: "0.58rem",
+                padding: "2px 6px",
+                borderRadius: "4px",
+                fontWeight: 900,
+                background: (metTelemetry.regime === 'TORPOR' || isForcedTorpor) ? '#FF3355' : metTelemetry.regime === 'CONSERVATIVE' ? '#FFB300' : '#00E676',
+                color: '#000000',
+              }}>
+                {isForcedTorpor ? 'TORPOR FORZADO' : metTelemetry.regime}
+              </span>
+              <button
+                onClick={() => {
+                  const next = !isForcedTorpor;
+                  metabolicGovernor.setForcedTorpor(next);
+                  setIsForcedTorpor(next);
+                  if (next) {
+                    TacticalAudioEngine.playAlarm();
+                    toast.warning("Torpor forzado activado: Radio LoRa 5 min, IA pausada");
+                  } else {
+                    TacticalAudioEngine.playTap();
+                    toast.success("Torpor desactivado: CNS restaurado");
+                  }
+                }}
+                style={{
+                  fontSize: "0.58rem",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  fontWeight: 900,
+                  background: isForcedTorpor ? "#FF3355" : "rgba(255, 255, 255, 0.1)",
+                  border: `1px solid ${isForcedTorpor ? "#FFF" : "rgba(255, 255, 255, 0.25)"}`,
+                  color: "#FFF",
+                  cursor: "pointer"
+                }}
+              >
+                {isForcedTorpor ? "DESPERTAR" : "FORZAR"}
+              </button>
+            </div>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", fontWeight: 800 }}>
             <span style={{ color: "#94A3B8" }}>Batería:</span>
-            <span style={{ color: metTelemetry.batteryPct < 20 ? '#FF3355' : '#00E676' }}>{metTelemetry.batteryPct}% ({metTelemetry.isCharging ? '⚡ Cargando' : `~${metTelemetry.estimatedStandbyHours}h est`})</span>
+            <span style={{ color: metTelemetry.batteryPct < 20 ? '#FF3355' : '#00E676' }}>
+              {metTelemetry.batteryPct}% ({metTelemetry.isCharging ? '⚡ Cargando' : `~${metTelemetry.estimatedStandbyHours}h est`})
+            </span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
             <span style={{ color: "#94A3B8" }}>Reloj Sináptico:</span>
@@ -1070,6 +1219,11 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
             <span style={{ color: "#94A3B8" }}>IPC / NPF:</span>
             <span style={{ color: "#B388FF" }}>{(metTelemetry.ipcLevel * 100).toFixed(0)}% / {(metTelemetry.npfLevel * 100).toFixed(0)}%</span>
           </div>
+          {isForcedTorpor && (
+            <div style={{ fontSize: "0.60rem", color: "#FF6680", marginTop: "4px", fontStyle: "italic" }}>
+              ⚠️ Reposo táctico extremo: longevidad multiplicada x3.5, radio TDMA LoRa en ráfagas de 5 min.
+            </div>
+          )}
         </div>
 
         {/* Card 5: Mushroom Body & Swarm Pheromones */}
@@ -1109,6 +1263,28 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
             <span style={{ color: "#94A3B8" }}>LTP Pinned:</span>
             <span style={{ color: "#00E676" }}>{mbTelemetry.ltpPinnedRecords} Paquetes SOS</span>
           </div>
+          <button
+            onClick={() => setIsPheromoneModalOpen(true)}
+            style={{
+              width: "100%",
+              marginTop: "6px",
+              padding: "5px 8px",
+              borderRadius: "6px",
+              background: "rgba(179, 136, 255, 0.15)",
+              border: "1px solid rgba(179, 136, 255, 0.4)",
+              color: "#B388FF",
+              fontWeight: 800,
+              fontSize: "0.66rem",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "4px"
+            }}
+          >
+            <span>🍄</span>
+            <span>EMITIR FEROMONA SWARM</span>
+          </button>
         </div>
 
         {/* Card 6: Giant Fiber System & fly-swing */}
@@ -1142,37 +1318,118 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           style={{
             padding: "10px",
             borderRadius: "10px",
-            background: opticTelemetry.loomingThreat.isThreatDetected ? "rgba(255, 51, 85, 0.12)" : "rgba(0, 229, 255, 0.05)",
+            background: opticTelemetry.loomingThreat.isThreatDetected ? "rgba(255, 51, 85, 0.15)" : "rgba(0, 229, 255, 0.05)",
             border: `1px solid ${opticTelemetry.loomingThreat.isThreatDetected ? '#FF3355' : 'rgba(0, 229, 255, 0.25)'}`,
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
             <span style={{ fontSize: "0.65rem", color: opticTelemetry.loomingThreat.isThreatDetected ? '#FF3355' : '#00E5FF', fontWeight: 900 }}>
               👁️ LÓBULOS ÓPTICOS (T4/T5 &amp; LC4)
             </span>
-            <span style={{
-              fontSize: "0.58rem",
-              padding: "2px 6px",
-              borderRadius: "4px",
-              fontWeight: 900,
-              background: opticTelemetry.loomingThreat.isThreatDetected ? '#FF3355' : '#00E5FF',
-              color: '#000000',
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{
+                fontSize: "0.58rem",
+                padding: "2px 6px",
+                borderRadius: "4px",
+                fontWeight: 900,
+                background: opticTelemetry.loomingThreat.isThreatDetected ? '#FF3355' : '#00E5FF',
+                color: '#000000',
+              }}>
+                {opticTelemetry.loomingThreat.isThreatDetected ? '🚨 LOOMING' : 'DESPEJADO'}
+              </span>
+              <button
+                onClick={isCameraActive ? stopCamera : startCamera}
+                style={{
+                  fontSize: "0.58rem",
+                  padding: "2px 7px",
+                  borderRadius: "4px",
+                  fontWeight: 900,
+                  background: isCameraActive ? "#FF3355" : "#00E5FF",
+                  border: "none",
+                  color: "#000",
+                  cursor: "pointer"
+                }}
+              >
+                {isCameraActive ? "APAGAR" : "CÁMARA"}
+              </button>
+            </div>
+          </div>
+
+          {/* Omatidios Compound Eye 16x16 Visual Matrix */}
+          <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "6px" }}>
+            <div style={{
+              width: "64px", height: "64px",
+              display: "grid", gridTemplateColumns: "repeat(16, 1fr)",
+              background: "#000", border: "1px solid rgba(0, 229, 255, 0.4)",
+              borderRadius: "4px", overflow: "hidden", flexShrink: 0
             }}>
-              {opticTelemetry.loomingThreat.isThreatDetected ? '🚨 LOOMING' : 'DESPEJADO'}
-            </span>
+              {ommatidiaPixels.map((val, idx) => {
+                const brightness = Math.round(val * 255);
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      width: "100%", height: "100%",
+                      backgroundColor: opticTelemetry.loomingThreat.isThreatDetected
+                        ? `rgb(${brightness}, 0, 0)`
+                        : `rgb(0, ${brightness}, ${brightness})`
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <div style={{ flex: 1, fontSize: "0.64rem", display: "flex", flexDirection: "column", gap: "2px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "#94A3B8" }}>Estado:</span>
+                <span style={{ color: isCameraActive ? "#00E676" : "#64748B", fontWeight: 800 }}>
+                  {isCameraActive ? `ACTIVO (${opticTelemetry.fpsProcessed} FPS)` : "STANDBY"}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "#94A3B8" }}>Flujo HS/VS:</span>
+                <span style={{ color: "#00E5FF" }}>
+                  {opticTelemetry.hsHorizontalMotion.toFixed(2)} / {opticTelemetry.vsVerticalMotion.toFixed(2)}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "#94A3B8" }}>Vías ON/OFF:</span>
+                <span style={{ color: "#76FF03" }}>
+                  T4: {opticTelemetry.t4OnMotionMagnitude.toFixed(2)} | T5: {opticTelemetry.t5OffMotionMagnitude.toFixed(2)}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "#94A3B8" }}>Odometría:</span>
+                <span style={{ color: "#FFD600" }}>{opticTelemetry.visualOdometryDistanceMeters.toFixed(1)} m</span>
+              </div>
+            </div>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", fontWeight: 800 }}>
-            <span style={{ color: "#94A3B8" }}>Flujo Óptico H/V:</span>
-            <span style={{ color: "#00E5FF" }}>HS: {opticTelemetry.hsHorizontalMotion.toFixed(2)} | VS: {opticTelemetry.vsVerticalMotion.toFixed(2)}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
-            <span style={{ color: "#94A3B8" }}>Vías ON/OFF:</span>
-            <span style={{ color: "#76FF03" }}>T4: {opticTelemetry.t4OnMotionMagnitude} | T5: {opticTelemetry.t5OffMotionMagnitude}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
-            <span style={{ color: "#94A3B8" }}>Odometría Visual:</span>
-            <span style={{ color: "#FFD600" }}>{opticTelemetry.visualOdometryDistanceMeters} m ({opticTelemetry.fpsProcessed} FPS)</span>
-          </div>
+
+          {/* Hidden video element for camera stream ingestion */}
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            style={{ display: "none" }}
+          />
+
+          {opticTelemetry.loomingThreat.isThreatDetected && (
+            <div style={{
+              background: "rgba(255, 51, 85, 0.25)",
+              border: "1px solid #FF3355",
+              borderRadius: "4px",
+              padding: "4px 8px",
+              marginTop: "4px",
+              fontSize: "0.62rem",
+              color: "#FFF",
+              fontWeight: 800,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <span>🚨 AMENAZA DE COLISIÓN (LC4/LPLC2)</span>
+              <span>TTC: {opticTelemetry.loomingThreat.estimatedTtcMs.toFixed(0)} ms</span>
+            </div>
+          )}
         </div>
 
         {/* Card 6: Tactical Motor Actuators DNa01/02 & Haptics */}
@@ -1213,6 +1470,28 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
             <span style={{ color: "#94A3B8" }}>Pulsos Hápticos:</span>
             <span style={{ color: "#00E5FF" }}>{motorTelemetry.totalPulsesDispatched} despachados</span>
           </div>
+          <button
+            onClick={() => setIsHapticModalOpen(true)}
+            style={{
+              width: "100%",
+              marginTop: "6px",
+              padding: "5px 8px",
+              borderRadius: "6px",
+              background: "rgba(255, 179, 0, 0.15)",
+              border: "1px solid rgba(255, 179, 0, 0.4)",
+              color: "#FFB300",
+              fontWeight: 800,
+              fontSize: "0.66rem",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "4px"
+            }}
+          >
+            <span>📳</span>
+            <span>ABRIR GUÍA HÁPTICA EYES-FREE</span>
+          </button>
         </div>
 
         {/* Card 5: Radiogoniometría Bio-Inercial AoA (Direction-Finding) */}
@@ -1448,6 +1727,26 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           </div>
         </div>
       )}
+
+      {/* Modal de Difusión de Feromonas Swarm */}
+      <PheromoneBroadcastModal
+        isOpen={isPheromoneModalOpen}
+        onClose={() => setIsPheromoneModalOpen(false)}
+        currentLocation={(() => {
+          const lastLoc = TacticalLocationEngine.getLastKnownLocation();
+          return {
+            lat: lastLoc?.lat || 0,
+            lon: lastLoc?.lon || 0,
+            alt: lastLoc?.alt || 0,
+          };
+        })()}
+      />
+
+      {/* Modal de Navegación Háptica Eyes-Free */}
+      <EyesFreeHapticModal
+        isOpen={isHapticModalOpen}
+        onClose={() => setIsHapticModalOpen(false)}
+      />
     </div>
   );
 }
