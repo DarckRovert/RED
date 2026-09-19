@@ -25,6 +25,22 @@ export interface MushroomBodyConfig {
   saturationThreshold: number;   // 0.80 (80% capacidad dispara arbitraje LTD)
 }
 
+export type SwarmPheromoneType = 'ALARM' | 'TRAIL' | 'AGGREGATION';
+
+export interface SwarmPheromone {
+  id: string;
+  type: SwarmPheromoneType;
+  intensity: number; // [0.0, 1.0] con decaimiento temporal
+  originPeerId: string;
+  createdAt: number;
+  ttlMs: number;
+  xMeters?: number;
+  yMeters?: number;
+  notes?: string;
+}
+
+export type BehavioralDrive = 'APPROACH' | 'AVOID' | 'NEUTRAL';
+
 export interface AssociativeMemoryRecord {
   nonce: string;
   activeKcIndices: number[];     // Índices dispersos de células de Kenyon activadas
@@ -56,6 +72,13 @@ export interface MushroomBodyTelemetry {
   mbonCount: number;              // 97 MBONs de salida
   danPamCount: number;            // ~130 neuronas PAM (recompensa / LTP)
   danPpl1Count: number;           // ~12 neuronas PPL1 (aversión / SOS)
+  // Dinámica de Conducta y Feromonas de Enjambre
+  behavioralDrive: BehavioralDrive;
+  behavioralValenceScore: number; // [-1.0, 1.0] Balance PAM (+) vs PPL1 (-)
+  pamRewardScore: number;         // Puntuación acumulada de recompensa
+  ppl1AversionScore: number;      // Puntuación acumulada de aversión / peligro
+  activePheromonesCount: number;
+  topPheromone?: SwarmPheromone;
   lastUpdated: number;
 }
 
@@ -78,6 +101,12 @@ export class DtnMushroomBodyEngine {
 
   // Tabla de memorias asociativas indexadas por Nonce de paquete
   private memoryTable: Map<string, AssociativeMemoryRecord> = new Map();
+
+  // Memoria Dopaminérgica de Pares (PAM Recompensa vs PPL1 Aversión)
+  private peerValenceMap: Map<string, { pamReward: number; ppl1Aversion: number; lastReinforcedAt: number; reason?: string }> = new Map();
+
+  // Almacén de Feromonas de Enjambre Activas
+  private pheromonesMap: Map<string, SwarmPheromone> = new Map();
 
   // Contadores de telemetría bio-inspirada
   private ltdEvictedTotal = 0;
@@ -469,6 +498,146 @@ export class DtnMushroomBodyEngine {
   }
 
   /**
+   * Refuerzo de Recompensa Dopaminérgica (Cúmulo PAM - Protocerebral Anterior Medial):
+   * Modula plasticidad sináptica positiva (LTP) ante entrega exitosa, baja latencia o enlace de alta calidad.
+   */
+  public reinforceReward(peerIdOrNonce: string, deltaReward = 0.15): void {
+    const key = (peerIdOrNonce || '').trim().toLowerCase();
+    if (!key) return;
+
+    const memory = this.memoryTable.get(key);
+    if (memory) {
+      memory.valence = Math.min(1.0, memory.valence + deltaReward);
+      memory.lastReinforcedAt = Date.now();
+      memory.reinforcementCount++;
+      if (memory.valence >= this.config.ltpValenceThreshold) {
+        memory.isLtpPinned = true;
+      }
+    }
+
+    const existing = this.peerValenceMap.get(key) || { pamReward: 0.5, ppl1Aversion: 0.0, lastReinforcedAt: Date.now() };
+    existing.pamReward = Math.min(1.0, existing.pamReward + deltaReward);
+    existing.ppl1Aversion = Math.max(0.0, existing.ppl1Aversion - (deltaReward * 0.5));
+    existing.lastReinforcedAt = Date.now();
+    this.peerValenceMap.set(key, existing);
+
+    this.persistState();
+    this.notifyListeners();
+  }
+
+  /**
+   * Refuerzo de Aversión Dopaminérgica (Cúmulo PPL1 - Protocerebral Posterior Lateral 1):
+   * Modula plasticidad aversiva (LTD/Evitación) ante paquetes corruptos, jamming, caídas repetidas o conducta hostil.
+   * Si la severidad es crítica (>= 0.75), emite automáticamente una feromona de enjambre de ALARMA.
+   */
+  public reinforceAversion(peerIdOrNonce: string, severity = 0.25, reason = 'CORRUPTED_OR_JAMMED'): void {
+    const key = (peerIdOrNonce || '').trim().toLowerCase();
+    if (!key) return;
+
+    const memory = this.memoryTable.get(key);
+    if (memory && !memory.isLtpPinned) {
+      memory.valence = Math.max(0.05, memory.valence - severity);
+      memory.lastReinforcedAt = Date.now();
+    }
+
+    const existing = this.peerValenceMap.get(key) || { pamReward: 0.5, ppl1Aversion: 0.0, lastReinforcedAt: Date.now() };
+    existing.ppl1Aversion = Math.min(1.0, existing.ppl1Aversion + severity);
+    existing.pamReward = Math.max(0.0, existing.pamReward - (severity * 0.5));
+    existing.lastReinforcedAt = Date.now();
+    existing.reason = reason;
+    this.peerValenceMap.set(key, existing);
+
+    if (severity >= 0.75 || existing.ppl1Aversion >= 0.8) {
+      this.emitPheromone('ALARM', 1.0, `Aversión PPL1 crítica: ${reason} (Par: ${key.slice(0, 12)})`);
+    }
+
+    this.persistState();
+    this.notifyListeners();
+  }
+
+  /**
+   * Consulta la propensión conductual biológica hacia un par (APPROACH, AVOID o NEUTRAL).
+   */
+  public getPeerBehavioralDrive(peerId: string): { drive: BehavioralDrive; score: number; reason?: string } {
+    const key = (peerId || '').trim().toLowerCase();
+    const entry = this.peerValenceMap.get(key);
+    if (!entry) {
+      return { drive: 'NEUTRAL', score: 0.0 };
+    }
+    const netValence = entry.pamReward - entry.ppl1Aversion; // [-1.0, 1.0]
+    let drive: BehavioralDrive = 'NEUTRAL';
+    if (netValence > 0.20) drive = 'APPROACH';
+    else if (netValence < -0.20) drive = 'AVOID';
+
+    return { drive, score: Math.round(netValence * 100) / 100, reason: entry.reason };
+  }
+
+  /**
+   * Emite una feromona de enjambre P2P (Swarm Pheromone) para señalización estigmérgica.
+   */
+  public emitPheromone(
+    type: SwarmPheromoneType,
+    intensity = 1.0,
+    notes?: string,
+    coords?: { xMeters?: number; yMeters?: number }
+  ): SwarmPheromone {
+    const id = `ph_${type.toLowerCase()}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const pheromone: SwarmPheromone = {
+      id,
+      type,
+      intensity: Math.min(1.0, Math.max(0.1, intensity)),
+      originPeerId: 'self',
+      createdAt: Date.now(),
+      ttlMs: 15 * 60 * 1000, // 15 minutos de vida media
+      xMeters: coords?.xMeters,
+      yMeters: coords?.yMeters,
+      notes,
+    };
+
+    this.pheromonesMap.set(id, pheromone);
+    this.cleanExpiredPheromones();
+    this.notifyListeners();
+    return pheromone;
+  }
+
+  /**
+   * Ingiere una feromona recibida de un par remoto vía enlace de malla.
+   */
+  public ingestPheromone(pheromone: SwarmPheromone): void {
+    if (!pheromone || !pheromone.id || !pheromone.type) return;
+    this.pheromonesMap.set(pheromone.id, {
+      ...pheromone,
+      intensity: Math.min(1.0, Math.max(0.0, pheromone.intensity)),
+    });
+    this.cleanExpiredPheromones();
+    this.notifyListeners();
+  }
+
+  /**
+   * Limpia feromonas expiradas y calcula el decaimiento de intensidad exponencial.
+   */
+  public cleanExpiredPheromones(): void {
+    const now = Date.now();
+    for (const [id, ph] of this.pheromonesMap.entries()) {
+      const age = now - ph.createdAt;
+      if (age >= ph.ttlMs) {
+        this.pheromonesMap.delete(id);
+      } else {
+        const halfLife = ph.ttlMs * 0.5;
+        ph.intensity = Math.max(0.01, ph.intensity * Math.exp(-age / halfLife));
+      }
+    }
+  }
+
+  /**
+   * Obtiene la lista de feromonas de enjambre activas ordenadas por intensidad.
+   */
+  public getActivePheromones(): SwarmPheromone[] {
+    this.cleanExpiredPheromones();
+    return Array.from(this.pheromonesMap.values()).sort((a, b) => b.intensity - a.intensity);
+  }
+
+  /**
    * Obtiene la telemetría del sistema para inspección táctica y HUD.
    */
   public getTelemetry(currentQueueLength = 0, maxCapacity = 5000): MushroomBodyTelemetry {
@@ -483,6 +652,24 @@ export class DtnMushroomBodyEngine {
     const meanValence = this.memoryTable.size > 0 ? totalValence / this.memoryTable.size : 0;
     const currentSaturationRatio = maxCapacity > 0 ? Math.min(1.0, currentQueueLength / maxCapacity) : 0;
 
+    let sumPam = 0;
+    let sumPpl1 = 0;
+    for (const v of this.peerValenceMap.values()) {
+      sumPam += v.pamReward;
+      sumPpl1 += v.ppl1Aversion;
+    }
+    const count = Math.max(1, this.peerValenceMap.size);
+    const avgPam = sumPam / count;
+    const avgPpl1 = sumPpl1 / count;
+    const netValenceScore = avgPam - avgPpl1;
+
+    let behavioralDrive: BehavioralDrive = 'NEUTRAL';
+    if (netValenceScore > 0.2) behavioralDrive = 'APPROACH';
+    else if (netValenceScore < -0.2) behavioralDrive = 'AVOID';
+
+    const activePheromones = this.getActivePheromones();
+    const topPheromone = activePheromones.length > 0 ? activePheromones[0] : undefined;
+
     return {
       totalKenyonCells: this.config.totalKenyonCells,
       activeKenyonCellsLastStimulus: this.lastStimulusActiveKcCount,
@@ -495,6 +682,12 @@ export class DtnMushroomBodyEngine {
       mbonCount: DtnMushroomBodyEngine.MBON_COUNT,
       danPamCount: DtnMushroomBodyEngine.DAN_PAM_COUNT,
       danPpl1Count: DtnMushroomBodyEngine.DAN_PPL1_COUNT,
+      behavioralDrive,
+      behavioralValenceScore: Math.round(netValenceScore * 100) / 100,
+      pamRewardScore: Math.round(avgPam * 100) / 100,
+      ppl1AversionScore: Math.round(avgPpl1 * 100) / 100,
+      activePheromonesCount: activePheromones.length,
+      topPheromone,
       lastUpdated: Date.now(),
     };
   }
@@ -580,6 +773,8 @@ export class DtnMushroomBodyEngine {
    */
   public destroy(): void {
     this.memoryTable.clear();
+    this.peerValenceMap.clear();
+    this.pheromonesMap.clear();
     this.ltdEvictedTotal = 0;
     this.lastStimulusActiveKcCount = 0;
     this.listeners.clear();

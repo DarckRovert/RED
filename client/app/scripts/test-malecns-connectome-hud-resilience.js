@@ -95,7 +95,7 @@ console.log('  ✅ [PASS] 5. Aislamiento Visual por Subsistema (ALL, CX, MB, GFS
 // TEST 6: Control de Rotación, Drag y Zoom
 console.log('  Testing 6: Control táctil de órbita 3D y límites angulares...');
 assert(hudCode.includes('autoRotate'), 'Debe soportar alternancia de autorrotación');
-assert(hudCode.includes('Math.max(-1.2, Math.min(1.2, rotXRef.current + dy *'), 'Rotación X debe estar acotada a [-1.2, 1.2]');
+assert(hudCode.includes('Math.max(-1.2, Math.min(1.2, currentRotX + dy *') || hudCode.includes('Math.max(-1.2, Math.min(1.2, rotXRef.current + dy *'), 'Rotación X debe estar acotada a [-1.2, 1.2]');
 assert(hudCode.includes('zoomRef.current = Math.min(1.8, zoomRef.current + 0.15)'), 'Zoom debe tener límite superior seguro (1.8)');
 assert(hudCode.includes('zoomRef.current = Math.max(0.5, zoomRef.current - 0.15)'), 'Zoom debe tener límite inferior seguro (0.5)');
 console.log('  ✅ [PASS] 6. Control Táctil de Órbita 3D, Clamping Angular y Límites de Zoom');

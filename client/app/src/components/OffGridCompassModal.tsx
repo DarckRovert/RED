@@ -18,6 +18,7 @@ import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { TacIcon } from "./ui/TacIcon";
 import { ringAttractor, RingAttractorTelemetry } from "../lib/neuro/RingAttractorEngine";
 import { synapticMeshRouter, RfPeerBearing } from "../lib/neuro/SynapticMeshRouterEngine";
+import { fanShapedBody, FanShapedBodyTelemetry } from "../lib/neuro/FanShapedBodyEngine";
 
 export function OffGridCompassModal() {
     const { navigate, identity } = useRedStore();
@@ -44,10 +45,15 @@ export function OffGridCompassModal() {
     // Telemetría de Anillo Atractor Bio-Inercial (Drosophila Central Complex)
     const [ringTelem, setRingTelem] = useState<RingAttractorTelemetry>(() => ringAttractor.getTelemetry());
 
+    // Telemetría de Navegación 3D Fan-Shaped Body (Retorno a Casa)
+    const [fbTelem, setFbTelem] = useState<FanShapedBodyTelemetry>(() => fanShapedBody.getTelemetry());
+
     useEffect(() => {
         const unsub = ringAttractor.subscribe(setRingTelem);
+        const unsubFb = fanShapedBody.subscribe(setFbTelem);
         return () => {
             unsub();
+            unsubFb();
         };
     }, []);
 
@@ -532,6 +538,36 @@ export function OffGridCompassModal() {
             ctx.fillStyle = "#FFF";
             ctx.font = "bold 9px monospace";
             ctx.fillText(`${rel.distanceMeters}m`, tx, ty - 12);
+        }
+
+        // Draw Fan-Shaped Body Home Vector (🏠 Golden Arrow to Return Point)
+        if (fbTelem && fbTelem.homeVector.distanceMeters > 0.5) {
+            const homeRad = (fbTelem.homeVector.bearingDeg * Math.PI) / 180;
+            const hDistRatio = Math.min(1.0, fbTelem.homeVector.distanceMeters / Math.max(100, radarMaxDist));
+            const hDistPx = hDistRatio * (radius - 35);
+            const hx = Math.sin(homeRad) * hDistPx;
+            const hy = -Math.cos(homeRad) * hDistPx;
+
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(hx, hy);
+            ctx.strokeStyle = "#FFD600";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([3, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            ctx.fillStyle = "#FFD600";
+            ctx.shadowColor = "#FFD600";
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(hx, hy, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = "#FFD600";
+            ctx.font = "bold 8px monospace";
+            ctx.fillText(`CASA ${fbTelem.homeVector.distanceMeters}m`, hx + 8, hy + 3);
         }
 
         // Draw Triangulation Landmarks with Range Scaling
@@ -1145,6 +1181,63 @@ export function OffGridCompassModal() {
                 }}>
                     <div style={{ maxWidth: '640px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                         
+                        {/* Fan-Shaped Body (FB) Home Vector Return HUD */}
+                        <div style={{
+                            padding: "10px 14px",
+                            borderRadius: "14px",
+                            background: "linear-gradient(135deg, rgba(255, 214, 0, 0.08) 0%, rgba(20, 20, 30, 0.95) 100%)",
+                            border: "1px solid rgba(255, 214, 0, 0.3)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "10px",
+                            flexWrap: "wrap",
+                        }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <div style={{
+                                    width: 32, height: 32, borderRadius: "8px",
+                                    background: "rgba(255, 214, 0, 0.2)",
+                                    border: "1px solid #FFD600",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    fontSize: "1rem"
+                                }}>
+                                    🏠
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: "0.65rem", color: "#FFD600", fontWeight: 800, textTransform: "uppercase" }}>
+                                        Retorno Inercial (Fan-Shaped Body 3D)
+                                    </div>
+                                    <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#FFF", fontFamily: "monospace" }}>
+                                        {fbTelem.homeVector.distanceMeters}m @ {fbTelem.homeVector.bearingDeg}° ({fbTelem.homeVector.cardinal})
+                                        {fbTelem.homeVector.deltaAltitudeMeters !== 0 && (
+                                            <span style={{ fontSize: "0.72rem", color: "#38BDF8", marginLeft: "8px" }}>
+                                                ΔZ {fbTelem.homeVector.deltaAltitudeMeters > 0 ? `+${fbTelem.homeVector.deltaAltitudeMeters}` : fbTelem.homeVector.deltaAltitudeMeters}m
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    TacticalAudioEngine.playTap();
+                                    fanShapedBody.setHomeOrigin();
+                                    toast.success("Origen de retorno (Home) fijado en posición actual");
+                                }}
+                                style={{
+                                    padding: "6px 12px",
+                                    borderRadius: "8px",
+                                    background: "rgba(255, 214, 0, 0.15)",
+                                    border: "1px solid #FFD600",
+                                    color: "#FFD600",
+                                    fontWeight: 800,
+                                    fontSize: "0.72rem",
+                                    cursor: "pointer",
+                                }}
+                            >
+                                FIJAR CASA
+                            </button>
+                        </div>
+
                         {/* Tactical Target Active Guidance HUD (Si hay objetivo activo) */}
                         {target && (
                             <div style={{

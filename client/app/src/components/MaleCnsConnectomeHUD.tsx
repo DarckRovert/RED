@@ -2,9 +2,12 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { ringAttractor, RingAttractorTelemetry } from "../lib/neuro/RingAttractorEngine";
+import { fanShapedBody, FanShapedBodyTelemetry } from "../lib/neuro/FanShapedBodyEngine";
 import { synapticMeshRouter, SynapticMeshTelemetry, RfPeerBearing } from "../lib/neuro/SynapticMeshRouterEngine";
 import { giantFiberReflex, GiantFiberTelemetry } from "../lib/neuro/GiantFiberReflexEngine";
 import { dtnMushroomBody, MushroomBodyTelemetry } from "../lib/neuro/DtnMushroomBodyEngine";
+import { johnstonOrgan, JohnstonOrganTelemetry } from "../lib/neuro/JohnstonOrganEngine";
+import { metabolicGovernor, MetabolicGovernorTelemetry } from "../lib/neuro/MetabolicNeuromorphicGovernor";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacIcon } from "./ui/TacIcon";
@@ -18,7 +21,7 @@ interface Point3D {
 interface ConnectomeNode {
   id: string;
   name: string;
-  system: "CX" | "MB" | "GFS" | "SENSORY";
+  system: "CX" | "MB" | "GFS" | "SENSORY" | "FB";
   pos: Point3D;
   color: string;
   size: number;
@@ -29,7 +32,7 @@ interface ConnectomeEdge {
   from: string;
   to: string;
   weight: number;
-  system: "CX" | "MB" | "GFS" | "SENSORY";
+  system: "CX" | "MB" | "GFS" | "SENSORY" | "FB";
   pulseProgress?: number;
 }
 
@@ -40,15 +43,18 @@ export interface MaleCnsConnectomeHUDProps {
 export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Estados de telemetría de los 4 motores bio-neuromórficos
+  // Estados de telemetría de los 7 subsistemas bio-neuromórficos
   const [cxTelemetry, setCxTelemetry] = useState<RingAttractorTelemetry>(() => ringAttractor.getTelemetry());
+  const [fbTelemetry, setFbTelemetry] = useState<FanShapedBodyTelemetry>(() => fanShapedBody.getTelemetry());
   const [synapticTelemetry, setSynapticTelemetry] = useState<SynapticMeshTelemetry>(() => synapticMeshRouter.getTelemetry());
   const [gfsTelemetry, setGfsTelemetry] = useState<GiantFiberTelemetry>(() => giantFiberReflex.getTelemetry());
   const [mbTelemetry, setMbTelemetry] = useState<MushroomBodyTelemetry>(() => dtnMushroomBody.getTelemetry());
+  const [joTelemetry, setJoTelemetry] = useState<JohnstonOrganTelemetry>(() => johnstonOrgan.getTelemetry());
+  const [metTelemetry, setMetTelemetry] = useState<MetabolicGovernorTelemetry>(() => metabolicGovernor.getTelemetry());
   const [rfBearings, setRfBearings] = useState<RfPeerBearing[]>(() => synapticMeshRouter.getAllActiveBearings());
 
   // Filtros de visualización y control de cámara 3D
-  const [filterSystem, setFilterSystem] = useState<"ALL" | "CX" | "MB" | "GFS">("ALL");
+  const [filterSystem, setFilterSystem] = useState<"ALL" | "CX" | "MB" | "GFS" | "FB">("ALL");
   const [autoRotate, setAutoRotate] = useState<boolean>(true);
   const autoRotateRef = useRef<boolean>(true);
   const rotXRef = useRef<number>(0.3);
@@ -82,21 +88,27 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     return unregister;
   }, [onClose]);
 
-  // Suscripción a los 4 subsistemas neurobiológicos
+  // Suscripción a los 7 subsistemas neurobiológicos
   useEffect(() => {
     const unsubCx = ringAttractor.subscribe(setCxTelemetry);
+    const unsubFb = fanShapedBody.subscribe(setFbTelemetry);
     const unsubSyn = synapticMeshRouter.subscribe((st) => {
       setSynapticTelemetry(st);
       setRfBearings(synapticMeshRouter.getAllActiveBearings());
     });
     const unsubGfs = giantFiberReflex.subscribe(setGfsTelemetry);
     const unsubMb = dtnMushroomBody.subscribe(setMbTelemetry);
+    const unsubJo = johnstonOrgan.subscribe(setJoTelemetry);
+    const unsubMet = metabolicGovernor.subscribe(setMetTelemetry);
 
     return () => {
       unsubCx();
+      unsubFb();
       unsubSyn();
       unsubGfs();
       unsubMb();
+      unsubJo();
+      unsubMet();
     };
   }, []);
 
@@ -171,6 +183,56 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
         system: "CX",
       });
     }
+
+    // Fan-Shaped Body (FB) — 16 Columnas azimutales y 9 estratos laminares (Navegación 3D)
+    for (let c = 0; c < 16; c++) {
+      const colAng = (c / 16) * Math.PI * 2;
+      const colRadius = 60;
+      const fx = Math.cos(colAng) * colRadius;
+      const fz = Math.sin(colAng) * colRadius;
+      const fy = 50; // Estrato dorsal sobre EB
+
+      const act = fbTelemetry.columnLayerMatrix[c * 9 + 4] ?? 0.25;
+
+      nList.push({
+        id: `FB_COL_${c}`,
+        name: `FB Column ${c + 1} (Layer 5 Path Int)`,
+        system: "FB",
+        pos: { x: fx, y: fy, z: fz },
+        color: "#FFD600",
+        size: 3.5,
+        activity: act,
+      });
+
+      eList.push({
+        from: `CX_EPG_${c}`,
+        to: `FB_COL_${c}`,
+        weight: 0.75,
+        system: "FB",
+      });
+    }
+
+    // Johnston's Organ (JO) — Antenas mecanosensoriales acústicas y de choque
+    [-1, 1].forEach((side) => {
+      const sPrefix = side === 1 ? "R" : "L";
+      const antPos: Point3D = { x: side * 45, y: 150, z: -5 };
+      nList.push({
+        id: `SENSORY_JO_${sPrefix}`,
+        name: `Johnston Organ ${sPrefix} (Mechanosensory/Acoustic)`,
+        system: "SENSORY",
+        pos: antPos,
+        color: joTelemetry.shockEventsCount > 0 ? "#FF3355" : "#00E5FF",
+        size: 4.5,
+        activity: joTelemetry.acousticEnergyLevel,
+      });
+
+      eList.push({
+        from: `SENSORY_JO_${sPrefix}`,
+        to: `GFS_SOMA_${sPrefix}`,
+        weight: 0.9,
+        system: "GFS",
+      });
+    });
 
     // 2. Mushroom Body (MB) — Calyx, Pedúnculo y Lóbulos Alfa/Beta/Gamma (Memoria DTN)
     // Cáliz dorsal bilateral
@@ -431,6 +493,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           if (!p1.visible || !p2.visible) return;
 
           let strokeColor = "rgba(0, 229, 255, 0.2)";
+          if (edge.system === "FB") strokeColor = "rgba(255, 214, 0, 0.3)";
           if (edge.system === "MB") strokeColor = "rgba(179, 136, 255, 0.25)";
           if (edge.system === "GFS") strokeColor = gfsTelemetry.emconLockActive ? "rgba(255, 51, 85, 0.6)" : "rgba(255, 145, 0, 0.35)";
 
@@ -449,7 +512,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           if (Number.isFinite(px) && Number.isFinite(py)) {
             ctx.beginPath();
             ctx.arc(px, py, Math.max(1, 2 * dpr), 0, Math.PI * 2);
-            ctx.fillStyle = edge.system === "GFS" ? "#FF3355" : "#00E5FF";
+            ctx.fillStyle = edge.system === "GFS" ? "#FF3355" : edge.system === "FB" ? "#FFD600" : "#00E5FF";
             ctx.fill();
           }
         });
@@ -849,7 +912,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
             zIndex: 5,
           }}
         >
-          {(["ALL", "CX", "MB", "GFS"] as const).map((sys) => (
+          {(["ALL", "CX", "FB", "MB", "GFS"] as const).map((sys) => (
             <button
               key={sys}
               onClick={() => {
@@ -870,6 +933,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
             >
               {sys === "ALL" && "🌐 COMPLETO"}
               {sys === "CX" && "🧭 CENTRAL COMPLEX"}
+              {sys === "FB" && "📐 FAN-SHAPED BODY"}
               {sys === "MB" && "🍄 MUSHROOM BODY"}
               {sys === "GFS" && "⚡ GIANT FIBER"}
             </button>
@@ -898,7 +962,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           }}
         >
           <div style={{ fontSize: "0.65rem", color: "#00E5FF", fontWeight: 900, marginBottom: "4px" }}>
-            🧭 CENTRAL COMPLEX (CX)
+            🧭 CENTRAL COMPLEX (CX / E-PG)
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", fontWeight: 800 }}>
             <span style={{ color: "#94A3B8" }}>Rumbo Atractor:</span>
@@ -910,33 +974,136 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           </div>
         </div>
 
-        {/* Card 2: Synaptic Mesh Router & Murthy Lab Statistics */}
+        {/* Card 2: Fan-Shaped Body (FB 3D Vector Path Integration) */}
         <div
           style={{
             padding: "10px",
             borderRadius: "10px",
-            background: "rgba(0, 230, 118, 0.05)",
-            border: "1px solid rgba(0, 230, 118, 0.2)",
+            background: "rgba(255, 214, 0, 0.05)",
+            border: "1px solid rgba(255, 214, 0, 0.2)",
           }}
         >
-          <div style={{ fontSize: "0.65rem", color: "#00E676", fontWeight: 900, marginBottom: "4px" }}>
-            📡 SINAPSIS HEBBIANA & MURTHY LAB
+          <div style={{ fontSize: "0.65rem", color: "#FFD600", fontWeight: 900, marginBottom: "4px" }}>
+            📐 FAN-SHAPED BODY (FB 3D VECTORS)
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", fontWeight: 800 }}>
-            <span style={{ color: "#94A3B8" }}>Reciprocidad r:</span>
-            <span style={{ color: "#00E676" }}>{(synapticTelemetry.edgeReciprocity * 100).toFixed(0)}%</span>
+            <span style={{ color: "#94A3B8" }}>Home Vector:</span>
+            <span style={{ color: "#FFD600" }}>{fbTelemetry.homeVector.distanceMeters}m @ {fbTelemetry.homeVector.bearingDeg}° ({fbTelemetry.homeVector.cardinal})</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
-            <span style={{ color: "#94A3B8" }}>Small-World σ:</span>
-            <span style={{ color: "#00E5FF" }}>{synapticTelemetry.smallWorldSigma.toFixed(2)} (FlyWire)</span>
+            <span style={{ color: "#94A3B8" }}>Desplazamiento Z:</span>
+            <span style={{ color: "#00E5FF" }}>{fbTelemetry.homeVector.deltaAltitudeMeters > 0 ? `+${fbTelemetry.homeVector.deltaAltitudeMeters}` : fbTelemetry.homeVector.deltaAltitudeMeters}m (Baro)</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
-            <span style={{ color: "#94A3B8" }}>Motivos Triádicos:</span>
-            <span style={{ color: "#FFB300" }}>FFL: {synapticTelemetry.fflMotifsCount} | FBL: {synapticTelemetry.fblMotifsCount}</span>
+            <span style={{ color: "#94A3B8" }}>Odometría P-FN:</span>
+            <span style={{ color: "#00E676" }}>{fbTelemetry.totalDistanceTraveledMeters}m total</span>
           </div>
         </div>
 
-        {/* Card 3: Giant Fiber System & fly-swing */}
+        {/* Card 3: Johnston's Organ (Mechanosensory & Acoustic Shield) */}
+        <div
+          style={{
+            padding: "10px",
+            borderRadius: "10px",
+            background: "rgba(0, 229, 255, 0.05)",
+            border: `1px solid ${joTelemetry.shockEventsCount > 0 ? "#FF3355" : "rgba(0, 229, 255, 0.2)"}`,
+          }}
+        >
+          <div style={{ fontSize: "0.65rem", color: joTelemetry.shockEventsCount > 0 ? "#FF3355" : "#00E5FF", fontWeight: 900, marginBottom: "4px" }}>
+            👂 ÓRGANO DE JOHNSTON (MECANOSENSOR)
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", fontWeight: 800 }}>
+            <span style={{ color: "#94A3B8" }}>Energía Acústica:</span>
+            <span style={{ color: joTelemetry.acousticEnergyLevel > 0.5 ? "#FFB300" : "#00E676" }}>{(joTelemetry.acousticEnergyLevel * 100).toFixed(0)}%</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+            <span style={{ color: "#94A3B8" }}>Frecuencia Resonancia:</span>
+            <span style={{ color: "#00E5FF" }}>{joTelemetry.vibrationFrequencyHz} Hz</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+            <span style={{ color: "#94A3B8" }}>Choques Detectados:</span>
+            <span style={{ color: joTelemetry.shockEventsCount > 0 ? "#FF3355" : "#64748B" }}>{joTelemetry.shockEventsCount} eventos</span>
+          </div>
+        </div>
+
+        {/* Card 4: Metabolic Neuromorphic Governor (IPC / NPF) */}
+        <div
+          style={{
+            padding: "10px",
+            borderRadius: "10px",
+            background: metTelemetry.regime === 'TORPOR' ? "rgba(255, 51, 85, 0.1)" : "rgba(118, 255, 3, 0.05)",
+            border: `1px solid ${metTelemetry.regime === 'TORPOR' ? '#FF3355' : 'rgba(118, 255, 3, 0.25)'}`,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+            <span style={{ fontSize: "0.65rem", color: metTelemetry.regime === 'TORPOR' ? '#FF3355' : '#76FF03', fontWeight: 900 }}>
+              🔋 METABOLISMO (IPC / NPF)
+            </span>
+            <span style={{
+              fontSize: "0.58rem",
+              padding: "2px 6px",
+              borderRadius: "4px",
+              fontWeight: 900,
+              background: metTelemetry.regime === 'TORPOR' ? '#FF3355' : metTelemetry.regime === 'CONSERVATIVE' ? '#FFB300' : '#00E676',
+              color: '#000000',
+            }}>
+              {metTelemetry.regime}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", fontWeight: 800 }}>
+            <span style={{ color: "#94A3B8" }}>Batería:</span>
+            <span style={{ color: metTelemetry.batteryPct < 20 ? '#FF3355' : '#00E676' }}>{metTelemetry.batteryPct}% ({metTelemetry.isCharging ? '⚡ Cargando' : `~${metTelemetry.estimatedStandbyHours}h est`})</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+            <span style={{ color: "#94A3B8" }}>Reloj Sináptico:</span>
+            <span style={{ color: "#00E5FF" }}>{metTelemetry.neuralClockIntervalMs} ms ({Math.round(1000 / metTelemetry.neuralClockIntervalMs)} Hz)</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+            <span style={{ color: "#94A3B8" }}>IPC / NPF:</span>
+            <span style={{ color: "#B388FF" }}>{(metTelemetry.ipcLevel * 100).toFixed(0)}% / {(metTelemetry.npfLevel * 100).toFixed(0)}%</span>
+          </div>
+        </div>
+
+        {/* Card 5: Mushroom Body & Swarm Pheromones */}
+        <div
+          style={{
+            padding: "10px",
+            borderRadius: "10px",
+            background: "rgba(179, 136, 255, 0.05)",
+            border: "1px solid rgba(179, 136, 255, 0.2)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+            <span style={{ fontSize: "0.65rem", color: "#B388FF", fontWeight: 900 }}>
+              🍄 MUSHROOM BODY & CONDUCTA
+            </span>
+            <span style={{
+              fontSize: "0.58rem",
+              padding: "1px 5px",
+              borderRadius: "4px",
+              fontWeight: 800,
+              background: mbTelemetry.behavioralDrive === 'APPROACH' ? 'rgba(0, 230, 118, 0.2)' : mbTelemetry.behavioralDrive === 'AVOID' ? 'rgba(255, 51, 85, 0.2)' : 'rgba(148, 163, 184, 0.2)',
+              color: mbTelemetry.behavioralDrive === 'APPROACH' ? '#00E676' : mbTelemetry.behavioralDrive === 'AVOID' ? '#FF3355' : '#94A3B8',
+              border: `1px solid ${mbTelemetry.behavioralDrive === 'APPROACH' ? '#00E676' : mbTelemetry.behavioralDrive === 'AVOID' ? '#FF3355' : 'rgba(148, 163, 184, 0.3)'}`,
+            }}>
+              {mbTelemetry.behavioralDrive}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", fontWeight: 800 }}>
+            <span style={{ color: "#94A3B8" }}>KCs Activas:</span>
+            <span style={{ color: "#B388FF" }}>{mbTelemetry.activeKenyonCellsLastStimulus} / 2500 (5%)</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+            <span style={{ color: "#94A3B8" }}>Feromonas Enjambre:</span>
+            <span style={{ color: "#FFD600" }}>{mbTelemetry.activePheromonesCount} activas</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+            <span style={{ color: "#94A3B8" }}>LTP Pinned:</span>
+            <span style={{ color: "#00E676" }}>{mbTelemetry.ltpPinnedRecords} Paquetes SOS</span>
+          </div>
+        </div>
+
+        {/* Card 6: Giant Fiber System & fly-swing */}
         <div
           style={{
             padding: "10px",
@@ -959,32 +1126,6 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
             <span style={{ color: "#94A3B8" }}>Latencia Refleja:</span>
             <span style={{ color: gfsTelemetry.emconLockActive ? "#FF3355" : "#00E676" }}>&lt; 15 ms (Conexinas)</span>
-          </div>
-        </div>
-
-        {/* Card 4: Mushroom Body & The Fly's Table */}
-        <div
-          style={{
-            padding: "10px",
-            borderRadius: "10px",
-            background: "rgba(179, 136, 255, 0.05)",
-            border: "1px solid rgba(179, 136, 255, 0.2)",
-          }}
-        >
-          <div style={{ fontSize: "0.65rem", color: "#B388FF", fontWeight: 900, marginBottom: "4px" }}>
-            🍄 MUSHROOM BODY (The Fly's Table)
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", fontWeight: 800 }}>
-            <span style={{ color: "#94A3B8" }}>KCs Activas:</span>
-            <span style={{ color: "#B388FF" }}>{mbTelemetry.activeKenyonCellsLastStimulus} / 2500 (5%)</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
-            <span style={{ color: "#94A3B8" }}>Conectoma:</span>
-            <span style={{ color: "#FFD600" }}>682 PN | 97 MBON | 332 DAN</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
-            <span style={{ color: "#94A3B8" }}>LTP Pinned:</span>
-            <span style={{ color: "#00E676" }}>{mbTelemetry.ltpPinnedRecords} Paquetes SOS</span>
           </div>
         </div>
 

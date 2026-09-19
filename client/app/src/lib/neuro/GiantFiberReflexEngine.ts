@@ -156,6 +156,13 @@ export class GiantFiberReflexEngine {
   }
 
   /**
+   * Alias de conveniencia táctica para activar el reflejo de escape.
+   */
+  public triggerEscape(source: ReflexTriggerSource = 'EW_JAMMING'): GiantFiberReflexResult {
+    return this.triggerReflex(source);
+  }
+
+  /**
    * Desvía inmediatamente un paquete a la capa ultrasónica SoundMesh o Li-Fi óptico.
    */
   public divertToCovertChannel(payload: Uint8Array | string): boolean {
