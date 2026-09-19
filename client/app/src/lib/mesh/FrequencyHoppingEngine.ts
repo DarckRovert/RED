@@ -44,6 +44,16 @@ export class FrequencyHoppingEngine {
         this.swarmSeed = key;
     }
 
+    private emergencyChannel: { channelIndex: number; frequencyMhz: number } | null = null;
+
+    public forceEmergencyEvade(channelIndex: number, frequencyMhz: number): void {
+        this.emergencyChannel = { channelIndex, frequencyMhz };
+    }
+
+    public clearEmergencyEvade(): void {
+        this.emergencyChannel = null;
+    }
+
     /**
      * Obtiene el estado actual del espectro y la sincronización de canal
      */
@@ -51,8 +61,21 @@ export class FrequencyHoppingEngine {
         const now = Date.now();
         const slotEpoch = Math.floor(now / this.dwellTimeMs);
         const slotTimeRemainingMs = this.dwellTimeMs - (now % this.dwellTimeMs);
-
         const hasHardware = this.isSubGhzHardwareAvailable();
+
+        if (this.emergencyChannel) {
+            return {
+                channelIndex: this.emergencyChannel.channelIndex,
+                frequencyMhz: this.emergencyChannel.frequencyMhz,
+                slotEpoch,
+                slotTimeRemainingMs: 0,
+                hopRatePerSec: 0,
+                hasHardwareTransceiver: hasHardware,
+                rfBandLabel: hasHardware ? "902–928 MHz (LoRa Sub-GHz EVASIÓN)" : "CANAL SILENCIADO (EMCON)",
+                operatingMode: "EVASIÓN SIGINT ACTIVA (EMCON)",
+            };
+        }
+
         const channelIndex = this.computeChannelForSlot(slotEpoch);
         const frequencyMhz = Math.round((this.baseFrequencyMhz + channelIndex * this.channelSpacingMhz) * 100) / 100;
 

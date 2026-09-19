@@ -23,28 +23,17 @@ pub enum TransportMessage {
         public_key: [u8; 32],
     },
     /// Encrypted data
-    Data {
-        payload: Vec<u8>,
-    },
+    Data { payload: Vec<u8> },
     /// Ping for keepalive
-    Ping {
-        nonce: u64,
-    },
+    Ping { nonce: u64 },
     /// Pong response
-    Pong {
-        nonce: u64,
-    },
+    Pong { nonce: u64 },
     /// Graceful disconnect
-    Disconnect {
-        reason: String,
-    },
+    Disconnect { reason: String },
     /// Onion routed packet
     Onion(crate::network::routing::OnionPacket),
     /// Broadcast RED identity (hash + pk hex)
-    IdentityBroadcast {
-        hash: String,
-        pk: String,
-    },
+    IdentityBroadcast { hash: String, pk: String },
 }
 
 /// Transport trait for network communication
@@ -170,7 +159,7 @@ mod tests {
     #[tokio::test]
     async fn test_placeholder_transport() {
         let transport = PlaceholderTransport::new();
-        
+
         let result = transport.listen("127.0.0.1:7331".parse().unwrap()).await;
         assert!(result.is_ok());
 

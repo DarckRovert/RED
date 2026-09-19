@@ -2,7 +2,7 @@ use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-pub use red_core::protocol::tactical::{WeatherReport, PostWeatherReportRequest};
+pub use red_core::protocol::tactical::{PostWeatherReportRequest, WeatherReport};
 
 #[derive(Clone)]
 pub struct WeatherStore {
@@ -54,12 +54,18 @@ impl WeatherStore {
             timestamp,
         };
 
-        self.reports.write().unwrap_or_else(|e| e.into_inner()).insert(id, report.clone());
+        self.reports
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, report.clone());
         report
     }
 
     pub fn add_report_raw(&self, report: WeatherReport) {
-        self.reports.write().unwrap_or_else(|e| e.into_inner()).insert(report.id.clone(), report);
+        self.reports
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(report.id.clone(), report);
     }
 
     pub fn list_reports(&self, limit: usize) -> Vec<WeatherReport> {

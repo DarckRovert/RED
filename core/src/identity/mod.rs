@@ -10,7 +10,9 @@
 mod identity;
 pub mod registry;
 
-pub use identity::{Identity, IdentityHash, IdentityBuilder, DeviceId, DevicePublicKey, AuthorizedDevice};
+pub use identity::{
+    AuthorizedDevice, DeviceId, DevicePublicKey, Identity, IdentityBuilder, IdentityHash,
+};
 
 use thiserror::Error;
 

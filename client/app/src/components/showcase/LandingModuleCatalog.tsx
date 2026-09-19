@@ -68,7 +68,9 @@ export const CATALOG_TO_SCREEN_MAP: Record<string, ScreenView> = {
     shakePair: 'shakePair',
     updater: 'updater',
     health: 'health',
-    nodeLogs: 'nodeLogs'
+    nodeLogs: 'nodeLogs',
+    maleCnsConnectome: 'maleCnsConnectome',
+    connectome: 'maleCnsConnectome'
 };
 
 interface LandingModuleCatalogProps {

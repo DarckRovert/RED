@@ -12,6 +12,7 @@
  */
 
 import { registerPlugin } from "@capacitor/core";
+import { giantFiberReflex } from "../neuro/GiantFiberReflexEngine";
 
 export interface SpamPattern {
     pattern: string;
@@ -634,14 +635,7 @@ export class SovereignShieldEngine {
 
     // ── Telemetría de Radiofrecuencia (Anti-IMSI Catcher) ─────────────────────
     public async getRfThreatStatus(): Promise<RfThreatStatus> {
-        try {
-            if (typeof window !== "undefined" && (window as any).Capacitor?.isPluginAvailable("RedShield")) {
-                const res = await RedShield.getRfStatus();
-                if (res) return res;
-            }
-        } catch {}
-
-        return {
+        let status: RfThreatStatus = {
             carrierName: "RED Cellular Guard",
             networkType: "4G_LTE",
             isEncrypted: true,
@@ -650,6 +644,29 @@ export class SovereignShieldEngine {
             wifiSecurity: "WPA2",
             isRogueWifiThreat: false
         };
+
+        try {
+            if (typeof window !== "undefined" && (window as any).Capacitor?.isPluginAvailable("RedShield")) {
+                const res = await RedShield.getRfStatus();
+                if (res) status = res;
+            }
+        } catch {}
+
+        // Disparo reactivo del Arco Reflejo de Fibra Gigante (<15ms)
+        if (status.is2gDowngradeThreat) {
+            giantFiberReflex.triggerReflex('IMSI_CATCHER');
+        } else if (status.isRogueWifiThreat) {
+            giantFiberReflex.triggerReflex('ROGUE_CARRIER_DOWNGRADE');
+        }
+
+        return status;
+    }
+
+    /**
+     * Activa manualmente el Arco Reflejo de Escape EW / SIGINT (Giant Fiber System)
+     */
+    public triggerEwEscapeReflex(): void {
+        giantFiberReflex.triggerReflex('MANUAL_TACTICAL_SCRAM');
     }
 
     // ── Cálculo del Índice de Blindaje Soberano (0 a 100%) ───────────────────

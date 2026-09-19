@@ -34,12 +34,11 @@ impl IdentityHash {
 
     /// Parse from hex string
     pub fn from_hex(s: &str) -> IdentityResult<Self> {
-        let bytes = hex::decode(s)
-            .map_err(|e| IdentityError::GenerationError(e.to_string()))?;
-        
+        let bytes = hex::decode(s).map_err(|e| IdentityError::GenerationError(e.to_string()))?;
+
         if bytes.len() != 32 {
             return Err(IdentityError::GenerationError(
-                "Identity hash must be 32 bytes".to_string()
+                "Identity hash must be 32 bytes".to_string(),
             ));
         }
 
@@ -108,19 +107,19 @@ impl fmt::Display for IdentityHash {
 pub struct Identity {
     /// Key pair for key exchange
     key_pair: KeyPair,
-    
+
     /// Signing key pair for signatures
     signing_keys: SigningKeyPair,
-    
+
     /// Random value used in identity hash
     random: [u8; 32],
-    
+
     /// The identity hash (public identifier)
     identity_hash: IdentityHash,
-    
+
     /// Creation timestamp (Unix seconds)
     created_at: u64,
-    
+
     /// Expiration timestamp (Unix seconds)
     expires_at: u64,
 }
@@ -242,12 +241,12 @@ impl IdentityBuilder {
     pub fn build(self) -> IdentityResult<Identity> {
         // Phase 18: Natively verifiable Anti-Sybil Proof-of-Work.
         // We force the Ed25519 Public Key itself to start with 16 zero-bits (0x0000).
-        // This mathematically binds the PoW to the Libp2p `PeerId`, allowing the Swarm to 
+        // This mathematically binds the PoW to the Libp2p `PeerId`, allowing the Swarm to
         // instantly disconnect malicious botnets during the `Identify` handshake.
         // GAP-30 FIX: PoW disabled for ultra-fast dev booting.
         // We no longer loop for a specific public key prefix.
         let key_pair = KeyPair::generate();
-        
+
         let signing_keys = SigningKeyPair::generate();
 
         let mut random = [0u8; 32];
@@ -318,7 +317,7 @@ pub struct IdentityOwnershipProof {
 }
 
 mod signature_serde {
-    use serde::{Deserializer, Serializer, Deserialize};
+    use serde::{Deserialize, Deserializer, Serializer};
     pub fn serialize<S>(sig: &[u8; 64], serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -331,7 +330,9 @@ mod signature_serde {
         D: Deserializer<'de>,
     {
         let bytes: Vec<u8> = Deserialize::deserialize(deserializer)?;
-        bytes.try_into().map_err(|_| serde::de::Error::custom("Invalid signature length"))
+        bytes
+            .try_into()
+            .map_err(|_| serde::de::Error::custom("Invalid signature length"))
     }
 }
 
@@ -342,14 +343,15 @@ impl IdentityOwnershipProof {
 
         // Verify the identity hash matches the public key
         // Note: We can't verify the random component, but we verify the signature
-        
+
         // Verify signature
         let Ok(verifying_key) = VerifyingKey::from_bytes(&self.verifying_key) else {
             return false;
         };
 
         let signature = ed25519_dalek::Signature::from_bytes(&self.signature);
-        let verification_result: Result<(), ed25519_dalek::SignatureError> = verifying_key.verify(&self.challenge, &signature);
+        let verification_result: Result<(), ed25519_dalek::SignatureError> =
+            verifying_key.verify(&self.challenge, &signature);
         verification_result.is_ok()
     }
 }
@@ -361,7 +363,7 @@ mod tests {
     #[test]
     fn test_identity_generation() {
         let identity = Identity::generate().unwrap();
-        
+
         assert!(!identity.is_expired());
         assert!(!identity.should_rotate());
         assert_eq!(identity.identity_hash().as_bytes().len(), 32);
@@ -372,7 +374,7 @@ mod tests {
         let identity = Identity::generate().unwrap();
         let hex = identity.identity_hash().to_hex();
         let recovered = IdentityHash::from_hex(&hex).unwrap();
-        
+
         assert_eq!(identity.identity_hash(), &recovered);
     }
 
@@ -390,7 +392,7 @@ mod tests {
     fn test_ownership_proof() {
         let identity = Identity::generate().unwrap();
         let challenge = b"prove you own this identity";
-        
+
         let proof = identity.create_ownership_proof(challenge);
         assert!(proof.verify());
     }

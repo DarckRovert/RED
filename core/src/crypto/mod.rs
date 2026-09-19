@@ -8,15 +8,15 @@
 //! - Hashing (BLAKE3)
 //! - Key derivation (HKDF)
 
-pub mod keys;
 pub mod encryption;
 pub mod hashing;
+pub mod keys;
 pub mod ratchet;
 pub mod zk_proofs;
 
-pub use keys::{KeyPair, PublicKey, SecretKey, EphemeralKeyPair};
-pub use encryption::{encrypt, decrypt, EncryptedData};
-pub use hashing::{hash, derive_key};
+pub use encryption::{decrypt, encrypt, EncryptedData};
+pub use hashing::{derive_key, hash};
+pub use keys::{EphemeralKeyPair, KeyPair, PublicKey, SecretKey};
 pub use ratchet::{DoubleRatchet, RatchetState};
 
 use thiserror::Error;

@@ -17,15 +17,21 @@ impl DiscoveryEngine {
     }
 
     fn nodes_tree(&self) -> Option<sled::Tree> {
-        self.db.as_ref().and_then(|db| db.open_tree("discovery_nodes").ok())
+        self.db
+            .as_ref()
+            .and_then(|db| db.open_tree("discovery_nodes").ok())
     }
 
     fn config_tree(&self) -> Option<sled::Tree> {
-        self.db.as_ref().and_then(|db| db.open_tree("discovery_config").ok())
+        self.db
+            .as_ref()
+            .and_then(|db| db.open_tree("discovery_config").ok())
     }
 
     fn last_notified_tree(&self) -> Option<sled::Tree> {
-        self.db.as_ref().and_then(|db| db.open_tree("discovery_last_notified").ok())
+        self.db
+            .as_ref()
+            .and_then(|db| db.open_tree("discovery_last_notified").ok())
     }
 
     pub fn register_discovered_node(&self, mut node: ProximityNode) {
@@ -45,7 +51,7 @@ impl DiscoveryEngine {
                 }
             }
         }
-        
+
         ProximityFilterConfig {
             cooldown_seconds: 3600,
             rssi_threshold_dbm: -75,
@@ -72,7 +78,7 @@ impl DiscoveryEngine {
         let mut nodes = Vec::new();
         let cfg = self.get_config();
         let now = chrono::Utc::now().timestamp();
-        
+
         if let Some(tree) = self.nodes_tree() {
             for item in tree.iter() {
                 if let Ok((_, v)) = item {
@@ -82,7 +88,9 @@ impl DiscoveryEngine {
                             // Filtro 2: Cooldown
                             let mut allow = true;
                             if let Some(ln_tree) = self.last_notified_tree() {
-                                if let Ok(Some(last_t_bytes)) = ln_tree.get(n.identity_hash.as_bytes()) {
+                                if let Ok(Some(last_t_bytes)) =
+                                    ln_tree.get(n.identity_hash.as_bytes())
+                                {
                                     if let Ok(last_t) = bincode::deserialize::<i64>(&last_t_bytes) {
                                         if (now - last_t) < (cfg.cooldown_seconds as i64) {
                                             allow = false;
@@ -114,7 +122,7 @@ impl DiscoveryEngine {
 
     pub fn trigger_wave(&self, req: WaveHandshakeRequest) -> ProximityNode {
         let timestamp = chrono::Utc::now().timestamp();
-        
+
         if let Some(tree) = self.last_notified_tree() {
             if let Ok(bytes) = bincode::serialize(&timestamp) {
                 let _ = tree.insert(req.target_identity_hash.as_bytes(), bytes);

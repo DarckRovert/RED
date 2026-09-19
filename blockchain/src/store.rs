@@ -1,11 +1,11 @@
 //! Persistent storage for blockchain data using Sled (Pure Rust).
 
-use std::path::Path;
-use sled::{Db, Batch};
 use serde::{de::DeserializeOwned, Serialize};
+use sled::{Batch, Db};
+use std::path::Path;
 
-use crate::{BlockchainError, BlockchainResult};
 use crate::block::{Block, BlockHash};
+use crate::{BlockchainError, BlockchainResult};
 
 /// Keys for metadata
 const KEY_TIP: &[u8] = b"tip";
@@ -19,9 +19,8 @@ pub struct BlockStore {
 impl BlockStore {
     /// Open a new block store at the given path
     pub fn open<P: AsRef<Path>>(path: P) -> BlockchainResult<Self> {
-        let db = sled::open(path)
-            .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
-            
+        let db = sled::open(path).map_err(|e| BlockchainError::StorageError(e.to_string()))?;
+
         Ok(Self { db })
     }
 
@@ -29,37 +28,40 @@ impl BlockStore {
     pub fn save_block(&self, block: &Block) -> BlockchainResult<()> {
         let hash = block.hash();
         let height = block.header.height;
-        
+
         let mut batch = Batch::default();
-        
+
         // Save block data
-        let block_data = bincode::serialize(block)
-            .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
+        let block_data =
+            bincode::serialize(block).map_err(|e| BlockchainError::StorageError(e.to_string()))?;
         batch.insert(format!("b:{}", hex::encode(hash)).as_bytes(), block_data);
-        
+
         // Update tip and height
         batch.insert(KEY_TIP, hash.to_vec());
         batch.insert(KEY_HEIGHT, height.to_le_bytes().to_vec());
-        
+
         // Save height index with big-endian bytes for proper lexicographical sorting in sled
         batch.insert([b"h", &height.to_be_bytes()[..]].concat(), hash.to_vec());
 
-        
-        self.db.apply_batch(batch)
+        self.db
+            .apply_batch(batch)
             .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
-            
+
         // Flush to disk
-        self.db.flush()
+        self.db
+            .flush()
             .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
-            
+
         Ok(())
     }
 
     /// Get a block by hash
     pub fn get_block(&self, hash: &BlockHash) -> BlockchainResult<Option<Block>> {
-        let data = self.db.get(format!("b:{}", hex::encode(hash)))
+        let data = self
+            .db
+            .get(format!("b:{}", hex::encode(hash)))
             .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
-            
+
         match data {
             Some(bytes) => {
                 let block = bincode::deserialize(&bytes)
@@ -73,15 +75,16 @@ impl BlockStore {
     /// Get a block hash by height
     pub fn get_hash_at_height(&self, height: u64) -> BlockchainResult<Option<BlockHash>> {
         let key = [b"h", &height.to_be_bytes()[..]].concat();
-        let data = self.db.get(key)
+        let data = self
+            .db
+            .get(key)
             .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
-            
+
         match data {
-
-
             Some(bytes) => {
-                let arr: [u8; 32] = bytes.to_vec().try_into()
-                    .map_err(|_| BlockchainError::StorageError("Invalid hash length in DB".to_string()))?;
+                let arr: [u8; 32] = bytes.to_vec().try_into().map_err(|_| {
+                    BlockchainError::StorageError("Invalid hash length in DB".to_string())
+                })?;
                 Ok(Some(arr))
             }
             None => Ok(None),
@@ -90,13 +93,16 @@ impl BlockStore {
 
     /// Get current tip hash
     pub fn get_tip(&self) -> BlockchainResult<Option<BlockHash>> {
-        let data = self.db.get(KEY_TIP)
+        let data = self
+            .db
+            .get(KEY_TIP)
             .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
-            
+
         match data {
             Some(bytes) => {
-                let arr: [u8; 32] = bytes.to_vec().try_into()
-                    .map_err(|_| BlockchainError::StorageError("Invalid hash length in DB".to_string()))?;
+                let arr: [u8; 32] = bytes.to_vec().try_into().map_err(|_| {
+                    BlockchainError::StorageError("Invalid hash length in DB".to_string())
+                })?;
                 Ok(Some(arr))
             }
             None => Ok(None),
@@ -105,13 +111,16 @@ impl BlockStore {
 
     /// Get current height
     pub fn get_height(&self) -> BlockchainResult<u64> {
-        let data = self.db.get(KEY_HEIGHT)
+        let data = self
+            .db
+            .get(KEY_HEIGHT)
             .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
-            
+
         match data {
             Some(bytes) => {
-                let arr: [u8; 8] = bytes.to_vec().try_into()
-                    .map_err(|_| BlockchainError::StorageError("Invalid height length in DB".to_string()))?;
+                let arr: [u8; 8] = bytes.to_vec().try_into().map_err(|_| {
+                    BlockchainError::StorageError("Invalid height length in DB".to_string())
+                })?;
                 Ok(u64::from_le_bytes(arr))
             }
             None => Ok(0),
@@ -120,20 +129,24 @@ impl BlockStore {
 
     /// Save arbitrary state (e.g. identity registry)
     pub fn save_state<S: Serialize>(&self, key: &str, state: &S) -> BlockchainResult<()> {
-        let data = bincode::serialize(state)
+        let data =
+            bincode::serialize(state).map_err(|e| BlockchainError::StorageError(e.to_string()))?;
+        self.db
+            .insert(format!("s:{}", key).as_bytes(), data)
             .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
-        self.db.insert(format!("s:{}", key).as_bytes(), data)
-            .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
-        self.db.flush()
+        self.db
+            .flush()
             .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
         Ok(())
     }
 
     /// Load arbitrary state
     pub fn load_state<S: DeserializeOwned>(&self, key: &str) -> BlockchainResult<Option<S>> {
-        let data = self.db.get(format!("s:{}", key).as_bytes())
+        let data = self
+            .db
+            .get(format!("s:{}", key).as_bytes())
             .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
-            
+
         match data {
             Some(bytes) => {
                 let state = bincode::deserialize(&bytes)

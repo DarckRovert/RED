@@ -21,26 +21,26 @@ pub struct RatchetState {
     /// Our current ratchet key pair
     #[zeroize(skip)]
     dh_self: Option<KeyPair>,
-    
+
     /// Their current ratchet public key
     #[zeroize(skip)]
     dh_remote: Option<PublicKey>,
-    
+
     /// Root key
     root_key: [u8; 32],
-    
+
     /// Sending chain key
     chain_key_send: Option<[u8; 32]>,
-    
+
     /// Receiving chain key
     chain_key_recv: Option<[u8; 32]>,
-    
+
     /// Sending message number
     n_send: u32,
-    
+
     /// Receiving message number
     n_recv: u32,
-    
+
     /// Previous sending chain length
     pn: u32,
 
@@ -51,25 +51,14 @@ pub struct RatchetState {
 
 impl RatchetState {
     /// Create a new ratchet state (for initiator)
-    pub fn new_initiator(
-        shared_secret: [u8; 32],
-        their_public: PublicKey,
-    ) -> CryptoResult<Self> {
+    pub fn new_initiator(shared_secret: [u8; 32], their_public: PublicKey) -> CryptoResult<Self> {
         let dh_self = KeyPair::generate();
         let dh_output = dh_self.key_exchange(&their_public);
-        
-        // Derive root key and sending chain key
-        let chain_key_send = derive_symmetric_key(
-            &shared_secret,
-            &dh_output,
-            b"RED-chain-send",
-        )?;
 
-        let derived = derive_symmetric_key(
-            &shared_secret,
-            &dh_output,
-            b"RED-root-update",
-        )?;
+        // Derive root key and sending chain key
+        let chain_key_send = derive_symmetric_key(&shared_secret, &dh_output, b"RED-chain-send")?;
+
+        let derived = derive_symmetric_key(&shared_secret, &dh_output, b"RED-root-update")?;
 
         Ok(Self {
             dh_self: Some(dh_self),
@@ -85,10 +74,7 @@ impl RatchetState {
     }
 
     /// Create a new ratchet state (for responder)
-    pub fn new_responder(
-        shared_secret: [u8; 32],
-        our_keypair: KeyPair,
-    ) -> CryptoResult<Self> {
+    pub fn new_responder(shared_secret: [u8; 32], our_keypair: KeyPair) -> CryptoResult<Self> {
         Ok(Self {
             dh_self: Some(our_keypair),
             dh_remote: None,
@@ -143,29 +129,29 @@ pub struct RatchetMessage {
 
 impl DoubleRatchet {
     /// Create a new Double Ratchet as initiator
-    pub fn new_initiator(
-        shared_secret: [u8; 32],
-        their_public: PublicKey,
-    ) -> CryptoResult<Self> {
+    pub fn new_initiator(shared_secret: [u8; 32], their_public: PublicKey) -> CryptoResult<Self> {
         let state = RatchetState::new_initiator(shared_secret, their_public)?;
         Ok(Self { state })
     }
 
     /// Create a new Double Ratchet as responder
-    pub fn new_responder(
-        shared_secret: [u8; 32],
-        our_keypair: KeyPair,
-    ) -> CryptoResult<Self> {
+    pub fn new_responder(shared_secret: [u8; 32], our_keypair: KeyPair) -> CryptoResult<Self> {
         let state = RatchetState::new_responder(shared_secret, our_keypair)?;
         Ok(Self { state })
     }
 
     /// Encrypt a message
     pub fn encrypt(&mut self, plaintext: &[u8]) -> CryptoResult<RatchetMessage> {
-        let dh_self = self.state.dh_self.as_ref()
+        let dh_self = self
+            .state
+            .dh_self
+            .as_ref()
             .ok_or_else(|| CryptoError::EncryptionError("No DH key".to_string()))?;
-        
-        let chain_key = self.state.chain_key_send.as_ref()
+
+        let chain_key = self
+            .state
+            .chain_key_send
+            .as_ref()
             .ok_or_else(|| CryptoError::EncryptionError("No chain key".to_string()))?;
 
         // Derive message key and advance chain
@@ -191,7 +177,11 @@ impl DoubleRatchet {
     /// Decrypt a message
     pub fn decrypt(&mut self, message: &RatchetMessage) -> CryptoResult<Vec<u8>> {
         // Check if we already have the skip key
-        if let Some(key) = self.state.skipped_message_keys.remove(&(message.header.dh_public.clone(), message.header.n)) {
+        if let Some(key) = self
+            .state
+            .skipped_message_keys
+            .remove(&(message.header.dh_public.clone(), message.header.n))
+        {
             return decrypt(&key, &message.ciphertext);
         }
 
@@ -210,7 +200,10 @@ impl DoubleRatchet {
         // Skip messages in current chain
         self.skip_message_keys(message.header.n)?;
 
-        let chain_key = self.state.chain_key_recv.as_ref()
+        let chain_key = self
+            .state
+            .chain_key_recv
+            .as_ref()
             .ok_or_else(|| CryptoError::DecryptionError("No chain key".to_string()))?;
 
         // Derive current message key and advance chain
@@ -229,16 +222,22 @@ impl DoubleRatchet {
         }
 
         if (until - self.state.n_recv) as usize + self.state.skipped_message_keys.len() > MAX_SKIP {
-            return Err(CryptoError::DecryptionError("Too many skipped messages".to_string()));
+            return Err(CryptoError::DecryptionError(
+                "Too many skipped messages".to_string(),
+            ));
         }
 
-        if let (Some(chain_key), Some(remote_pub)) = (&self.state.chain_key_recv, &self.state.dh_remote) {
+        if let (Some(chain_key), Some(remote_pub)) =
+            (&self.state.chain_key_recv, &self.state.dh_remote)
+        {
             let mut current_chain = *chain_key;
             let remote_pub = remote_pub.clone();
 
             while self.state.n_recv < until {
                 let (new_chain, message_key) = derive_chain_keys(&current_chain)?;
-                self.state.skipped_message_keys.insert((remote_pub.clone(), self.state.n_recv), message_key);
+                self.state
+                    .skipped_message_keys
+                    .insert((remote_pub.clone(), self.state.n_recv), message_key);
                 current_chain = new_chain;
                 self.state.n_recv += 1;
             }
@@ -261,39 +260,26 @@ impl DoubleRatchet {
             // The receiving chain being derived here is mathematically the SENDER's send chain.
             // Therefore, we MUST use the exact same KDF label ("RED-chain-send") that the
             // sender used when they called `new_initiator` or `dh_ratchet`.
-            let recv_chain = derive_symmetric_key(
-                &self.state.root_key,
-                &dh_output,
-                b"RED-chain-send",
-            )?;
+            let recv_chain =
+                derive_symmetric_key(&self.state.root_key, &dh_output, b"RED-chain-send")?;
             self.state.chain_key_recv = Some(recv_chain);
 
             // Update root key
-            self.state.root_key = derive_symmetric_key(
-                &self.state.root_key,
-                &dh_output,
-                b"RED-root-update",
-            )?;
+            self.state.root_key =
+                derive_symmetric_key(&self.state.root_key, &dh_output, b"RED-root-update")?;
         }
 
         // Generate new DH key pair
         let new_dh = KeyPair::generate();
-        
+
         // Derive sending chain key
         let dh_output = new_dh.key_exchange(their_public);
-        let send_chain = derive_symmetric_key(
-            &self.state.root_key,
-            &dh_output,
-            b"RED-chain-send",
-        )?;
+        let send_chain = derive_symmetric_key(&self.state.root_key, &dh_output, b"RED-chain-send")?;
         self.state.chain_key_send = Some(send_chain);
 
         // Update root key again
-        self.state.root_key = derive_symmetric_key(
-            &self.state.root_key,
-            &dh_output,
-            b"RED-root-update",
-        )?;
+        self.state.root_key =
+            derive_symmetric_key(&self.state.root_key, &dh_output, b"RED-root-update")?;
 
         self.state.dh_self = Some(new_dh);
 
@@ -313,22 +299,16 @@ mod tests {
     fn setup_ratchets() -> (DoubleRatchet, DoubleRatchet) {
         // Simulate X3DH key agreement
         let shared_secret = [0x42u8; 32];
-        
+
         // Bob generates his signed prekey
         let bob_prekey = KeyPair::generate();
         let bob_public = bob_prekey.public.clone();
 
         // Alice initiates
-        let alice = DoubleRatchet::new_initiator(
-            shared_secret,
-            bob_public,
-        ).unwrap();
+        let alice = DoubleRatchet::new_initiator(shared_secret, bob_public).unwrap();
 
         // Bob responds
-        let bob = DoubleRatchet::new_responder(
-            shared_secret,
-            bob_prekey,
-        ).unwrap();
+        let bob = DoubleRatchet::new_responder(shared_secret, bob_prekey).unwrap();
 
         (alice, bob)
     }

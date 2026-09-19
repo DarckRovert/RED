@@ -1,6 +1,6 @@
 [package]
 name = "red_mobile"
-version = "110.0.0"
+version = "111.0.0"
 edition = "2021"
 publish = false
 

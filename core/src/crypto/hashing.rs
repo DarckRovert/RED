@@ -15,7 +15,6 @@ pub fn blake3_hash(data: &[u8]) -> [u8; 32] {
     hash(data)
 }
 
-
 /// Hash multiple pieces of data
 pub fn hash_many(parts: &[&[u8]]) -> [u8; 32] {
     let mut hasher = blake3::Hasher::new();
@@ -43,19 +42,15 @@ pub fn derive_key(
 ) -> CryptoResult<Vec<u8>> {
     let hk = Hkdf::<Sha256>::new(Some(salt), ikm);
     let mut okm = vec![0u8; output_len];
-    
+
     hk.expand(info, &mut okm)
         .map_err(|e| CryptoError::KeyDerivationError(e.to_string()))?;
-    
+
     Ok(okm)
 }
 
 /// Derive a 32-byte symmetric key
-pub fn derive_symmetric_key(
-    ikm: &[u8],
-    salt: &[u8],
-    info: &[u8],
-) -> CryptoResult<[u8; 32]> {
+pub fn derive_symmetric_key(ikm: &[u8], salt: &[u8], info: &[u8]) -> CryptoResult<[u8; 32]> {
     let derived = derive_key(ikm, salt, info, 32)?;
     let mut key = [0u8; 32];
     key.copy_from_slice(&derived);
@@ -63,22 +58,12 @@ pub fn derive_symmetric_key(
 }
 
 /// Derive chain and message keys for Double Ratchet
-pub fn derive_chain_keys(
-    chain_key: &[u8; 32],
-) -> CryptoResult<([u8; 32], [u8; 32])> {
+pub fn derive_chain_keys(chain_key: &[u8; 32]) -> CryptoResult<([u8; 32], [u8; 32])> {
     // Derive new chain key
-    let new_chain_key = derive_symmetric_key(
-        chain_key,
-        b"",
-        b"RED-chain-key",
-    )?;
+    let new_chain_key = derive_symmetric_key(chain_key, b"", b"RED-chain-key")?;
 
     // Derive message key
-    let message_key = derive_symmetric_key(
-        chain_key,
-        b"",
-        b"RED-message-key",
-    )?;
+    let message_key = derive_symmetric_key(chain_key, b"", b"RED-message-key")?;
 
     Ok((new_chain_key, message_key))
 }
@@ -97,7 +82,7 @@ mod tests {
         let data = b"Hello, RED!";
         let h1 = hash(data);
         let h2 = hash(data);
-        
+
         assert_eq!(h1, h2);
         assert_eq!(h1.len(), 32);
     }
@@ -106,7 +91,7 @@ mod tests {
     fn test_hash_different_inputs() {
         let h1 = hash(b"Hello");
         let h2 = hash(b"World");
-        
+
         assert_ne!(h1, h2);
     }
 
@@ -114,7 +99,7 @@ mod tests {
     fn test_hash_many() {
         let parts = [b"Hello".as_slice(), b"World".as_slice()];
         let h = hash_many(&parts);
-        
+
         assert_eq!(h.len(), 32);
     }
 
@@ -145,9 +130,9 @@ mod tests {
     #[test]
     fn test_derive_chain_keys() {
         let chain_key = [0x42u8; 32];
-        
+
         let (new_chain, message) = derive_chain_keys(&chain_key).unwrap();
-        
+
         assert_ne!(new_chain, chain_key);
         assert_ne!(message, chain_key);
         assert_ne!(new_chain, message);

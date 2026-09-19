@@ -8,12 +8,22 @@ import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacIcon } from "./ui/TacIcon";
+import { ringAttractor, RingAttractorTelemetry } from "../lib/neuro/RingAttractorEngine";
 
 export function CelestialPdrModal() {
     const { t } = useTranslation();
     const { navigate, goBack } = useRedStore();
 
     const [activeTab, setActiveTab] = useState<"celestial" | "pdr">("celestial");
+    const [ringTelem, setRingTelem] = useState<RingAttractorTelemetry>(() => ringAttractor.getTelemetry());
+
+    useEffect(() => {
+        const unsub = ringAttractor.subscribe(setRingTelem);
+        return () => {
+            unsub();
+        };
+    }, []);
+
     const [coords, setCoords] = useState<{ lat: number; lon: number }>(() => {
         if (typeof window !== "undefined") {
             try {
@@ -682,6 +692,49 @@ export function CelestialPdrModal() {
                                 <TacIcon name="refresh" size={13} color="#AAA" />
                                 <span>{t('celestial_pdr_modal.reset_pdr')}</span>
                             </button>
+                        </div>
+
+                        {/* Central Complex Ring Attractor Bio-Inertial HUD */}
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 22, 40, 0.95) 0%, rgba(6, 10, 22, 0.98) 100%)",
+                            border: "1px solid rgba(0, 229, 255, 0.35)",
+                            borderRadius: "12px", padding: "12px", display: "flex", flexDirection: "column", gap: "8px"
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <TacIcon name="compass" size={14} color="#00E5FF" />
+                                    <span style={{ fontSize: "0.72rem", fontWeight: 900, color: "#00E5FF", letterSpacing: "0.4px" }}>
+                                        CENTRAL COMPLEX BIO-INERCIAL (DROSOPHILA CX)
+                                    </span>
+                                </div>
+                                <span style={{
+                                    fontSize: "0.58rem", fontWeight: 900, padding: "2px 6px", borderRadius: "5px",
+                                    background: ringTelem.isSensoryAnchored ? "rgba(0, 230, 118, 0.2)" : "rgba(255, 179, 0, 0.2)",
+                                    color: ringTelem.isSensoryAnchored ? "#00E676" : "#FFB300"
+                                }}>
+                                    {ringTelem.isSensoryAnchored ? "ANCLADO" : "INERCIAL PURO"}
+                                </span>
+                            </div>
+
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.68rem" }}>
+                                <span style={{ color: "var(--text-muted, #AAA)" }}>Rumbo Atractor: <strong style={{ color: "#00E5FF" }}>{ringTelem.headingDeg}° {ringTelem.cardinal}</strong></span>
+                                <span style={{ color: "var(--text-muted, #AAA)" }}>Giroscopio: <strong style={{ color: "#FFF" }}>{ringTelem.angularVelocityDps}°/s</strong></span>
+                                <span style={{ color: "var(--text-muted, #AAA)" }}>Confianza: <strong style={{ color: "#00E676" }}>{(ringTelem.confidence * 100).toFixed(0)}%</strong></span>
+                            </div>
+
+                            {/* Micro-anillo de 16 cuñas E-PG */}
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(16, 1fr)", gap: "2px", height: "18px", alignItems: "end", background: "rgba(0,0,0,0.4)", padding: "4px", borderRadius: "6px" }}>
+                                {ringTelem.wedges.map((w, idx) => (
+                                    <div
+                                        key={idx}
+                                        style={{
+                                            height: `${Math.max(15, Math.round(w * 100))}%`,
+                                            background: w > 0.5 ? "#00E5FF" : "rgba(255,255,255,0.12)",
+                                            borderRadius: "1px"
+                                        }}
+                                    />
+                                ))}
+                            </div>
                         </div>
 
                         {/* Enlace al Mapa */}

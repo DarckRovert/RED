@@ -60,15 +60,17 @@ if (orphanCompCount === 0) console.log('  ✅ 100% de componentes de UI estan ac
 // 3. Audit ScreenView Router Coverage
 const typesFile = fs.readFileSync(path.join(srcDir, 'store', 'types.ts'), 'utf8');
 const pageFile = fs.readFileSync(path.join(srcDir, 'app', 'page.tsx'), 'utf8');
+const wsFile = fs.readFileSync(path.join(srcDir, 'components', 'navigation', 'WorkspaceScreens.tsx'), 'utf8');
+const combinedRouter = pageFile + '\n' + wsFile;
 const match = typesFile.match(/export type ScreenView = ([^;]+);/);
 if (match) {
     const views = match[1].split('|').map(v => v.trim().replace(/['"]/g, ''));
     console.log(`🗺️ [3/4] Enrutador C4ISR: ${views.length} vistas ScreenView.`);
-    const unrouted = views.filter(v => !pageFile.includes(`"${v}"`) && !pageFile.includes(`'${v}'`));
+    const unrouted = views.filter(v => !combinedRouter.includes(`"${v}"`) && !combinedRouter.includes(`'${v}'`));
     if (unrouted.length === 0) {
-        console.log('  ✅ 100% de vistas ScreenView estan enlazadas en page.tsx.\n');
+        console.log('  ✅ 100% de vistas ScreenView estan enlazadas en WorkspaceScreens / page.tsx.\n');
     } else {
-        console.log(`  ⚠️ Vistas sin renderizador en page.tsx (${unrouted.length}): ${unrouted.join(', ')}\n`);
+        console.log(`  ⚠️ Vistas sin renderizador en WorkspaceScreens / page.tsx (${unrouted.length}): ${unrouted.join(', ')}\n`);
     }
 }
 

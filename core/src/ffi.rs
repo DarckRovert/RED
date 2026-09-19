@@ -3,10 +3,10 @@
 //! This module provides a C-compatible interface for mobile integrations.
 //! Error codes: 0 = success, -1 = null argument, -2 = invalid UTF-8, -3 = operation failed
 
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
 use crate::identity::Identity;
 use crate::protocol::Message;
+use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
 
 use std::sync::OnceLock;
 
@@ -17,10 +17,8 @@ static FFI_IDENTITY: OnceLock<Identity> = OnceLock::new();
 /// Returns NULL on failure.
 #[no_mangle]
 pub extern "C" fn red_identity_create() -> *mut c_char {
-    let identity = FFI_IDENTITY.get_or_init(|| {
-        Identity::generate().unwrap()
-    });
-    
+    let identity = FFI_IDENTITY.get_or_init(|| Identity::generate().unwrap());
+
     let hash = identity.identity_hash().to_hex();
     if let Ok(cs) = CString::new(hash) {
         return cs.into_raw();
@@ -49,22 +47,27 @@ pub unsafe extern "C" fn red_message_send(
 ) -> i32 {
     // SEC-3 FIX: Use safe string conversion — return error code instead of panicking
     let sender_str = {
-
-        if sender_ptr.is_null() { return -1; }
+        if sender_ptr.is_null() {
+            return -1;
+        }
         match CStr::from_ptr(sender_ptr).to_str() {
             Ok(s) => s,
             Err(_) => return -2,
         }
     };
     let recipient_str = {
-        if recipient_ptr.is_null() { return -1; }
+        if recipient_ptr.is_null() {
+            return -1;
+        }
         match CStr::from_ptr(recipient_ptr).to_str() {
             Ok(s) => s,
             Err(_) => return -2,
         }
     };
     let text = {
-        if text_ptr.is_null() { return -1; }
+        if text_ptr.is_null() {
+            return -1;
+        }
         match CStr::from_ptr(text_ptr).to_str() {
             Ok(s) => {
                 // SEC-FIX 6.1: Bound incoming payload to 5MB to prevent OOM attacks
@@ -73,7 +76,7 @@ pub unsafe extern "C" fn red_message_send(
                     return -5;
                 }
                 s
-            },
+            }
             Err(_) => return -2,
         }
     };
@@ -104,6 +107,8 @@ pub unsafe extern "C" fn red_message_send(
 /// Undefined behavior if called with a pointer not allocated by this bridge or already deallocated.
 #[no_mangle]
 pub unsafe extern "C" fn red_free_string(s: *mut c_char) {
-    if s.is_null() { return; }
+    if s.is_null() {
+        return;
+    }
     let _ = CString::from_raw(s);
 }

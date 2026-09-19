@@ -494,5 +494,3 @@ pub struct TranslateResponse {
     pub execution_time_ms: u64,
     pub source: String,
 }
-
-

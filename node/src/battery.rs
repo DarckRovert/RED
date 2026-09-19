@@ -13,7 +13,9 @@ impl BatteryOptimizer {
     }
 
     fn tree(&self) -> Option<sled::Tree> {
-        self.db.as_ref().and_then(|db| db.open_tree("battery_status").ok())
+        self.db
+            .as_ref()
+            .and_then(|db| db.open_tree("battery_status").ok())
     }
 
     pub fn get_status(&self) -> EcoMeshStatus {

@@ -15,7 +15,7 @@ import { TacticalLocationEngine, TacticalLocation } from "../../lib/sensors/Tact
 import { TacIcon } from "../ui/TacIcon";
 
 export function TacticalGhostGpsModal() {
-    const { navigate } = useRedStore();
+    const { navigate, goBack } = useRedStore();
     const { t } = useTranslation();
 
     // Estado del motor señuelo
@@ -30,11 +30,11 @@ export function TacticalGhostGpsModal() {
     // Salida con tecla ESC o botón atrás de Android
     useEffect(() => {
         const unregister = BackHandlerRegistry.register(() => {
-            navigate("sidebar");
+            goBack();
             return true;
         });
         return () => unregister();
-    }, [navigate]);
+    }, [goBack]);
 
     // Suscripción a cambios de ubicación en tiempo real
     useEffect(() => {
@@ -163,7 +163,7 @@ export function TacticalGhostGpsModal() {
                 </div>
 
                 <button
-                    onClick={() => navigate("sidebar")}
+                    onClick={() => goBack()}
                     style={{
                         background: "rgba(255, 255, 255, 0.05)",
                         border: "1px solid rgba(255, 255, 255, 0.2)",

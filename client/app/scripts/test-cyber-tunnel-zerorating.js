@@ -147,6 +147,25 @@ runTest("10. RedHyperBrowserModal: Enrutamiento soberano Zero-Rating y badge act
     assert(hyperBrowserCode.includes("ZERO-RATING"), "Debe mostrar badge táctico de Zero-Rating");
 });
 
+// ── 7. Validación de Resiliencia DNS y Failover Multi-Nivel en Java ───────────
+const pluginJavaPath = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'java', 'f', 'red', 'app', 'RedNodePlugin.java');
+const pluginJavaCode = fs.readFileSync(pluginJavaPath, 'utf8');
+
+runTest("11. RedProxyServer.java: Resolución DNS anti-censura y failover Zero-Rating", () => {
+    assert(redProxyJavaCode.includes("resolveHostResilient"), "Debe implementar resolución DNS resiliente");
+    assert(redProxyJavaCode.includes("STATIC_DNS_MAP"), "Debe poseer caché estática de dominios y CDNs universales");
+    assert(redProxyJavaCode.includes("setZeroRatingConfig"), "Debe permitir actualización en caliente de perfil Zero-Rating");
+    assert(redProxyJavaCode.includes("activeIpTarget"), "Debe soportar IP de salida de portal cautivo");
+    assert(redProxyJavaCode.includes("activeSniHost"), "Debe soportar SNI host de operador");
+});
+
+runTest("12. RedNodePlugin.java: Soporte dinámico para setProxyZeroRatingConfig", () => {
+    assert(pluginJavaCode.includes("setProxyZeroRatingConfig"), "Debe exponer PluginMethod setProxyZeroRatingConfig");
+    assert(pluginJavaCode.includes("sniHost"), "Debe procesar parámetro sniHost");
+    assert(pluginJavaCode.includes("ipTarget"), "Debe procesar parámetro ipTarget");
+    assert(pluginJavaCode.includes("zeroRating"), "Debe procesar flag zeroRating");
+});
+
 console.log("\n================================================================================");
 console.log(`📊 RESULTADO FINAL SUITE CYBERTUNNEL: ${passedTests}/${totalTests} PRUEBAS EXITOSAS`);
 console.log("================================================================================\n");

@@ -1,8 +1,8 @@
 //! Block structure and validation.
 
+use ed25519_dalek::Signer;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use ed25519_dalek::Signer;
 
 use crate::transaction::Transaction;
 use crate::{BlockchainError, BlockchainResult};
@@ -44,7 +44,7 @@ impl BlockHeader {
         data.extend_from_slice(&self.timestamp.to_le_bytes());
         data.extend_from_slice(&self.validator);
         // Note: signature is not included in hash
-        
+
         *blake3::hash(&data).as_bytes()
     }
 
@@ -81,7 +81,7 @@ impl Block {
     ) -> Self {
         let merkle_root = Self::calculate_merkle_root(&transactions);
         let state_root = [0u8; 32]; // Calculated dynamically from state matrix upstream
-        
+
         let header = BlockHeader {
             version: 1,
             height,
@@ -130,14 +130,11 @@ impl Block {
             return [0u8; 32];
         }
 
-        let mut hashes: Vec<[u8; 32]> = transactions
-            .iter()
-            .map(|tx| tx.hash())
-            .collect();
+        let mut hashes: Vec<[u8; 32]> = transactions.iter().map(|tx| tx.hash()).collect();
 
         while hashes.len() > 1 {
             let mut next_level = Vec::new();
-            
+
             for chunk in hashes.chunks(2) {
                 let combined = if chunk.len() == 2 {
                     [chunk[0].as_slice(), chunk[1].as_slice()].concat()
@@ -146,7 +143,7 @@ impl Block {
                 };
                 next_level.push(*blake3::hash(&combined).as_bytes());
             }
-            
+
             hashes = next_level;
         }
 
@@ -159,14 +156,14 @@ impl Block {
         let calculated_root = Self::calculate_merkle_root(&self.transactions);
         if calculated_root != self.header.merkle_root {
             return Err(BlockchainError::InvalidBlock(
-                "Invalid merkle root".to_string()
+                "Invalid merkle root".to_string(),
             ));
         }
 
         // Check transaction count
         if self.transactions.len() > crate::MAX_TXS_PER_BLOCK {
             return Err(BlockchainError::InvalidBlock(
-                "Too many transactions".to_string()
+                "Too many transactions".to_string(),
             ));
         }
 
@@ -193,15 +190,17 @@ impl Block {
 
     /// Verify block signature
     pub fn verify_signature(&self) -> BlockchainResult<()> {
-        use ed25519_dalek::{Verifier, VerifyingKey, Signature};
+        use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
-        let verifying_key = VerifyingKey::from_bytes(&self.header.validator)
-            .map_err(|e| BlockchainError::ConsensusError(format!("Invalid validator key: {}", e)))?;
-        
+        let verifying_key = VerifyingKey::from_bytes(&self.header.validator).map_err(|e| {
+            BlockchainError::ConsensusError(format!("Invalid validator key: {}", e))
+        })?;
+
         let signature = Signature::from_bytes(&self.header.signature);
         let data = self.header.signing_data();
 
-        verifying_key.verify(&data, &signature)
+        verifying_key
+            .verify(&data, &signature)
             .map_err(|_| BlockchainError::ConsensusError("Invalid block signature".to_string()))?;
 
         Ok(())
@@ -225,7 +224,7 @@ mod tests {
     #[test]
     fn test_genesis_block() {
         let genesis = Block::genesis();
-        
+
         assert!(genesis.is_genesis());
         assert_eq!(genesis.header.height, 0);
         assert_eq!(genesis.transactions.len(), 0);
@@ -236,7 +235,7 @@ mod tests {
         let block = Block::genesis();
         let hash1 = block.hash();
         let hash2 = block.hash();
-        
+
         assert_eq!(hash1, hash2);
     }
 

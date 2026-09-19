@@ -1,5 +1,5 @@
-use serde::{Deserializer, Serializer};
 use serde::de::{self, Visitor};
+use serde::{Deserializer, Serializer};
 use std::fmt;
 
 pub fn serialize<S>(bytes: &[u8; 64], serializer: S) -> Result<S::Ok, S::Error>
@@ -31,7 +31,10 @@ where
                 array.copy_from_slice(v);
                 Ok(array)
             } else {
-                Err(E::custom(format!("expected array of length 64, found {}", v.len())))
+                Err(E::custom(format!(
+                    "expected array of length 64, found {}",
+                    v.len()
+                )))
             }
         }
 
@@ -41,7 +44,8 @@ where
         {
             let mut array = [0u8; 64];
             for (i, item) in array.iter_mut().enumerate() {
-                *item = seq.next_element()?
+                *item = seq
+                    .next_element()?
                     .ok_or_else(|| de::Error::invalid_length(i, &self))?;
             }
             Ok(array)

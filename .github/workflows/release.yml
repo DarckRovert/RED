@@ -15,7 +15,7 @@ jobs:
       
       - name: Validate version consistency
         run: |
-          ROOT_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*= "\([^"]*\)".*/\1/')
+          ROOT_VERSION=$(grep -E '^\s*version\s*=' Cargo.toml | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/')
           TAG_VERSION=${GITHUB_REF#refs/tags/v}
           
           if [[ $GITHUB_REF == refs/tags/v* ]]; then
@@ -49,12 +49,18 @@ jobs:
       - name: Build release binaries
         run: cargo build --release --bin red-node
       
-      - name: Generate checksums
+      - name: Generate and synchronize checksums
         run: |
           mkdir -p release-assets
           cp target/release/red-node release-assets/
           cd release-assets
-          sha256sum * > SHA256SUMS.txt
+          NODE_SHA=$(sha256sum red-node | awk '{print $1}')
+          echo "$NODE_SHA" > red-node.sha256
+          if [ -f "SHA256SUMS.txt" ]; then
+            grep -v "red-node" SHA256SUMS.txt > SHA256SUMS.tmp || true
+            mv SHA256SUMS.tmp SHA256SUMS.txt
+          fi
+          echo "$NODE_SHA  red-node" >> SHA256SUMS.txt
           cd ..
       
       - name: Upload artifacts
@@ -82,8 +88,14 @@ jobs:
         id: release_notes
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          NOTES=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | head -n -1)
-          echo "release_notes=$NOTES" >> $GITHUB_OUTPUT
+          if [ -f "release_notes_v${VERSION}.md" ]; then
+            NOTES=$(cat "release_notes_v${VERSION}.md")
+          else
+            NOTES=$(sed -n "/^## \[${VERSION}/,/^## \[/p" CHANGELOG.md | head -n -1)
+          fi
+          echo "release_notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
       
       - name: Create Release
         uses: softprops/action-gh-release@v2

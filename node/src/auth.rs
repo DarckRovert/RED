@@ -21,11 +21,7 @@ fn extract_token(headers: &HeaderMap) -> Option<&str> {
         .get("authorization")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
-        .or_else(|| {
-            headers
-                .get("x-api-key")
-                .and_then(|v| v.to_str().ok())
-        })
+        .or_else(|| headers.get("x-api-key").and_then(|v| v.to_str().ok()))
         .or_else(|| {
             headers
                 .get("x-red-session-token")
@@ -87,7 +83,11 @@ pub async fn auth_middleware(
     }
 
     // Try reading session.token from standard locations
-    for p in ["session.token", "red_node/session.token", ".red/session.token"] {
+    for p in [
+        "session.token",
+        "red_node/session.token",
+        ".red/session.token",
+    ] {
         if let Ok(tok) = std::fs::read_to_string(p) {
             let t = tok.trim().to_string();
             if t.len() == 64 {
@@ -106,7 +106,8 @@ pub async fn auth_middleware(
         Some(provided) => {
             let prov_clean = provided.trim();
             let is_valid = expected_tokens.iter().any(|exp| {
-                subtle::ConstantTimeEq::ct_eq(prov_clean.as_bytes(), exp.as_bytes()).unwrap_u8() == 1
+                subtle::ConstantTimeEq::ct_eq(prov_clean.as_bytes(), exp.as_bytes()).unwrap_u8()
+                    == 1
             });
             if is_valid {
                 next.run(request).await

@@ -6,11 +6,11 @@
 //! - Group key rotation
 //! - Forward secrecy within groups
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::crypto::{
-    encryption::{encrypt, decrypt},
+    encryption::{decrypt, encrypt},
     hashing::blake3_hash,
     keys::{KeyPair, PublicKey},
 };
@@ -64,7 +64,10 @@ pub enum MemberRole {
 
 impl MemberRole {
     pub fn can_send(&self) -> bool {
-        matches!(self, MemberRole::Admin | MemberRole::Moderator | MemberRole::Member)
+        matches!(
+            self,
+            MemberRole::Admin | MemberRole::Moderator | MemberRole::Member
+        )
     }
     pub fn can_manage_members(&self) -> bool {
         matches!(self, MemberRole::Admin | MemberRole::Moderator)
@@ -90,7 +93,7 @@ impl SenderKey {
     pub fn generate() -> Self {
         let mut chain_key = [0u8; 32];
         getrandom::getrandom(&mut chain_key).expect("Failed to generate random bytes");
-        
+
         Self {
             chain_key,
             signature_key: KeyPair::generate(),
@@ -211,7 +214,10 @@ impl Group {
         if !self.is_admin(caller) {
             return Err(GroupError::NotAuthorized);
         }
-        let member = self.members.get_mut(target).ok_or(GroupError::MemberNotFound)?;
+        let member = self
+            .members
+            .get_mut(target)
+            .ok_or(GroupError::MemberNotFound)?;
         member.role = new_role;
         Ok(())
     }
@@ -222,7 +228,9 @@ impl Group {
         caller: &IdentityHash,
         target: &IdentityHash,
     ) -> Result<(), GroupError> {
-        let caller_role = self.members.get(caller)
+        let caller_role = self
+            .members
+            .get(caller)
             .map(|m| m.role.clone())
             .ok_or(GroupError::NotAuthorized)?;
         if !caller_role.can_manage_members() {
@@ -232,7 +240,10 @@ impl Group {
         if matches!(caller_role, MemberRole::Moderator) && self.is_admin(target) {
             return Err(GroupError::NotAuthorized);
         }
-        let member = self.members.get_mut(target).ok_or(GroupError::MemberNotFound)?;
+        let member = self
+            .members
+            .get_mut(target)
+            .ok_or(GroupError::MemberNotFound)?;
         member.role = MemberRole::ReadOnly;
         Ok(())
     }
@@ -244,13 +255,18 @@ impl Group {
         target: &IdentityHash,
         muted: bool,
     ) -> Result<(), GroupError> {
-        let caller_role = self.members.get(caller)
+        let caller_role = self
+            .members
+            .get(caller)
             .map(|m| m.role.clone())
             .ok_or(GroupError::NotAuthorized)?;
         if !caller_role.can_manage_members() {
             return Err(GroupError::NotAuthorized);
         }
-        let member = self.members.get_mut(target).ok_or(GroupError::MemberNotFound)?;
+        let member = self
+            .members
+            .get_mut(target)
+            .ok_or(GroupError::MemberNotFound)?;
         member.muted = muted;
         Ok(())
     }
@@ -261,7 +277,10 @@ impl Group {
         target: &IdentityHash,
         new_role: MemberRole,
     ) -> Result<(), GroupError> {
-        let member = self.members.get_mut(target).ok_or(GroupError::MemberNotFound)?;
+        let member = self
+            .members
+            .get_mut(target)
+            .ok_or(GroupError::MemberNotFound)?;
         member.role = new_role;
         Ok(())
     }
@@ -272,7 +291,10 @@ impl Group {
         target: &IdentityHash,
         muted: bool,
     ) -> Result<(), GroupError> {
-        let member = self.members.get_mut(target).ok_or(GroupError::MemberNotFound)?;
+        let member = self
+            .members
+            .get_mut(target)
+            .ok_or(GroupError::MemberNotFound)?;
         member.muted = muted;
         Ok(())
     }
@@ -287,8 +309,12 @@ impl Group {
         match self.members.get(identity_hash) {
             None => false,
             Some(m) => {
-                if m.muted { return false; }
-                if self.broadcast_only { return m.role.can_manage_members(); }
+                if m.muted {
+                    return false;
+                }
+                if self.broadcast_only {
+                    return m.role.can_manage_members();
+                }
                 m.role.can_send()
             }
         }
@@ -301,10 +327,10 @@ impl Group {
         }
 
         self.members.insert(member.identity_hash.clone(), member);
-        
+
         // Rotate sender key when adding members for forward secrecy
         self.rotate_sender_key();
-        
+
         Ok(())
     }
 
@@ -316,10 +342,10 @@ impl Group {
 
         self.members.remove(identity_hash);
         self.member_sender_keys.remove(identity_hash);
-        
+
         // Rotate sender key when removing members
         self.rotate_sender_key();
-        
+
         Ok(())
     }
 
@@ -331,9 +357,9 @@ impl Group {
     /// Encrypt a message for the group
     pub fn encrypt_message(&mut self, plaintext: &[u8]) -> Result<GroupMessage, GroupError> {
         let message_key = self.our_sender_key.next_message_key();
-        
-        let ciphertext = encrypt(&message_key, plaintext)
-            .map_err(|_| GroupError::EncryptionFailed)?;
+
+        let ciphertext =
+            encrypt(&message_key, plaintext).map_err(|_| GroupError::EncryptionFailed)?;
 
         Ok(GroupMessage {
             group_id: self.id.clone(),
@@ -349,7 +375,9 @@ impl Group {
         message: &GroupMessage,
         sender: &IdentityHash,
     ) -> Result<Vec<u8>, GroupError> {
-        let sender_key = self.member_sender_keys.get_mut(sender)
+        let sender_key = self
+            .member_sender_keys
+            .get_mut(sender)
             .ok_or(GroupError::SenderKeyNotFound)?;
 
         // Advance to correct iteration
@@ -358,12 +386,11 @@ impl Group {
         }
 
         let message_key = sender_key.next_message_key();
-        
+
         let encrypted = crate::crypto::encryption::EncryptedData::from_bytes(&message.ciphertext)
             .map_err(|_| GroupError::DecryptionFailed)?;
-        
-        decrypt(&message_key, &encrypted)
-            .map_err(|_| GroupError::DecryptionFailed)
+
+        decrypt(&message_key, &encrypted).map_err(|_| GroupError::DecryptionFailed)
     }
 
     /// Get all members
@@ -383,17 +410,14 @@ impl Group {
 
     /// Check if identity is an admin
     pub fn is_admin(&self, identity_hash: &IdentityHash) -> bool {
-        self.members.get(identity_hash)
+        self.members
+            .get(identity_hash)
             .map(|m| m.role == MemberRole::Admin)
             .unwrap_or(false)
     }
 
     /// Store a member's sender key
-    pub fn store_sender_key(
-        &mut self,
-        member: &IdentityHash,
-        sender_key: SenderKey,
-    ) {
+    pub fn store_sender_key(&mut self, member: &IdentityHash, sender_key: SenderKey) {
         self.member_sender_keys.insert(member.clone(), sender_key);
     }
 
@@ -511,7 +535,7 @@ mod tests {
         };
 
         let group = Group::create("Test Group".to_string(), creator);
-        
+
         assert_eq!(group.name, "Test Group");
         assert_eq!(group.member_count(), 1);
     }
@@ -527,7 +551,7 @@ mod tests {
         };
 
         let mut group = Group::create("Test Group".to_string(), creator);
-        
+
         let member = GroupMember {
             identity_hash: IdentityHash::from_bytes([0x88u8; 32]), // Use distinct hash
             public_key: KeyPair::generate().public,

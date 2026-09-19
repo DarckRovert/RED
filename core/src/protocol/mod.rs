@@ -5,22 +5,27 @@
 //! - Conversation management
 //! - Group messaging
 
-mod message;
 mod conversation;
 pub mod group;
+mod message;
 pub mod tactical;
 
-pub use message::{Message, MessageType, MessageId, MessageStatus, SocialPostPayload, P2PVoucherPayload, MedicalTriagePayload};
 pub use conversation::{Conversation, ConversationId};
-pub use group::{Group, GroupId, GroupMember, GroupMessage, MemberRole, GroupError};
+pub use group::{Group, GroupError, GroupId, GroupMember, GroupMessage, MemberRole};
+pub use message::{
+    MedicalTriagePayload, Message, MessageId, MessageStatus, MessageType, P2PVoucherPayload,
+    SocialPostPayload,
+};
 pub use tactical::{
-    AlertStatus, AmberAlert, AmberSighting, CreateAmberAlertRequest, ReportSightingRequest, ResolveAmberAlertRequest,
-    SosBeacon, SosReportRequest, WeatherReport, PostWeatherReportRequest, ChannelMessage, PostChannelMessageRequest,
-    SocialPost, PostRequest, GuardianVerdict, GuardianMode, VoiceBurst, SendVoiceBurstRequest, EphemeralConfig,
-    ProximityNode, RegisterBleDeviceRequest, WaveHandshakeRequest, SafeZone, ProximityFilterConfig, ProximityDigest,
-    EcoMeshStatus, CleanImageRequest, CleanImageResponse, FileChunk, ChunkManifest, SplitFileRequest,
-    CopilotQueryRequest, CopilotResponse, SummarizeChannelRequest, ChannelSummaryResponse, TranslateRequest, TranslateResponse,
-    AMBER_GOSSIP_TOPIC, DEFAULT_ALERT_TTL_SECS, MAX_LOCAL_POSTS,
+    AlertStatus, AmberAlert, AmberSighting, ChannelMessage, ChannelSummaryResponse, ChunkManifest,
+    CleanImageRequest, CleanImageResponse, CopilotQueryRequest, CopilotResponse,
+    CreateAmberAlertRequest, EcoMeshStatus, EphemeralConfig, FileChunk, GuardianMode,
+    GuardianVerdict, PostChannelMessageRequest, PostRequest, PostWeatherReportRequest,
+    ProximityDigest, ProximityFilterConfig, ProximityNode, RegisterBleDeviceRequest,
+    ReportSightingRequest, ResolveAmberAlertRequest, SafeZone, SendVoiceBurstRequest, SocialPost,
+    SosBeacon, SosReportRequest, SplitFileRequest, SummarizeChannelRequest, TranslateRequest,
+    TranslateResponse, VoiceBurst, WaveHandshakeRequest, WeatherReport, AMBER_GOSSIP_TOPIC,
+    DEFAULT_ALERT_TTL_SECS, MAX_LOCAL_POSTS,
 };
 
 use thiserror::Error;

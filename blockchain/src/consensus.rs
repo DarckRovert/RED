@@ -38,11 +38,13 @@ impl Validator {
         if !self.active {
             return 0;
         }
-        
+
         // Weight based on stake and performance
         let total_slots = self.blocks_produced + self.missed_slots;
-        let performance = (self.blocks_produced * 100).checked_div(total_slots).unwrap_or(100);
-        
+        let performance = (self.blocks_produced * 100)
+            .checked_div(total_slots)
+            .unwrap_or(100);
+
         (self.stake * performance) / 100
     }
 }
@@ -71,32 +73,32 @@ impl Consensus {
     }
 
     /// Register a new validator
-    pub fn register_validator(
-        &self,
-        public_key: [u8; 32],
-        stake: u64,
-    ) -> BlockchainResult<()> {
+    pub fn register_validator(&self, public_key: [u8; 32], stake: u64) -> BlockchainResult<()> {
         if stake < MIN_VALIDATOR_STAKE {
-            return Err(BlockchainError::ConsensusError(
-                format!("Stake too low: {} < {}", stake, MIN_VALIDATOR_STAKE)
-            ));
+            return Err(BlockchainError::ConsensusError(format!(
+                "Stake too low: {} < {}",
+                stake, MIN_VALIDATOR_STAKE
+            )));
         }
 
         let mut validators = self.validators.write().unwrap_or_else(|e| e.into_inner());
-        
+
         if validators.contains_key(&public_key) {
             return Err(BlockchainError::ConsensusError(
-                "Validator already registered".to_string()
+                "Validator already registered".to_string(),
             ));
         }
 
-        validators.insert(public_key, Validator {
+        validators.insert(
             public_key,
-            stake,
-            active: true,
-            blocks_produced: 0,
-            missed_slots: 0,
-        });
+            Validator {
+                public_key,
+                stake,
+                active: true,
+                blocks_produced: 0,
+                missed_slots: 0,
+            },
+        );
 
         Ok(())
     }
@@ -104,11 +106,10 @@ impl Consensus {
     /// Add stake to existing validator
     pub fn add_stake(&self, public_key: &[u8; 32], amount: u64) -> BlockchainResult<()> {
         let mut validators = self.validators.write().unwrap_or_else(|e| e.into_inner());
-        
-        let validator = validators.get_mut(public_key)
-            .ok_or_else(|| BlockchainError::ConsensusError(
-                "Validator not found".to_string()
-            ))?;
+
+        let validator = validators
+            .get_mut(public_key)
+            .ok_or_else(|| BlockchainError::ConsensusError("Validator not found".to_string()))?;
 
         validator.stake += amount;
         Ok(())
@@ -117,15 +118,14 @@ impl Consensus {
     /// Remove stake from validator
     pub fn remove_stake(&self, public_key: &[u8; 32], amount: u64) -> BlockchainResult<()> {
         let mut validators = self.validators.write().unwrap_or_else(|e| e.into_inner());
-        
-        let validator = validators.get_mut(public_key)
-            .ok_or_else(|| BlockchainError::ConsensusError(
-                "Validator not found".to_string()
-            ))?;
+
+        let validator = validators
+            .get_mut(public_key)
+            .ok_or_else(|| BlockchainError::ConsensusError("Validator not found".to_string()))?;
 
         if validator.stake < amount {
             return Err(BlockchainError::ConsensusError(
-                "Insufficient stake".to_string()
+                "Insufficient stake".to_string(),
             ));
         }
 
@@ -142,11 +142,9 @@ impl Consensus {
     /// Select leader for a slot
     pub fn select_leader(&self, slot: u64) -> Option<[u8; 32]> {
         let validators = self.validators.read().unwrap_or_else(|e| e.into_inner());
-        
-        let mut active_validators: Vec<_> = validators.values()
-            .filter(|v| v.active)
-            .collect();
-        
+
+        let mut active_validators: Vec<_> = validators.values().filter(|v| v.active).collect();
+
         // SEC-4 FIX: Sort by public key for deterministic selection across all nodes
         active_validators.sort_by_key(|v| v.public_key);
 
@@ -155,9 +153,7 @@ impl Consensus {
         }
 
         // Calculate total weight
-        let total_weight: u64 = active_validators.iter()
-            .map(|v| v.weight())
-            .sum();
+        let total_weight: u64 = active_validators.iter().map(|v| v.weight()).sum();
 
         if total_weight == 0 {
             return None;
@@ -184,15 +180,14 @@ impl Consensus {
     /// Verify block was produced by correct leader
     pub fn verify_block_producer(&self, block: &Block) -> BlockchainResult<()> {
         let slot = block.header.height; // Using height as slot for simplicity
-        
-        let expected_leader = self.select_leader(slot)
-            .ok_or_else(|| BlockchainError::ConsensusError(
-                "No active validators".to_string()
-            ))?;
+
+        let expected_leader = self
+            .select_leader(slot)
+            .ok_or_else(|| BlockchainError::ConsensusError("No active validators".to_string()))?;
 
         if block.header.validator != expected_leader {
             return Err(BlockchainError::ConsensusError(
-                "Block produced by wrong validator".to_string()
+                "Block produced by wrong validator".to_string(),
             ));
         }
 
@@ -219,18 +214,25 @@ impl Consensus {
     ///
     /// - `DoubleSign`: removes 20% of stake and immediately deactivates.
     /// - `Downtime`: removes 5% of stake; deactivates if below min stake.
-    pub fn slash_validator(&self, public_key: &[u8; 32], reason: SlashReason) -> BlockchainResult<()> {
+    pub fn slash_validator(
+        &self,
+        public_key: &[u8; 32],
+        reason: SlashReason,
+    ) -> BlockchainResult<()> {
         let mut validators = self.validators.write().unwrap_or_else(|e| e.into_inner());
-        let v = validators.get_mut(public_key)
+        let v = validators
+            .get_mut(public_key)
             .ok_or_else(|| BlockchainError::ConsensusError("Validator not found".to_string()))?;
 
         if !v.active {
-            return Err(BlockchainError::ConsensusError("Validator is already inactive".to_string()));
+            return Err(BlockchainError::ConsensusError(
+                "Validator is already inactive".to_string(),
+            ));
         }
 
         let slash_pct = match reason {
-            SlashReason::DoubleSign => 20u64,   // 20% stake slashed
-            SlashReason::Downtime  =>  5u64,    //  5% stake slashed
+            SlashReason::DoubleSign => 20u64, // 20% stake slashed
+            SlashReason::Downtime => 5u64,    //  5% stake slashed
         };
 
         let slash_amount = (v.stake * slash_pct) / 100;
@@ -239,14 +241,25 @@ impl Consensus {
         // DoubleSign always deactivates immediately
         if reason == SlashReason::DoubleSign {
             v.active = false;
-            warn!("Validator {:?} SLASHED for DoubleSign — deactivated. Stake remaining: {}", &public_key[..4], v.stake);
+            warn!(
+                "Validator {:?} SLASHED for DoubleSign — deactivated. Stake remaining: {}",
+                &public_key[..4],
+                v.stake
+            );
         } else {
             // Downtime: deactivate only if below minimum stake
             if v.stake < MIN_VALIDATOR_STAKE {
                 v.active = false;
-                warn!("Validator {:?} slashed for Downtime and fell below min stake — deactivated", &public_key[..4]);
+                warn!(
+                    "Validator {:?} slashed for Downtime and fell below min stake — deactivated",
+                    &public_key[..4]
+                );
             } else {
-                info!("Validator {:?} slashed for Downtime. Stake remaining: {}", &public_key[..4], v.stake);
+                info!(
+                    "Validator {:?} slashed for Downtime. Stake remaining: {}",
+                    &public_key[..4],
+                    v.stake
+                );
             }
         }
 
@@ -255,12 +268,17 @@ impl Consensus {
 
     /// Get a read-only snapshot of all validators (for tests and status endpoints)
     pub fn get_validators(&self) -> HashMap<[u8; 32], Validator> {
-        self.validators.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.validators
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Get active validator count
     pub fn active_validator_count(&self) -> usize {
-        self.validators.read().unwrap_or_else(|e| e.into_inner())
+        self.validators
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
             .values()
             .filter(|v| v.active)
             .count()
@@ -268,7 +286,9 @@ impl Consensus {
 
     /// Get total staked amount
     pub fn total_stake(&self) -> u64 {
-        self.validators.read().unwrap_or_else(|e| e.into_inner())
+        self.validators
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
             .values()
             .filter(|v| v.active)
             .map(|v| v.stake)
@@ -304,10 +324,13 @@ impl Consensus {
         signing_key: ed25519_dalek::SigningKey,
     ) {
         use crate::block::Block;
-        use tracing::{info, warn, error};
+        use tracing::{error, info, warn};
 
         let public_key = signing_key.verifying_key().to_bytes();
-        info!("Starting block production for validator: {}", hex::encode(public_key));
+        info!(
+            "Starting block production for validator: {}",
+            hex::encode(public_key)
+        );
 
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(BLOCK_TIME_SECS));
         let mut consecutive_failures = 0;
@@ -322,24 +345,22 @@ impl Consensus {
             // Check if we are the leader for this slot
             if let Some(leader) = self.select_leader(current_slot) {
                 if leader == public_key {
-                    info!("Produced block leader for slot {}: We are the leader!", current_slot);
-                    
+                    info!(
+                        "Produced block leader for slot {}: We are the leader!",
+                        current_slot
+                    );
+
                     // Collect transactions from mempool
                     let txs = chain.get_pending_transactions(crate::MAX_TXS_PER_BLOCK);
-                    
+
                     let height = chain.height() + 1;
                     let prev_hash = chain.tip();
-                    
-                    let mut block = Block::new(
-                        height,
-                        prev_hash,
-                        txs,
-                        public_key,
-                    );
-                    
+
+                    let mut block = Block::new(height, prev_hash, txs, public_key);
+
                     // Sign the block
                     block.sign(&signing_key);
-                    
+
                     // Add to local chain
                     if let Err(e) = chain.add_block(block) {
                         error!("Failed to add self-produced block: {:?}", e);
@@ -378,11 +399,8 @@ mod tests {
     #[test]
     fn test_register_validator() {
         let consensus = Consensus::new();
-        
-        let result = consensus.register_validator(
-            [0x01u8; 32],
-            MIN_VALIDATOR_STAKE,
-        );
+
+        let result = consensus.register_validator([0x01u8; 32], MIN_VALIDATOR_STAKE);
 
         assert!(result.is_ok());
         assert_eq!(consensus.active_validator_count(), 1);
@@ -391,11 +409,8 @@ mod tests {
     #[test]
     fn test_stake_too_low() {
         let consensus = Consensus::new();
-        
-        let result = consensus.register_validator(
-            [0x01u8; 32],
-            MIN_VALIDATOR_STAKE - 1,
-        );
+
+        let result = consensus.register_validator([0x01u8; 32], MIN_VALIDATOR_STAKE - 1);
 
         assert!(result.is_err());
     }
@@ -403,9 +418,13 @@ mod tests {
     #[test]
     fn test_leader_selection() {
         let consensus = Consensus::new();
-        
-        consensus.register_validator([0x01u8; 32], MIN_VALIDATOR_STAKE).unwrap();
-        consensus.register_validator([0x02u8; 32], MIN_VALIDATOR_STAKE * 2).unwrap();
+
+        consensus
+            .register_validator([0x01u8; 32], MIN_VALIDATOR_STAKE)
+            .unwrap();
+        consensus
+            .register_validator([0x02u8; 32], MIN_VALIDATOR_STAKE * 2)
+            .unwrap();
 
         let leader = consensus.select_leader(0);
         assert!(leader.is_some());
@@ -414,9 +433,13 @@ mod tests {
     #[test]
     fn test_total_stake() {
         let consensus = Consensus::new();
-        
-        consensus.register_validator([0x01u8; 32], MIN_VALIDATOR_STAKE).unwrap();
-        consensus.register_validator([0x02u8; 32], MIN_VALIDATOR_STAKE * 2).unwrap();
+
+        consensus
+            .register_validator([0x01u8; 32], MIN_VALIDATOR_STAKE)
+            .unwrap();
+        consensus
+            .register_validator([0x02u8; 32], MIN_VALIDATOR_STAKE * 2)
+            .unwrap();
 
         assert_eq!(consensus.total_stake(), MIN_VALIDATOR_STAKE * 3);
     }

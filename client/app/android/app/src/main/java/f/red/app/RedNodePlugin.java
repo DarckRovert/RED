@@ -1708,13 +1708,46 @@ public class RedNodePlugin extends Plugin {
     @PluginMethod
     public void startProxyServer(PluginCall call) {
         int port = call.getInt("port", 8088);
+        String sniHost = call.getString("sniHost", "www.claro.com.pe");
+        String ipTarget = call.getString("ipTarget", "179.6.232.18");
+        String provider = call.getString("provider", "Claro PE");
+        String mode = call.getString("mode", "ZERO_RATING_SNI");
+        boolean zeroRating = call.getBoolean("zeroRating", true);
+
+        RedNodeService.setProxyZeroRatingConfig(sniHost, ipTarget, provider, mode, zeroRating);
         boolean started = RedNodeService.startProxyServer(port);
+
         com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
         ret.put("success", started);
         ret.put("running", started);
         ret.put("isRunning", started);
         ret.put("port", port);
         ret.put("host", "127.0.0.1");
+        ret.put("activeSniHost", sniHost);
+        ret.put("activeIpTarget", ipTarget);
+        ret.put("activeProvider", provider);
+        ret.put("tunnelMode", mode);
+        ret.put("zeroRatingEnabled", zeroRating);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void setProxyZeroRatingConfig(PluginCall call) {
+        String sniHost = call.getString("sniHost", "www.claro.com.pe");
+        String ipTarget = call.getString("ipTarget", "179.6.232.18");
+        String provider = call.getString("provider", "Claro PE");
+        String mode = call.getString("mode", "ZERO_RATING_SNI");
+        boolean zeroRating = call.getBoolean("zeroRating", true);
+
+        RedNodeService.setProxyZeroRatingConfig(sniHost, ipTarget, provider, mode, zeroRating);
+
+        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+        ret.put("success", true);
+        ret.put("activeSniHost", sniHost);
+        ret.put("activeIpTarget", ipTarget);
+        ret.put("activeProvider", provider);
+        ret.put("tunnelMode", mode);
+        ret.put("zeroRatingEnabled", zeroRating);
         call.resolve(ret);
     }
 
@@ -1742,6 +1775,11 @@ public class RedNodePlugin extends Plugin {
         ret.put("bytesDownloaded", proxy != null ? proxy.getBytesDownloaded() : 0);
         ret.put("activeConnections", proxy != null ? proxy.getActiveConnections() : 0);
         ret.put("totalRequests", proxy != null ? proxy.getTotalRequests() : 0);
+        ret.put("activeSniHost", proxy != null ? proxy.getActiveSniHost() : "www.claro.com.pe");
+        ret.put("activeIpTarget", proxy != null ? proxy.getActiveIpTarget() : "179.6.232.18");
+        ret.put("activeProvider", proxy != null ? proxy.getActiveProvider() : "Claro PE");
+        ret.put("zeroRatingEnabled", proxy != null && proxy.isZeroRatingEnabled());
+        ret.put("tunnelMode", proxy != null ? proxy.getTunnelMode() : "ZERO_RATING_SNI");
         call.resolve(ret);
     }
 

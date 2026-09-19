@@ -10,6 +10,7 @@ import { rfSigintWatchdog, SigintTelemetry } from '../lib/sensors/RfSigintWatchd
 import { dynamicBearerGovernor, SwarmHealthTelemetry } from '../lib/mesh/DynamicBearerGovernor';
 import { dtnStorage } from '../lib/mesh/dtnStorage';
 import { SwarmHealthHUD } from './SwarmHealthHUD';
+import { MaleCnsConnectomeHUD } from './MaleCnsConnectomeHUD';
 import { GlobalSearchModal } from './GlobalSearchModal';
 import { toast } from './Toast';
 import { BackHandlerRegistry } from '../lib/navigation/BackHandlerRegistry';
@@ -57,6 +58,7 @@ export const TacticalCommandCenter: React.FC = () => {
     const [shieldTelemetry, setShieldTelemetry] = useState(() => globalShield.getTelemetry());
     const [dtnPacketCount, setDtnPacketCount] = useState<number>(() => dtnStorage.count);
     const [showSwarmHUD, setShowSwarmHUD] = useState<boolean>(false);
+    const [showConnectomeHUD, setShowConnectomeHUD] = useState<boolean>(false);
 
     // ── Intercepción Jerárquica LIFO de navegación Atrás ───────────────────
     useEffect(() => {
@@ -64,6 +66,10 @@ export const TacticalCommandCenter: React.FC = () => {
             TacticalAudioEngine.playTap();
             if (isSearchOpen) {
                 setIsSearchOpen(false);
+                return true;
+            }
+            if (showConnectomeHUD) {
+                setShowConnectomeHUD(false);
                 return true;
             }
             if (showSwarmHUD) {
@@ -85,7 +91,7 @@ export const TacticalCommandCenter: React.FC = () => {
             return false;
         });
         return unregister;
-    }, [isSearchOpen, showSwarmHUD, searchQuery, activeDomain, currentScreen, goBack]);
+    }, [isSearchOpen, showSwarmHUD, showConnectomeHUD, searchQuery, activeDomain, currentScreen, goBack]);
 
     useEffect(() => {
         const unsub = globalShield.subscribe(setShieldTelemetry);
@@ -258,9 +264,29 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: t('tactical_modules.acousticWarfare_badge'),
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
+            },
+            {
+                id: 'cyberTunnel',
+                action: 'cyberTunnel',
+                icon: 'zap',
+                title: t('tactical_modules.cyberTunnel_title'),
+                subtitle: t('tactical_modules.cyberTunnel_sub'),
+                badge: t('tactical_modules.cyberTunnel_badge'),
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.25)'
             }
         ],
         nav: [
+            {
+                id: 'maleCnsConnectome',
+                action: 'maleCnsConnectome',
+                icon: 'cpu',
+                title: 'Conectoma 3D MaleCNS',
+                subtitle: 'Topología bio-neuromórfica de Drosophila: Central Complex, Mushroom Body y Giant Fiber.',
+                badge: '3D WEBGL',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.25)'
+            },
             {
                 id: 'radar',
                 action: 'radar',
@@ -370,6 +396,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: t('tactical_modules.rfSpectrum_badge'),
                 badgeColor: '#FFB300',
                 accentGlow: 'rgba(255, 179, 0, 0.2)'
+            },
+            {
+                id: 'tacticalGhostGps',
+                action: 'tacticalGhostGps',
+                icon: 'ghost',
+                title: t('tactical_modules.ghostGps_title'),
+                subtitle: t('tactical_modules.ghostGps_sub'),
+                badge: t('tactical_modules.ghostGps_badge'),
+                badgeColor: '#B388FF',
+                accentGlow: 'rgba(179, 136, 255, 0.25)'
             }
         ],
         survival: [
@@ -634,6 +670,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: t('tactical_modules.network_badge'),
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
+                id: 'sovereignShield',
+                action: 'sovereignShield',
+                icon: 'shield',
+                title: t('tactical_modules.sovereignShield_title'),
+                subtitle: t('tactical_modules.sovereignShield_sub'),
+                badge: t('tactical_modules.sovereignShield_badge'),
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.25)'
             }
         ],
         economy: [
@@ -879,6 +925,20 @@ export const TacticalCommandCenter: React.FC = () => {
                         >
                             <TacIcon name="globe" size={14} color="currentColor" /> <span className="hidden sm:inline">ENJAMBRE</span>
                         </button>
+
+                        <button
+                            onClick={() => { TacticalAudioEngine.playTap(); setShowConnectomeHUD(true); }}
+                            style={{
+                                padding: '6px 12px', borderRadius: '10px',
+                                background: 'rgba(0, 229, 255, 0.15)', border: '1px solid rgba(0, 229, 255, 0.4)',
+                                color: 'var(--accent-cyan, #00E5FF)', fontSize: '0.75rem', fontWeight: 900,
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                                boxShadow: '0 0 12px rgba(0, 229, 255, 0.25)'
+                            }}
+                            title="Conectoma 3D MaleCNS v1.0"
+                        >
+                            <TacIcon name="cpu" size={14} color="currentColor" /> <span className="hidden sm:inline">CONECTOMA</span>
+                        </button>
                     </div>
                 </div>
 
@@ -960,7 +1020,7 @@ export const TacticalCommandCenter: React.FC = () => {
             <div className="scroll-container" style={{
                 flex: 1, padding: '16px', overflowY: 'auto',
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
                 gap: '14px', alignContent: 'start'
             }}>
                 {displayedModules.map(mod => {
@@ -968,7 +1028,14 @@ export const TacticalCommandCenter: React.FC = () => {
                     return (
                         <div
                             key={mod.id}
-                            onClick={() => { TacticalAudioEngine.playTap(); navigate(mod.action); }}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                if (mod.id === 'maleCnsConnectome') {
+                                    setShowConnectomeHUD(true);
+                                } else {
+                                    navigate(mod.action);
+                                }
+                            }}
                             className="tactical-card-hud card-tactical-interactive"
                             style={{
                                 background: 'linear-gradient(135deg, rgba(16, 22, 44, 0.85) 0%, rgba(8, 12, 28, 0.95) 100%)',
@@ -1060,6 +1127,23 @@ export const TacticalCommandCenter: React.FC = () => {
                 >
                     <div style={{ width: '100%', maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
                         <SwarmHealthHUD onClose={() => setShowSwarmHUD(false)} />
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Conectoma 3D MaleCNS v1.0 */}
+            {showConnectomeHUD && (
+                <div
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 9999,
+                        background: 'rgba(2, 4, 12, 0.90)', backdropFilter: 'blur(25px)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+                        animation: 'fadeIn 0.2s ease'
+                    }}
+                    onClick={() => setShowConnectomeHUD(false)}
+                >
+                    <div style={{ width: '100%', maxWidth: '1180px', height: '92vh', display: 'flex' }} onClick={e => e.stopPropagation()}>
+                        <MaleCnsConnectomeHUD onClose={() => setShowConnectomeHUD(false)} />
                     </div>
                 </div>
             )}

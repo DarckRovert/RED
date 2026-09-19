@@ -2,7 +2,7 @@ use chrono::Utc;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
-pub use red_core::protocol::tactical::{SocialPost, PostRequest, MAX_LOCAL_POSTS};
+pub use red_core::protocol::tactical::{PostRequest, SocialPost, MAX_LOCAL_POSTS};
 
 #[derive(Clone)]
 pub struct SocialStore {
@@ -58,7 +58,7 @@ impl SocialStore {
     pub fn follow(&self, author_hash: &str) {
         let mut follows = self.following.write().unwrap_or_else(|e| e.into_inner());
         follows.insert(author_hash.to_string());
-        
+
         if let Some(db) = &self.db {
             if let Ok(tree) = db.open_tree("social_following") {
                 let _ = tree.insert(author_hash.as_bytes(), &[]);
@@ -69,7 +69,7 @@ impl SocialStore {
     pub fn unfollow(&self, author_hash: &str) {
         let mut follows = self.following.write().unwrap_or_else(|e| e.into_inner());
         follows.remove(author_hash);
-        
+
         if let Some(db) = &self.db {
             if let Ok(tree) = db.open_tree("social_following") {
                 let _ = tree.remove(author_hash.as_bytes());
@@ -78,14 +78,22 @@ impl SocialStore {
     }
 
     pub fn get_following(&self) -> Vec<String> {
-        self.following.read().unwrap_or_else(|e| e.into_inner()).iter().cloned().collect()
+        self.following
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .cloned()
+            .collect()
     }
 
     pub fn create_post(&self, author_hash: String, req: PostRequest) -> SocialPost {
         let timestamp = Utc::now().timestamp();
         let hash_input = format!(
             "{}:{}:{}:{}",
-            author_hash, req.content, timestamp, req.media_data.as_deref().unwrap_or("")
+            author_hash,
+            req.content,
+            timestamp,
+            req.media_data.as_deref().unwrap_or("")
         );
         let hash = blake3::hash(hash_input.as_bytes()).to_hex().to_string();
         let id = format!("post_{}", &hash[..12]);
@@ -107,12 +115,19 @@ impl SocialStore {
     }
 
     /// Creates and cryptographically signs a tactical social post using the author's Ed25519 identity.
-    pub fn create_signed_post(&self, identity: &red_core::identity::Identity, req: PostRequest) -> SocialPost {
+    pub fn create_signed_post(
+        &self,
+        identity: &red_core::identity::Identity,
+        req: PostRequest,
+    ) -> SocialPost {
         let author_hash = identity.identity_hash().to_hex();
         let timestamp = Utc::now().timestamp();
         let hash_input = format!(
             "{}:{}:{}:{}",
-            author_hash, req.content, timestamp, req.media_data.as_deref().unwrap_or("")
+            author_hash,
+            req.content,
+            timestamp,
+            req.media_data.as_deref().unwrap_or("")
         );
         let hash = blake3::hash(hash_input.as_bytes()).to_hex().to_string();
         let id = format!("post_{}", &hash[..12]);
@@ -150,7 +165,7 @@ impl SocialStore {
                 }
             }
             feed_list[existing_idx] = existing.clone();
-            
+
             // Actualizar DB
             if let Some(db) = &self.db {
                 if let Ok(tree) = db.open_tree("social_feed") {
@@ -178,7 +193,7 @@ impl SocialStore {
                 if let Ok(bytes) = serde_json::to_vec(&post) {
                     let _ = tree.insert(post.id.as_bytes(), bytes);
                 }
-                
+
                 // Eliminar del Sled los posts más antiguos que fueron expulsados de la caché
                 for id in dropped_ids {
                     let _ = tree.remove(id.as_bytes());
@@ -191,17 +206,25 @@ impl SocialStore {
         let feed = self.feed.read().unwrap_or_else(|e| e.into_inner());
         feed.iter().take(limit).cloned().collect()
     }
-    
-    pub fn add_reaction(&self, post_id: &str, emoji: &str, reactor_hash: &str) -> Option<SocialPost> {
+
+    pub fn add_reaction(
+        &self,
+        post_id: &str,
+        emoji: &str,
+        reactor_hash: &str,
+    ) -> Option<SocialPost> {
         let mut feed_list = self.feed.write().unwrap_or_else(|e| e.into_inner());
         if let Some(post) = feed_list.iter_mut().find(|p| p.id == post_id) {
-            let entry = post.reactions.entry(emoji.to_string()).or_insert_with(Vec::new);
+            let entry = post
+                .reactions
+                .entry(emoji.to_string())
+                .or_insert_with(Vec::new);
             if !entry.contains(&reactor_hash.to_string()) {
                 entry.push(reactor_hash.to_string());
             }
-            
+
             let updated = post.clone();
-            
+
             if let Some(db) = &self.db {
                 if let Ok(tree) = db.open_tree("social_feed") {
                     if let Ok(bytes) = serde_json::to_vec(&updated) {

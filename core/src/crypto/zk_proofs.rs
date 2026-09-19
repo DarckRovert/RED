@@ -146,7 +146,7 @@ pub struct MerkleProof {
 }
 
 /// Zero-knowledge proof for identity registration
-/// 
+///
 /// Proves: ∃ w: H(w) = root ∧ MerklePath(w, PK_u(t)) = 1 ∧ ∀ t' < t: PK_u(t') ≠ PK_u(t)
 #[derive(Clone, Debug)]
 pub struct IdentityProof {
@@ -253,7 +253,7 @@ impl IdentityProof {
     fn verify_zk_proof(&self) -> bool {
         // Simplified verification
         // In production, verify the actual zk-SNARK
-        
+
         // Check proof data is well-formed
         if self.proof_data.aux.len() != 32 {
             return false;
@@ -318,16 +318,16 @@ mod tests {
     #[test]
     fn test_merkle_tree() {
         let mut tree = MerkleTree::new(4);
-        
+
         let leaf1 = [1u8; 32];
         let leaf2 = [2u8; 32];
-        
+
         let idx1 = tree.add_leaf(leaf1);
         let idx2 = tree.add_leaf(leaf2);
-        
+
         let proof1 = tree.generate_proof(idx1).unwrap();
         let proof2 = tree.generate_proof(idx2).unwrap();
-        
+
         assert!(MerkleTree::verify_proof(&proof1));
         assert!(MerkleTree::verify_proof(&proof2));
     }
@@ -335,20 +335,20 @@ mod tests {
     #[test]
     fn test_identity_proof() {
         let mut tree = MerkleTree::new(4);
-        
+
         let sk = [0x42u8; 32];
         let pk = [0x43u8; 32];
-        
+
         // Add commitment to tree
         let mut commitment_input = Vec::with_capacity(64);
         commitment_input.extend_from_slice(&sk);
         commitment_input.extend_from_slice(&pk);
         let commitment = blake3_hash(&commitment_input);
         let idx = tree.add_leaf(commitment);
-        
+
         // Create proof
         let proof = IdentityProof::create(&sk, &pk, &tree, idx).unwrap();
-        
+
         // Verify proof
         let nullifiers: Vec<&[u8; 32]> = vec![];
         assert!(proof.verify(&nullifiers));
@@ -357,22 +357,22 @@ mod tests {
     #[test]
     fn test_nullifier_prevents_double_registration() {
         let mut tree = MerkleTree::new(4);
-        
+
         let sk = [0x42u8; 32];
         let pk = [0x43u8; 32];
-        
+
         let mut commitment_input = Vec::with_capacity(64);
         commitment_input.extend_from_slice(&sk);
         commitment_input.extend_from_slice(&pk);
         let commitment = blake3_hash(&commitment_input);
         let idx = tree.add_leaf(commitment);
-        
+
         let proof = IdentityProof::create(&sk, &pk, &tree, idx).unwrap();
-        
+
         // First verification should pass
         let nullifiers: Vec<&[u8; 32]> = vec![];
         assert!(proof.verify(&nullifiers));
-        
+
         // Second verification with same nullifier should fail
         let nullifiers: Vec<&[u8; 32]> = vec![&proof.nullifier];
         assert!(!proof.verify(&nullifiers));

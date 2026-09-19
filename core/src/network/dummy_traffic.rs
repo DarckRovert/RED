@@ -5,9 +5,9 @@
 //! - Real messages replace scheduled dummy messages
 //! - Indistinguishable from real traffic
 
-use std::time::{Duration, Instant};
 use rand::Rng;
 use rand_distr::{Distribution, Exp};
+use std::time::{Duration, Instant};
 
 /// Default dummy traffic rate (messages per second)
 pub const DEFAULT_LAMBDA: f64 = 1.0 / 30.0; // One message every 30 seconds
@@ -253,18 +253,32 @@ impl std::error::Error for SchedulerError {}
 /// Phase 18: Decoy Vault Auto-Population
 /// Injects organic-looking fake contacts and mundane conversation history into a fresh SQLite vault.
 /// This ensures interrogators do not see a suspiciously empty app when the Duress PIN is entered.
-pub fn populate_decoy_vault(storage: &mut crate::storage::Storage, my_id: &crate::identity::IdentityHash) {
-    let fake_contacts = [("Mamá", "Hola hijo, ¿vas a venir a cenar hoy?"),
-        ("Suscripción de Streaming", "Su factura ha sido pagada. Su plan termina el 30."),
-        ("Carlos Universidad", "¿Ya hiciste la tarea de finanzas? Está imposible hermano")];
+pub fn populate_decoy_vault(
+    storage: &mut crate::storage::Storage,
+    my_id: &crate::identity::IdentityHash,
+) {
+    let fake_contacts = [
+        ("Mamá", "Hola hijo, ¿vas a venir a cenar hoy?"),
+        (
+            "Suscripción de Streaming",
+            "Su factura ha sido pagada. Su plan termina el 30.",
+        ),
+        (
+            "Carlos Universidad",
+            "¿Ya hiciste la tarea de finanzas? Está imposible hermano",
+        ),
+    ];
 
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
 
     for (i, (name, first_msg)) in fake_contacts.iter().enumerate() {
         use crate::identity::IdentityBuilder;
         let fake_id = IdentityBuilder::new().build().unwrap();
         let fake_hash = fake_id.identity_hash().clone();
-        
+
         let contact = crate::storage::Contact {
             identity_hash: fake_hash.clone(),
             display_name: name.to_string(),
@@ -290,7 +304,7 @@ pub fn populate_decoy_vault(storage: &mut crate::storage::Storage, my_id: &crate
             edited: false,
         };
         let _ = storage.add_message(msg);
-        
+
         let reply = crate::protocol::Message {
             id: crate::protocol::MessageId::generate(),
             sender: my_id.clone(),
@@ -303,7 +317,7 @@ pub fn populate_decoy_vault(storage: &mut crate::storage::Storage, my_id: &crate
         };
         let _ = storage.add_message(reply);
     }
-    
+
     tracing::info!("Decoy Vault autonomously populated with mundane conversation history.");
 }
 
@@ -316,7 +330,7 @@ mod tests {
     fn test_dummy_generator_timing() {
         // Use high rate for faster testing
         let mut gen = DummyTrafficGenerator::new(100.0); // 100 msgs/sec
-        
+
         // Should eventually trigger
         let mut triggered = false;
         for _ in 0..100 {
@@ -327,21 +341,21 @@ mod tests {
             }
             sleep(Duration::from_millis(10));
         }
-        
+
         assert!(triggered);
     }
 
     #[test]
     fn test_traffic_scheduler() {
         let mut scheduler = TrafficScheduler::new(100.0, 64, 10);
-        
+
         // Queue a real message
         let real_msg = vec![0x42u8; 64];
         scheduler.queue_message(real_msg.clone()).unwrap();
-        
+
         // Wait for send time
         sleep(Duration::from_millis(50));
-        
+
         // Should get the real message
         if let Some((msg, is_real)) = scheduler.next_message() {
             if is_real {
@@ -353,13 +367,13 @@ mod tests {
     #[test]
     fn test_dummy_message_generator() {
         let gen = DummyMessageGenerator::new(128);
-        
+
         let msg1 = gen.generate();
         let msg2 = gen.generate();
-        
+
         assert_eq!(msg1.len(), 128);
         assert_eq!(msg2.len(), 128);
-        
+
         // Messages should be different (random)
         assert_ne!(msg1, msg2);
     }

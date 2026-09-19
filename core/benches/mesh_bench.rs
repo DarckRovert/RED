@@ -9,14 +9,9 @@ fn bench_gossip_broadcast_packetization(c: &mut Criterion) {
     let payload = b"Tactical packet benchmark payload 256 bytes".to_vec();
 
     c.bench_function("gossip_broadcast_packetize", |b| {
-        b.iter(|| {
-            protocol.broadcast(black_box(payload.clone()), black_box(origin_hash))
-        });
+        b.iter(|| protocol.broadcast(black_box(payload.clone()), black_box(origin_hash)));
     });
 }
 
-criterion_group!(
-    mesh_benches,
-    bench_gossip_broadcast_packetization
-);
+criterion_group!(mesh_benches, bench_gossip_broadcast_packetization);
 criterion_main!(mesh_benches);

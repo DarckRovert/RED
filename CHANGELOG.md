@@ -1,5 +1,45 @@
 # Changelog
 
+## [111.0.0-bio-neuromorphic-connectome-os-y-malecns-v1.0-3d-hud] - 2026-09-19
+
+### 🚀 Bio-Neuromorphic Connectome OS & MaleCNS v1.0 3D HUD (Release Oficial v111.0.0)
+
+- **Visualizador Táctico Conectómico 3D (`MaleCnsConnectomeHUD.tsx`):**
+  - Motor de proyección isométrica 3D a 2D desacoplado de los re-renderizados de React para una tasa fija de 60 FPS nativos sin sobrecarga DOM.
+  - Sincronización dinámica de buffer de canvas con `window.devicePixelRatio` para nitidez Subpixel Retina en pantallas táctiles y monitores 4K.
+  - Exploración anatómica interactiva con filtrado por subsistema (Central Complex, Mushroom Body, Giant Fiber System).
+  - Controles optogenéticos en vivo (ChR2 10Hz pacing, silenciamiento NpHR por operador y restauración).
+  - Modal formal de atribución científica y procedencia conectómica cumpliendo licencias de código abierto.
+- **Enrutador Sináptico Hebbiano & Percolación Topológica (`SynapticMeshRouterEngine.ts`):**
+  - Plasticidad sináptica Hebbiana con modulación de recompensa por RTT/LQS y factor temporal exponencial.
+  - Elección automática de repetidores de Club Rico (*Rich-Club Hubs*) ocupando el 10-25% de la red con alta intermediación.
+  - Poda sináptica (*Synaptic Pruning*) de enlaces ruidosos o intermitentes ($W < 0.15$) para suprimir tormentas de difusión RF en un 80-95%.
+  - Estadísticas de conectoma de Princeton Murthy Lab: reciprocidad de enlaces $r$, coeficiente *small-world* $\sigma$ y motivos triádicos de Milo (FFL/FBL).
+  - Acumulador de paquetes Leaky Integrate-and-Fire (LIF) de Eon Systems PBC con cruce instantáneo sub-milisegundo ante SOS/CBRN.
+- **Arco Reflejo de Escape Fly-Swing & Guerra Electrónica (`GiantFiberReflexEngine.ts`):**
+  - Circuito de escape monosináptico acoplado por uniones comunicantes eléctricas (*gap junctions* conexinas, conductancia 15.4 nS).
+  - Mapeo exacto de identificadores MaleCNS v1.0: LC4 [#10042] + LPLC2 [#10043] $\to$ DNp01 [#10001] $\to$ TTMn [#10099].
+  - Activación determinista en $< 15\text{ ms}$ ante jamming EW, detectores IMSI-Catcher o degradaciones 2G anómalas.
+  - Silenciamiento electromagnético inmediato (EMCON / Radio Mute) y salto criptográfico de evasión FHSS.
+  - Desvío instantáneo de paquetes vitales hacia la capa acústica ultrasónica SoundMesh.
+- **Memoria Asociativa DTN del Cuerpo Fungiforme (`DtnMushroomBodyEngine.ts`):**
+  - Expansión dimensional dispersa sobre 2,500 Células de Kenyon (KC) con ~5% de activación determinista (125 KCs activas).
+  - Asignación de valencia dopaminérgica (DAN PAM para recompensa/LTP; DAN PPL1 para aversión/SOS).
+  - Potenciación a Largo Plazo (LTP Pinned): Inmortalización incondicional de paquetes SOS/CBRN/blockchain con 0% de pérdidas ante saturación DTN.
+  - Depresión a Largo Plazo (LTD Eviction): Desalojo ordenado por valencia y antigüedad en `dtnStorage.ts` cuando la cola supera el 80% de capacidad.
+  - Paridad anatómica con *The Fly's Table*: 682 neuronas de proyección (PN), 97 MBONs y 332 DANs.
+- **Brújula Bio-Inercial de Atractor Continuo (`RingAttractorEngine.ts`):**
+  - 16 cuñas angulares con neuronas de brújula E-PG y conectividad recurrente excitación-local / inhibición-lateral ($W_{ij} = J_0 + J_1 \cos(\theta_i - \theta_j)$).
+  - Neuronas P-EN de integración de velocidad angular desde giróscopo y halteres físicos.
+  - Decodificación por vector poblacional circular ($\text{atan2}$ de momentos trigonométricos).
+  - Aislamiento en memoria de trabajo inercial pura ante distorsiones ferromagnéticas o ataques de jamming/spoofing, eliminando la deriva angular abrupta.
+  - Integrado de forma nativa en `OffGridCompassModal.tsx` y `CelestialPdrModal.tsx`.
+- **Gobernanza Atómica SSOT v111.0.0 & Verificación en Hardware Físico Real:**
+  - 100% de paridad en los 22 archivos maestros de versión (`v111.0.0`, build code `111000`).
+  - Verificación en hardware real en Motorola Moto G22 (`ZT322B386P`) y Lenovo Tablet (`HA2CHKZ2`).
+  - Hash SHA-256 canónico APK: `B237A16E3F4C34DC630E6A3B8637C62FBB04F21698EF22A5DB56A4053EB6D45A`.
+  - Hash SHA-256 canónico red-node.exe: `AF1207A0D10CCC9102EEC1AC31DB2E5CCE0B917AB02E1FD83D41572DD27E788D`.
+
 ## [110.0.0-sovereign-shield-y-defensa-tactica-c4isr] - 2026-09-18
 
 ### 🚀 Sovereign Shield: Caller ID, Anti-Spam & Defensa Táctica C4ISR (Release Oficial v110.0.0)

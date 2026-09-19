@@ -37,7 +37,10 @@ impl AITranslatorEngine {
         dict_es_qu.insert("comida", "mikhuna");
         dict_es_qu.insert("herido", "k'irisqa");
 
-        Self { dict_es_en, dict_es_qu }
+        Self {
+            dict_es_en,
+            dict_es_qu,
+        }
     }
 
     pub fn translate(&self, req: TranslateRequest) -> TranslateResponse {
@@ -51,7 +54,9 @@ impl AITranslatorEngine {
         let words: Vec<&str> = text.split_whitespace().collect();
 
         for word in words {
-            let clean_word = word.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+            let clean_word = word
+                .trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase();
             let mut translated_word = word.to_string(); // Default to original
 
             if target == "en" {

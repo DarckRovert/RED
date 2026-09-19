@@ -2,79 +2,151 @@ const fs = require('fs');
 const path = require('path');
 
 console.log("================================================================================");
-console.log("🔎 AUDITORÍA EXHAUSTIVA DE INTEGRIDAD DE TODOS LOS MÓDULOS DE RED OS (V3)");
+console.log("🔎 AUDITORÍA EXHAUSTIVA DE INTEGRIDAD DE TODOS LOS MÓDULOS DE RED OS (v110.0.0)");
 console.log("================================================================================");
 
 const rootDir = path.join(__dirname, '..');
 const pagePath = path.join(rootDir, 'client/app/src/app/page.tsx');
+const wsPath = path.join(rootDir, 'client/app/src/components/navigation/WorkspaceScreens.tsx');
 const sidebarPath = path.join(rootDir, 'client/app/src/components/Sidebar.tsx');
 const ccPath = path.join(rootDir, 'client/app/src/components/TacticalCommandCenter.tsx');
 
-const pageContent = fs.readFileSync(pagePath, 'utf8');
+const wsContent = fs.readFileSync(wsPath, 'utf8');
 const sidebarContent = fs.readFileSync(sidebarPath, 'utf8');
 const ccContent = fs.readFileSync(ccPath, 'utf8');
 
-// 1. Extract tools and modules
-const sidebarTools = [...sidebarContent.matchAll(/{\s*icon:\s*"([^"]+)",\s*label:\s*"([^"]+)",\s*action:\s*"([^"]+)"\s*}/g)]
-    .map(m => ({ icon: m[1], label: m[2], action: m[3] }));
+// 1. Extraer acciones de Sidebar y Command Center
+const sidebarActions = [...sidebarContent.matchAll(/action:\s*["']([^"']+)["']/g)].map(m => m[1]);
+const ccActions = [...ccContent.matchAll(/action:\s*["']([^"']+)["']/g)].map(m => m[1]);
 
-const ccModules = [...ccContent.matchAll(/id:\s*['"]([^'"]+)['"],\s*action:\s*['"]([^'"]+)['"],\s*icon:\s*['"]([^'"]+)['"],\s*title:\s*['"]([^'"]+)['"]/g)]
-    .map(m => ({ id: m[1], action: m[2], icon: m[3], title: m[4] }));
-
-// 2. Extract dynamic imports in page.tsx
+// 2. Extraer dynamic imports en WorkspaceScreens.tsx
 const dynamicImports = {};
 const dynamicRegex = /const\s+([A-Za-z0-9_]+)\s*=\s*dynamic\(\(\)\s*=>\s*import\(["']([^"']+)["']\)/g;
 let dMatch;
-while ((dMatch = dynamicRegex.exec(pageContent)) !== null) {
+while ((dMatch = dynamicRegex.exec(wsContent)) !== null) {
     dynamicImports[dMatch[1]] = dMatch[2];
 }
 
-// Split page.tsx into Tablet layout and Mobile layout
-const tabletSplitIndex = pageContent.indexOf('/* ── Master-Detail Tablet Layout');
-const mobileSplitIndex = pageContent.indexOf('/* ── Single-Column Mobile Layout');
+const actionsToCheck = new Set([...sidebarActions, ...ccActions]);
 
-const tabletSection = pageContent.slice(tabletSplitIndex, mobileSplitIndex);
-const mobileSection = pageContent.slice(mobileSplitIndex);
-
-// Mapping of action to actual React component name
+// Mapping directo para casos con nombres derivados o wrappers
 const ACTION_TO_COMP = {
     call: 'CallScreen',
     webCompanionLink: 'WebCompanionLinkModal',
+    companionLink: 'WebCompanionLinkModal',
     swarmHealthHUD: 'SwarmHealthHUD',
+    swarmHealth: 'SwarmHealthHUD',
     channels: 'PublicChannelsPanel',
+    publicChannels: 'PublicChannelsPanel',
     canvas: 'LiveCanvasModal',
+    liveCanvas: 'LiveCanvasModal',
     radar: 'RadarWindow',
     nodemap: 'NodeMap',
     appStore: 'SovereignAppStoreModal',
     hyperBrowser: 'RedHyperBrowserModal',
     settings: 'SettingsModal',
-    updater: 'UpdateModal'
+    updater: 'UpdateModal',
+    groups: 'GroupsPanel',
+    squads: 'GroupsPanel',
+    chat: 'ChatWindow',
+    security: 'SecurityPanel',
+    broadcast: 'BroadcastPanel',
+    crypto: 'CryptoPanel',
+    status: 'StatusView',
+    explorer: 'BlockchainExplorer',
+    network: 'NetworkPanel',
+    dms: 'DMSSettings',
+    amber: 'AmberAdminPanel',
+    amberAdmin: 'AmberAdminPanel',
+    guardian: 'GuardianStatusPanel',
+    nearby: 'NearbyDevicesPanel',
+    contacts: 'NearbyDevicesPanel',
+    globalShield: 'GlobalShieldPanel',
+    web3Vault: 'Web3VaultModal',
+    p2pCompass: 'P2PCompassModal',
+    offGridCompass: 'OffGridCompassModal',
+    compass: 'OffGridCompassModal',
+    socialFeed: 'SocialFeedPanel',
+    walkie: 'P2PWalkieTalkieModal',
+    weather: 'WeatherAlertPanel',
+    weatherAlert: 'WeatherAlertPanel',
+    idVault: 'IdentityVaultModal',
+    identityVault: 'IdentityVaultModal',
+    proximity: 'ProximityWaveModal',
+    proximityWave: 'ProximityWaveModal',
+    ecoMesh: 'EcoMeshPanel',
+    proximitySettings: 'ProximitySettingsModal',
+    proximity_settings: 'ProximitySettingsModal',
+    aiCopilot: 'AICopilotModal',
+    copilot: 'AICopilotModal',
+    liveStream: 'LiveStreamBroadcaster',
+    vitalScan: 'VitalScanModal',
+    survivalBeacon: 'SurvivalBeaconModal',
+    sos: 'SurvivalBeaconModal',
+    tacticalVisionScan: 'TacticalVisionScanModal',
+    shamirRecovery: 'ShamirRecoveryModal',
+    cbrnSatellite: 'CbrnSatelliteModal',
+    zkBarterSubsurface: 'ZkBarterSubsurfaceModal',
+    tcccBallistics: 'TcccBallisticsModal',
+    c4isrEmpDrill: 'C4isrEmpDrillModal',
+    airGapStego: 'AirGapStegoModal',
+    celestialPdr: 'CelestialPdrModal',
+    acousticWarfare: 'AcousticWarfareModal',
+    vitalResources: 'VitalResourcesModal',
+    sonarSeismic: 'SonarSeismicModal',
+    tacticalFoxhunt: 'TacticalFoxhuntModal',
+    atmosphericSafety: 'AtmosphericSafetyModal',
+    rfSpectrum: 'RfSpectrumModal',
+    stegoVault: 'StegoVaultModal',
+    shakePair: 'ShakePairModal',
+    p2pPay: 'RedP2PPayModal',
+    redP2PPay: 'RedP2PPayModal',
+    blackout: 'BlackoutSimulatorModal',
+    systemHealth: 'SystemHealthModal',
+    health: 'SystemHealthModal',
+    nodeLogs: 'NodeLogsModal',
+    logs: 'NodeLogsModal',
+    calculator: 'CalculatorScreen',
+    secReport: 'SecurityReportModal',
+    backup: 'BackupRestoreModal',
+    commercialHub: 'CommercialHubModal',
+    hub: 'CommercialHubModal',
+    loraTransceiver: 'LoraTransceiverModal',
+    extremeSurvival: 'ExtremeSurvivalHudModal',
+    survivalHud: 'ExtremeSurvivalHudModal',
+    tacticalGhostGps: 'TacticalGhostGpsModal',
+    ghostGps: 'TacticalGhostGpsModal',
+    cyberTunnel: 'RedCyberTunnelModal',
+    zeroRating: 'RedCyberTunnelModal',
+    sovereignShield: 'SovereignShieldDashboard',
+    shield: 'SovereignShieldDashboard',
+    maleCnsConnectome: 'MaleCnsConnectomeHUD',
+    connectome: 'MaleCnsConnectomeHUD'
 };
-
-const actionsToCheck = new Set([...sidebarTools.map(t => t.action), ...ccModules.map(m => m.action)]);
 
 const issues = [];
 const moduleReport = [];
 
 for (const action of actionsToCheck) {
-    if (action === 'commandCenter') {
+    if (action === 'commandCenter' || action === 'sidebar' || action === 'landing') {
         continue;
     }
-    
-    // Check in tablet section
-    const inTablet = tabletSection.includes(`"${action}"`) || tabletSection.includes(`'${action}'`);
-    // Check in mobile section
-    const inMobile = mobileSection.includes(`"${action}"`) || mobileSection.includes(`'${action}'`);
+
+    // Verificar enrutamiento en WorkspaceScreens.tsx
+    const isRouted = wsContent.includes(`"${action}"`) || wsContent.includes(`'${action}'`);
 
     let compName = ACTION_TO_COMP[action];
     if (!compName) {
-        const actionIdx = pageContent.indexOf(`"${action}"`);
-        const slice = pageContent.slice(actionIdx, actionIdx + 300);
-        const compMatch = slice.match(/<([A-Z][A-Za-z0-9_]+)/);
-        compName = compMatch ? compMatch[1] : 'UNKNOWN';
+        const actionIdx = wsContent.indexOf(`"${action}"`);
+        if (actionIdx !== -1) {
+            const slice = wsContent.slice(actionIdx, actionIdx + 300);
+            const compMatch = slice.match(/<([A-Z][A-Za-z0-9_]+)/);
+            compName = compMatch ? compMatch[1] : 'UNKNOWN';
+        } else {
+            compName = 'UNKNOWN';
+        }
     }
 
-    // Resolve component file
     let compPath = dynamicImports[compName];
     let fileExists = false;
     let fileSize = 0;
@@ -83,7 +155,7 @@ for (const action of actionsToCheck) {
 
     if (compPath) {
         if (compPath.startsWith('.')) {
-            fullFilePath = path.resolve(path.join(rootDir, 'client/app/src/app'), compPath);
+            fullFilePath = path.resolve(path.join(rootDir, 'client/app/src/components/navigation'), compPath);
             if (!fs.existsSync(fullFilePath)) {
                 if (fs.existsSync(fullFilePath + '.tsx')) fullFilePath += '.tsx';
                 else if (fs.existsSync(fullFilePath + '.ts')) fullFilePath += '.ts';
@@ -105,9 +177,8 @@ for (const action of actionsToCheck) {
         fileExists,
         fileSize,
         fileLines,
-        inTablet,
-        inMobile,
-        status: (inTablet && inMobile && fileExists && fileSize > 500) ? 'OK' : 'FAIL'
+        isRouted,
+        status: (isRouted && fileExists && fileSize > 500) ? 'OK' : 'FAIL'
     };
 
     moduleReport.push(itemStatus);
@@ -125,13 +196,13 @@ if (issues.length > 0) {
     console.log("\n⚠️ DETALLES DE FALLAS:");
     console.dir(issues, { depth: null });
 } else {
-    console.log("\n✅ ¡100% DE LOS 61 MÓDULOS DE RUTA TIENEN COMPONENTE REAL EN DISCO, TAMAÑO SUSTANCIAL Y PARIDAD TOTAL EN TABLET Y MÓVIL!");
+    console.log(`\n✅ ¡100% DE LOS ${moduleReport.length} MÓDULOS TIENEN COMPONENTE REAL EN DISCO, TAMAÑO SUSTANCIAL Y ENRUTAMIENTO VERIFICADO!`);
 }
 
-console.log("\n--- DETALLE DE TODOS LOS 61 MÓDULOS Y SUS COMPONENTES EN DISCO ---");
-moduleReport.forEach((m, i) => {
+console.log("\n--- DETALLE DE TODOS LOS MÓDULOS Y SUS COMPONENTES EN DISCO ---");
+moduleReport.sort((a, b) => a.action.localeCompare(b.action)).forEach((m, i) => {
     const kb = (m.fileSize / 1024).toFixed(1);
-    console.log(`${String(i + 1).padStart(2, ' ')}. [${m.action.padEnd(20, ' ')}] -> <${m.component.padEnd(26, ' ')}> (${kb.padStart(5, ' ')} KB, ${String(m.fileLines).padStart(4, ' ')} líneas) [Tablet: ${m.inTablet ? '✓' : '✗'}, Mobile: ${m.inMobile ? '✓' : '✗'}]`);
+    console.log(`${String(i + 1).padStart(2, ' ')}. [${m.action.padEnd(24, ' ')}] -> <${m.component.padEnd(26, ' ')}> (${kb.padStart(5, ' ')} KB, ${String(m.fileLines).padStart(4, ' ')} líneas) [Ruta OK: ${m.isRouted ? '✓' : '✗'}]`);
 });
 
 console.log("\n================================================================================");

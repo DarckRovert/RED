@@ -22,7 +22,6 @@ impl Default for DiscoveryEngine {
 
 impl DiscoveryEngine {
     pub fn new() -> Self {
-        
         Self {
             nearby_nodes: Arc::new(RwLock::new(HashMap::new())),
             last_notified: Arc::new(RwLock::new(HashMap::new())),
@@ -47,7 +46,10 @@ impl DiscoveryEngine {
     }
 
     pub fn get_config(&self) -> ProximityFilterConfig {
-        self.config.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.config
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     pub fn set_config(&self, cfg: ProximityFilterConfig) {
@@ -97,7 +99,10 @@ impl DiscoveryEngine {
             transport: "BLE".to_string(),
             last_seen: timestamp,
         };
-        self.nearby_nodes.write().unwrap_or_else(|e| e.into_inner()).insert(identity_hash, node);
+        self.nearby_nodes
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(identity_hash, node);
     }
 
     pub fn trigger_wave(&self, req: WaveHandshakeRequest) -> ProximityNode {

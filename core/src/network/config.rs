@@ -11,34 +11,34 @@ use super::{DEFAULT_PORT, MAX_PEERS, MIN_PEERS, ONION_PATH_LENGTH};
 pub struct NetworkConfig {
     /// Listen address
     pub listen_addr: SocketAddr,
-    
+
     /// Bootstrap nodes
     pub bootstrap_nodes: Vec<libp2p::Multiaddr>,
-    
+
     /// Maximum number of peers
     pub max_peers: usize,
-    
+
     /// Minimum number of peers
     pub min_peers: usize,
-    
+
     /// Onion routing path length
     pub onion_path_length: usize,
-    
+
     /// Connection timeout
     pub connection_timeout: Duration,
-    
+
     /// Ping interval
     pub ping_interval: Duration,
-    
+
     /// Enable mDNS for local discovery
     pub enable_mdns: bool,
-    
+
     /// Enable DHT
     pub enable_dht: bool,
-    
+
     /// Enable gossip protocol
     pub enable_gossip: bool,
-    
+
     /// Dummy traffic rate (messages per minute)
     pub dummy_traffic_rate: f64,
 
@@ -122,7 +122,7 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = NetworkConfig::default();
-        
+
         assert_eq!(config.listen_addr.port(), DEFAULT_PORT);
         assert_eq!(config.max_peers, MAX_PEERS);
         assert_eq!(config.onion_path_length, ONION_PATH_LENGTH);
@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn test_builder_pattern() {
         let addr: libp2p::Multiaddr = "/ip4/192.168.1.1/tcp/7331".parse().unwrap();
-        
+
         let config = NetworkConfig::new(8080)
             .with_bootstrap_node(addr)
             .with_max_peers(100)

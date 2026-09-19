@@ -18,18 +18,18 @@ impl MessageId {
         let uuid = uuid::Uuid::new_v4();
         let mut bytes = [0u8; 32];
         bytes[..16].copy_from_slice(uuid.as_bytes());
-        
+
         // Add timestamp for uniqueness
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos() as u64;
         bytes[16..24].copy_from_slice(&timestamp.to_le_bytes());
-        
+
         // Fill rest with random
         use rand::RngCore;
         rand::rngs::OsRng.fill_bytes(&mut bytes[24..]);
-        
+
         Self(bytes)
     }
 
@@ -85,10 +85,7 @@ pub enum MessageType {
         mime_type: String,
     },
     /// Voice message
-    Voice {
-        data: Vec<u8>,
-        duration_ms: u32,
-    },
+    Voice { data: Vec<u8>, duration_ms: u32 },
     /// Video message
     Video {
         data: Vec<u8>,
@@ -114,17 +111,11 @@ pub enum MessageType {
         emoji: String,
     },
     /// Message deletion request
-    Delete {
-        target_message_id: MessageId,
-    },
+    Delete { target_message_id: MessageId },
     /// Read receipt
-    ReadReceipt {
-        message_ids: Vec<MessageId>,
-    },
+    ReadReceipt { message_ids: Vec<MessageId> },
     /// Typing indicator
-    Typing {
-        is_typing: bool,
-    },
+    Typing { is_typing: bool },
     /// Encrypted group message using SenderKey
     GroupPayload(crate::protocol::group::GroupMessage),
     /// Group Invitation / Descriptor Distribution (v64.1)
@@ -136,9 +127,7 @@ pub enum MessageType {
         created_at: u64,
     },
     /// Timer update for disappearing messages
-    TimerUpdate {
-        seconds: u32,
-    },
+    TimerUpdate { seconds: u32 },
     /// Ephemeral message with expiration
     Ephemeral {
         expires_at: u64,
@@ -150,10 +139,7 @@ pub enum MessageType {
     WeatherReport(Vec<u8>),
     /// Presence beacon — emitted periodically to signal that a node is online.
     /// `last_seen` is Unix ms; `online` true = connected, false = graceful offline.
-    PresenceBeacon {
-        last_seen: u64,
-        online: bool,
-    },
+    PresenceBeacon { last_seen: u64, online: bool },
     /// Profile Sync Request (v31.0)
     ProfileSyncRequest,
     /// Profile Sync Response (v31.0)
@@ -237,7 +223,6 @@ pub struct SocialPostPayload {
     pub reply_to: Option<String>,
 }
 
-
 impl MessageType {
     /// Get the size of this message type in bytes
     pub fn size(&self) -> usize {
@@ -254,7 +239,11 @@ impl MessageType {
             MessageType::ReadReceipt { message_ids } => message_ids.len() * 32,
             MessageType::Typing { .. } => 1,
             MessageType::GroupPayload(msg) => msg.ciphertext.len() + 68,
-            MessageType::GroupInvite { group_name, members, .. } => 72 + group_name.len() + members.len() * 32,
+            MessageType::GroupInvite {
+                group_name,
+                members,
+                ..
+            } => 72 + group_name.len() + members.len() * 32,
             MessageType::TimerUpdate { .. } => 4,
             MessageType::Ephemeral { content, .. } => 8 + content.size(),
             MessageType::SocialPost(data) => data.len(),
@@ -267,7 +256,12 @@ impl MessageType {
             MessageType::P2PVoucher(data) => data.len(),
             MessageType::ChannelHopCoordination { reason, .. } => 16 + reason.len(),
             MessageType::MedicalTriageReport(data) => data.len(),
-            MessageType::EmergencyBeacon { beacon_id, distress_type, message, .. } => 32 + beacon_id.len() + distress_type.len() + message.len(),
+            MessageType::EmergencyBeacon {
+                beacon_id,
+                distress_type,
+                message,
+                ..
+            } => 32 + beacon_id.len() + distress_type.len() + message.len(),
             MessageType::WebRTCSignal(signal) => signal.len(),
             MessageType::ContactRequest(payload) => payload.len(),
             MessageType::ContactResponse(payload) => payload.len(),
@@ -278,7 +272,16 @@ impl MessageType {
     /// Check if this is a control message (not user content)
     pub fn is_control(&self) -> bool {
         match self {
-            MessageType::ReadReceipt { .. } | MessageType::Typing { .. } | MessageType::TimerUpdate { .. } | MessageType::PresenceBeacon { .. } | MessageType::ChannelHopCoordination { .. } | MessageType::WebRTCSignal(_) | MessageType::ContactRequest(_) | MessageType::ContactResponse(_) | MessageType::GroupInvite { .. } | MessageType::StatusPacket(_) => true,
+            MessageType::ReadReceipt { .. }
+            | MessageType::Typing { .. }
+            | MessageType::TimerUpdate { .. }
+            | MessageType::PresenceBeacon { .. }
+            | MessageType::ChannelHopCoordination { .. }
+            | MessageType::WebRTCSignal(_)
+            | MessageType::ContactRequest(_)
+            | MessageType::ContactResponse(_)
+            | MessageType::GroupInvite { .. }
+            | MessageType::StatusPacket(_) => true,
             MessageType::Ephemeral { content, .. } => content.is_control(),
             _ => false,
         }
@@ -332,7 +335,7 @@ impl Message {
         text: impl Into<String>,
     ) -> ProtocolResult<Self> {
         let text = text.into();
-        
+
         if text.len() > MAX_MESSAGE_SIZE {
             return Err(ProtocolError::MessageTooLarge(text.len(), MAX_MESSAGE_SIZE));
         }
@@ -366,14 +369,12 @@ impl Message {
 
     /// Serialize message for encryption
     pub fn serialize(&self) -> ProtocolResult<Vec<u8>> {
-        bincode::serialize(self)
-            .map_err(|e| ProtocolError::InvalidFormat(e.to_string()))
+        bincode::serialize(self).map_err(|e| ProtocolError::InvalidFormat(e.to_string()))
     }
 
     /// Deserialize message
     pub fn deserialize(bytes: &[u8]) -> ProtocolResult<Self> {
-        bincode::deserialize(bytes)
-            .map_err(|e| ProtocolError::InvalidFormat(e.to_string()))
+        bincode::deserialize(bytes).map_err(|e| ProtocolError::InvalidFormat(e.to_string()))
     }
 
     /// Get message size
@@ -423,7 +424,7 @@ mod tests {
     fn test_message_id_generation() {
         let id1 = MessageId::generate();
         let id2 = MessageId::generate();
-        
+
         assert_ne!(id1, id2);
     }
 
@@ -431,9 +432,9 @@ mod tests {
     fn test_text_message() {
         let sender = create_test_identity();
         let recipient = IdentityHash::from_bytes([0x43u8; 32]);
-        
+
         let msg = Message::text(sender.clone(), recipient.clone(), "Hello!").unwrap();
-        
+
         assert_eq!(msg.sender, sender);
         assert_eq!(msg.recipient, recipient);
         assert!(matches!(msg.content, MessageType::Text(_)));
@@ -444,11 +445,11 @@ mod tests {
     fn test_message_serialization() {
         let sender = create_test_identity();
         let recipient = IdentityHash::from_bytes([0x43u8; 32]);
-        
+
         let msg = Message::text(sender, recipient, "Test").unwrap();
         let bytes = msg.serialize().unwrap();
         let recovered = Message::deserialize(&bytes).unwrap();
-        
+
         assert_eq!(msg.id, recovered.id);
     }
 
@@ -457,9 +458,9 @@ mod tests {
         let sender = create_test_identity();
         let recipient = IdentityHash::from_bytes([0x43u8; 32]);
         let large_text = "x".repeat(MAX_MESSAGE_SIZE + 1);
-        
+
         let result = Message::text(sender, recipient, large_text);
-        
+
         assert!(matches!(result, Err(ProtocolError::MessageTooLarge(_, _))));
     }
 }

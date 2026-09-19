@@ -78,7 +78,9 @@ function updateFile(filePath, updaterFn, description) {
 }
 
 // 1. client/app/src/lib/version.ts
-updateFile('client/app/src/lib/version.ts', () => {
+updateFile('client/app/src/lib/version.ts', (originalContent) => {
+    const shaMatch = originalContent && originalContent.match(/RED_APK_SHA256\s*=\s*["']([^"']+)["']/);
+    const existingSha = shaMatch ? shaMatch[1] : "7B460682D459BE02A5092A2C68DF94A70809C0FBE0BFDFBAA6ED83A1E93541BD";
     return `/**
  * RED Sovereign Mesh — Single Source of Truth for System Version
  * Version: ${targetVersion} RED Sovereign Mesh — ${releaseName}
@@ -96,7 +98,7 @@ export const RED_PROTOCOL_VERSION = "RED/${major}.${minor}-NOISE-PQC";
 export const RED_RELEASE_CHANNEL = "stable-p2p";
 export const RED_APK_NAME = "red-latest.apk";
 export const RED_APK_CANONICAL = "red-latest.apk";
-export const RED_APK_SHA256 = "DAC30005D02A01752A10D59E3F6DD21345CAE0AE85307FF91B5D5DA68475A515";
+export const RED_APK_SHA256 = "${existingSha}";
 `;
 }, 'Constantes TypeScript');
 

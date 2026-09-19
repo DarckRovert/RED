@@ -17,7 +17,7 @@ const GUARDIAN_MODEL: &str = "RED-Guardian-Nano-v3 (Offline Deep Semantic Engine
 const CACHE_TTL_SECS: u64 = 300; // 5 minutos
 const MAX_CACHE_ENTRIES: usize = 1000;
 
-pub use red_core::protocol::tactical::{GuardianVerdict, GuardianMode};
+pub use red_core::protocol::tactical::{GuardianMode, GuardianVerdict};
 
 // ─── Tipos públicos ────────────────────────────────────────────────────────────
 
@@ -59,8 +59,15 @@ pub struct GuardianEngine {
 
 impl GuardianEngine {
     /// Crea un nuevo GuardianEngine 100% local off-grid.
-    pub fn new(_api_key: Option<String>, mode: GuardianMode, copilot: Arc<crate::ai_copilot::AICopilotEngine>) -> Self {
-        info!("🛡️ Guardian IA inicializado en modo 100% LOCAL Off-Grid ({:?})", mode);
+    pub fn new(
+        _api_key: Option<String>,
+        mode: GuardianMode,
+        copilot: Arc<crate::ai_copilot::AICopilotEngine>,
+    ) -> Self {
+        info!(
+            "🛡️ Guardian IA inicializado en modo 100% LOCAL Off-Grid ({:?})",
+            mode
+        );
         Self {
             mode,
             cache: Arc::new(Mutex::new(HashMap::new())),
@@ -122,7 +129,9 @@ impl GuardianEngine {
         }
 
         // ── Capa 2: Evaluador Semántico Profundo 100% Local ─────────────────────
-        let deep_verdict = self.local_deep_semantic_classifier(context, current_msg).await;
+        let deep_verdict = self
+            .local_deep_semantic_classifier(context, current_msg)
+            .await;
         self.cache_verdict(cache_key, deep_verdict.clone());
 
         match &deep_verdict {
@@ -200,9 +209,13 @@ impl GuardianEngine {
 
     /// Evaluador Semántico Profundo 100% Local (Capa 2).
     /// Ejecuta clasificación multimodelo de amenazas directamente en el nodo Rust usando el motor GGUF asíncrono.
-    async fn local_deep_semantic_classifier(&self, context: &[String], current_msg: &str) -> GuardianVerdict {
+    async fn local_deep_semantic_classifier(
+        &self,
+        context: &[String],
+        current_msg: &str,
+    ) -> GuardianVerdict {
         let text_lower = current_msg.to_lowercase();
-        
+
         // El semáforo restringe a 1 inferencia concurrente máxima para proteger la memoria RAM (Anti-OOM)
         let _permit = match self.semaphore.acquire().await {
             Ok(p) => p,
@@ -228,18 +241,32 @@ impl GuardianEngine {
         };
 
         let resp = self.copilot.query_async(req).await;
-        
+
         let answer_upper = resp.answer.to_uppercase();
         if answer_upper.contains("BLOCK:") || answer_upper.starts_with("BLOCK") {
-            let reason = resp.answer.replace("BLOCK:", "").replace("BLOCK", "").trim().to_string();
+            let reason = resp
+                .answer
+                .replace("BLOCK:", "")
+                .replace("BLOCK", "")
+                .trim()
+                .to_string();
             return GuardianVerdict::Block {
                 category: "ai_semantic_block".to_string(),
-                reason: if reason.is_empty() { "Bloqueado por IA semántica profunda".to_string() } else { reason },
+                reason: if reason.is_empty() {
+                    "Bloqueado por IA semántica profunda".to_string()
+                } else {
+                    reason
+                },
             };
         }
 
         // Fallback preventivo rápido si falla la IA o responde ambiguo (aunque no debería por el prompt zero-shot)
-        let seed_phishing = ["dame tu clave privada", "pásame tu frase semilla", "seed phrase", "private key"];
+        let seed_phishing = [
+            "dame tu clave privada",
+            "pásame tu frase semilla",
+            "seed phrase",
+            "private key",
+        ];
         for pat in seed_phishing {
             if text_lower.contains(pat) {
                 return GuardianVerdict::Block {
@@ -358,23 +385,38 @@ impl GuardianEngine {
     }
 
     fn increment_blocked(&self) {
-        self.stats.lock().unwrap_or_else(|e| e.into_inner()).messages_blocked += 1;
+        self.stats
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .messages_blocked += 1;
     }
 
     fn increment_flagged(&self) {
-        self.stats.lock().unwrap_or_else(|e| e.into_inner()).messages_flagged += 1;
+        self.stats
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .messages_flagged += 1;
     }
 
     fn increment_images_analyzed(&self) {
-        self.stats.lock().unwrap_or_else(|e| e.into_inner()).images_analyzed += 1;
+        self.stats
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .images_analyzed += 1;
     }
 
     fn increment_images_blocked(&self) {
-        self.stats.lock().unwrap_or_else(|e| e.into_inner()).images_blocked += 1;
+        self.stats
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .images_blocked += 1;
     }
 
     fn increment_cache_hits(&self) {
-        self.stats.lock().unwrap_or_else(|e| e.into_inner()).cache_hits += 1;
+        self.stats
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .cache_hits += 1;
     }
 }
 

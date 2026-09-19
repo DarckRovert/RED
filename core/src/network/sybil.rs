@@ -83,7 +83,10 @@ mod tests {
         let nonce = SybilGuard::mine_pow(&pk, difficulty);
         assert!(SybilGuard::verify_pow(&pk, nonce, difficulty));
         // Wrong nonce must fail
-        assert!(!SybilGuard::verify_pow(&pk, nonce.wrapping_add(1), difficulty) || nonce.wrapping_add(1) == nonce);
+        assert!(
+            !SybilGuard::verify_pow(&pk, nonce.wrapping_add(1), difficulty)
+                || nonce.wrapping_add(1) == nonce
+        );
     }
 
     #[test]

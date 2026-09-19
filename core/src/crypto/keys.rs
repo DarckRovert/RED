@@ -1,10 +1,10 @@
 //! Key management for RED protocol.
 
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
-use x25519_dalek::{EphemeralSecret, PublicKey as X25519PublicKey, StaticSecret};
-use ed25519_dalek::{SigningKey, VerifyingKey, Signature, Signer, Verifier};
-use zeroize::ZeroizeOnDrop;
 use serde::{Deserialize, Serialize};
+use x25519_dalek::{EphemeralSecret, PublicKey as X25519PublicKey, StaticSecret};
+use zeroize::ZeroizeOnDrop;
 
 use super::{CryptoError, CryptoResult};
 
@@ -63,12 +63,11 @@ impl PublicKey {
 
     /// Parse from hex string
     pub fn from_hex(s: &str) -> CryptoResult<Self> {
-        let bytes = hex::decode(s)
-            .map_err(|e| CryptoError::InvalidKeyFormat(e.to_string()))?;
-        
+        let bytes = hex::decode(s).map_err(|e| CryptoError::InvalidKeyFormat(e.to_string()))?;
+
         if bytes.len() != 32 {
             return Err(CryptoError::InvalidKeyFormat(
-                "Public key must be 32 bytes".to_string()
+                "Public key must be 32 bytes".to_string(),
             ));
         }
 
@@ -168,7 +167,9 @@ mod signing_key_serde {
         D: Deserializer<'de>,
     {
         let bytes: Vec<u8> = serde::Deserialize::deserialize(deserializer)?;
-        let arr: [u8; 32] = bytes.try_into().map_err(|_| serde::de::Error::custom("Invalid key length"))?;
+        let arr: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| serde::de::Error::custom("Invalid key length"))?;
         Ok(SigningKey::from_bytes(&arr))
     }
 }
@@ -189,7 +190,9 @@ mod verifying_key_serde {
         D: Deserializer<'de>,
     {
         let bytes: Vec<u8> = serde::Deserialize::deserialize(deserializer)?;
-        let arr: [u8; 32] = bytes.try_into().map_err(|_| serde::de::Error::custom("Invalid key length"))?;
+        let arr: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| serde::de::Error::custom("Invalid key length"))?;
         VerifyingKey::from_bytes(&arr).map_err(serde::de::Error::custom)
     }
 }
@@ -268,7 +271,7 @@ mod tests {
     fn test_signing() {
         let kp = SigningKeyPair::generate();
         let message = b"Hello, RED!";
-        
+
         let signature = kp.sign(message);
         assert!(kp.verify(message, &signature).is_ok());
     }

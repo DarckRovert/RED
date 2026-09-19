@@ -117,7 +117,10 @@ async fn verify_session_token(
         "/api/conversations",
         "/api/mesh/apk",
     ];
-    if public.iter().any(|p| path == *p || path.starts_with("/relay/") || path.starts_with("/api/messages/")) {
+    if public
+        .iter()
+        .any(|p| path == *p || path.starts_with("/relay/") || path.starts_with("/api/messages/"))
+    {
         return Ok(next.run(req).await);
     }
 
@@ -126,7 +129,12 @@ async fn verify_session_token(
         .headers()
         .get("host")
         .and_then(|h| h.to_str().ok())
-        .map(|h| h.starts_with("localhost:") || h.starts_with("127.0.0.1:") || h == "localhost" || h == "127.0.0.1")
+        .map(|h| {
+            h.starts_with("localhost:")
+                || h.starts_with("127.0.0.1:")
+                || h == "localhost"
+                || h == "127.0.0.1"
+        })
         .unwrap_or(false);
 
     // Verificar token en header X-Red-Session-Token o Authorization Bearer
@@ -135,7 +143,8 @@ async fn verify_session_token(
         .get("x-red-session-token")
         .and_then(|v| v.to_str().ok())
         .or_else(|| {
-            req.headers().get("authorization")
+            req.headers()
+                .get("authorization")
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.strip_prefix("Bearer "))
         })
@@ -419,10 +428,10 @@ pub struct SetBlackoutRequest {
 async fn handle_get_blackout(State(state): State<ApiState>) -> impl IntoResponse {
     let node = state.node.lock().await;
     let peers = node.get_peers().await;
-    
+
     let is_blackout = node.is_blackout_mode();
     let peer_count = peers.as_ref().map(|p| p.len()).unwrap_or(0);
-    
+
     let active_transports = if is_blackout {
         vec![
             "mDNS / LAN UDP (7331)".to_string(),
@@ -445,8 +454,12 @@ async fn handle_get_blackout(State(state): State<ApiState>) -> impl IntoResponse
         local_peers: peer_count,
         epidemic_ttl: if is_blackout { 7 } else { 3 },
         blocked_wan_peers: node.get_blocked_wan_peers(),
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-    }).into_response()
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    })
+    .into_response()
 }
 
 async fn handle_set_blackout(
@@ -456,7 +469,7 @@ async fn handle_set_blackout(
     let node = state.node.lock().await;
     node.set_blackout_mode(req.enabled);
     node.enforce_blackout().await;
-    
+
     if req.enabled {
         tracing::warn!("⚠️ PROTOCOLO DE APAGÓN ACTIVADO: Sockets WAN desconectados.");
     } else {
@@ -488,8 +501,12 @@ async fn handle_set_blackout(
         local_peers: peer_count,
         epidemic_ttl: if is_blackout { 7 } else { 3 },
         blocked_wan_peers: node.get_blocked_wan_peers(),
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-    }).into_response()
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    })
+    .into_response()
 }
 
 pub fn build_router(state: ApiState) -> Router {
@@ -557,10 +574,7 @@ pub fn build_router(state: ApiState) -> Router {
             "/api/groups/:id/members/:hash/mute",
             put(handle_mute_group_member),
         )
-        .route(
-            "/api/groups/:id/broadcast",
-            put(handle_set_group_broadcast),
-        )
+        .route("/api/groups/:id/broadcast", put(handle_set_group_broadcast))
         .route(
             "/api/groups/history/request",
             post(handle_group_history_request),
@@ -568,16 +582,25 @@ pub fn build_router(state: ApiState) -> Router {
         // v25.0: Social P2P
         .route("/api/social/feed", get(get_social_feed))
         .route("/api/social/post", post(create_social_post))
-        .route("/api/social/posts", get(get_social_feed).post(create_social_post))
+        .route(
+            "/api/social/posts",
+            get(get_social_feed).post(create_social_post),
+        )
         .route("/api/social/posts/:id", delete(handle_delete_social_post))
         .route("/api/social/react", post(create_social_reaction))
         .route("/api/social/follow", post(follow_user))
         .route("/api/social/unfollow", post(unfollow_user))
         .route("/api/social/following", get(get_following))
         // Stego Vault & Capsules (LSB Off-Grid Sled DB)
-        .route("/api/stego/capsules", get(handle_get_stego_vault).post(handle_save_stego_vault))
+        .route(
+            "/api/stego/capsules",
+            get(handle_get_stego_vault).post(handle_save_stego_vault),
+        )
         .route("/api/stego/capsules/:id", delete(handle_delete_stego_vault))
-        .route("/api/stego/vault", get(handle_get_stego_vault).post(handle_save_stego_vault))
+        .route(
+            "/api/stego/vault",
+            get(handle_get_stego_vault).post(handle_save_stego_vault),
+        )
         .route("/api/stego/vault/:id", delete(handle_delete_stego_vault))
         // Sovereign P2P Payments & Vouchers (v32.0)
         .route("/api/p2p/wallet", get(handle_get_p2p_wallet))
@@ -586,7 +609,10 @@ pub fn build_router(state: ApiState) -> Router {
         // Blackout mode
         .route("/api/blackout/status", get(handle_get_blackout))
         .route("/api/blackout/mode", post(handle_set_blackout))
-        .route("/api/network/blackout", get(handle_get_blackout).post(handle_set_blackout))
+        .route(
+            "/api/network/blackout",
+            get(handle_get_blackout).post(handle_set_blackout),
+        )
         // FIX M4: peers list
         .route("/api/peers", get(handle_list_peers))
         .route(
@@ -594,7 +620,10 @@ pub fn build_router(state: ApiState) -> Router {
             get(handle_get_profile).put(handle_set_profile),
         )
         .route("/api/settings/burner", post(handle_set_burner_mode))
-        .route("/api/settings/dms", get(handle_get_dms).post(handle_set_dms))
+        .route(
+            "/api/settings/dms",
+            get(handle_get_dms).post(handle_set_dms),
+        )
         .route("/api/settings/dms/ping", post(handle_ping_dms))
         .route("/api/settings/dms/panic_wipe", post(handle_panic_wipe))
         // C1: LoRa config — persists serial port + baud so LoraBridge picks it up on restart
@@ -605,7 +634,10 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/network/connect", post(handle_network_connect))
         .route("/api/dns/query", post(handle_dns_query))
         // Zero-Rating SNI Fronting & CyberTunnel ClearNet Gateway
-        .route("/red-tunnel", post(handle_red_tunnel).get(handle_red_tunnel))
+        .route(
+            "/red-tunnel",
+            post(handle_red_tunnel).get(handle_red_tunnel),
+        )
         .route("/api/cybertunnel/status", get(handle_cybertunnel_status))
         .route("/api/cybertunnel/proxy", post(handle_cybertunnel_proxy))
         // GAP-02: Outbound mesh payloads SSE (Rust → JS radio bridge)
@@ -676,7 +708,10 @@ pub fn build_router(state: ApiState) -> Router {
             post(handle_update_battery_optimize),
         )
         // ── v24.0: AI Copilot + Summarizer + Translator + Sovereign Endpoints ───
-        .route("/api/ai/status", get(handle_ai_status).post(handle_ai_status))
+        .route(
+            "/api/ai/status",
+            get(handle_ai_status).post(handle_ai_status),
+        )
         .route("/api/tags", get(handle_ollama_tags))
         .route("/v1/models", get(handle_openai_models))
         .route("/v1/chat/completions", post(handle_openai_chat_completions))
@@ -763,8 +798,8 @@ async fn serve_terms() -> impl IntoResponse {
 /// Serves the actual signed RED .apk installer directly from the device's storage.
 async fn handle_download_apk() -> impl IntoResponse {
     use axum::body::Body;
-    use axum::response::Response;
     use axum::http::StatusCode;
+    use axum::response::Response;
 
     let candidate_paths = [
         "client/app/android/app/build/outputs/apk/debug/app-debug.apk",
@@ -796,7 +831,9 @@ async fn handle_download_apk() -> impl IntoResponse {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
             .header("Content-Type", "text/plain")
-            .body(Body::from("404 Not Found: No real APK binary stored on node disk."))
+            .body(Body::from(
+                "404 Not Found: No real APK binary stored on node disk.",
+            ))
             .unwrap_or_else(|_| Response::new(Body::empty()))
     }
 }
@@ -881,7 +918,8 @@ async fn handle_send_message(
                 let n = state.node.lock().await;
                 if let Ok((_, _, convs)) = n.get_sync_payload().await {
                     if let Some(c) = convs.iter().find(|c| c.id == conv_id) {
-                        context_msgs = c.messages()
+                        context_msgs = c
+                            .messages()
                             .iter()
                             .rev()
                             .take(5)
@@ -896,14 +934,17 @@ async fn handle_send_message(
                 }
             }
         }
-
     }
 
     // Analizar imágenes por pHash
     if msg_type_str == "image" {
         if let Some(ref media_data) = req.media_data {
             let verdict = state.guardian.analyze_image_hash(media_data);
-            if let GuardianVerdict::Block { category, reason: _ } = verdict {
+            if let GuardianVerdict::Block {
+                category,
+                reason: _,
+            } = verdict
+            {
                 tracing::warn!("Guardian bloqueó imagen: category={}", category);
                 return (
                     StatusCode::FORBIDDEN,
@@ -922,7 +963,10 @@ async fn handle_send_message(
     let mut node = state.node.lock().await;
     let sender = node.identity_hash().clone();
 
-    let is_media_data = req.media_data.is_some() || req.content.starts_with("data:image") || req.content.starts_with("data:audio") || req.content.starts_with("data:video");
+    let is_media_data = req.media_data.is_some()
+        || req.content.starts_with("data:image")
+        || req.content.starts_with("data:audio")
+        || req.content.starts_with("data:video");
     let detected_media_data = req.media_data.clone().or_else(|| {
         if req.content.starts_with("data:") {
             Some(req.content.clone())
@@ -930,7 +974,8 @@ async fn handle_send_message(
             None
         }
     });
-    let detected_msg_type = if (msg_type_str == "text" || msg_type_str.is_empty()) && is_media_data {
+    let detected_msg_type = if (msg_type_str == "text" || msg_type_str.is_empty()) && is_media_data
+    {
         if req.content.starts_with("data:image") {
             "image".to_string()
         } else if req.content.starts_with("data:audio") {
@@ -956,8 +1001,17 @@ async fn handle_send_message(
                 parsed["accuracy"] = serde_json::json!(req.accuracy);
             }
             parsed.to_string()
-        } else if detected_msg_type != "text" && (is_media_data || detected_media_data.is_some() || req.latitude.is_some() || detected_msg_type == "location") {
-            let text_caption = if req.content.starts_with("data:") { "" } else { &req.content };
+        } else if detected_msg_type != "text"
+            && (is_media_data
+                || detected_media_data.is_some()
+                || req.latitude.is_some()
+                || detected_msg_type == "location")
+        {
+            let text_caption = if req.content.starts_with("data:") {
+                ""
+            } else {
+                &req.content
+            };
             serde_json::json!({
                 "text": text_caption,
                 "msg_type": detected_msg_type,
@@ -970,12 +1024,22 @@ async fn handle_send_message(
                 "longitude": req.longitude,
                 "accuracy": req.accuracy,
                 "target_message_id": req.target_message_id,
-            }).to_string()
+            })
+            .to_string()
         } else {
             req.content.clone()
         }
-    } else if detected_msg_type != "text" && (is_media_data || detected_media_data.is_some() || req.latitude.is_some() || detected_msg_type == "location") {
-        let text_caption = if req.content.starts_with("data:") { "" } else { &req.content };
+    } else if detected_msg_type != "text"
+        && (is_media_data
+            || detected_media_data.is_some()
+            || req.latitude.is_some()
+            || detected_msg_type == "location")
+    {
+        let text_caption = if req.content.starts_with("data:") {
+            ""
+        } else {
+            &req.content
+        };
         serde_json::json!({
             "text": text_caption,
             "msg_type": detected_msg_type,
@@ -988,7 +1052,8 @@ async fn handle_send_message(
             "longitude": req.longitude,
             "accuracy": req.accuracy,
             "target_message_id": req.target_message_id,
-        }).to_string()
+        })
+        .to_string()
     } else {
         req.content.clone()
     };
@@ -1028,24 +1093,32 @@ async fn handle_send_message(
     // Obtenemos id para ofuscación asíncrona
     let msg_id = message.id.clone();
     let recipient_clone = recipient.clone();
-    
+
     // SEC-FIX A-5: Burner Chats skip persistence via core storage logic
     let send_res = node.send_message(recipient, message).await;
-    
+
     // Guardian IA - Post-escaneo asíncrono (Zero-Block)
     if send_res.is_ok() && (msg_type_str == "text" || msg_type_str == "system") {
         let state_async = state.clone();
         let content_clone = req.content.clone();
         let sender_clone = sender.clone();
-        
+
         tokio::spawn(async move {
-            let verdict = state_async.guardian.analyze_conversation_context(&context_msgs, &content_clone).await;
+            let verdict = state_async
+                .guardian
+                .analyze_conversation_context(&context_msgs, &content_clone)
+                .await;
             if let GuardianVerdict::Block { reason, .. } = verdict {
-                let conv_id = red_core::protocol::ConversationId::from_participants(&sender_clone, &recipient_clone);
+                let conv_id = red_core::protocol::ConversationId::from_participants(
+                    &sender_clone,
+                    &recipient_clone,
+                );
                 let new_content = format!("[Auto-Censurado por Guardian IA: {}]", reason);
                 let mut n = state_async.node.lock().await;
-                let _ = n.edit_message(&conv_id.to_hex(), &msg_id.to_hex(), new_content.clone()).await;
-                
+                let _ = n
+                    .edit_message(&conv_id.to_hex(), &msg_id.to_hex(), new_content.clone())
+                    .await;
+
                 // Re-emitir evento para que la UI del emisor re-renderice el ofuscado
                 match Message::text(sender_clone, recipient_clone, new_content) {
                     Ok(mut dummy_msg) => {
@@ -1053,7 +1126,10 @@ async fn handle_send_message(
                         let _ = state_async.msg_tx.send(dummy_msg);
                     }
                     Err(e) => {
-                        tracing::warn!("[Guardian] Error creando mensaje dummy tras censura: {:?}", e);
+                        tracing::warn!(
+                            "[Guardian] Error creando mensaje dummy tras censura: {:?}",
+                            e
+                        );
                     }
                 }
             }
@@ -1162,7 +1238,10 @@ async fn handle_get_messages(
                     || their_short == conv_id
                     || our_short == conv_id
                     || cid_hex == conv_id
-                    || (conv_id.len() >= 8 && (their_hex.starts_with(&conv_id) || cid_hex.starts_with(&conv_id) || our_hex.starts_with(&conv_id)))
+                    || (conv_id.len() >= 8
+                        && (their_hex.starts_with(&conv_id)
+                            || cid_hex.starts_with(&conv_id)
+                            || our_hex.starts_with(&conv_id)))
             });
             match conv {
                 Some(c) => {
@@ -1186,8 +1265,13 @@ async fn handle_get_messages(
                             ) = if let MessageType::Text(text) = &m.content {
                                 if let Ok(meta) = serde_json::from_str::<serde_json::Value>(text) {
                                     if meta.get("msg_type").is_some() {
-                                        let raw_text = meta.get("text").and_then(|v| v.as_str()).unwrap_or("");
-                                        let final_content = if raw_text.is_empty() { text.clone() } else { raw_text.to_string() };
+                                        let raw_text =
+                                            meta.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                                        let final_content = if raw_text.is_empty() {
+                                            text.clone()
+                                        } else {
+                                            raw_text.to_string()
+                                        };
                                         (
                                             final_content,
                                             meta["msg_type"].as_str().unwrap_or("text").to_string(),
@@ -1196,18 +1280,31 @@ async fn handle_get_messages(
                                             meta["width"].as_u64().map(|v| v as u32),
                                             meta["height"].as_u64().map(|v| v as u32),
                                             meta["duration_ms"].as_u64(),
-                                            meta.get("latitude").and_then(|v| v.as_f64()).or_else(|| meta.get("lat").and_then(|v| v.as_f64())),
-                                            meta.get("longitude").and_then(|v| v.as_f64()).or_else(|| meta.get("lon").and_then(|v| v.as_f64())),
+                                            meta.get("latitude").and_then(|v| v.as_f64()).or_else(
+                                                || meta.get("lat").and_then(|v| v.as_f64()),
+                                            ),
+                                            meta.get("longitude").and_then(|v| v.as_f64()).or_else(
+                                                || meta.get("lon").and_then(|v| v.as_f64()),
+                                            ),
                                             meta.get("accuracy").and_then(|v| v.as_f64()),
                                             meta["target_message_id"].as_str().map(String::from),
                                         )
-                                    } else if text.starts_with("data:image") || text.starts_with("/9j/") || text.starts_with("iVBORw0") {
+                                    } else if text.starts_with("data:image")
+                                        || text.starts_with("/9j/")
+                                        || text.starts_with("iVBORw0")
+                                    {
                                         (
                                             text.clone(),
                                             "image".into(),
                                             Some(text.clone()),
                                             Some("image/jpeg".into()),
-                                            None, None, None, None, None, None, None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
                                         )
                                     } else if text.starts_with("data:audio") {
                                         (
@@ -1215,7 +1312,13 @@ async fn handle_get_messages(
                                             "voice".into(),
                                             Some(text.clone()),
                                             Some("audio/webm".into()),
-                                            None, None, None, None, None, None, None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
                                         )
                                     } else if text.starts_with("data:video") {
                                         (
@@ -1223,7 +1326,13 @@ async fn handle_get_messages(
                                             "video".into(),
                                             Some(text.clone()),
                                             Some("video/mp4".into()),
-                                            None, None, None, None, None, None, None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
+                                            None,
                                         )
                                     } else {
                                         (
@@ -1240,13 +1349,22 @@ async fn handle_get_messages(
                                             None,
                                         )
                                     }
-                                } else if text.starts_with("data:image") || text.starts_with("/9j/") || text.starts_with("iVBORw0") {
+                                } else if text.starts_with("data:image")
+                                    || text.starts_with("/9j/")
+                                    || text.starts_with("iVBORw0")
+                                {
                                     (
                                         text.clone(),
                                         "image".into(),
                                         Some(text.clone()),
                                         Some("image/jpeg".into()),
-                                        None, None, None, None, None, None, None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
                                     )
                                 } else if text.starts_with("data:audio") {
                                     (
@@ -1254,7 +1372,13 @@ async fn handle_get_messages(
                                         "voice".into(),
                                         Some(text.clone()),
                                         Some("audio/webm".into()),
-                                        None, None, None, None, None, None, None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
                                     )
                                 } else if text.starts_with("data:video") {
                                     (
@@ -1262,7 +1386,13 @@ async fn handle_get_messages(
                                         "video".into(),
                                         Some(text.clone()),
                                         Some("video/mp4".into()),
-                                        None, None, None, None, None, None, None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
                                     )
                                 } else {
                                     (
@@ -1297,7 +1427,9 @@ async fn handle_get_messages(
 
                             let meta = if let MessageType::Text(text) = &m.content {
                                 serde_json::from_str::<serde_json::Value>(text).ok()
-                            } else { None };
+                            } else {
+                                None
+                            };
 
                             let reply_to_val =
                                 meta.as_ref().and_then(|m| m.get("reply_to")).and_then(|r| {
@@ -1317,7 +1449,9 @@ async fn handle_get_messages(
                                 status: Some(match &m.status {
                                     red_core::protocol::MessageStatus::Pending => "Pending".into(),
                                     red_core::protocol::MessageStatus::Sent => "Sent".into(),
-                                    red_core::protocol::MessageStatus::Delivered => "Delivered".into(),
+                                    red_core::protocol::MessageStatus::Delivered => {
+                                        "Delivered".into()
+                                    }
                                     red_core::protocol::MessageStatus::Read => "Read".into(),
                                     red_core::protocol::MessageStatus::Failed(_) => "Failed".into(),
                                 }),
@@ -1560,12 +1694,15 @@ async fn handle_list_groups(State(state): State<ApiState>) -> impl IntoResponse 
                     name: g.name.clone(),
                     member_count: g.member_count(),
                     broadcast_only: g.broadcast_only,
-                    members: g.members().map(|m| GroupMemberResponse {
-                        identity_hash: m.identity_hash.to_hex(),
-                        role: format!("{:?}", m.role),
-                        joined_at: m.joined_at,
-                        muted: m.muted,
-                    }).collect(),
+                    members: g
+                        .members()
+                        .map(|m| GroupMemberResponse {
+                            identity_hash: m.identity_hash.to_hex(),
+                            role: format!("{:?}", m.role),
+                            joined_at: m.joined_at,
+                            muted: m.muted,
+                        })
+                        .collect(),
                 })
                 .collect();
             Json(items).into_response()
@@ -1730,13 +1867,18 @@ async fn handle_get_dms(State(state): State<ApiState>) -> impl IntoResponse {
 
     let storage_arc = node.get_storage();
     let s = storage_arc.lock().await;
-    let last_active: u64 = s.get_config("dms_last_active")
+    let last_active: u64 = s
+        .get_config("dms_last_active")
         .and_then(|v| v.parse().ok())
         .unwrap_or(now);
 
     let elapsed = now.saturating_sub(last_active);
     let trigger_secs = trigger_hours * 3600;
-    let seconds_remaining = if enabled { (trigger_secs as i64) - (elapsed as i64) } else { trigger_secs as i64 };
+    let seconds_remaining = if enabled {
+        (trigger_secs as i64) - (elapsed as i64)
+    } else {
+        trigger_secs as i64
+    };
     let is_triggered = enabled && seconds_remaining <= 0;
 
     Json(serde_json::json!({
@@ -1761,7 +1903,10 @@ async fn handle_ping_dms(State(state): State<ApiState>) -> impl IntoResponse {
     let mut s = storage_arc.lock().await;
     let _ = s.set_config("dms_last_active", now.to_string());
     tracing::info!("[API] DMS Check-in: operator presence recorded at {}", now);
-    (StatusCode::OK, Json(serde_json::json!({"success": true, "last_active_timestamp": now})))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"success": true, "last_active_timestamp": now})),
+    )
 }
 
 async fn handle_panic_wipe(State(state): State<ApiState>) -> impl IntoResponse {
@@ -1770,7 +1915,10 @@ async fn handle_panic_wipe(State(state): State<ApiState>) -> impl IntoResponse {
     let mut s = storage_arc.lock().await;
     let _ = s.self_destruct();
     tracing::warn!("[API] 🚨 PANIC WIPE EXECUTED: Storage self-destructed");
-    (StatusCode::OK, Json(serde_json::json!({"success": true, "wiped": true})))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"success": true, "wiped": true})),
+    )
 }
 
 // ─── Blockchain Explorer Omega Protocol ───────────────────────────────────────
@@ -1999,7 +2147,7 @@ async fn handle_crypto_renegotiate(State(state): State<ApiState>) -> impl IntoRe
     tracing::info!("Starting DH key renegotiation with active peers...");
     let mut node = state.node.lock().await;
     let _ = node.rotate_identity();
-    
+
     Json(serde_json::json!({
         "status": "success",
         "message": "Protocolo Diffie-Hellman reiniciado para las sesiones activas"
@@ -2032,7 +2180,8 @@ async fn handle_set_lora_config(
             state.node.clone(),
             req.port.clone(),
             req.baud,
-        ).await;
+        )
+        .await;
     }
 
     tracing::info!(
@@ -2069,7 +2218,8 @@ async fn handle_scan_lora_ports(State(state): State<ApiState>) -> impl IntoRespo
                 state.node.clone(),
                 dev.port_name.clone(),
                 dev.recommended_baud,
-            ).await;
+            )
+            .await;
         }
     }
     (StatusCode::OK, Json(scan_result))
@@ -2285,9 +2435,7 @@ pub struct DnsQueryRequest {
     pub server: Option<String>,
 }
 
-async fn handle_dns_query(
-    Json(req): Json<DnsQueryRequest>,
-) -> impl IntoResponse {
+async fn handle_dns_query(Json(req): Json<DnsQueryRequest>) -> impl IntoResponse {
     let query_host = req.query.trim();
     if query_host.is_empty() {
         return (
@@ -2324,7 +2472,9 @@ async fn handle_dns_query(
         packet.extend_from_slice(&[0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
         for part in query_host.split('.') {
-            if part.is_empty() { continue; }
+            if part.is_empty() {
+                continue;
+            }
             let bytes = part.as_bytes();
             if bytes.len() > 63 {
                 return Err("DNS label too long".to_string());
@@ -2334,7 +2484,13 @@ async fn handle_dns_query(
         }
         packet.push(0x00);
 
-        let qtype = match req.record_type.as_deref().unwrap_or("TXT").to_uppercase().as_str() {
+        let qtype = match req
+            .record_type
+            .as_deref()
+            .unwrap_or("TXT")
+            .to_uppercase()
+            .as_str()
+        {
             "A" => 1u16,
             "AAAA" => 28u16,
             _ => 16u16,
@@ -2368,7 +2524,8 @@ async fn handle_dns_query(
         } else {
             Ok("ACK_OK_EMPTY".to_string())
         }
-    }).await;
+    })
+    .await;
 
     let latency_ms = start.elapsed().as_millis() as u64;
 
@@ -2420,12 +2577,15 @@ pub struct CyberTunnelProxyRequest {
 }
 
 async fn handle_cybertunnel_status() -> impl IntoResponse {
-    let mut resp = Response::new(Body::from(serde_json::to_string(&serde_json::json!({
-        "ok": true,
-        "active": true,
-        "clearnet_gateway": true,
-        "version": format!("v{}", env!("CARGO_PKG_VERSION"))
-    })).unwrap_or_default()));
+    let mut resp = Response::new(Body::from(
+        serde_json::to_string(&serde_json::json!({
+            "ok": true,
+            "active": true,
+            "clearnet_gateway": true,
+            "version": format!("v{}", env!("CARGO_PKG_VERSION"))
+        }))
+        .unwrap_or_default(),
+    ));
     resp.headers_mut().insert(
         axum::http::header::CONTENT_TYPE,
         HeaderValue::from_static("application/json"),
@@ -2437,10 +2597,7 @@ async fn handle_cybertunnel_status() -> impl IntoResponse {
     resp
 }
 
-async fn handle_red_tunnel(
-    headers: HeaderMap,
-    body: axum::body::Bytes,
-) -> impl IntoResponse {
+async fn handle_red_tunnel(headers: HeaderMap, body: axum::body::Bytes) -> impl IntoResponse {
     let forward_url = headers
         .get("x-red-forward-url")
         .and_then(|h| h.to_str().ok())
@@ -2466,7 +2623,9 @@ async fn handle_red_tunnel(
                 let mut out_resp = Response::new(Body::from(bytes));
                 *out_resp.status_mut() = status;
                 if let Ok(ct_val) = HeaderValue::from_str(&content_type) {
-                    out_resp.headers_mut().insert(axum::http::header::CONTENT_TYPE, ct_val);
+                    out_resp
+                        .headers_mut()
+                        .insert(axum::http::header::CONTENT_TYPE, ct_val);
                 }
                 out_resp.headers_mut().insert(
                     HeaderName::from_static("x-red-ack"),
@@ -2486,12 +2645,15 @@ async fn handle_red_tunnel(
         }
     }
 
-    let mut resp = Response::new(Body::from(serde_json::to_string(&serde_json::json!({
-        "ok": true,
-        "status": "RED_TUNNEL_PERMEABLE",
-        "ack": concat!("v", env!("CARGO_PKG_VERSION")),
-        "bytes_received": body.len()
-    })).unwrap_or_default()));
+    let mut resp = Response::new(Body::from(
+        serde_json::to_string(&serde_json::json!({
+            "ok": true,
+            "status": "RED_TUNNEL_PERMEABLE",
+            "ack": concat!("v", env!("CARGO_PKG_VERSION")),
+            "bytes_received": body.len()
+        }))
+        .unwrap_or_default(),
+    ));
     *resp.status_mut() = StatusCode::OK;
     resp.headers_mut().insert(
         axum::http::header::CONTENT_TYPE,
@@ -2504,9 +2666,7 @@ async fn handle_red_tunnel(
     resp
 }
 
-async fn handle_cybertunnel_proxy(
-    Json(req): Json<CyberTunnelProxyRequest>,
-) -> impl IntoResponse {
+async fn handle_cybertunnel_proxy(Json(req): Json<CyberTunnelProxyRequest>) -> impl IntoResponse {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(12))
         .build()
@@ -2579,7 +2739,8 @@ async fn handle_mark_read(
 
                     // 2. Collect IDs of unread incoming messages to notify sender
                     let my_hash = node.identity_hash();
-                    let unread_ids: Vec<red_core::protocol::MessageId> = c.messages()
+                    let unread_ids: Vec<red_core::protocol::MessageId> = c
+                        .messages()
                         .iter()
                         .filter(|m| &m.sender != my_hash)
                         .map(|m| m.id.clone())
@@ -2615,15 +2776,18 @@ async fn handle_mark_read(
 
                     (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
                 }
-                None => {
-                    (StatusCode::OK, Json(serde_json::json!({"ok": true, "note": "not found"}))).into_response()
-                }
+                None => (
+                    StatusCode::OK,
+                    Json(serde_json::json!({"ok": true, "note": "not found"})),
+                )
+                    .into_response(),
             }
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": format!("{}", e)})),
-        ).into_response(),
+        )
+            .into_response(),
     }
 }
 
@@ -2714,13 +2878,15 @@ fn parse_identity_hash(input: &str) -> Result<IdentityHash, String> {
 
     // Exact 64-char hex — canonical form
     if hash_part.len() == 64 {
-        return IdentityHash::from_hex(hash_part)
-            .map_err(|_| "Formato HEX inválido".to_string());
+        return IdentityHash::from_hex(hash_part).map_err(|_| "Formato HEX inválido".to_string());
     }
 
     // Short ID (8-16 hex chars): pad right with zeros and persist as best-effort contact.
     // The contact will be resolved to a full canonical hash once the peer comes online.
-    if hash_part.len() >= 8 && hash_part.len() < 64 && hash_part.chars().all(|c| c.is_ascii_hexdigit()) {
+    if hash_part.len() >= 8
+        && hash_part.len() < 64
+        && hash_part.chars().all(|c| c.is_ascii_hexdigit())
+    {
         let padded = format!("{:0<64}", hash_part);
         return IdentityHash::from_hex(&padded)
             .map_err(|_| format!("Short ID inválido: {}", hash_part));
@@ -2861,11 +3027,23 @@ async fn handle_set_group_member_role(
             a.copy_from_slice(&b);
             a
         }
-        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid group id"})),
+            )
+                .into_response()
+        }
     };
     let member_hash = match parse_identity_hash(&member_hash_hex) {
         Ok(h) => h,
-        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e})),
+            )
+                .into_response()
+        }
     };
     let new_role = match req.role.as_str() {
         "Admin" => red_core::protocol::MemberRole::Admin,
@@ -2886,10 +3064,15 @@ async fn handle_set_group_member_role(
             Err(e) => (
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": format!("{}", e)})),
-            ).into_response(),
+            )
+                .into_response(),
         }
     } else {
-        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Group not found"}))).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Group not found"})),
+        )
+            .into_response()
     }
 }
 
@@ -2904,11 +3087,23 @@ async fn handle_mute_group_member(
             a.copy_from_slice(&b);
             a
         }
-        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid group id"})),
+            )
+                .into_response()
+        }
     };
     let member_hash = match parse_identity_hash(&member_hash_hex) {
         Ok(h) => h,
-        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e})),
+            )
+                .into_response()
+        }
     };
 
     let node = state.node.lock().await;
@@ -2923,10 +3118,15 @@ async fn handle_mute_group_member(
             Err(e) => (
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": format!("{}", e)})),
-            ).into_response(),
+            )
+                .into_response(),
         }
     } else {
-        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Group not found"}))).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Group not found"})),
+        )
+            .into_response()
     }
 }
 
@@ -2941,7 +3141,13 @@ async fn handle_set_group_broadcast(
             a.copy_from_slice(&b);
             a
         }
-        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid group id"})),
+            )
+                .into_response()
+        }
     };
 
     let node = state.node.lock().await;
@@ -2952,7 +3158,11 @@ async fn handle_set_group_broadcast(
         let _ = s.add_group(group);
         (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
     } else {
-        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Group not found"}))).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Group not found"})),
+        )
+            .into_response()
     }
 }
 
@@ -2965,7 +3175,11 @@ async fn handle_group_history_request(
         req.group_id,
         req.requester_hash
     );
-    (StatusCode::OK, Json(serde_json::json!({"ok": true, "status": "DTN sync request queued"}))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"ok": true, "status": "DTN sync request queued"})),
+    )
+        .into_response()
 }
 
 async fn handle_remove_group_member(
@@ -3638,7 +3852,11 @@ async fn handle_delete_voice_burst(
         let _ = state.outbound_tx.send(raw_bytes);
     }
 
-    (StatusCode::OK, Json(serde_json::json!({ "ok": true, "deleted": id, "found": deleted }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "ok": true, "deleted": id, "found": deleted })),
+    )
+        .into_response()
 }
 
 /// POST /api/sanitizer/clean — Sanitiza cabeceras EXIF / GPS de imágenes
@@ -3817,14 +4035,18 @@ async fn handle_update_battery_optimize(
 // ── v24.0: Handlers AI Copilot, Summarizer & Translator ───────────────────────
 
 async fn handle_ai_status() -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({
-        "status": "ok",
-        "service": "RED Desktop Node AI",
-        "version": env!("CARGO_PKG_VERSION"),
-        "engine": "Candle GGUF / Offline Tactical AI",
-        "model": "red-tactical",
-        "capabilities": ["copilot", "chat_completions", "emergency_triage"]
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "ok",
+            "service": "RED Desktop Node AI",
+            "version": env!("CARGO_PKG_VERSION"),
+            "engine": "Candle GGUF / Offline Tactical AI",
+            "model": "red-tactical",
+            "capabilities": ["copilot", "chat_completions", "emergency_triage"]
+        })),
+    )
+        .into_response()
 }
 
 async fn handle_ollama_tags() -> impl IntoResponse {
@@ -3849,17 +4071,21 @@ async fn handle_ollama_tags() -> impl IntoResponse {
 }
 
 async fn handle_openai_models() -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({
-        "object": "list",
-        "data": [
-            {
-                "id": "red-tactical",
-                "object": "model",
-                "created": 1700000000,
-                "owned_by": "red-node"
-            }
-        ]
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "object": "list",
+            "data": [
+                {
+                    "id": "red-tactical",
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "red-node"
+                }
+            ]
+        })),
+    )
+        .into_response()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -3880,12 +4106,16 @@ async fn handle_ollama_generate(
         model_id: req.model,
     };
     let res = state.ai_copilot.query_async(copilot_req).await;
-    (StatusCode::OK, Json(serde_json::json!({
-        "model": "red-tactical",
-        "created_at": chrono::Utc::now().to_rfc3339(),
-        "response": res.answer,
-        "done": true
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "model": "red-tactical",
+            "created_at": chrono::Utc::now().to_rfc3339(),
+            "response": res.answer,
+            "done": true
+        })),
+    )
+        .into_response()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -3906,12 +4136,17 @@ async fn handle_openai_chat_completions(
     State(state): State<ApiState>,
     Json(req): Json<OpenAIChatCompletionRequest>,
 ) -> impl IntoResponse {
-    let last_user_msg = req.messages.iter().rev()
+    let last_user_msg = req
+        .messages
+        .iter()
+        .rev()
         .find(|m| m.role == "user")
         .map(|m| m.content.clone())
         .unwrap_or_else(|| "ping".to_string());
-    
-    let system_context = req.messages.iter()
+
+    let system_context = req
+        .messages
+        .iter()
         .find(|m| m.role == "system")
         .map(|m| m.content.clone());
 
@@ -3922,31 +4157,41 @@ async fn handle_openai_chat_completions(
         model_id: req.model.clone(),
     };
     let res = state.ai_copilot.query_async(copilot_req).await;
-    
-    let completion_id = format!("chatcmpl-{}", red_core::protocol::MessageId::generate().to_hex());
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "id": completion_id,
-        "object": "chat.completion",
-        "created": now,
-        "model": req.model.unwrap_or_else(|| "red-tactical".to_string()),
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": res.answer
-                },
-                "finish_reason": "stop"
+    let completion_id = format!(
+        "chatcmpl-{}",
+        red_core::protocol::MessageId::generate().to_hex()
+    );
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": now,
+            "model": req.model.unwrap_or_else(|| "red-tactical".to_string()),
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": res.answer
+                    },
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30
             }
-        ],
-        "usage": {
-            "prompt_tokens": 10,
-            "completion_tokens": 20,
-            "total_tokens": 30
-        }
-    }))).into_response()
+        })),
+    )
+        .into_response()
 }
 
 /// POST /api/ai/copilot — Consulta al Copiloto / Asistente Táctico de Emergencia Offline
@@ -3982,7 +4227,10 @@ async fn get_social_feed(
     State(state): State<ApiState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let limit = params.get("limit").and_then(|v| v.parse::<usize>().ok()).unwrap_or(50);
+    let limit = params
+        .get("limit")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(50);
     let posts = state.social_store.get_feed(limit);
     Json(posts)
 }
@@ -4008,16 +4256,14 @@ async fn unfollow_user(
     Json(serde_json::json!({ "status": "success", "unfollowed": req.author_hash }))
 }
 
-async fn get_following(
-    State(state): State<ApiState>,
-) -> impl IntoResponse {
+async fn get_following(State(state): State<ApiState>) -> impl IntoResponse {
     let following = state.social_store.get_following();
     Json(following)
 }
 
 fn compress_image_base64(b64: String) -> String {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
-    
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
     // Extraer prefix si existe
     let (_prefix, data) = if b64.starts_with("data:image/") {
         if let Some(idx) = b64.find(',') {
@@ -4035,7 +4281,10 @@ fn compress_image_base64(b64: String) -> String {
             let resized = img.resize(800, 800, image::imageops::FilterType::Triangle);
             let mut out_buffer = std::io::Cursor::new(Vec::new());
             // Guardar como JPEG
-            if resized.write_to(&mut out_buffer, image::ImageFormat::Jpeg).is_ok() {
+            if resized
+                .write_to(&mut out_buffer, image::ImageFormat::Jpeg)
+                .is_ok()
+            {
                 let compressed_b64 = STANDARD.encode(out_buffer.into_inner());
                 // Siempre devolver como data:image/jpeg;base64,
                 return format!("data:image/jpeg;base64,{}", compressed_b64);
@@ -4050,15 +4299,15 @@ async fn create_social_post(
     Json(mut req): Json<crate::social::PostRequest>,
 ) -> impl IntoResponse {
     let node = state.node.lock().await;
-    
+
     // Compresión Zero-Bloat
     if let Some(b64) = req.media_data.take() {
         req.media_data = Some(compress_image_base64(b64));
     }
-    
+
     // Crear el post firmado criptográficamente con Ed25519
     let post = state.social_store.create_signed_post(node.identity(), req);
-    
+
     // Difundirlo por la red P2P
     if let Ok(payload) = serde_json::to_vec(&post) {
         let msg = red_core::protocol::Message {
@@ -4080,7 +4329,7 @@ async fn create_social_post(
             let _ = state.outbound_tx.send(raw_bytes);
         }
     }
-    
+
     Json(post)
 }
 
@@ -4098,14 +4347,17 @@ async fn create_social_reaction(
     let author_hash_obj = node.identity_hash().clone();
     let author_hash = author_hash_obj.to_hex();
     drop(node);
-    
-    if let Some(post) = state.social_store.add_reaction(&req.post_id, &req.emoji, &author_hash) {
+
+    if let Some(post) = state
+        .social_store
+        .add_reaction(&req.post_id, &req.emoji, &author_hash)
+    {
         if let Ok(payload) = serde_json::to_vec(&post) {
             let msg = red_core::protocol::Message {
                 id: red_core::protocol::MessageId::generate(),
                 content: red_core::protocol::MessageType::SocialPost(payload),
                 sender: author_hash_obj.clone(),
-                recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]), 
+                recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
                 timestamp: chrono::Utc::now().timestamp() as u64,
                 status: red_core::protocol::MessageStatus::Sent,
                 edited: false,
@@ -4156,9 +4408,17 @@ async fn handle_delete_social_post(
                 let _ = state.outbound_tx.send(raw_bytes);
             }
         }
-        (StatusCode::OK, Json(serde_json::json!({ "ok": true, "deleted": post_id }))).into_response()
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "deleted": post_id })),
+        )
+            .into_response()
     } else {
-        (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Post not found" }))).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Post not found" })),
+        )
+            .into_response()
     }
 }
 
@@ -4179,7 +4439,9 @@ async fn handle_save_stego_vault(
     let node = state.node.lock().await;
     let storage = node.get_storage();
     let s = storage.lock().await;
-    let id = req.id.unwrap_or_else(|| red_core::protocol::MessageId::generate().to_hex());
+    let id = req
+        .id
+        .unwrap_or_else(|| red_core::protocol::MessageId::generate().to_hex());
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -4197,7 +4459,11 @@ async fn handle_save_stego_vault(
     };
 
     let _ = s.store_stego_capsule(&record);
-    tracing::info!("[API] Cápsula esteganográfica guardada en Sled: '{}' (Cifrada: {})", record.title, record.has_password);
+    tracing::info!(
+        "[API] Cápsula esteganográfica guardada en Sled: '{}' (Cifrada: {})",
+        record.title,
+        record.has_password
+    );
 
     (StatusCode::CREATED, Json(record)).into_response()
 }
@@ -4211,7 +4477,11 @@ async fn handle_delete_stego_vault(
     let s = storage.lock().await;
     let _ = s.delete_stego_capsule(&id);
     tracing::info!("[API] Cápsula esteganográfica eliminada de Sled: '{}'", id);
-    (StatusCode::OK, Json(serde_json::json!({"success": true, "deleted": id}))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"success": true, "deleted": id})),
+    )
+        .into_response()
 }
 
 // ─── Sovereign P2P Payments & Vouchers Handlers (v32.0) ──────────────────────────
@@ -4353,7 +4623,10 @@ async fn handle_create_p2p_voucher(
             edited: false,
         };
         let _ = node
-            .send_message(red_core::identity::IdentityHash::from_bytes([0; 32]), out_msg.clone())
+            .send_message(
+                red_core::identity::IdentityHash::from_bytes([0; 32]),
+                out_msg.clone(),
+            )
             .await;
         if let Ok(raw_bytes) = serde_json::to_vec(&out_msg) {
             let _ = state.outbound_tx.send(raw_bytes);
@@ -4459,4 +4732,3 @@ async fn handle_redeem_p2p_voucher(
     )
         .into_response()
 }
-

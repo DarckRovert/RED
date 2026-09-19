@@ -113,6 +113,7 @@ const MiniAppContainerModal  = dynamic(() => import("../miniapp/MiniAppContainer
 const TacticalGhostGpsModal  = dynamic(() => import("../modals/TacticalGhostGpsModal").then(m => ({ default: m.TacticalGhostGpsModal })), { ssr: false, loading: () => <AppLoader /> });
 const RedCyberTunnelModal    = dynamic(() => import("../modals/RedCyberTunnelModal").then(m => ({ default: m.RedCyberTunnelModal })), { ssr: false, loading: () => <AppLoader /> });
 const SovereignShieldDashboard = dynamic(() => import("../SovereignShieldDashboard"), { ssr: false, loading: () => <AppLoader /> });
+const MaleCnsConnectomeHUD    = dynamic(() => import("../MaleCnsConnectomeHUD").then(m => ({ default: m.MaleCnsConnectomeHUD })), { ssr: false, loading: () => <AppLoader /> });
 
 // ── TacticalTabletWorkspace ───────────────────────────────────────────────────
 // Placeholder del pane derecho en tablet cuando currentScreen === "sidebar".
@@ -573,6 +574,21 @@ export function WorkspaceScreens({ isTablet, onOpenTool }: WorkspaceScreensProps
       {currentScreen === "updater"                                             && <UpdateModal onClose={goBack} />}
       {currentScreen === "ecoMesh"                                             && <EcoMeshPanel />}
       {currentScreen === "status"                                              && <StatusView />}
+
+      {(currentScreen === "maleCnsConnectome" || currentScreen === "connectome") && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 100000,
+            background: "rgba(2, 4, 10, 0.90)",
+            backdropFilter: "blur(25px)", WebkitBackdropFilter: "blur(25px)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: "16px",
+          }}
+        >
+          <div style={{ width: "100%", maxWidth: "1180px", height: "92vh", display: "flex" }}>
+            <MaleCnsConnectomeHUD onClose={goBack} />
+          </div>
+        </div>
+      )}
 
       {/* ── Landing (deep-link desde notificación) ── */}
       {currentScreen === "landing" && (

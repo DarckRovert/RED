@@ -1,18 +1,29 @@
-#![allow(dead_code, unused_imports, missing_docs, unused_variables, deprecated, clippy::manual_strip, clippy::unnecessary_sort_by, clippy::needless_range_loop, clippy::manual_checked_ops, clippy::collapsible_if)]
-use jni::JNIEnv;
+#![allow(
+    dead_code,
+    unused_imports,
+    missing_docs,
+    unused_variables,
+    deprecated,
+    clippy::manual_strip,
+    clippy::unnecessary_sort_by,
+    clippy::needless_range_loop,
+    clippy::manual_checked_ops,
+    clippy::collapsible_if
+)]
+use ed25519_dalek::SigningKey;
 use jni::objects::{JClass, JString};
+use jni::JNIEnv;
 use std::path::PathBuf;
-use tracing::{info, error, warn};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use ed25519_dalek::SigningKey;
+use tracing::{error, info, warn};
 
-mod api;
 pub mod ai_copilot;
 pub mod ai_summarizer;
 pub mod ai_translator;
 pub mod amber;
 pub mod amber_authority;
+mod api;
 pub mod battery;
 pub mod channels;
 pub mod discovery;
@@ -23,7 +34,6 @@ pub mod sanitizer;
 pub mod sos;
 pub mod voice;
 pub mod weather;
-
 
 // Nodos Semilla Mundiales — Bootstrap peers oficiales de libp2p/IPFS.
 // Mantenidos por Protocol Labs. Proveen descubrimiento Kademlia global
@@ -43,8 +53,10 @@ const BOOTSTRAP_NODES: &[&str] = &[
 
 static ONCE: std::sync::Once = std::sync::Once::new();
 static NODE_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static GLOBAL_API_STATE: std::sync::OnceLock<Arc<tokio::sync::Mutex<Option<api::ApiState>>>> = std::sync::OnceLock::new();
-static GLOBAL_TOKIO_HANDLE: std::sync::OnceLock<tokio::runtime::Handle> = std::sync::OnceLock::new();
+static GLOBAL_API_STATE: std::sync::OnceLock<Arc<tokio::sync::Mutex<Option<api::ApiState>>>> =
+    std::sync::OnceLock::new();
+static GLOBAL_TOKIO_HANDLE: std::sync::OnceLock<tokio::runtime::Handle> =
+    std::sync::OnceLock::new();
 
 #[no_mangle]
 pub extern "system" fn Java_f_red_app_RedNodePlugin_updateBatteryStatus(
@@ -75,7 +87,10 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_injectBlePayload(
         let payload_bytes = match env.convert_byte_array(&payload_jbytes) {
             Ok(b) => b,
             Err(e) => {
-                error!("injectBlePayload: failed to convert byte array from JNI: {:?}", e);
+                error!(
+                    "injectBlePayload: failed to convert byte array from JNI: {:?}",
+                    e
+                );
                 return;
             }
         };
@@ -101,7 +116,9 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_injectBlePayload(
                     }
                 });
             } else {
-                warn!("injectBlePayload: Tokio runtime handle not yet initialized — skipping payload");
+                warn!(
+                    "injectBlePayload: Tokio runtime handle not yet initialized — skipping payload"
+                );
             }
         }
     }));
@@ -135,7 +152,7 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_startNode(
                 return;
             }
         };
-            
+
         let password_str: String = match env.get_string(&password_jstr) {
             Ok(s) => s.into(),
             Err(e) => {
@@ -170,7 +187,10 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_startNode(
                     }
                     Err(e) => {
                         error!("Internal node crashed: {:?}", e);
-                        let _ = std::fs::write(data_dir.join("CRASH_DUMP.txt"), format!("CRASH:\n{:#?}", e));
+                        let _ = std::fs::write(
+                            data_dir.join("CRASH_DUMP.txt"),
+                            format!("CRASH:\n{:#?}", e),
+                        );
                     }
                 }
             });
@@ -196,9 +216,15 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_destroyNode(
         };
 
         let base_dir = PathBuf::from(&data_dir_str);
-        error!("🔴 PANIC WIPE INITIATED — destroying all data at {:?}", base_dir);
+        error!(
+            "🔴 PANIC WIPE INITIATED — destroying all data at {:?}",
+            base_dir
+        );
 
-        for dir in [base_dir.clone(), PathBuf::from(format!("{}_decoy", data_dir_str))] {
+        for dir in [
+            base_dir.clone(),
+            PathBuf::from(format!("{}_decoy", data_dir_str)),
+        ] {
             if dir.exists() {
                 if let Err(e) = std::fs::remove_dir_all(&dir) {
                     error!("Failed to remove {:?}: {:?}", dir, e);
@@ -213,7 +239,6 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_destroyNode(
     }));
 }
 
-
 /// Write a timestamped log line to DEBUG_TRACE.txt in the node data dir.
 /// Android suppresses stdout from JNI libs, so this is our only way
 /// to see what's happening at runtime on a real device.
@@ -226,7 +251,11 @@ fn append_log(data_dir: &std::path::Path, msg: &str) {
     let line = format!("[{}] {}\n", now, msg);
     // Use append mode so every boot accumulates its trace
     use std::io::Write;
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
         let _ = f.write_all(line.as_bytes());
     }
 
@@ -234,9 +263,17 @@ fn append_log(data_dir: &std::path::Path, msg: &str) {
         "ERROR"
     } else if msg.contains("WARN") || msg.contains("panic") {
         "WARN"
-    } else if msg.contains("P2P") || msg.contains("mDNS") || msg.contains("BLE") || msg.contains("Swarm") {
+    } else if msg.contains("P2P")
+        || msg.contains("mDNS")
+        || msg.contains("BLE")
+        || msg.contains("Swarm")
+    {
         "P2P"
-    } else if msg.contains("storage") || msg.contains("key") || msg.contains("identity") || msg.contains("PoW") {
+    } else if msg.contains("storage")
+        || msg.contains("key")
+        || msg.contains("identity")
+        || msg.contains("PoW")
+    {
         "CRYPTO"
     } else if msg.contains("consensus") || msg.contains("blockchain") {
         "CONSENSUS"
@@ -251,7 +288,16 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     let build_ts = env!("CARGO_PKG_VERSION");
     append_log(&data_dir, "=== RED NODE BOOT START ===");
     append_log(&data_dir, &format!("Build Version (SemVer): {}", build_ts));
-    append_log(&data_dir, &format!("Boot timestamp: {}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()));
+    append_log(
+        &data_dir,
+        &format!(
+            "Boot timestamp: {}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        ),
+    );
     let _ = std::fs::create_dir_all(&data_dir);
 
     // Derive storage key (fast, pure CPU, ok on async thread)
@@ -262,9 +308,9 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
         password_str.as_bytes(),
         b"red-storage-salt-v1",
         b"storage-key",
-    ).map_err(|_| anyhow::anyhow!("Key derivation failure"))?;
+    )
+    .map_err(|_| anyhow::anyhow!("Key derivation failure"))?;
     append_log(&data_dir, "Storage key derived OK");
-
 
     // ── ASYNC API BOOT ────────────────────────────────────────────────────────
     // Launch the API server FIRST with an empty state so the frontend can poll
@@ -273,18 +319,27 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     let (msg_tx, _) = tokio::sync::broadcast::channel(100);
     let api_state = Arc::new(Mutex::new(None));
     let _ = GLOBAL_API_STATE.set(api_state.clone());
-    
+
     let api_state_clone = api_state.clone();
     let msg_tx_clone = msg_tx.clone();
     let api_log_dir = data_dir.clone();
 
     tokio::spawn(async move {
         let http_addr = "127.0.0.1:7333";
-        append_log(&api_log_dir, &format!("Binding Axum server on {} (Loopback Local Only)...", http_addr));
+        append_log(
+            &api_log_dir,
+            &format!(
+                "Binding Axum server on {} (Loopback Local Only)...",
+                http_addr
+            ),
+        );
         let app = api::build_router_async(api_state_clone, msg_tx_clone);
         match tokio::net::TcpListener::bind(http_addr).await {
             Ok(listener) => {
-                append_log(&api_log_dir, "Axum server BOUND and LISTENING on 127.0.0.1:7333 OK");
+                append_log(
+                    &api_log_dir,
+                    "Axum server BOUND and LISTENING on 127.0.0.1:7333 OK",
+                );
                 if let Err(e) = axum::serve(listener, app).await {
                     let msg = format!("Axum serve error: {}", e);
                     append_log(&api_log_dir, &msg);
@@ -297,7 +352,10 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
             }
         }
     });
-    append_log(&data_dir, "Axum task spawned. Proceeding to storage init...");
+    append_log(
+        &data_dir,
+        "Axum task spawned. Proceeding to storage init...",
+    );
 
     // ── BLOCKING I/O IN DEDICATED THREADS ────────────────────────────────────
     // Storage::open() and Identity::generate() are BLOCKING operations.
@@ -311,22 +369,35 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
         let mut storage = red_core::storage::Storage::new(storage_data_dir, key);
         storage.open()?;
         Ok::<_, anyhow::Error>(storage)
-    }).await.map_err(|e| anyhow::anyhow!("Storage thread panic: {:?}", e))??;
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("Storage thread panic: {:?}", e))??;
     append_log(&data_dir, "Storage opened OK");
     let storage_arc = Arc::new(Mutex::new(storage_result));
 
-    append_log(&data_dir, "Loading or validating identity (spawn_blocking)...");
+    append_log(
+        &data_dir,
+        "Loading or validating identity (spawn_blocking)...",
+    );
     let identity = {
         let s = storage_arc.lock().await;
         let has_saved_identity = s.has_raw_entry("identity", b"user_identity");
         if has_saved_identity {
             match s.try_get_identity() {
                 Ok(Some(id)) => {
-                    append_log(&data_dir, &format!("Existing identity authenticated & loaded: {}", id.identity_hash().short()));
+                    append_log(
+                        &data_dir,
+                        &format!(
+                            "Existing identity authenticated & loaded: {}",
+                            id.identity_hash().short()
+                        ),
+                    );
                     id
                 }
                 Ok(None) => {
-                    return Err(anyhow::anyhow!("Storage corruption: Identity entry exists but returned empty."));
+                    return Err(anyhow::anyhow!(
+                        "Storage corruption: Identity entry exists but returned empty."
+                    ));
                 }
                 Err(err) => {
                     let msg = format!("FATAL: Storage decryption failed ({:?}) — Incorrect PIN / Master Password.", err);
@@ -335,18 +406,29 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
                 }
             }
         } else {
-            append_log(&data_dir, "No identity found — generating fresh identity via PoW (First Boot)...");
+            append_log(
+                &data_dir,
+                "No identity found — generating fresh identity via PoW (First Boot)...",
+            );
             drop(s); // Release lock before blocking
             let id = tokio::task::spawn_blocking(|| {
                 red_core::identity::Identity::generate()
                     .map_err(|e| anyhow::anyhow!("Identity gen fail: {:?}", e))
-            }).await.map_err(|e| anyhow::anyhow!("Identity thread panic: {:?}", e))??;
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("Identity thread panic: {:?}", e))??;
             append_log(&data_dir, "IDENTITY PoW COMPLETE OK");
             {
                 let mut s2 = storage_arc.lock().await;
                 let _ = s2.set_identity(id.clone());
             }
-            append_log(&data_dir, &format!("New identity generated and saved: {}", id.identity_hash().short()));
+            append_log(
+                &data_dir,
+                &format!(
+                    "New identity generated and saved: {}",
+                    id.identity_hash().short()
+                ),
+            );
             id
         }
     };
@@ -358,8 +440,8 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     append_log(&data_dir, "Blockchain OK");
 
     append_log(&data_dir, "Configuring P2P network...");
-    let mut network_config = red_core::network::NetworkConfig::new(7331)
-        .with_data_dir(data_dir.clone());
+    let mut network_config =
+        red_core::network::NetworkConfig::new(7331).with_data_dir(data_dir.clone());
     for addr_str in BOOTSTRAP_NODES {
         if let Ok(addr) = addr_str.parse() {
             network_config = network_config.with_bootstrap_node(addr);
@@ -383,7 +465,9 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     let consensus_cb = consensus.clone();
     let chain_cb = chain_arc.clone();
     tokio::spawn(async move {
-        consensus_cb.run_block_production(chain_cb, signing_key).await;
+        consensus_cb
+            .run_block_production(chain_cb, signing_key)
+            .await;
     });
 
     // ── Background Storage Maintenance Worker (Prunes expired records every 24h) ──
@@ -428,7 +512,10 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
         use std::io::Write;
         let _ = f.write_all(token_hex.as_bytes());
     }
-    append_log(&data_dir, "Ephemeral API Key generated and saved to session.token");
+    append_log(
+        &data_dir,
+        "Ephemeral API Key generated and saved to session.token",
+    );
 
     {
         let mut s = api_state.lock().await;
@@ -454,7 +541,10 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
         });
     }
 
-    append_log(&data_dir, "=== NODE FULLY INITIALIZED — API SERVING LIVE DATA ===");
+    append_log(
+        &data_dir,
+        "=== NODE FULLY INITIALIZED — API SERVING LIVE DATA ===",
+    );
 
     // Background Mesh Message Dispatcher (for Weather Reports, CAP alerts, etc.)
     let mut mesh_rx = msg_tx.subscribe();
@@ -462,7 +552,8 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     tokio::spawn(async move {
         while let Ok(msg) = mesh_rx.recv().await {
             if let red_core::protocol::MessageType::WeatherReport(payload) = &msg.content {
-                if let Ok(report) = serde_json::from_slice::<crate::weather::WeatherReport>(payload) {
+                if let Ok(report) = serde_json::from_slice::<crate::weather::WeatherReport>(payload)
+                {
                     let state_guard = api_state_mesh.lock().await;
                     if let Some(state) = state_guard.as_ref() {
                         state.weather_store.add_report_raw(report);
@@ -496,5 +587,3 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
         tokio::time::sleep(std::time::Duration::from_secs(60)).await;
     }
 }
-
-

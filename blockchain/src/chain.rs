@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use crate::block::{Block, BlockHash};
-use crate::transaction::{Transaction, TxHash};
 use crate::store::BlockStore;
+use crate::transaction::{Transaction, TxHash};
 use crate::{BlockchainError, BlockchainResult};
 use serde::{Deserialize, Serialize};
 
@@ -49,13 +49,11 @@ impl Chain {
     /// Open a persistent blockchain at the given path
     pub fn open<P: AsRef<std::path::Path>>(path: P) -> BlockchainResult<Self> {
         let store = BlockStore::open(path)?;
-        
-        let identities = store.load_state("identities")?
-            .unwrap_or_else(HashMap::new);
-            
-        let groups = store.load_state("groups")?
-            .unwrap_or_else(HashMap::new);
-            
+
+        let identities = store.load_state("identities")?.unwrap_or_else(HashMap::new);
+
+        let groups = store.load_state("groups")?.unwrap_or_else(HashMap::new);
+
         // If empty, initialize with genesis
         if store.get_tip()?.is_none() {
             let genesis = Block::genesis();
@@ -116,16 +114,17 @@ impl Chain {
         // Check block connects to tip
         if block.header.previous_hash != current_tip && !block.is_genesis() {
             return Err(BlockchainError::InvalidBlock(
-                "Block does not connect to tip".to_string()
+                "Block does not connect to tip".to_string(),
             ));
         }
 
         // Check height
         if !block.is_genesis() && block.header.height != current_height + 1 {
-            return Err(BlockchainError::InvalidBlock(
-                format!("Invalid height: expected {}, got {}", 
-                    current_height + 1, block.header.height)
-            ));
+            return Err(BlockchainError::InvalidBlock(format!(
+                "Invalid height: expected {}, got {}",
+                current_height + 1,
+                block.header.height
+            )));
         }
 
         // Apply transactions
@@ -135,7 +134,7 @@ impl Chain {
 
         // Save block
         self.store.save_block(&block)?;
-        
+
         // Save state
         self.save_state()?;
 
@@ -147,74 +146,85 @@ impl Chain {
         use crate::transaction::TransactionType;
 
         match &tx.tx_type {
-            TransactionType::RegisterIdentity { 
-                identity_hash, 
-                public_key, 
+            TransactionType::RegisterIdentity {
+                identity_hash,
+                public_key,
                 verifying_key,
                 zk_proof,
             } => {
                 let mut identities = self.identities.write().unwrap_or_else(|e| e.into_inner());
-                
+
                 if identities.contains_key(identity_hash) {
                     return Err(BlockchainError::InvalidTransaction(
-                        "Identity already registered".to_string()
+                        "Identity already registered".to_string(),
                     ));
                 }
 
                 // SEC-FIX A-7: Validate the ZK proof before accepting registration
                 // This ensures the sender actually knows the private key for the identity.
                 if !zk_proof.is_empty() {
-                    if !red_core::crypto::zk_proofs::verify_zk_proof(identity_hash, public_key, zk_proof) {
+                    if !red_core::crypto::zk_proofs::verify_zk_proof(
+                        identity_hash,
+                        public_key,
+                        zk_proof,
+                    ) {
                         return Err(BlockchainError::InvalidTransaction(
-                            "Invalid ZK proof for identity registration".to_string()
+                            "Invalid ZK proof for identity registration".to_string(),
                         ));
                     }
                 } else {
                     return Err(BlockchainError::InvalidTransaction(
-                        "Registration requires a valid ZK proof".to_string()
+                        "Registration requires a valid ZK proof".to_string(),
                     ));
                 }
 
-                identities.insert(*identity_hash, IdentityState {
-                    public_key: *public_key,
-                    verifying_key: *verifying_key,
-                    registered_at: block_height,
-                    revoked: false,
-                });
+                identities.insert(
+                    *identity_hash,
+                    IdentityState {
+                        public_key: *public_key,
+                        verifying_key: *verifying_key,
+                        registered_at: block_height,
+                        revoked: false,
+                    },
+                );
 
                 // SEC-FIX A-6: Sync with IdentityRegistry (Trace for notification)
-                tracing::info!("Chain identity registry synchronized for {}", hex::encode(identity_hash));
+                tracing::info!(
+                    "Chain identity registry synchronized for {}",
+                    hex::encode(identity_hash)
+                );
             }
             TransactionType::RevokeIdentity { identity_hash, .. } => {
                 let mut identities = self.identities.write().unwrap_or_else(|e| e.into_inner());
-                
+
                 if let Some(state) = identities.get_mut(identity_hash) {
                     state.revoked = true;
                 } else {
                     return Err(BlockchainError::InvalidTransaction(
-                        "Identity not found".to_string()
+                        "Identity not found".to_string(),
                     ));
                 }
             }
-            TransactionType::UpdateIdentity { 
-                old_identity_hash, 
+            TransactionType::UpdateIdentity {
+                old_identity_hash,
                 new_identity_hash,
                 new_public_key,
                 new_verifying_key,
                 ..
             } => {
                 let mut identities = self.identities.write().unwrap_or_else(|e| e.into_inner());
-                
+
                 // Get old identity
-                let old_state = identities.get(old_identity_hash)
-                    .ok_or_else(|| BlockchainError::InvalidTransaction(
-                        "Old identity not found".to_string()
-                    ))?
+                let old_state = identities
+                    .get(old_identity_hash)
+                    .ok_or_else(|| {
+                        BlockchainError::InvalidTransaction("Old identity not found".to_string())
+                    })?
                     .clone();
 
                 if old_state.revoked {
                     return Err(BlockchainError::InvalidTransaction(
-                        "Old identity is revoked".to_string()
+                        "Old identity is revoked".to_string(),
                     ));
                 }
 
@@ -229,38 +239,60 @@ impl Chain {
                     .as_ref()
                     .copied()
                     .unwrap_or(old_state.verifying_key);
-                identities.insert(*new_identity_hash, IdentityState {
-                    public_key: *new_public_key,
-                    verifying_key: final_verifying_key,
-                    registered_at: block_height,
-                    revoked: false,
-                });
+                identities.insert(
+                    *new_identity_hash,
+                    IdentityState {
+                        public_key: *new_public_key,
+                        verifying_key: final_verifying_key,
+                        registered_at: block_height,
+                        revoked: false,
+                    },
+                );
             }
-            TransactionType::CreateGroup { group_id, initial_state } => {
+            TransactionType::CreateGroup {
+                group_id,
+                initial_state,
+            } => {
                 let mut groups = self.groups.write().unwrap_or_else(|e| e.into_inner());
                 if groups.contains_key(group_id) {
-                    return Err(BlockchainError::InvalidTransaction("Group already exists".to_string()));
+                    return Err(BlockchainError::InvalidTransaction(
+                        "Group already exists".to_string(),
+                    ));
                 }
-                groups.insert(*group_id, GroupState {
-                    id: *group_id,
-                    data: initial_state.clone(),
-                    updated_at: block_height,
-                });
+                groups.insert(
+                    *group_id,
+                    GroupState {
+                        id: *group_id,
+                        data: initial_state.clone(),
+                        updated_at: block_height,
+                    },
+                );
             }
-            TransactionType::UpdateGroup { group_id, new_state, signature } => {
+            TransactionType::UpdateGroup {
+                group_id,
+                new_state,
+                signature,
+            } => {
                 let mut groups = self.groups.write().unwrap_or_else(|e| e.into_inner());
-                let group = groups.get_mut(group_id)
-                    .ok_or_else(|| BlockchainError::InvalidTransaction("Group not found".to_string()))?;
+                let group = groups.get_mut(group_id).ok_or_else(|| {
+                    BlockchainError::InvalidTransaction("Group not found".to_string())
+                })?;
 
                 // SEC-FIX A-2: Verify the Ed25519 signature using the sender's registered verifying_key.
                 {
                     let identities = self.identities.read().unwrap_or_else(|e| e.into_inner());
-                    let sender_state = identities.get(&tx.sender)
-                        .ok_or_else(|| BlockchainError::InvalidTransaction(
-                            "UpdateGroup sender not registered on chain".to_string()
-                        ))?;
-                    let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&sender_state.verifying_key)
-                        .map_err(|_| BlockchainError::InvalidTransaction("Invalid verifying key".to_string()))?;
+                    let sender_state = identities.get(&tx.sender).ok_or_else(|| {
+                        BlockchainError::InvalidTransaction(
+                            "UpdateGroup sender not registered on chain".to_string(),
+                        )
+                    })?;
+                    let verifying_key =
+                        ed25519_dalek::VerifyingKey::from_bytes(&sender_state.verifying_key)
+                            .map_err(|_| {
+                                BlockchainError::InvalidTransaction(
+                                    "Invalid verifying key".to_string(),
+                                )
+                            })?;
                     let sig = ed25519_dalek::Signature::from_bytes(signature);
                     // Sign the group_id + new_state hash
                     let mut data_to_verify = group_id.to_vec();
@@ -281,7 +313,10 @@ impl Chain {
         }
 
         // Remove from mempool
-        self.mempool.write().unwrap_or_else(|e| e.into_inner()).remove(&tx.hash());
+        self.mempool
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&tx.hash());
 
         Ok(())
     }
@@ -290,26 +325,31 @@ impl Chain {
     pub fn save_state(&self) -> BlockchainResult<()> {
         let identities = self.identities.read().unwrap_or_else(|e| e.into_inner());
         self.store.save_state("identities", &*identities)?;
-        
+
         let groups = self.groups.read().unwrap_or_else(|e| e.into_inner());
         self.store.save_state("groups", &*groups)?;
-        
+
         Ok(())
     }
 
     /// Add transaction to mempool
     pub fn add_to_mempool(&self, tx: Transaction) -> BlockchainResult<()> {
         tx.validate()?;
-        
+
         let hash = tx.hash();
-        self.mempool.write().unwrap_or_else(|e| e.into_inner()).insert(hash, tx);
-        
+        self.mempool
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(hash, tx);
+
         Ok(())
     }
 
     /// Get pending transactions
     pub fn get_pending_transactions(&self, limit: usize) -> Vec<Transaction> {
-        self.mempool.read().unwrap_or_else(|e| e.into_inner())
+        self.mempool
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
             .values()
             .take(limit)
             .cloned()
@@ -319,14 +359,19 @@ impl Chain {
     /// Check if identity is registered
     pub fn is_identity_registered(&self, identity_hash: &[u8; 32]) -> bool {
         let identities = self.identities.read().unwrap_or_else(|e| e.into_inner());
-        identities.get(identity_hash)
+        identities
+            .get(identity_hash)
             .map(|s| !s.revoked)
             .unwrap_or(false)
     }
 
     /// Get identity state
     pub fn get_identity(&self, identity_hash: &[u8; 32]) -> Option<IdentityState> {
-        self.identities.read().unwrap_or_else(|e| e.into_inner()).get(identity_hash).cloned()
+        self.identities
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(identity_hash)
+            .cloned()
     }
 
     /// Get mempool size
@@ -340,7 +385,7 @@ impl Chain {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        
+
         let mut mempool = self.mempool.write().unwrap_or_else(|e| e.into_inner());
         let initial_len = mempool.len();
         mempool.retain(|_, tx| {
@@ -354,7 +399,9 @@ impl Chain {
 
     /// Get identity count
     pub fn identity_count(&self) -> usize {
-        self.identities.read().unwrap_or_else(|e| e.into_inner())
+        self.identities
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
             .values()
             .filter(|s| !s.revoked)
             .count()
@@ -376,7 +423,7 @@ mod tests {
     #[test]
     fn test_new_chain() {
         let chain = Chain::new_temp();
-        
+
         assert_eq!(chain.height(), 0);
         assert!(chain.get_block_at_height(0).is_some());
     }
@@ -385,14 +432,14 @@ mod tests {
     fn test_genesis_block() {
         let chain = Chain::new_temp();
         let genesis = chain.get_block_at_height(0).unwrap();
-        
+
         assert!(genesis.is_genesis());
     }
 
     #[test]
     fn test_add_to_mempool() {
         let chain = Chain::new_temp();
-        
+
         let tx = Transaction::register_identity(
             [0x01u8; 32],
             [0x02u8; 32],
@@ -403,7 +450,7 @@ mod tests {
         );
 
         chain.add_to_mempool(tx).unwrap();
-        
+
         assert_eq!(chain.mempool_size(), 1);
     }
 }

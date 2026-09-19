@@ -58,7 +58,9 @@ impl AmberStore {
             return Err(AmberError::InvalidData("name es requerido".to_string()));
         }
         if req.description.trim().is_empty() {
-            return Err(AmberError::InvalidData("description es requerido".to_string()));
+            return Err(AmberError::InvalidData(
+                "description es requerido".to_string(),
+            ));
         }
         if req.age > 150 {
             return Err(AmberError::InvalidData("age inválido".to_string()));
@@ -93,7 +95,10 @@ impl AmberStore {
             sighting_count: 0,
         };
 
-        self.alerts.write().unwrap_or_else(|e| e.into_inner()).insert(id, alert.clone());
+        self.alerts
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, alert.clone());
         Ok(alert)
     }
 
@@ -108,11 +113,20 @@ impl AmberStore {
     }
 
     pub fn list_all_alerts(&self) -> Vec<AmberAlert> {
-        self.alerts.read().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
+        self.alerts
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .cloned()
+            .collect()
     }
 
     pub fn get_alert(&self, id: &str) -> Option<AmberAlert> {
-        self.alerts.read().unwrap_or_else(|e| e.into_inner()).get(id).cloned()
+        self.alerts
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(id)
+            .cloned()
     }
 
     pub fn resolve_alert(
@@ -166,7 +180,10 @@ impl AmberStore {
             notes,
         };
 
-        self.sightings.write().unwrap_or_else(|e| e.into_inner()).push(sighting.clone());
+        self.sightings
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(sighting.clone());
         Ok(sighting)
     }
 }

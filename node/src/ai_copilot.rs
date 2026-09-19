@@ -1,6 +1,6 @@
 //! AI Copilot Engine — Native Rust Off-Grid Inference Coordinator (Node)
 //!
-//! Executes local tactical AI inference over GGUF models directly on the ARM64/x86_64 processor 
+//! Executes local tactical AI inference over GGUF models directly on the ARM64/x86_64 processor
 //! without third-party web cloud dependencies.
 
 use std::path::{Path, PathBuf};
@@ -39,28 +39,31 @@ impl AICopilotEngine {
     /// Proveedor global seguro para early-boot sin requerir ApiState completo
     pub fn global() -> Arc<Self> {
         static ENGINE: std::sync::OnceLock<Arc<AICopilotEngine>> = std::sync::OnceLock::new();
-        ENGINE.get_or_init(|| Arc::new(AICopilotEngine::new())).clone()
+        ENGINE
+            .get_or_init(|| Arc::new(AICopilotEngine::new()))
+            .clone()
     }
 
     /// Método asíncrono para que no bloquee el event loop de Tokio (P2P Mesh Network)
     pub async fn query_async(&self, req: CopilotQueryRequest) -> CopilotResponse {
         let state_clone = self.state.clone();
-        
+
         // Delegamos la inferencia pesada a un hilo de CPU dedicado (spawn_blocking)
         // para asegurar que los pings de la red Mesh P2P no hagan timeout.
-        let result = tokio::task::spawn_blocking(move || {
-            Self::execute_inference(state_clone, req)
-        }).await;
+        let result =
+            tokio::task::spawn_blocking(move || Self::execute_inference(state_clone, req)).await;
 
         match result {
             Ok(resp) => resp,
             Err(_) => CopilotResponse {
-                answer: "⚠️ [Error Crítico]: El hilo de inferencia neuronal colapsó (Thread Panic).".to_string(),
+                answer:
+                    "⚠️ [Error Crítico]: El hilo de inferencia neuronal colapsó (Thread Panic)."
+                        .to_string(),
                 topic_category: "Error Interno".to_string(),
                 source: "Motor Rust Fallback".to_string(),
                 model_used: "Ninguno".to_string(),
                 execution_time_ms: 0,
-            }
+            },
         }
     }
 
@@ -70,7 +73,10 @@ impl AICopilotEngine {
     }
 
     /// Ejecuta la inferencia real utilizando Candle
-    fn execute_inference(state: Arc<Mutex<AICopilotState>>, req: CopilotQueryRequest) -> CopilotResponse {
+    fn execute_inference(
+        state: Arc<Mutex<AICopilotState>>,
+        req: CopilotQueryRequest,
+    ) -> CopilotResponse {
         let start = std::time::Instant::now();
         let prompt = req.prompt.trim();
         let model_name = req.model_id.unwrap_or_else(|| "Desconocido".to_string());
@@ -156,7 +162,7 @@ impl AICopilotEngine {
             st.is_loaded = true;
             st.active_model_path = model_path.clone();
         }
-        
+
         // Liberamos el Mutex para no bloquear durante la inferencia larga
         drop(st);
 
@@ -205,7 +211,9 @@ impl AICopilotEngine {
         }
 
         let model_name_lower = model_name.to_lowercase();
-        let gguf_arch = content.metadata.get("general.architecture")
+        let gguf_arch = content
+            .metadata
+            .get("general.architecture")
             .and_then(|v| match v {
                 candle_core::quantized::gguf_file::Value::String(s) => Some(s.to_lowercase()),
                 _ => None,
@@ -213,8 +221,12 @@ impl AICopilotEngine {
             .unwrap_or_default();
         let path_str_lower = path.to_string_lossy().to_lowercase();
 
-        let is_qwen = gguf_arch.contains("qwen") || model_name_lower.contains("qwen") || path_str_lower.contains("qwen");
-        let is_phi = gguf_arch.contains("phi") || model_name_lower.contains("phi") || path_str_lower.contains("phi");
+        let is_qwen = gguf_arch.contains("qwen")
+            || model_name_lower.contains("qwen")
+            || path_str_lower.contains("qwen");
+        let is_phi = gguf_arch.contains("phi")
+            || model_name_lower.contains("phi")
+            || path_str_lower.contains("phi");
 
         let mut model = if is_qwen {
             match candle_transformers::models::quantized_qwen2::ModelWeights::from_gguf(content, &mut file, &device) {
@@ -249,7 +261,7 @@ impl AICopilotEngine {
                 source: "Candle Engine".to_string(),
                 model_used: model_name,
                 execution_time_ms: start.elapsed().as_millis() as u64,
-            }
+            };
         } else {
             match candle_transformers::models::quantized_llama::ModelWeights::from_gguf(content, &mut file, &device) {
                 Ok(m) => LocalModel::Llama(m),
@@ -266,7 +278,9 @@ impl AICopilotEngine {
         };
 
         // Formateo de ChatML / Instruct formal según la arquitectura e inyección de contexto RAG
-        let formatted_prompt = if model_name_lower.contains("qwen") || model_name_lower.contains("smollm") {
+        let formatted_prompt = if model_name_lower.contains("qwen")
+            || model_name_lower.contains("smollm")
+        {
             if let Some(ctx) = &req.context {
                 format!(
                     "<|im_start|>system\nEres el Copiloto IA de RED OS, un asistente inteligente, empático y conversacional que opera 100% en el dispositivo sin internet. Conversa con fluidez, amabilidad y precisión en español sobre cualquier tema que plantee el operador. Si el siguiente protocolo oficial es relevante a la consulta, intégralo de forma natural: {}\nResponde de manera clara, amena y estructurada.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
@@ -333,7 +347,10 @@ impl AICopilotEngine {
         if let Ok(entries) = std::fs::read_dir(parent_dir) {
             for entry in entries.flatten() {
                 let p = entry.path();
-                if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("json") && !candidates.contains(&p) {
+                if p.is_file()
+                    && p.extension().and_then(|e| e.to_str()) == Some("json")
+                    && !candidates.contains(&p)
+                {
                     candidates.push(p);
                 }
             }
@@ -381,21 +398,24 @@ impl AICopilotEngine {
         };
 
         let initial_prompt_tokens_len = tokens.len();
-        let mut logits_processor = candle_transformers::generation::LogitsProcessor::new(299792458, Some(0.35), Some(0.9));
+        let mut logits_processor =
+            candle_transformers::generation::LogitsProcessor::new(299792458, Some(0.35), Some(0.9));
         let mut generated_text = String::new();
         let max_tokens = 512; // Límite seguro para respuestas completas
 
         for index in 0..max_tokens {
             let context_size = if index > 0 { 1 } else { tokens.len() };
             let start_pos = tokens.len().saturating_sub(context_size);
-            let input = match Tensor::new(&tokens[start_pos..], &device).and_then(|t| t.unsqueeze(0)) {
+            let input = match Tensor::new(&tokens[start_pos..], &device)
+                .and_then(|t| t.unsqueeze(0))
+            {
                 Ok(inp) => inp,
                 Err(e) => {
                     generated_text = format!("🔴 [Error de Tensor]: Fallo al construir el tensor de entrada: {}. Posible modelo GGUF corrupto o memoria insuficiente.", e);
                     break;
                 }
             };
-            
+
             let logits = match model.forward(&input, start_pos) {
                 Ok(l) => l,
                 Err(_) => break, // Fallo de inferencia, detenemos
@@ -403,7 +423,8 @@ impl AICopilotEngine {
             let mut logits = match logits.squeeze(0).and_then(|l| l.squeeze(0)) {
                 Ok(l) => l,
                 Err(e) => {
-                    generated_text = format!("🔴 [Error de Logits]: Fallo al extraer logits: {}.", e);
+                    generated_text =
+                        format!("🔴 [Error de Logits]: Fallo al extraer logits: {}.", e);
                     break;
                 }
             };
@@ -411,12 +432,16 @@ impl AICopilotEngine {
             // Penalización de repetición ligera en los últimos 32 tokens
             if tokens.len() > 1 {
                 let recent_tokens = &tokens[tokens.len().saturating_sub(32)..];
-                logits = match candle_transformers::utils::apply_repeat_penalty(&logits, 1.15, recent_tokens) {
+                logits = match candle_transformers::utils::apply_repeat_penalty(
+                    &logits,
+                    1.15,
+                    recent_tokens,
+                ) {
                     Ok(l) => l,
                     Err(_) => logits,
                 };
             }
-            
+
             let next_token = match logits_processor.sample(&logits) {
                 Ok(t) => t,
                 Err(_) => break,
@@ -438,21 +463,24 @@ impl AICopilotEngine {
             }
 
             tokens.push(next_token);
-            
+
             if let Ok(text) = tokenizer.decode(&[next_token], true) {
                 generated_text.push_str(&text);
-                if generated_text.contains("<|im_end|>") 
-                    || generated_text.contains("<|endoftext|>") 
-                    || generated_text.contains("</s>") 
-                    || generated_text.contains("<|end|>") 
-                    || generated_text.contains("<|eot_id|>") {
+                if generated_text.contains("<|im_end|>")
+                    || generated_text.contains("<|endoftext|>")
+                    || generated_text.contains("</s>")
+                    || generated_text.contains("<|end|>")
+                    || generated_text.contains("<|eot_id|>")
+                {
                     break;
                 }
             }
         }
 
         // Decodificación atómica de la secuencia completa para preservar caracteres UTF-8 multibyte en español (tildes, ñ)
-        let raw_answer = if let Ok(full_decoded) = tokenizer.decode(&tokens[initial_prompt_tokens_len..], true) {
+        let raw_answer = if let Ok(full_decoded) =
+            tokenizer.decode(&tokens[initial_prompt_tokens_len..], true)
+        {
             full_decoded
         } else {
             generated_text
@@ -468,7 +496,11 @@ impl AICopilotEngine {
             .to_string();
 
         CopilotResponse {
-            answer: if clean_answer.is_empty() { "Inferencia completada sin texto.".to_string() } else { clean_answer },
+            answer: if clean_answer.is_empty() {
+                "Inferencia completada sin texto.".to_string()
+            } else {
+                clean_answer
+            },
             topic_category: "Inferencia Local GGUF".to_string(),
             source: "RED Sovereign Desktop Node (Candle)".to_string(),
             model_used: model_name,

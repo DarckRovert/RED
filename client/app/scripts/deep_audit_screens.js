@@ -59,7 +59,8 @@ const screens = [
     'PublicChannelsPanel',
     'SocialFeedPanel',
     'NearbyDevicesPanel',
-    'TacticalCommandCenter'
+    'TacticalCommandCenter',
+    'MaleCnsConnectomeHUD'
 ];
 
 const compDir = path.join(__dirname, '..', 'src', 'components');

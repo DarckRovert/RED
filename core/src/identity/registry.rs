@@ -27,7 +27,7 @@ impl RegistrationProof {
     /// Verify this proof against a known root
     pub fn verify(&self, merkle_root: &[u8; 32]) -> bool {
         let mut current = *self.identity_hash.as_bytes();
-        
+
         for sibling in &self.merkle_proof {
             // Combine current with sibling (order matters)
             if current < *sibling {
@@ -98,7 +98,7 @@ impl IdentityRegistry {
         proof: RegistrationProof,
     ) -> IdentityResult<()> {
         let mut identities = self.identities.write().unwrap();
-        
+
         if identities.contains_key(&identity_hash) {
             return Err(IdentityError::AlreadyExists);
         }
@@ -116,7 +116,7 @@ impl IdentityRegistry {
     /// Revoke an identity
     pub fn revoke(&self, identity_hash: &IdentityHash) -> IdentityResult<()> {
         let mut identities = self.identities.write().unwrap();
-        
+
         if !identities.contains_key(identity_hash) {
             return Err(IdentityError::NotFound(identity_hash.to_hex()));
         }
@@ -202,7 +202,7 @@ mod tests {
         let proof = create_mock_proof(hash.clone());
 
         registry.register(hash.clone(), proof).unwrap();
-        
+
         assert!(registry.is_registered(&hash));
         assert_eq!(registry.count(), 1);
     }
@@ -216,7 +216,7 @@ mod tests {
 
         registry.register(hash.clone(), proof.clone()).unwrap();
         let result = registry.register(hash, proof);
-        
+
         assert!(matches!(result, Err(IdentityError::AlreadyExists)));
     }
 
@@ -229,7 +229,7 @@ mod tests {
 
         registry.register(hash.clone(), proof).unwrap();
         registry.revoke(&hash).unwrap();
-        
+
         assert!(!registry.is_registered(&hash));
         assert!(matches!(
             registry.get_status(&hash),
@@ -244,7 +244,7 @@ mod tests {
         let hash = identity.identity_hash().clone();
 
         registry.mark_pending(hash.clone());
-        
+
         assert!(matches!(
             registry.get_status(&hash),
             RegistrationStatus::Pending

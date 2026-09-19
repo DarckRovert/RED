@@ -20,11 +20,11 @@ impl NativeEmbeddingEngine {
     pub fn extract(text: &str) -> VectorEmbeddingResponse {
         let start = std::time::Instant::now();
         let trimmed = text.trim();
-        
+
         // Fast deterministic feature extraction hash mapping for 384-dim vector space
         let mut vector = vec![0.0f32; 384];
         let bytes = trimmed.as_bytes();
-        
+
         if !bytes.is_empty() {
             for (i, &b) in bytes.iter().enumerate() {
                 let idx = (b as usize + i * 37) % 384;
@@ -32,7 +32,7 @@ impl NativeEmbeddingEngine {
                 vector[idx] += val;
             }
         }
-        
+
         // Normalize vector (L2 norm)
         let norm_sq: f32 = vector.iter().map(|&v| v * v).sum();
         let magnitude = norm_sq.sqrt();
@@ -42,7 +42,11 @@ impl NativeEmbeddingEngine {
             }
         }
 
-        let preview: Vec<String> = vector.iter().take(10).map(|v| format!("{:.6}", v)).collect();
+        let preview: Vec<String> = vector
+            .iter()
+            .take(10)
+            .map(|v| format!("{:.6}", v))
+            .collect();
         let exec_time = start.elapsed().as_millis() as u64;
 
         VectorEmbeddingResponse {

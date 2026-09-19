@@ -46,6 +46,8 @@ import { multipathBonding, MultipathBondingEngine } from './MultipathBondingEngi
 import { loraTdmaScheduler } from './LoRaTdmaSchedulerEngine';
 import { broadcastStormGuardEngine } from './BroadcastStormGuardEngine';
 import { tacticalMicroBurst } from './TacticalMicroBurstEngine';
+import { synapticMeshRouter } from '../neuro/SynapticMeshRouterEngine';
+import { giantFiberReflex } from '../neuro/GiantFiberReflexEngine';
 
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
 const DEDUP_WINDOW_MSG_MS = 30 * 60 * 1000;       // 30m  — chat messages (reduces Map size ~95% in long sessions)
@@ -271,6 +273,7 @@ class MeshRouter {
       }
       return false;
     });
+    synapticMeshRouter.init();
     console.log('[MeshRouter] Initialized — identity:', myIdentityHash.slice(0, 12));
   }
 
@@ -1255,14 +1258,41 @@ class MeshRouter {
       } catch {}
     }
 
+    // Giant Fiber Reflex: If EMCON / Radio Mute is active, suppress all RF broadcasts and divert
+    if (giantFiberReflex.isRadioMuted()) {
+      console.log('[MeshRouter] 🛡️ EMCON Active (Giant Fiber Reflex): Suppressing RF broadcast, diverting to SoundMesh');
+      if (payload.length <= 255) {
+        SoundMeshEngine.transmitPayload(payload).catch(() => {});
+        return 1;
+      }
+      return 0;
+    }
+
     // Filter peers if battery conservation is active (throttle dense flood)
     let peersList = Array.from(this.peers.entries());
     if (decision.batteryConservationMode && peersList.length > 3) {
       peersList = peersList.slice(0, 3); // Restrict to top 3 neighbors in critical battery
     }
 
-    for (const [peerId, peer] of peersList) {
-      if (peerId === exceptPeer) continue;
+    // Bio-Inspired Connectome Percolation (Murthy Lab Rich-Club & Synaptic Pruning)
+    let isEmergency = false;
+    try {
+      const preview = new TextDecoder().decode(payload.slice(0, 60));
+      if (preview.includes('SOS') || preview.includes('beacon') || preview.includes('CBRN') || preview.includes('amber')) {
+        isEmergency = true;
+      }
+    } catch {}
+
+    const candidateList = peersList.map(([id, peer]) => ({ id, peer }));
+    const { selectedPeers } = synapticMeshRouter.selectBroadcastPeers(
+      candidateList,
+      exceptPeer,
+      isEmergency
+    );
+
+    for (const item of selectedPeers) {
+      const peerId = item.id;
+      const peer = item.peer;
       const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora' | 'soundmesh') || 'ble', payload);
       if (ok) sent++;
     }
@@ -1827,6 +1857,20 @@ class MeshRouter {
     const isEmergency = isBroadcast && (packet.flags === 1 || packet.nonce.includes('sos') || packet.nonce.includes('beacon'));
     const decision = cognitiveArbiter.evaluateRoutingDecision(directPeer, encoded.length, isEmergency);
 
+    // Giant Fiber Reflex: If EMCON / Radio Mute is active, suppress all RF broadcasts and divert
+    if (giantFiberReflex.isRadioMuted()) {
+      console.log('[MeshRouter] 🛡️ EMCON Active (Giant Fiber Reflex): Diverting packet via SoundMesh');
+      if (encoded.length <= 255) {
+        const ok = await SoundMeshEngine.transmitPayload(encoded);
+        if (ok) {
+          dtnStorage.markAttempt(packet.nonce, false);
+          return 'sent';
+        }
+      }
+      dtnStorage.enqueue(packet, 10);
+      return 'queued';
+    }
+
     // Global Cognitive Fallback A: Electronic Warfare / Jamming active in RF -> route via SoundMesh
     if (decision.isElectronicWarfareActive && encoded.length <= 255) {
       console.log(`[MeshRouter] 🛡️ Jamming EW Active: Routing via SoundMesh (${decision.rationale})`);
@@ -1874,9 +1918,31 @@ class MeshRouter {
           }
         }
       }
+
+      // Fast-Path 3: Bio-Neuromorphic Synaptic Next-Hop (Murthy Lab Connectome Unicast)
+      if (canonicalRecipient) {
+        const candidateNeighbors = Array.from(this.peers.entries())
+          .filter(([id, peer]) => {
+            if (id === exceptPeer) return false;
+            const lqs = peer.rssi ? bluetoothTransport.getLinkQuality(id) : 70;
+            return lqs >= (decision.batteryConservationMode ? 50 : 15);
+          })
+          .map(([id, peer]) => ({ id, peer }));
+
+        const optimalHop = synapticMeshRouter.getOptimalNextHop(canonicalRecipient, candidateNeighbors);
+        if (optimalHop && optimalHop.id !== canonicalRecipient) {
+          const hopPeer = optimalHop.peer;
+          const ok = await this.sendToPeer(optimalHop.id, (hopPeer.transport as 'wifi' | 'ble' | 'lora' | 'soundmesh') || 'ble', encoded);
+          if (ok) {
+            console.log(`[MeshRouter] 🧠 Synaptic Connectome: Delivered unicast to ${canonicalRecipient.slice(0, 8)} via next-hop ${optimalHop.id.slice(0, 8)}`);
+            dtnStorage.markAttempt(packet.nonce, false);
+            return 'sent';
+          }
+        }
+      }
     }
 
-    // ─── 2. CONTROLLED MULTI-HOP FLOOD (LQS-Filtered & Battery Throttled) ───
+    // ─── 2. CONTROLLED MULTI-HOP FLOOD (Bio-Inspired Connectome Percolation & LQS-Filtered) ───
     // If not a direct peer or direct send failed, forward to connected neighbors with healthy links
     let peersToSend = Array.from(this.peers.entries())
       .filter(([id, peer]) => {
@@ -1891,7 +1957,16 @@ class MeshRouter {
       peersToSend = peersToSend.slice(0, 3);
     }
 
-    for (const [peerId, peer] of peersToSend) {
+    // Connectome Synaptic Pruning & Rich-Club Hub Routing
+    const { selectedPeers: multiHopPeers } = synapticMeshRouter.selectBroadcastPeers(
+      peersToSend.map(([id, peer]) => ({ id, peer })),
+      exceptPeer,
+      isEmergency
+    );
+
+    for (const item of multiHopPeers) {
+      const peerId = item.id;
+      const peer = item.peer;
       const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora' | 'soundmesh') || 'ble', encoded);
       if (ok) anySent = true;
     }
@@ -1988,21 +2063,26 @@ class MeshRouter {
     transport: 'wifi' | 'ble' | 'lora' | 'soundmesh',
     payload: Uint8Array
   ): Promise<boolean> {
+    const startTs = Date.now();
     try {
+      let ok = false;
       if (transport === 'wifi' && this.wifi) {
-        return await this.wifi.send(peerId, payload);
+        ok = await this.wifi.send(peerId, payload);
+      } else if (transport === 'ble') {
+        ok = await bluetoothTransport.send(peerId, payload);
+      } else if (transport === 'lora') {
+        ok = await this.sendViaLoRa(payload);
+      } else if (transport === 'soundmesh') {
+        ok = await SoundMeshEngine.transmitPayload(payload);
       }
-      if (transport === 'ble') {
-        return await bluetoothTransport.send(peerId, payload);
-      }
-      if (transport === 'lora') {
-        return await this.sendViaLoRa(payload);
-      }
-      if (transport === 'soundmesh') {
-        return await SoundMeshEngine.transmitPayload(payload);
-      }
+      const rtt = Math.max(10, Date.now() - startTs);
+      const peer = this.peers.get(peerId);
+      const lqs = peer?.rssi ? bluetoothTransport.getLinkQuality(peerId) : 70;
+      synapticMeshRouter.recordDeliveryResult(peerId, ok, rtt, lqs);
+      return ok;
     } catch (e) {
       console.warn(`[MeshRouter] Send to ${peerId} via ${transport} failed:`, e);
+      synapticMeshRouter.recordDeliveryResult(peerId, false, 500, 20);
     }
     return false;
   }
@@ -2227,6 +2307,8 @@ class MeshRouter {
     } else {
       this.activeGateways.delete(resolvedCanonical);
     }
+    const peerLqs = updated.rssi ? bluetoothTransport.getLinkQuality(resolvedCanonical) : 70;
+    synapticMeshRouter.touchPeer(resolvedCanonical, peerLqs);
     this.notifyPeersChange();
   }
 

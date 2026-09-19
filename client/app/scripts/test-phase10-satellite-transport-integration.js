@@ -91,7 +91,7 @@ runTest('7. StatusHeader: Red activa SAT LEO reconocida en selector y paleta de 
 runTest('8. StatusHeader: Pill interactivo de satélite LEO con navegación táctica', () => {
     assert(statusHeaderCode.includes('onClick={() => navigate("cbrnSatellite")}'), 'Debe permitir navegar al panel satelital');
     assert(statusHeaderCode.includes('satTelem.isUplinkAvailable ? "LEO AOS" : "LEO"'), 'Debe alternar entre LEO AOS y LEO');
-    assert(statusHeaderCode.includes('🛰️'), 'Debe renderizar icono satelital');
+    assert(statusHeaderCode.includes('🛰️') || statusHeaderCode.includes('name="satellite"'), 'Debe renderizar icono satelital');
 });
 
 // ── 4. Inspección de SwarmHealthHUD.tsx ────────────────────────────────────────
@@ -99,7 +99,7 @@ const hudPath = path.join(__dirname, '..', 'src', 'components', 'SwarmHealthHUD.
 const hudCode = fs.readFileSync(hudPath, 'utf8');
 
 runTest('9. SwarmHealthHUD: Icono y color para SATELLITE_LEO', () => {
-    assert(hudCode.includes('case "SATELLITE_LEO": return "🛰️";'), 'Debe tener icono de satélite');
+    assert(hudCode.includes('case "SATELLITE_LEO": return "🛰️";') || hudCode.includes('case "SATELLITE_LEO": return <TacIcon name="satellite"'), 'Debe tener icono de satélite');
     assert(hudCode.includes('case "SATELLITE_LEO": return "var(--accent-cyan, #00E5FF)";'), 'Debe tener color cian neón');
 });
 
@@ -114,7 +114,7 @@ const sidebarHeaderCode = fs.readFileSync(sidebarHeaderPath, 'utf8');
 
 runTest('11. SidebarHeader: Indicador espacial en cabecera de mensajería', () => {
     assert(sidebarHeaderCode.includes('satelliteMeshGateway.subscribe(t => setSatAos(t.isUplinkAvailable))'), 'Debe suscribirse a AOS');
-    assert(sidebarHeaderCode.includes('{satAos ? " · 🛰️ LEO AOS" : ""}'), 'Debe mostrar badge orbital en el subtítulo');
+    assert(sidebarHeaderCode.includes('{satAos ? " · 🛰️ LEO AOS" : ""}') || (sidebarHeaderCode.includes('satAos') && sidebarHeaderCode.includes('LEO AOS')), 'Debe mostrar badge orbital en el subtítulo');
 });
 
 console.log('\n================================================================================');

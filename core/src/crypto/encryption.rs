@@ -35,9 +35,7 @@ impl EncryptedData {
     /// Deserialize from bytes
     pub fn from_bytes(bytes: &[u8]) -> CryptoResult<Self> {
         if bytes.len() < NONCE_SIZE {
-            return Err(CryptoError::DecryptionError(
-                "Data too short".to_string()
-            ));
+            return Err(CryptoError::DecryptionError("Data too short".to_string()));
         }
 
         let mut nonce = [0u8; NONCE_SIZE];
@@ -92,9 +90,7 @@ pub fn decrypt(key: &[u8; 32], encrypted: &EncryptedData) -> CryptoResult<Vec<u8
 
     cipher
         .decrypt(nonce, encrypted.ciphertext.as_ref())
-        .map_err(|_| CryptoError::DecryptionError(
-            "Authentication failed".to_string()
-        ))
+        .map_err(|_| CryptoError::DecryptionError("Authentication failed".to_string()))
 }
 
 /// Encrypt with associated data (AEAD)
@@ -147,9 +143,7 @@ pub fn decrypt_with_aad(
 
     cipher
         .decrypt(nonce, payload)
-        .map_err(|_| CryptoError::DecryptionError(
-            "Authentication failed".to_string()
-        ))
+        .map_err(|_| CryptoError::DecryptionError("Authentication failed".to_string()))
 }
 
 #[cfg(test)]

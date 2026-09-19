@@ -1,8 +1,8 @@
-# 🛡️ RED — Sovereign Mesh OS v109.0.0
+# 🛡️ RED — Sovereign Mesh OS v111.0.0
 
 > **RED** (Red Criptográfica Off-Grid & P2P Mesh) es la plataforma de comunicaciones tácticas, descentralizadas y soberanas más avanzada del mundo. Diseñada desde su origen para operar bajo escenarios de apagón tecnológico, censura estatal, desastres naturales o denegación de servicios, RED no depende de servidores centrales, infraestructuras celulares ni conexión a Internet. Ahora con el **Modo Familiar (WhatsApp UX)** integrado, **Coordinación Espectral LoRa TDMA**, **Enrutamiento Geoespacial Geohash** y **Repetidores Solares Autónomos ESP32-S3**.
 
-[![Descargar APK Oficial RED v109.0.0](https://img.shields.io/badge/Descargar_APK_v109.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v109.0.0)
+[![Descargar APK Oficial RED v111.0.0](https://img.shields.io/badge/Descargar_APK_v111.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v111.0.0)
 [![Página Web Oficial GitHub Pages](https://img.shields.io/badge/Web_App-GitHub_Pages-38BDF8?style=for-the-badge&logo=github)](https://darckrovert.github.io/RED/)
 [![Licencia AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-purple?style=for-the-badge&logo=gnu)](https://github.com/DarckRovert/RED/blob/main/LICENSE)
 [![TypeScript Strict](https://img.shields.io/badge/TypeScript-0_Errors_Strict-00D97E?style=for-the-badge&logo=typescript)](https://github.com/DarckRovert/RED)
@@ -35,6 +35,8 @@ Accede a la documentación técnica y operativa completa del proyecto:
 6. [Criptografía Post-Cuántica & Privacidad en Capas](#criptografia-post-cuantica)
 7. [Tokenomics & Proof-of-Relay](#tokenomics)
 8. [Guía de Compilación & Despliegue](#guia-compilacion)
+9. [Fundamentos Bio-Neuromórficos & Atribución Conectómica](#fundamentos-bioneuromorficos)
+10. [Licencia & Descargo Legal](#licencia)
 
 ---
 
@@ -43,7 +45,7 @@ Accede a la documentación técnica y operativa completa del proyecto:
 
 En situaciones de emergencia o denegación de red, las aplicaciones tradicionales de mensajería (WhatsApp, Telegram, Signal) fallan al depender de servidores centrales en la nube y torres de telefonía celular. **RED** rompe esta dependencia convirtiendo cada dispositivo en un **nodo de red mesh independiente** capaz de cifrar, enrutar y entregar mensajes a través de radios de hardware locales y enlazar globalmente cuando exista un puente de red.
 
-| Característica | Aplicaciones Tradicionales | RED v109.0.0 |
+| Característica | Aplicaciones Tradicionales | RED v111.0.0 |
 |---|---|---|
 | **Interfaz & UX** | Saturada y con menús dispersos | **Doble Modo Soberano: Modo Familiar (WhatsApp UX) + Modo Táctico C4ISR (8 Hubs, 62 Pantallas)** |
 | **Infraestructura** | Requiere servidores en la nube y 4G/5G | **100% Descentralizado / Zero-Server** |
@@ -125,7 +127,7 @@ graph TD
 <a id="autenticacion-biometrica"></a>
 ## 🔐 3. Autenticación Biométrica Universal & Seguridad Zero-Trust
 
-RED v109.0.0 incorpora un guardián de hardware que vincula el chip de seguridad del dispositivo a la base de datos `sled`:
+RED v111.0.0 incorpora un guardián de hardware que vincula el chip de seguridad del dispositivo a la base de datos `sled`:
 
 1. **Soporte Biométrico Completo:**
    - **Android Nativo:** Sensor de huella dactilar, reconocimiento facial 3D/IR, escáner de iris y credenciales de dispositivo mediante `BiometricPrompt` (`USE_BIOMETRIC` + `USE_FINGERPRINT`).
@@ -295,8 +297,34 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 ---
 
+<a id="fundamentos-bioneuromorficos"></a>
+## 🧠 9. Fundamentos Bio-Neuromórficos & Atribución Conectómica
+
+RED Sovereign Mesh OS integra principios de computación bio-inspirada y dinámica de circuitos neuronales reales del conectoma de *Drosophila melanogaster* para optimizar el enrutamiento de malla, la navegación sin satélites, la evasión de guerra electrónica y la retención asociativa de mensajes:
+
+1. **MaleCNS v1.0 & Template ([cobanov/fly-connectome-template](https://github.com/cobanov/fly-connectome-template)):**
+   - Atlas somático 3D (124,289 neuronas clasificadas) desarrollado por **Milos Cobanov** y Janelia Research Campus (Cell, Septiembre 2026).
+   - Utilizado en el visualizador interactivo WebGL/Canvas `MaleCnsConnectomeHUD.tsx`. Licencia source-available con atribución obligatoria en interfaz web y repositorio.
+
+2. **Estadísticas de Red FlyWire ([murthylab/flywire-network-analysis](https://github.com/murthylab/flywire-network-analysis)):**
+   - Investigaciones sobre la topología del conectoma completo de **Mala Murthy Lab (Princeton University)** (Nature, 2024 / FlyWire Consortium).
+   - Aplicado en `SynapticMeshRouterEngine.ts` para el cálculo en tiempo real de:
+     - **Reciprocidad de enlaces ($r$):** Prevención de enlaces asimétricos y pérdidas simplex en LoRa/BLE.
+     - **Índice Small-World ($\sigma$):** Garantía de alta modularidad local y bajo diámetro de salto global.
+     - **Motivos Triádicos (Milo et al.):** Refuerzo de bucles de avance coherente (Feed-Forward Loops, FFL) y supresión activa de tríadas cíclicas (Feedback Loops, FBL) causantes de tormentas de difusión.
+
+3. **Curaduría Conectómica & Circuitos de Escape ([cobanov/awesome-fly](https://github.com/cobanov/awesome-fly)):**
+   - Circuito de escape monosináptico `fly-swing` (Lobula Columnar LC4 `#10042` y LPLC2 `#10043` sinaptando en interneurona gigante DNp01 `#10001` y motoneurona de salto TTMn `#10099`) integrado en `GiantFiberReflexEngine.ts` para silenciamiento EMCON en < 15ms.
+   - Matriz de conectividad de *The Fly's Table* (682 Neuronas de Proyección, 2,500 Células de Kenyon, 97 MBONs y 332 Neuronas Dopaminérgicas PAM/PPL1) integrada en `DtnMushroomBodyEngine.ts`.
+
+4. **Emulación SNN & Optogenética ([eonsystemspbc/fly-brain](https://github.com/eonsystemspbc/fly-brain) & [Eon Systems PBC](https://github.com/eonsystemspbc)):**
+   - Paradigmas de computación bio-silicio neuromórfica y dinámica de potenciales Leaky Integrate-and-Fire (LIF).
+   - Búfer acumulador de eventos para reducir el consumo RF hasta un 65% en radios LoRa y herramientas de control optogenético (silenciamiento no destructivo NpHR de nodos anómalos y estimulación de sondeo ChR2 a 10Hz).
+
+---
+
 <a id="licencia"></a>
-## 📄 Licencia & Descargo Legal
+## 📄 10. Licencia & Descargo Legal
 
 Este proyecto está licenciado bajo la **GNU Affero General Public License v3.0 (AGPL-3.0)** — Copyright (C) 2026 Rodrigo Alejandro Vega Rojas (alias "DarckRovert") / RED Sovereign Mesh Team. Consulta el archivo [LICENSE](LICENSE) para más detalles.
 

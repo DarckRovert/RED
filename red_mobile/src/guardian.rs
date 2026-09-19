@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
-pub use red_core::protocol::tactical::{GuardianVerdict, GuardianMode};
+pub use red_core::protocol::tactical::{GuardianMode, GuardianVerdict};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GuardianStats {
@@ -118,6 +118,10 @@ impl GuardianEngine {
     }
 
     pub fn get_stats(&self) -> GuardianStats {
-        self.stats.lock().ok().map(|s| s.clone()).unwrap_or_default()
+        self.stats
+            .lock()
+            .ok()
+            .map(|s| s.clone())
+            .unwrap_or_default()
     }
 }

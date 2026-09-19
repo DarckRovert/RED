@@ -59,12 +59,16 @@ pub fn classify_serial_port(info: &SerialPortInfo) -> LoraDeviceDescriptor {
                 chip_name = "Silicon Labs CP2102/CP2104 (LilyGO T-Beam / Heltec)".to_string();
             }
             // 2. WCH CH340 / CH341 (Heltec LoRa 32 V3, DIY LoRa ESP32)
-            else if vid == 0x1a86 || prod_lower.contains("ch340") || prod_lower.contains("ch341") {
+            else if vid == 0x1a86 || prod_lower.contains("ch340") || prod_lower.contains("ch341")
+            {
                 is_lora_transceiver = true;
                 chip_name = "WCH CH340/CH341 UART (Heltec LoRa 32 V3 / ESP32)".to_string();
             }
             // 3. Espressif Systems ESP32-S2 / ESP32-S3 Native USB-JTAG/CDC
-            else if vid == 0x303a || prod_lower.contains("esp32") || mfg_lower.contains("espressif") {
+            else if vid == 0x303a
+                || prod_lower.contains("esp32")
+                || mfg_lower.contains("espressif")
+            {
                 is_lora_transceiver = true;
                 chip_name = "Espressif USB-JTAG/CDC (ESP32-S3 LoRa SX1262)".to_string();
             }
@@ -79,12 +83,18 @@ pub fn classify_serial_port(info: &SerialPortInfo) -> LoraDeviceDescriptor {
                 chip_name = "Raspberry Pi RP2040 (Pico LoRa SX1262)".to_string();
             }
             // 6. Detección heurística por palabras clave
-            else if prod_lower.contains("lora") || prod_lower.contains("t-beam") || prod_lower.contains("heltec") {
+            else if prod_lower.contains("lora")
+                || prod_lower.contains("t-beam")
+                || prod_lower.contains("heltec")
+            {
                 is_lora_transceiver = true;
                 chip_name = format!("Transceptor LoRa Compatible ({})", product);
             } else {
                 is_lora_transceiver = false;
-                chip_name = format!("Dispositivo USB Serial ({})", if product.is_empty() { "UART" } else { &product });
+                chip_name = format!(
+                    "Dispositivo USB Serial ({})",
+                    if product.is_empty() { "UART" } else { &product }
+                );
             }
         }
         SerialPortType::PciPort => {
@@ -136,18 +146,13 @@ pub fn scan_lora_hardware() -> LoraPnpScanResult {
     };
 
     let total_ports = ports.len();
-    let mut classified: Vec<LoraDeviceDescriptor> = ports
-        .iter()
-        .map(classify_serial_port)
-        .collect();
+    let mut classified: Vec<LoraDeviceDescriptor> =
+        ports.iter().map(classify_serial_port).collect();
 
     // Ordenar para que los transceptores LoRa aparezcan primero
     classified.sort_by(|a, b| b.is_lora_transceiver.cmp(&a.is_lora_transceiver));
 
-    let primary_device = classified
-        .iter()
-        .find(|d| d.is_lora_transceiver)
-        .cloned();
+    let primary_device = classified.iter().find(|d| d.is_lora_transceiver).cloned();
 
     LoraPnpScanResult {
         primary_device,
@@ -235,4 +240,3 @@ mod tests {
         assert_eq!(res.total_ports, res.devices.len());
     }
 }
-

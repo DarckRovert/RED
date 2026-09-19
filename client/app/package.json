@@ -1,6 +1,6 @@
 {
   "name": "red-app",
-  "version": "110.0.0",
+  "version": "111.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -53,6 +53,9 @@
     "test:autodestruct": "node scripts/test-autodestruct-resilience.js",
     "test:tile-cache": "node scripts/test-tile-cache-resilience.js",
     "test:magnetic-compass": "node scripts/test-magnetic-compass-resilience.js",
+    "test:ring-attractor": "node scripts/test-ring-attractor-resilience.js",
+    "test:synaptic-router": "node scripts/test-synaptic-router-resilience.js",
+    "test:giant-fiber": "node scripts/test-giant-fiber-reflex-resilience.js",
     "test:barometer": "node scripts/test-barometer-engine-resilience.js",
     "test:optical-morse": "node scripts/test-optical-morse-resilience.js",
     "test:water-purification": "node scripts/test-water-purification-resilience.js",
@@ -104,6 +107,8 @@
     "test:core-modules": "node scripts/test-core-uncovered-modules-resilience.js",
     "test:advanced-engines": "node scripts/test-tactical-advanced-engines-resilience.js",
     "test:multirail": "node scripts/test-multirail-payments.js",
+    "test:dtn-mushroom": "node scripts/test-dtn-mushroom-body-resilience.js",
+    "test:connectome": "node scripts/test-malecns-connectome-hud-resilience.js",
     "test:all": "node -e \"const fs=require('fs'); const {execSync}=require('child_process'); const tests=fs.readdirSync('scripts').filter(f=>f.startsWith('test-')&&(f.endsWith('.js')||f.endsWith('.mjs'))); let failed=0; for(const t of tests){ try { execSync('node scripts/'+t, {stdio:'inherit'}); } catch(e){ failed++; } } if(failed>0) process.exit(1);\"",
     "prepare": "node scripts/setup_git_hooks.js",
     "postinstall": "node scripts/copy-wasm.js",

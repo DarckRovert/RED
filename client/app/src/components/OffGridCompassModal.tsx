@@ -16,6 +16,7 @@ import { tacticalCompass, CompassTelemetry } from "../lib/sensors/TacticalCompas
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { TacIcon } from "./ui/TacIcon";
+import { ringAttractor, RingAttractorTelemetry } from "../lib/neuro/RingAttractorEngine";
 
 export function OffGridCompassModal() {
     const { navigate, identity } = useRedStore();
@@ -38,6 +39,16 @@ export function OffGridCompassModal() {
 
     // Magnetic Anomaly State
     const [magTelemetry, setMagTelemetry] = useState<MagneticTelemetry>(() => magneticDetector.getTelemetry());
+
+    // Telemetría de Anillo Atractor Bio-Inercial (Drosophila Central Complex)
+    const [ringTelem, setRingTelem] = useState<RingAttractorTelemetry>(() => ringAttractor.getTelemetry());
+
+    useEffect(() => {
+        const unsub = ringAttractor.subscribe(setRingTelem);
+        return () => {
+            unsub();
+        };
+    }, []);
 
     useEffect(() => {
         magneticDetector.startListening();
@@ -111,6 +122,16 @@ export function OffGridCompassModal() {
         const unsub = tacticalCompass.subscribe(setCompassTelemetry);
         return () => unsub();
     }, []);
+
+    // Sincronización del anclaje sensorial ante anomalías magnéticas
+    useEffect(() => {
+        if (magTelemetry.isAnomalyDetected) {
+            ringAttractor.setSensoryAnchored(false);
+        } else {
+            ringAttractor.setSensoryAnchored(true);
+            ringAttractor.injectExternalCue(heading, true);
+        }
+    }, [magTelemetry.isAnomalyDetected, heading]);
 
     const [solarAzimuth, setSolarAzimuth] = useState<{ azimuthDegrees: number; elevationDegrees: number; isNight: boolean }>({ azimuthDegrees: 0, elevationDegrees: 0, isNight: false });
 
@@ -1235,6 +1256,99 @@ export function OffGridCompassModal() {
                                             {dist >= 1000 ? `${dist / 1000}km` : `${dist}m`}
                                         </button>
                                     ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Central Complex Ring Attractor Bio-Inertial Card */}
+                        <div style={{
+                            background: 'linear-gradient(180deg, rgba(14, 22, 40, 0.95) 0%, rgba(6, 10, 22, 0.98) 100%)',
+                            border: '1.5px solid rgba(0, 229, 255, 0.35)',
+                            borderRadius: '16px', padding: '16px',
+                            display: 'flex', flexDirection: 'column', gap: '10px',
+                            boxSizing: 'border-box'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ width: 28, height: 28, borderRadius: '8px', background: 'rgba(0, 229, 255, 0.15)', border: '1px solid #00E5FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <TacIcon name="compass" size={16} color="#00E5FF" />
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.82rem', fontWeight: 900, color: '#00E5FF', letterSpacing: '0.4px' }}>
+                                            CENTRAL COMPLEX BIO-INERCIAL (DROSOPHILA CX)
+                                        </div>
+                                        <div style={{ fontSize: '0.64rem', color: '#94A3B8' }}>
+                                            16 Cuñas E-PG · Integración P-EN · Inmune a Spoofing / Deriva en Túneles
+                                        </div>
+                                    </div>
+                                </div>
+                                <span style={{
+                                    fontSize: '0.62rem', fontWeight: 900, padding: '3px 8px', borderRadius: '6px',
+                                    background: ringTelem.isSensoryAnchored ? 'rgba(0, 230, 118, 0.18)' : 'rgba(255, 179, 0, 0.18)',
+                                    color: ringTelem.isSensoryAnchored ? '#00E676' : '#FFB300',
+                                    border: `1px solid ${ringTelem.isSensoryAnchored ? '#00E676' : '#FFB300'}`
+                                }}>
+                                    {ringTelem.isSensoryAnchored ? 'ANCLADO SENSORIAL' : 'MEMORIA INERCIAL PURA'}
+                                </span>
+                            </div>
+
+                            {/* Visualizador de las 16 cuñas neuronales del Ellipsoid Body */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', background: 'rgba(0,0,0,0.4)', padding: '10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: '#AAA' }}>
+                                    <span>BURBUJA SINÁPTICA E-PG (16 CUÑAS ANGULARES)</span>
+                                    <span style={{ color: '#00E5FF', fontWeight: 800 }}>Rumbo Bio: {ringTelem.headingDeg}° {ringTelem.cardinal} (Conf: {(ringTelem.confidence * 100).toFixed(0)}%)</span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '3px', height: '28px', alignItems: 'end' }}>
+                                    {ringTelem.wedges.map((w, idx) => (
+                                        <div
+                                            key={idx}
+                                            title={`Cuña ${idx + 1}: ${(w * 100).toFixed(0)}%`}
+                                            style={{
+                                                height: `${Math.max(12, Math.round(w * 100))}%`,
+                                                background: w > 0.5 ? 'linear-gradient(180deg, #00E5FF 0%, #0077B6 100%)' : 'rgba(255,255,255,0.12)',
+                                                borderRadius: '2px',
+                                                boxShadow: w > 0.6 ? '0 0 6px rgba(0, 229, 255, 0.6)' : 'none',
+                                                transition: 'height 0.1s ease'
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.68rem', color: '#AAA', flexWrap: 'wrap', gap: '8px' }}>
+                                <span>Velocidad angular: <strong style={{ color: '#FFF' }}>{ringTelem.angularVelocityDps}°/s</strong></span>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                    <button
+                                        onClick={() => {
+                                            TacticalAudioEngine.playRogerBeep();
+                                            navigate('maleCnsConnectome');
+                                        }}
+                                        style={{
+                                            padding: '5px 10px', borderRadius: '6px',
+                                            background: 'rgba(0, 229, 255, 0.12)', border: '1px solid rgba(0, 229, 255, 0.4)',
+                                            color: '#00E5FF', fontWeight: 800, fontSize: '0.68rem', cursor: 'pointer',
+                                            display: 'flex', alignItems: 'center', gap: '4px'
+                                        }}
+                                        title="Explorar topología somática 3D MaleCNS v1.0"
+                                    >
+                                        <TacIcon name="cpu" size={11} />
+                                        <span>Conectoma 3D</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            tacticalCompass.setManualHeading(ringTelem.headingDeg);
+                                            toast.success(`🧭 Rumbo Bio-Inercial adoptado: ${ringTelem.headingDeg}°`);
+                                        }}
+                                        style={{
+                                            padding: '5px 10px', borderRadius: '6px',
+                                            background: 'rgba(0, 229, 255, 0.18)', border: '1px solid #00E5FF',
+                                            color: '#00E5FF', fontWeight: 800, fontSize: '0.68rem', cursor: 'pointer',
+                                            display: 'flex', alignItems: 'center', gap: '4px'
+                                        }}
+                                    >
+                                        <TacIcon name="check" size={11} />
+                                        <span>Adoptar Rumbo</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>

@@ -212,6 +212,18 @@ export class RedCyberTunnelEngine {
         this.stats.activeSniHost = target.sniHost;
         this.stats.activeIpTarget = target.ipTarget;
         this.persistStats();
+
+        // Sincronizar en caliente con el servidor proxy Java local
+        if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
+            RedNode.setProxyZeroRatingConfig({
+                sniHost: target.sniHost,
+                ipTarget: target.ipTarget,
+                provider: target.provider,
+                mode: this.stats.mode,
+                zeroRating: this.stats.mode === 'ZERO_RATING_SNI',
+            }).catch(() => {});
+        }
+
         this.notifyListeners();
     }
 
@@ -221,6 +233,17 @@ export class RedCyberTunnelEngine {
     public setMode(mode: CyberTunnelMode): void {
         this.stats.mode = mode;
         this.persistStats();
+
+        if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
+            RedNode.setProxyZeroRatingConfig({
+                sniHost: this.stats.activeSniHost,
+                ipTarget: this.stats.activeIpTarget,
+                provider: this.stats.activeProvider,
+                mode: mode,
+                zeroRating: mode === 'ZERO_RATING_SNI',
+            }).catch(() => {});
+        }
+
         this.notifyListeners();
     }
 
@@ -230,11 +253,18 @@ export class RedCyberTunnelEngine {
     public async activateTunnel(): Promise<{ success: boolean; message: string }> {
         this.stats.isActive = true;
 
-        // 1. Iniciar Servidor Proxy Nativo en Android (127.0.0.1:8088)
+        // 1. Iniciar Servidor Proxy Nativo en Android (127.0.0.1:8088) con perfil Zero-Rating
         let proxyStarted = false;
         try {
             if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
-                const res = await RedNode.startProxyServer({ port: this.stats.localProxyPort });
+                const res = await RedNode.startProxyServer({
+                    port: this.stats.localProxyPort,
+                    sniHost: this.stats.activeSniHost,
+                    ipTarget: this.stats.activeIpTarget,
+                    provider: this.stats.activeProvider,
+                    mode: this.stats.mode,
+                    zeroRating: this.stats.mode === 'ZERO_RATING_SNI',
+                });
                 if (res && (res.running || res.isRunning || res.success)) {
                     proxyStarted = true;
                     this.stats.isProxyRunning = true;

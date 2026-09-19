@@ -1070,6 +1070,15 @@ export const es = {
         updater_title: "Actualizador OTA Soberano",
         updater_sub: "Distribución verificada de nuevas versiones del sistema operativo nodo a nodo.",
         updater_badge: "ACTUALIZADOR",
+        cyberTunnel_title: "Túnel Zero-Rating & APN",
+        cyberTunnel_sub: "Bypass de datos móviles por SNI y proxy satelital local para navegación sin saldo.",
+        cyberTunnel_badge: "ZERO-RATING",
+        ghostGps_title: "Ghost GPS & Señuelo",
+        ghostGps_sub: "Spoofing táctico de coordenadas, trayectorias cinemáticas y evasión anti-rastreo.",
+        ghostGps_badge: "SEÑUELO",
+        sovereignShield_title: "Sovereign Shield C4ISR",
+        sovereignShield_sub: "Defensa celular contra spam, auditoría de apps maliciosas y contramedidas RF.",
+        sovereignShield_badge: "BLINDAJE",
     },
 
     tactical_hubs: {
@@ -1119,6 +1128,7 @@ export const es = {
         tool_rf_spectrum: "Espectro RF",
         tool_acoustic_warfare: "Guerra Acústica",
         tool_copilot: "Copiloto IA",
+        tool_connectome: "Conectoma MaleCNS 3D",
         tool_tactical_vision: "Visión Táctica",
         tool_c4isr_drill: "Simulacro C4ISR",
         tool_guardian: "Guardián",
@@ -1158,6 +1168,10 @@ export const es = {
         tool_swarm_health: "Salud Enjambre",
         tool_settings: "Ajustes",
         tool_updater: "Actualizador",
+        tool_cyber_tunnel: "Túnel Zero-Rating",
+        tool_ghost_gps: "Ghost GPS Señuelo",
+        tool_sovereign_shield: "Sovereign Shield",
+        tool_command_center: "Centro de Mando C4ISR",
     },
 
     swarm_health_hud: {

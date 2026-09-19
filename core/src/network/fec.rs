@@ -83,7 +83,10 @@ pub struct FecEncoder {
 impl FecEncoder {
     /// Create an encoder with K data chunks and M parity chunks
     pub fn new(k: usize, m: usize) -> Self {
-        assert!(k > 0 && m > 0 && k <= 128 && m <= 128, "Invalid FEC parameters (K <= 128, M <= 128)");
+        assert!(
+            k > 0 && m > 0 && k <= 128 && m <= 128,
+            "Invalid FEC parameters (K <= 128, M <= 128)"
+        );
         Self { k, m }
     }
 
@@ -187,7 +190,11 @@ impl FecDecoder {
         }
 
         // Avoid duplicate chunk indices
-        if !self.received_chunks.iter().any(|c| c.chunk_index == chunk.chunk_index) {
+        if !self
+            .received_chunks
+            .iter()
+            .any(|c| c.chunk_index == chunk.chunk_index)
+        {
             self.received_chunks.push(chunk);
         }
 
@@ -204,7 +211,11 @@ impl FecDecoder {
         // If we have all K systematic data chunks (indices 0..K-1), simple concat
         let mut has_all_data = true;
         for i in 0..self.k {
-            if !self.received_chunks.iter().any(|c| c.chunk_index == i as u8) {
+            if !self
+                .received_chunks
+                .iter()
+                .any(|c| c.chunk_index == i as u8)
+            {
                 has_all_data = false;
                 break;
             }
@@ -215,7 +226,11 @@ impl FecDecoder {
         if has_all_data {
             let mut payload = Vec::with_capacity(self.k * chunk_size);
             for i in 0..self.k {
-                let chunk = self.received_chunks.iter().find(|c| c.chunk_index == i as u8).unwrap();
+                let chunk = self
+                    .received_chunks
+                    .iter()
+                    .find(|c| c.chunk_index == i as u8)
+                    .unwrap();
                 payload.extend_from_slice(&chunk.data);
             }
             payload.truncate(self.original_len);
@@ -326,7 +341,9 @@ mod tests {
             }
         }
 
-        let reconstructed = decoder.decode().expect("Failed to decode with 25% packet loss");
+        let reconstructed = decoder
+            .decode()
+            .expect("Failed to decode with 25% packet loss");
         assert_eq!(reconstructed, payload);
     }
 }

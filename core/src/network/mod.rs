@@ -7,27 +7,27 @@
 //! - DHT for decentralized storage
 
 mod config;
-mod peer;
-mod routing;
-mod transport;
 pub mod control;
-pub mod node;
-pub mod onion;
 pub mod dummy_traffic;
+pub mod fec;
 pub mod gossip;
 pub mod libp2p_transport;
 pub mod lora_bridge;
-pub mod fec;
+pub mod node;
+pub mod onion;
+mod peer;
+mod routing;
 pub mod sybil;
+mod transport;
 
 pub use config::NetworkConfig;
-pub use peer::{Peer, PeerId, PeerInfo};
-pub use routing::{OnionRouter, Route};
-pub use transport::Transport;
+pub use fec::{FecChunk, FecDecoder, FecEncoder};
 pub use libp2p_transport::Libp2pTransport;
 pub use node::Node;
-pub use fec::{FecEncoder, FecDecoder, FecChunk};
+pub use peer::{Peer, PeerId, PeerInfo};
+pub use routing::{OnionRouter, Route};
 pub use sybil::SybilGuard;
+pub use transport::Transport;
 
 use thiserror::Error;
 
@@ -86,8 +86,15 @@ pub const ONION_PATH_LENGTH: usize = 3;
 pub fn append_log(data_dir: &std::path::Path, line: &str) {
     use std::io::Write;
     let path = data_dir.join("DEBUG_TRACE.txt");
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
-        let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         let _ = writeln!(f, "[{}] {}", ts, line);
     }
 }

@@ -15,9 +15,9 @@
 pub mod block;
 pub mod chain;
 pub mod consensus;
-pub mod transaction;
-pub mod store;
 pub mod serde_utils;
+pub mod store;
+pub mod transaction;
 
 use thiserror::Error;
 

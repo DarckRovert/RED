@@ -73,7 +73,7 @@ runTest('4. Red Blockchain: checked_div y agrupación de dígitos en blockchain'
     const serdeUtils = readFileNorm(path.join(rootDir, 'blockchain', 'src', 'serde_utils.rs'));
 
     assert(chainLib.includes('1_000_000_000_000'));
-    assert(consensus.includes('.checked_div(total_slots).unwrap_or(100)'));
+    assert(consensus.includes('.checked_div(total_slots)') && consensus.includes('.unwrap_or(100)'));
     assert(serdeUtils.includes('for (i, item) in array.iter_mut().enumerate()'));
 });
 

@@ -2,18 +2,23 @@
 
 use async_trait::async_trait;
 use libp2p::{
+    autonat, dcutr,
     futures::StreamExt,
-    gossipsub, identify, kad, mdns, noise, swarm::{NetworkBehaviour, SwarmEvent}, tcp, yamux, Multiaddr,
-    autonat, dcutr, relay
+    gossipsub, identify, kad, mdns, noise, relay,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux, Multiaddr,
 };
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::{info, warn, error, debug};
+use tracing::{debug, error, info, warn};
 
-use super::{NetworkError, NetworkResult, PeerId, transport::{Transport, TransportMessage}};
+use super::{
+    transport::{Transport, TransportMessage},
+    NetworkError, NetworkResult, PeerId,
+};
 
 /// Behaviour for our libp2p stack
 #[derive(NetworkBehaviour)]
@@ -53,7 +58,10 @@ enum TransportCommand {
     SendMessage(PeerId, TransportMessage),
     Disconnect(PeerId),
     /// GAP-2 FIX: channel to await the real DHT result
-    Resolve(crate::identity::IdentityHash, mpsc::Sender<NetworkResult<PeerId>>),
+    Resolve(
+        crate::identity::IdentityHash,
+        mpsc::Sender<NetworkResult<PeerId>>,
+    ),
     GetKnownPeers(mpsc::Sender<Vec<crate::network::PeerInfo>>),
     StartProviding,
     DisconnectWanPeers,
@@ -79,18 +87,21 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
 impl Libp2pTransport {
     /// Create a new libp2p transport
     pub fn new(
-        secret_key_bytes: [u8; 32], 
-        data_dir: Option<std::path::PathBuf>, 
+        secret_key_bytes: [u8; 32],
+        data_dir: Option<std::path::PathBuf>,
         bootstrap_nodes: Vec<Multiaddr>,
         blackout_mode: Arc<std::sync::atomic::AtomicBool>,
-        blocked_wan_peers: Arc<std::sync::atomic::AtomicUsize>
+        blocked_wan_peers: Arc<std::sync::atomic::AtomicUsize>,
     ) -> NetworkResult<Self> {
         let local_key = libp2p::identity::Keypair::ed25519_from_bytes(secret_key_bytes)
             .map_err(|e| NetworkError::TransportError(e.to_string()))?;
         let peer_id = local_key.public().to_peer_id();
-        
+
         if let Some(ref dir) = data_dir {
-            crate::network::append_log(dir, &format!("[libp2p] Initializing transport with PeerId: {}", peer_id));
+            crate::network::append_log(
+                dir,
+                &format!("[libp2p] Initializing transport with PeerId: {}", peer_id),
+            );
         }
 
         let mut yamux_config = yamux::Config::default();
@@ -100,23 +111,24 @@ impl Libp2pTransport {
         #[cfg(not(target_os = "android"))]
         let swarm_builder = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
             .with_tokio()
-            .with_tcp(
-                tcp::Config::default(),
-                noise::Config::new,
-                move || yamux_config.clone(),
-            ).map_err(|e| NetworkError::TransportError(e.to_string()))?
-            .with_dns().map_err(|e| NetworkError::TransportError(e.to_string()))?
-            .with_relay_client(noise::Config::new, move || yamux_relay.clone()).map_err(|e| NetworkError::TransportError(e.to_string()))?;
+            .with_tcp(tcp::Config::default(), noise::Config::new, move || {
+                yamux_config.clone()
+            })
+            .map_err(|e| NetworkError::TransportError(e.to_string()))?
+            .with_dns()
+            .map_err(|e| NetworkError::TransportError(e.to_string()))?
+            .with_relay_client(noise::Config::new, move || yamux_relay.clone())
+            .map_err(|e| NetworkError::TransportError(e.to_string()))?;
 
         #[cfg(target_os = "android")]
         let swarm_builder = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
             .with_tokio()
-            .with_tcp(
-                tcp::Config::default(),
-                noise::Config::new,
-                move || yamux_config.clone(),
-            ).map_err(|e| NetworkError::TransportError(e.to_string()))?
-            .with_relay_client(noise::Config::new, move || yamux_relay.clone()).map_err(|e| NetworkError::TransportError(e.to_string()))?;
+            .with_tcp(tcp::Config::default(), noise::Config::new, move || {
+                yamux_config.clone()
+            })
+            .map_err(|e| NetworkError::TransportError(e.to_string()))?
+            .with_relay_client(noise::Config::new, move || yamux_relay.clone())
+            .map_err(|e| NetworkError::TransportError(e.to_string()))?;
 
         let mut swarm = swarm_builder
             .with_behaviour(|key, relay_client| {
@@ -136,13 +148,11 @@ impl Libp2pTransport {
                 kademlia.set_mode(Some(kad::Mode::Server));
                 let identify = identify::Behaviour::new(
                     identify::Config::new("/red/1.0.0".to_string(), key.public())
-                        .with_agent_version(format!("RED-Node/{}", env!("CARGO_PKG_VERSION")))
+                        .with_agent_version(format!("RED-Node/{}", env!("CARGO_PKG_VERSION"))),
                 );
 
-                let autonat = autonat::Behaviour::new(
-                    key.public().to_peer_id(),
-                    autonat::Config::default()
-                );
+                let autonat =
+                    autonat::Behaviour::new(key.public().to_peer_id(), autonat::Config::default());
 
                 let dcutr = dcutr::Behaviour::new(key.public().to_peer_id());
 
@@ -160,21 +170,26 @@ impl Libp2pTransport {
                     // We use a shorter query interval to speed up discovery when nodes come online.
                     mdns: mdns::tokio::Behaviour::new(
                         mdns::Config {
-                            query_interval: Duration::from_secs(5), 
+                            query_interval: Duration::from_secs(5),
                             ttl: Duration::from_secs(60),
                             ..Default::default()
                         },
                         key.public().to_peer_id(),
-                    ).map_err(std::io::Error::other)?,
+                    )
+                    .map_err(std::io::Error::other)?,
                 })
-            }).map_err(|e| NetworkError::TransportError(e.to_string()))?
+            })
+            .map_err(|e| NetworkError::TransportError(e.to_string()))?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 
         // Configure Kademlia and Dial Bootstraps
         for addr in &bootstrap_nodes {
             if let Some(libp2p::multiaddr::Protocol::P2p(peer_id)) = addr.iter().last() {
-                swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .add_address(&peer_id, addr.clone());
                 if let Err(e) = swarm.dial(addr.clone()) {
                     warn!("[libp2p] Failed to dial bootstrap node {}: {:?}", addr, e);
                 } else {
@@ -192,24 +207,37 @@ impl Libp2pTransport {
 
         // Subscribe to messages topic and routing topic
         let topic = gossipsub::IdentTopic::new("red-messages");
-        swarm.behaviour_mut().gossipsub.subscribe(&topic)
-            .map_err(|e: libp2p::gossipsub::SubscriptionError| NetworkError::TransportError(e.to_string()))?;
-        
+        swarm.behaviour_mut().gossipsub.subscribe(&topic).map_err(
+            |e: libp2p::gossipsub::SubscriptionError| NetworkError::TransportError(e.to_string()),
+        )?;
+
         // GAP-3 FIX: Also subscribe to routing topic for onion packets
         let routing_topic = gossipsub::IdentTopic::new("red-routing");
-        swarm.behaviour_mut().gossipsub.subscribe(&routing_topic)
-            .map_err(|e: libp2p::gossipsub::SubscriptionError| NetworkError::TransportError(e.to_string()))?;
+        swarm
+            .behaviour_mut()
+            .gossipsub
+            .subscribe(&routing_topic)
+            .map_err(|e: libp2p::gossipsub::SubscriptionError| {
+                NetworkError::TransportError(e.to_string())
+            })?;
 
         // Handshake topic for exchanging node keys and identities
         let handshake_topic = gossipsub::IdentTopic::new("red-handshake");
-        swarm.behaviour_mut().gossipsub.subscribe(&handshake_topic)
-            .map_err(|e: libp2p::gossipsub::SubscriptionError| NetworkError::TransportError(e.to_string()))?;
+        swarm
+            .behaviour_mut()
+            .gossipsub
+            .subscribe(&handshake_topic)
+            .map_err(|e: libp2p::gossipsub::SubscriptionError| {
+                NetworkError::TransportError(e.to_string())
+            })?;
 
         let (cmd_tx, mut cmd_rx) = mpsc::channel(100);
         let (msg_tx, msg_rx) = mpsc::channel(100);
-        let known_peers: Arc<Mutex<Vec<crate::network::PeerInfo>>> = Arc::new(Mutex::new(Vec::new()));
-        let connected_peers_set: Arc<Mutex<HashSet<Vec<u8>>>> = Arc::new(Mutex::new(HashSet::new()));
-        
+        let known_peers: Arc<Mutex<Vec<crate::network::PeerInfo>>> =
+            Arc::new(Mutex::new(Vec::new()));
+        let connected_peers_set: Arc<Mutex<HashSet<Vec<u8>>>> =
+            Arc::new(Mutex::new(HashSet::new()));
+
         let known_peers_clone = known_peers.clone();
         let connected_clone = connected_peers_set.clone();
         let log_dir = data_dir.clone();
@@ -227,13 +255,17 @@ impl Libp2pTransport {
                     if let Ok(IpAddr::V4(ipv4)) = get_local_ip() {
                         let octets = ipv4.octets();
                         for i in (octets[3].saturating_sub(5))..=(octets[3].saturating_add(5)) {
-                            if i == octets[3] { continue; }
+                            if i == octets[3] {
+                                continue;
+                            }
                             let target_ip = Ipv4Addr::new(octets[0], octets[1], octets[2], i);
-                            
+
                             // GAP-42 FIX: Try both current (7331) and legacy (4556) ports for cross-version compatibility
                             for port in [7331, 4556] {
-                                let target_ma: Multiaddr = format!("/ip4/{}/tcp/{}", target_ip, port).parse().unwrap();
-                                let _ = cmd_tx_loop.send(TransportCommand::Connect(target_ma)).await;
+                                let target_ma: Multiaddr =
+                                    format!("/ip4/{}/tcp/{}", target_ip, port).parse().unwrap();
+                                let _ =
+                                    cmd_tx_loop.send(TransportCommand::Connect(target_ma)).await;
                             }
                         }
                     }
@@ -246,11 +278,14 @@ impl Libp2pTransport {
 
         // Spawn the swarm event loop
         tokio::spawn(async move {
-            let mut pending_resolves: std::collections::HashMap<kad::QueryId, (PeerId, mpsc::Sender<NetworkResult<PeerId>>)> = std::collections::HashMap::new();
-            
+            let mut pending_resolves: std::collections::HashMap<
+                kad::QueryId,
+                (PeerId, mpsc::Sender<NetworkResult<PeerId>>),
+            > = std::collections::HashMap::new();
+
             // Heartbeat to keep provider record alive
             let mut provider_interval = tokio::time::interval(Duration::from_secs(300));
-            
+
             loop {
                 tokio::select! {
                     _ = provider_interval.tick() => {
@@ -267,10 +302,10 @@ impl Libp2pTransport {
                                 for addr in info.listen_addrs {
                                     debug!("[libp2p] Identify: peer {} at {}", peer_id, addr);
                                     swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
-                                    
+
                                     // GAP-1 FIX: Insert the full PeerId bytes (usually ~38 bytes)
                                     connected_clone.lock().unwrap().insert(peer_id.to_bytes());
-                                    
+
                                     let mut kp = known_peers_clone.lock().unwrap();
                                     let target_id_bytes = {
                                         let b = peer_id.to_bytes();
@@ -447,7 +482,7 @@ impl Libp2pTransport {
                                     info!("[mDNS] Peer discovered: {} at {}", peer_id, addr);
                                     swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
                                     swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
-                                    
+
                                     // Robust entry into connected set
                                     connected_clone.lock().unwrap().insert(peer_id.to_bytes());
                                     let mut kp = known_peers_clone.lock().unwrap();
@@ -530,7 +565,7 @@ impl Libp2pTransport {
                                 }
                                 TransportCommand::Resolve(hash, tx) => {
                                     let peer_id = PeerId::from_bytes(*hash.as_bytes());
-                                    // To query Kademlia, we need libp2p::PeerId. 
+                                    // To query Kademlia, we need libp2p::PeerId.
                                     // Our custom PeerId holds the raw bytes, so we can convert it:
                                     if let Ok(libp2p_peer_id) = libp2p::PeerId::from_bytes(&peer_id.as_bytes()[..]) {
                                         let query_id = swarm.behaviour_mut().kademlia.get_providers(kad::RecordKey::new(&libp2p_peer_id.to_bytes()));
@@ -582,15 +617,23 @@ impl Transport for Libp2pTransport {
         let multiaddr: Multiaddr = format!("/ip4/{}/tcp/{}", addr.ip(), addr.port())
             .parse()
             .map_err(|e: libp2p::multiaddr::Error| NetworkError::TransportError(e.to_string()))?;
-        
-        // GAP-19 FIX: In addition to the requested IP (often 0.0.0.0), we attempt to 
+
+        // GAP-19 FIX: In addition to the requested IP (often 0.0.0.0), we attempt to
         // find and announce the REAL external IP of the device to the swarm.
         // This ensures other devices on the WiFi see a routable address in mDNS packets.
         if addr.ip().is_unspecified() {
             if let Ok(local_ip) = get_local_ip() {
-                let external_ma: Multiaddr = format!("/ip4/{}/tcp/{}", local_ip, addr.port()).parse().unwrap();
-                let _ = self.cmd_tx.send(TransportCommand::Listen(external_ma)).await;
-                info!("[libp2p] Also listening on external IP for mDNS: {}", local_ip);
+                let external_ma: Multiaddr = format!("/ip4/{}/tcp/{}", local_ip, addr.port())
+                    .parse()
+                    .unwrap();
+                let _ = self
+                    .cmd_tx
+                    .send(TransportCommand::Listen(external_ma))
+                    .await;
+                info!(
+                    "[libp2p] Also listening on external IP for mDNS: {}",
+                    local_ip
+                );
             }
         }
 
@@ -600,14 +643,18 @@ impl Transport for Libp2pTransport {
     }
 
     async fn connect(&self, addr: SocketAddr) -> NetworkResult<PeerId> {
-        let multiaddr: Multiaddr = format!("/ip4/{}/tcp/{}", addr.ip(), addr.port()).parse().unwrap();
+        let multiaddr: Multiaddr = format!("/ip4/{}/tcp/{}", addr.ip(), addr.port())
+            .parse()
+            .unwrap();
         let _ = self.cmd_tx.send(TransportCommand::Connect(multiaddr)).await;
         // Mocking PeerId for now as connect returns immediately in this async model
         Ok(PeerId::from_bytes([0u8; 32]))
     }
 
     async fn connect_multiaddr(&self, addr: Multiaddr) -> NetworkResult<()> {
-        self.cmd_tx.send(TransportCommand::Connect(addr)).await
+        self.cmd_tx
+            .send(TransportCommand::Connect(addr))
+            .await
             .map_err(|e| NetworkError::TransportError(e.to_string()))
     }
 
@@ -617,17 +664,24 @@ impl Transport for Libp2pTransport {
     }
 
     async fn disconnect(&self, peer_id: &PeerId) -> NetworkResult<()> {
-        let _ = self.cmd_tx.send(TransportCommand::Disconnect(peer_id.clone())).await;
+        let _ = self
+            .cmd_tx
+            .send(TransportCommand::Disconnect(peer_id.clone()))
+            .await;
         Ok(())
     }
 
     async fn send(&self, peer_id: &PeerId, message: TransportMessage) -> NetworkResult<()> {
-        let _ = self.cmd_tx.send(TransportCommand::SendMessage(peer_id.clone(), message)).await;
+        let _ = self
+            .cmd_tx
+            .send(TransportCommand::SendMessage(peer_id.clone(), message))
+            .await;
         Ok(())
     }
 
     async fn receive(&self) -> NetworkResult<(PeerId, TransportMessage)> {
-        let mut rx: tokio::sync::MutexGuard<'_, mpsc::Receiver<(PeerId, TransportMessage)>> = self.msg_rx.lock().await;
+        let mut rx: tokio::sync::MutexGuard<'_, mpsc::Receiver<(PeerId, TransportMessage)>> =
+            self.msg_rx.lock().await;
         match rx.recv().await {
             Some(msg) => Ok(msg),
             None => Err(NetworkError::NotInitialized),
@@ -637,7 +691,9 @@ impl Transport for Libp2pTransport {
     fn connected_peers(&self) -> Vec<PeerId> {
         // GAP-1 FIX: libp2p PeerIds are multihash-encoded and are 38+ bytes, NOT 32.
         // We use prefix-based matching and storage to avoid exclusion.
-        self.connected_peers.lock().unwrap()
+        self.connected_peers
+            .lock()
+            .unwrap()
             .iter()
             .filter(|bytes| !bytes.is_empty())
             .map(|bytes| {
@@ -656,15 +712,23 @@ impl Transport for Libp2pTransport {
     fn is_connected(&self, peer_id: &PeerId) -> bool {
         // FIX: Use prefix matching since libp2p PeerIds are longer than our 32-byte PeerId wrapper.
         let target = peer_id.as_bytes();
-        self.connected_peers.lock().unwrap()
+        self.connected_peers
+            .lock()
+            .unwrap()
             .iter()
             .any(|bytes| bytes.starts_with(target) || target.starts_with(bytes.as_slice()))
     }
 
     async fn resolve(&self, id: &crate::identity::IdentityHash) -> NetworkResult<PeerId> {
-        let (tx, mut rx): (mpsc::Sender<NetworkResult<PeerId>>, mpsc::Receiver<NetworkResult<PeerId>>) = mpsc::channel(1);
-        let _ = self.cmd_tx.send(TransportCommand::Resolve(id.clone(), tx)).await;
-        
+        let (tx, mut rx): (
+            mpsc::Sender<NetworkResult<PeerId>>,
+            mpsc::Receiver<NetworkResult<PeerId>>,
+        ) = mpsc::channel(1);
+        let _ = self
+            .cmd_tx
+            .send(TransportCommand::Resolve(id.clone(), tx))
+            .await;
+
         // Wait up to 10 seconds for DHT result
         match tokio::time::timeout(Duration::from_secs(10), rx.recv()).await {
             Ok(Some(result)) => result,
@@ -683,7 +747,7 @@ impl Transport for Libp2pTransport {
 fn get_local_ip() -> std::io::Result<IpAddr> {
     use std::net::UdpSocket;
     let socket = UdpSocket::bind("0.0.0.0:0")?;
-    // We don't actually send anything; we just connect to trigger the OS 
+    // We don't actually send anything; we just connect to trigger the OS
     // to choose the appropriate local interface for the "internet" routing.
     socket.connect("8.8.8.8:80")?;
     Ok(socket.local_addr()?.ip())

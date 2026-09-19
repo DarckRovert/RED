@@ -261,7 +261,7 @@ export default function Sidebar() {
                 { icon: "✨", label: t('tactical_hubs.tool_celestial_pdr'), action: "celestialPdr" },
                 { icon: "🦇", label: t('tactical_hubs.tool_sonar_seismic'), action: "sonarSeismic" },
                 { icon: "🦊", label: t('tactical_hubs.tool_foxhunt'), action: "tacticalFoxhunt" },
-                { icon: "👻", label: "Ghost GPS Señuelo", action: "tacticalGhostGps" },
+                { icon: "👻", label: t('tactical_hubs.tool_ghost_gps') || "Ghost GPS Señuelo", action: "tacticalGhostGps" },
                 { icon: "📳", label: t('tactical_hubs.tool_shake_pair'), action: "shakePair" },
                 { icon: "🌊", label: t('tactical_hubs.tool_proximity_wave'), action: "proximityWave" },
                 { icon: "📡", label: t('tactical_hubs.tool_nearby'), action: "nearby" },
@@ -292,6 +292,7 @@ export default function Sidebar() {
             badgeColor: "#00E5FF",
             tools: [
                 { icon: "🤖", label: t('tactical_hubs.tool_copilot'), action: "aiCopilot" },
+                { icon: "🧬", label: t('tactical_hubs.tool_connectome'), action: "maleCnsConnectome" },
                 { icon: "👁️", label: t('tactical_hubs.tool_tactical_vision'), action: "tacticalVisionScan" },
                 { icon: "⚡", label: t('tactical_hubs.tool_c4isr_drill'), action: "c4isrEmpDrill" },
                 { icon: "🛡️", label: t('tactical_hubs.tool_guardian'), action: "guardian" },
@@ -329,6 +330,7 @@ export default function Sidebar() {
             badge: `DEFCON ${shieldTelemetry.currentDefcon}`,
             badgeColor: shieldTelemetry.activeProfile?.color || (shieldTelemetry.currentDefcon === 1 ? 'var(--accent-crimson)' : shieldTelemetry.currentDefcon === 2 ? '#FF8008' : shieldTelemetry.currentDefcon === 3 ? '#FFB300' : shieldTelemetry.currentDefcon === 5 ? '#00E676' : '#00E5FF'),
             tools: [
+                { icon: "🛡️", label: t('tactical_hubs.tool_sovereign_shield') || "Sovereign Shield", action: "sovereignShield" },
                 { icon: "🛡️", label: t('tactical_hubs.tool_global_shield'), action: "globalShield" },
                 { icon: "☢️", label: t('tactical_hubs.tool_cbrn'), action: "cbrnSatellite" },
                 { icon: "⚡", label: t('tactical_hubs.tool_blackout'), action: "blackout" },
@@ -369,8 +371,8 @@ export default function Sidebar() {
             tools: [
                 { icon: "🛒", label: t('tactical_hubs.tool_app_store'), action: "appStore" },
                 { icon: "🌐", label: t('tactical_hubs.tool_hyper_browser'), action: "hyperBrowser" },
-                { icon: "⚡", label: "Túnel Zero-Rating", action: "cyberTunnel" },
-                { icon: "⚡", label: t('tactical_hubs.tool_c4isr_drill'), action: "commandCenter" },
+                { icon: "⚡", label: t('tactical_hubs.tool_cyber_tunnel') || "Túnel Zero-Rating", action: "cyberTunnel" },
+                { icon: "⚡", label: t('tactical_hubs.tool_command_center') || "Centro de Mando C4ISR", action: "commandCenter" },
                 { icon: "📊", label: t('tactical_hubs.tool_system_health'), action: "health" },
                 { icon: "📋", label: t('tactical_hubs.tool_node_logs'), action: "nodeLogs" },
                 { icon: "⚙️", label: t('tactical_hubs.tool_settings'), action: "settings" },

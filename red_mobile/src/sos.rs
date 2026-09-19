@@ -22,7 +22,11 @@ impl SosStore {
         }
     }
 
-    pub fn emit_sos(&self, identity: &red_core::identity::Identity, req: SosReportRequest) -> SosBeacon {
+    pub fn emit_sos(
+        &self,
+        identity: &red_core::identity::Identity,
+        req: SosReportRequest,
+    ) -> SosBeacon {
         let sender_did = identity.identity_hash().to_hex();
         let id = format!(
             "sos_{}_{}",
@@ -30,8 +34,11 @@ impl SosStore {
             &sender_did[..8.min(sender_did.len())]
         );
         let timestamp = Utc::now().timestamp();
-        
-        let payload = format!("{}{}{}{}{}", sender_did, req.lat, req.lon, req.battery_level, req.note);
+
+        let payload = format!(
+            "{}{}{}{}{}",
+            sender_did, req.lat, req.lon, req.battery_level, req.note
+        );
         let signature_bytes = identity.sign(payload.as_bytes());
         let signature = hex::encode(signature_bytes);
 
@@ -49,7 +56,10 @@ impl SosStore {
             signature,
         };
 
-        self.beacons.write().unwrap_or_else(|e| e.into_inner()).insert(id, beacon.clone());
+        self.beacons
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, beacon.clone());
         beacon
     }
 

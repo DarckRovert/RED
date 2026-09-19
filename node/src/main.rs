@@ -1,4 +1,14 @@
-#![allow(dead_code, unused_imports, missing_docs, unused_variables, deprecated, clippy::manual_strip, clippy::unnecessary_sort_by, clippy::needless_range_loop, clippy::manual_flatten)]
+#![allow(
+    dead_code,
+    unused_imports,
+    missing_docs,
+    unused_variables,
+    deprecated,
+    clippy::manual_strip,
+    clippy::unnecessary_sort_by,
+    clippy::needless_range_loop,
+    clippy::manual_flatten
+)]
 //! RED Network Node
 //!
 //! A full node for the RED decentralized messaging network.
@@ -12,20 +22,20 @@ mod amber_authority;
 mod api;
 mod auth;
 mod battery;
+pub mod blind_relay;
 mod channels;
 mod chunker;
 mod discovery;
 mod dns_tunnel;
 mod ephemeral;
 mod guardian;
+pub mod lora_pnp;
 mod rate_limit;
 mod sanitizer;
+mod social;
 mod sos;
 mod voice;
 mod weather;
-mod social;
-pub mod blind_relay;
-pub mod lora_pnp;
 
 use clap::{Parser, Subcommand};
 use red_core::crypto::hashing::derive_symmetric_key;
@@ -180,7 +190,11 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Status) => {
             show_status(data_dir).await?;
         }
-        Some(Commands::Relay { port, max_peers, host }) => {
+        Some(Commands::Relay {
+            port,
+            max_peers,
+            host,
+        }) => {
             let addr: std::net::SocketAddr = format!("{}:{}", host, port)
                 .parse()
                 .map_err(|e| anyhow::anyhow!("Invalid host/port '{}:{}': {}", host, port, e))?;
@@ -218,15 +232,11 @@ fn open_browser_dashboard(url: &str) {
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("open")
-            .arg(url)
-            .spawn();
+        let _ = std::process::Command::new("open").arg(url).spawn();
     }
     #[cfg(target_os = "linux")]
     {
-        let _ = std::process::Command::new("xdg-open")
-            .arg(url)
-            .spawn();
+        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
     }
 }
 
@@ -255,14 +265,21 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         let mut s = storage.lock().await;
         match s.get_identity() {
             Some(id) => {
-                info!("Loaded existing sovereign identity: did:red:{}", id.identity_hash().to_hex());
+                info!(
+                    "Loaded existing sovereign identity: did:red:{}",
+                    id.identity_hash().to_hex()
+                );
                 id
             }
             None => {
                 info!("No previous identity found. Generating new sovereign identity...");
-                let new_id = Identity::generate().map_err(|e| anyhow::anyhow!("Failed to generate identity: {}", e))?;
+                let new_id = Identity::generate()
+                    .map_err(|e| anyhow::anyhow!("Failed to generate identity: {}", e))?;
                 s.set_identity(new_id.clone())?;
-                info!("Generated and saved new sovereign identity: did:red:{}", new_id.identity_hash().to_hex());
+                info!(
+                    "Generated and saved new sovereign identity: did:red:{}",
+                    new_id.identity_hash().to_hex()
+                );
                 new_id
             }
         }
@@ -380,7 +397,8 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     tokio::spawn(async move {
         // En Linux, el puerto 53 requiere root. En desarrollo usamos 5353
         let port = if std::env::var("RED_DNS_PORT").is_ok() {
-            std::env::var("RED_DNS_PORT").ok()
+            std::env::var("RED_DNS_PORT")
+                .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(5353)
         } else {
@@ -427,25 +445,26 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                     e
                 );
                 let fallback = data_dir_amber.join("amber_fallback");
-                std::sync::Arc::new(
-                    match amber::AmberStore::open(&fallback) {
-                        Ok(s) => s,
-                        Err(e2) => {
-                            error!("❌ AmberStore fallback también falló: {} — continuando sin persistencia AMBER", e2);
-                            // Crear directorio de último recurso
-                            let last_resort = std::env::temp_dir().join("red_amber_emergency");
-                            amber::AmberStore::open(&last_resort)
-                                .expect("[FATAL] No se pudo abrir AmberStore en ninguna ruta")
-                        }
+                std::sync::Arc::new(match amber::AmberStore::open(&fallback) {
+                    Ok(s) => s,
+                    Err(e2) => {
+                        error!("❌ AmberStore fallback también falló: {} — continuando sin persistencia AMBER", e2);
+                        // Crear directorio de último recurso
+                        let last_resort = std::env::temp_dir().join("red_amber_emergency");
+                        amber::AmberStore::open(&last_resort)
+                            .expect("[FATAL] No se pudo abrir AmberStore en ninguna ruta")
                     }
-                )
+                })
             }
         };
 
         let shared_sled = match sled::open(data_dir_amber.join("sled_db")) {
             Ok(db) => std::sync::Arc::new(db),
             Err(e) => {
-                error!("❌ Error abriendo sled_db: {} — creando DB temporal en memoria", e);
+                error!(
+                    "❌ Error abriendo sled_db: {} — creando DB temporal en memoria",
+                    e
+                );
                 // sled no tiene modo in-memory puro; intentar un directorio temporal
                 let tmp = std::env::temp_dir().join("red_sled_emergency");
                 std::sync::Arc::new(sled::open(&tmp).unwrap_or_else(|e2| {
@@ -455,13 +474,17 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         };
 
         let sos_store = std::sync::Arc::new(sos::SosStore::new(Some(shared_sled.clone())));
-        let channel_store = std::sync::Arc::new(channels::ChannelStore::new(Some(shared_sled.clone())));
+        let channel_store =
+            std::sync::Arc::new(channels::ChannelStore::new(Some(shared_sled.clone())));
         let chunker = std::sync::Arc::new(chunker::ChunkerEngine::new());
         let voice_store = std::sync::Arc::new(voice::VoiceStore::new(Some(shared_sled.clone())));
 
-        let discovery = std::sync::Arc::new(discovery::DiscoveryEngine::new(Some((*shared_sled).clone())));
+        let discovery = std::sync::Arc::new(discovery::DiscoveryEngine::new(Some(
+            (*shared_sled).clone(),
+        )));
         let ephemeral = std::sync::Arc::new(ephemeral::EphemeralPurgeEngine::new());
-        let battery = std::sync::Arc::new(battery::BatteryOptimizer::new(Some((*shared_sled).clone())));
+        let battery =
+            std::sync::Arc::new(battery::BatteryOptimizer::new(Some((*shared_sled).clone())));
         let ai_summarizer = std::sync::Arc::new(ai_summarizer::AISummarizerEngine::new());
         let ai_translator = std::sync::Arc::new(ai_translator::AITranslatorEngine::new());
 
@@ -470,11 +493,18 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         let token_path = data_dir_amber.join("session.token");
         let session_token = if let Ok(existing) = std::fs::read_to_string(&token_path) {
             let tok = existing.trim().to_string();
-            if tok.len() == 64 { tok } else { generate_session_token(&token_path) }
+            if tok.len() == 64 {
+                tok
+            } else {
+                generate_session_token(&token_path)
+            }
         } else {
             generate_session_token(&token_path)
         };
-        info!("🔑 Token de sesión local listo ({}...)", &session_token[..8]);
+        info!(
+            "🔑 Token de sesión local listo ({}...)",
+            &session_token[..8]
+        );
 
         let state = ApiState {
             node: http_node.clone(),
@@ -489,7 +519,9 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             channel_store,
             chunker,
             voice_store,
-            weather_store: std::sync::Arc::new(weather::WeatherStore::new(Some((*shared_sled).clone()))),
+            weather_store: std::sync::Arc::new(weather::WeatherStore::new(Some(
+                (*shared_sled).clone(),
+            ))),
             discovery,
             ephemeral,
             battery,
@@ -524,47 +556,65 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                             social_store_clone.insert_post(post);
                         }
                     }
-                } else if let red_core::protocol::MessageType::WeatherReport(payload) = &msg.content {
+                } else if let red_core::protocol::MessageType::WeatherReport(payload) = &msg.content
+                {
                     if let Ok(report) = serde_json::from_slice::<weather::WeatherReport>(payload) {
                         weather_store_clone.add_report_raw(report);
                     }
                 } else if let red_core::protocol::MessageType::Text(text) = &msg.content {
                     if let Ok(val) = serde_json::from_str::<serde_json::Value>(text) {
-                        if val.get("msg_type").and_then(|v| v.as_str()) == Some("voice_burst_delete") {
-                            let burst_id = val.get("burst_id")
+                        if val.get("msg_type").and_then(|v| v.as_str())
+                            == Some("voice_burst_delete")
+                        {
+                            let burst_id = val
+                                .get("burst_id")
                                 .or_else(|| val.get("id"))
                                 .and_then(|v| v.as_str());
                             if let Some(id) = burst_id {
                                 voice_store_clone.delete_burst(id);
                             }
-                        } else if val.get("msg_type").and_then(|v| v.as_str()) == Some("voice_burst") || val.get("event_type").and_then(|v| v.as_str()) == Some("voice_burst") {
+                        } else if val.get("msg_type").and_then(|v| v.as_str())
+                            == Some("voice_burst")
+                            || val.get("event_type").and_then(|v| v.as_str()) == Some("voice_burst")
+                        {
                             if let Some(burst_val) = val.get("voice_burst") {
-                                if let Ok(burst) = serde_json::from_value::<voice::VoiceBurst>(burst_val.clone()) {
+                                if let Ok(burst) =
+                                    serde_json::from_value::<voice::VoiceBurst>(burst_val.clone())
+                                {
                                     voice_store_clone.insert_raw_burst(burst);
                                 }
-                            } else if let Some(content_str) = val.get("content").and_then(|c| c.as_str()) {
-                                if let Ok(burst) = serde_json::from_str::<voice::VoiceBurst>(content_str) {
+                            } else if let Some(content_str) =
+                                val.get("content").and_then(|c| c.as_str())
+                            {
+                                if let Ok(burst) =
+                                    serde_json::from_str::<voice::VoiceBurst>(content_str)
+                                {
                                     voice_store_clone.insert_raw_burst(burst);
                                 }
-                            } else if let Ok(burst) = serde_json::from_value::<voice::VoiceBurst>(val.clone()) {
+                            } else if let Ok(burst) =
+                                serde_json::from_value::<voice::VoiceBurst>(val.clone())
+                            {
                                 voice_store_clone.insert_raw_burst(burst);
                             }
                         }
                     }
 
                     // Omitir análisis NLP de Guardian IA en tramas binarias/vectoriales de alta frecuencia
-                    let is_control_or_vector = if let Ok(ref val) = serde_json::from_str::<serde_json::Value>(text) {
-                        val.get("msg_type").and_then(|v| v.as_str()).is_some_and(|t| {
-                            t == "voice_burst"
-                                || t == "voice_burst_delete"
-                                || t == "canvas_stroke"
-                                || t == "canvas_stroke_batch"
-                                || t == "canvas_clear"
-                                || t == "live_frame"
-                        })
-                    } else {
-                        false
-                    };
+                    let is_control_or_vector =
+                        if let Ok(ref val) = serde_json::from_str::<serde_json::Value>(text) {
+                            val.get("msg_type")
+                                .and_then(|v| v.as_str())
+                                .is_some_and(|t| {
+                                    t == "voice_burst"
+                                        || t == "voice_burst_delete"
+                                        || t == "canvas_stroke"
+                                        || t == "canvas_stroke_batch"
+                                        || t == "canvas_clear"
+                                        || t == "live_frame"
+                                })
+                        } else {
+                            false
+                        };
 
                     if !is_control_or_vector {
                         // Escaneo asíncrono con Guardian IA para no congelar el event loop
@@ -573,32 +623,44 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                         let recipient = msg.recipient.clone();
                         let msg_id = msg.id.clone();
                         let text_clone = text.clone();
-                        
+
                         tokio::spawn(async move {
                             let verdict = state_async.guardian.analyze_text(&text_clone).await;
                             if let guardian::GuardianVerdict::Block { reason, .. } = verdict {
                                 // Find conversation ID and obfuscate
                                 let mut n = state_async.node.lock().await;
-                                let conv_id = red_core::protocol::ConversationId::from_participants(&sender, &recipient);
+                                let conv_id = red_core::protocol::ConversationId::from_participants(
+                                    &sender, &recipient,
+                                );
                                 // Se asume 1 a 1 por ahora, o el frontend lo verá igual si mutamos.
-                                let new_content = format!("[Bloqueado por Guardian IA: {}]", reason);
-                                let _ = n.edit_message(&conv_id.to_hex(), &msg_id.to_hex(), new_content).await;
-                                
+                                let new_content =
+                                    format!("[Bloqueado por Guardian IA: {}]", reason);
+                                let _ = n
+                                    .edit_message(&conv_id.to_hex(), &msg_id.to_hex(), new_content)
+                                    .await;
+
                                 // Re-emitir evento para que la UI re-renderice
                                 let mut dummy_msg = msg.clone();
-                                dummy_msg.content = red_core::protocol::MessageType::Text(format!("[Bloqueado por Guardian IA: {}]", reason));
+                                dummy_msg.content = red_core::protocol::MessageType::Text(format!(
+                                    "[Bloqueado por Guardian IA: {}]",
+                                    reason
+                                ));
                                 let _ = state_async.msg_tx.send(dummy_msg);
                             }
                         });
                     }
-                } else if let red_core::protocol::MessageType::ReadReceipt { ref message_ids } = msg.content {
+                } else if let red_core::protocol::MessageType::ReadReceipt { ref message_ids } =
+                    msg.content
+                {
                     // ── ReadReceipt entrante: actualizar status → Read en la BD ────────
                     let state_async = state_for_loop.clone();
                     let message_ids_clone = message_ids.clone();
                     let sender_clone = msg.sender.clone();
                     tokio::spawn(async move {
                         let n = state_async.node.lock().await;
-                        let _ = n.mark_messages_read_by_peer(&sender_clone, &message_ids_clone).await;
+                        let _ = n
+                            .mark_messages_read_by_peer(&sender_clone, &message_ids_clone)
+                            .await;
                     });
                     // SSE handler re-emite como evento `read_receipt` al frontend
                 } else if let red_core::protocol::MessageType::PresenceBeacon { .. } = msg.content {
@@ -618,7 +680,9 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_millis() as u64;
-                    if let Ok(my_hash) = red_core::identity::IdentityHash::from_hex(&my_hash_for_beacon) {
+                    if let Ok(my_hash) =
+                        red_core::identity::IdentityHash::from_hex(&my_hash_for_beacon)
+                    {
                         let peers = {
                             let n = state_beacon.node.lock().await;
                             n.list_peers().await.unwrap_or_default()
@@ -669,11 +733,17 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         let listener = match tokio::net::TcpListener::bind(&http_addr).await {
             Ok(l) => l,
             Err(e) => {
-                error!("❌ Failed to bind HTTP API port {}: {}. A previous instance may be running.", http_addr, e);
+                error!(
+                    "❌ Failed to bind HTTP API port {}: {}. A previous instance may be running.",
+                    http_addr, e
+                );
                 return;
             }
         };
-        info!("Web UI + HTTP API listening on http://{} (LAN & Local)", http_addr);
+        info!(
+            "Web UI + HTTP API listening on http://{} (LAN & Local)",
+            http_addr
+        );
         let _ = axum::serve(
             listener,
             router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
@@ -690,12 +760,27 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     info!("Local API server listening on {} (loopback only)", api_addr);
 
     info!("\n╔═════════════════════════════════════════════════════════════════════════╗");
-    info!("║  🛡️  RED SOVEREIGN NODE v{:<44} ║", env!("CARGO_PKG_VERSION"));
+    info!(
+        "║  🛡️  RED SOVEREIGN NODE v{:<44} ║",
+        env!("CARGO_PKG_VERSION")
+    );
     info!("║                                                                         ║");
-    info!("║  Identidad:       did:red:{:<43} ║", identity.identity_hash().short());
-    info!("║  Puerto P2P:      {:5} (Malla libp2p & Kademlia DHT)                  ║", port);
-    info!("║  Puerto TCP API:  {:5} (Control de Daemon)                            ║", 7332);
-    info!("║  Puerto Web/SSE:  {:5} (REST API & WebRTC Engine)                     ║", 7333);
+    info!(
+        "║  Identidad:       did:red:{:<43} ║",
+        identity.identity_hash().short()
+    );
+    info!(
+        "║  Puerto P2P:      {:5} (Malla libp2p & Kademlia DHT)                  ║",
+        port
+    );
+    info!(
+        "║  Puerto TCP API:  {:5} (Control de Daemon)                            ║",
+        7332
+    );
+    info!(
+        "║  Puerto Web/SSE:  {:5} (REST API & WebRTC Engine)                     ║",
+        7333
+    );
     info!("║                                                                         ║");
     info!("║  🌐 Interfaz Web Soberana:                                              ║");
     info!("║     https://darckrovert.github.io/RED/                                  ║");
@@ -703,17 +788,24 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     info!("║  🔗 Dashboard Local:                                                    ║");
     info!("║     http://127.0.0.1:7333/api/status                                    ║");
     info!("║                                                                         ║");
-    info!("║  Altura de Cadena: {:<5} bloques                                        ║", chain.height());
+    info!(
+        "║  Altura de Cadena: {:<5} bloques                                        ║",
+        chain.height()
+    );
     info!("╚═════════════════════════════════════════════════════════════════════════╝");
 
     let lora_scan = lora_pnp::scan_lora_hardware();
     if let Some(ref dev) = lora_scan.primary_device {
-        info!("📻 [LoRa Plug & Play] Transceptor detectado: {} en {}", dev.chip_name, dev.port_name);
+        info!(
+            "📻 [LoRa Plug & Play] Transceptor detectado: {} en {}",
+            dev.chip_name, dev.port_name
+        );
         let _ = red_core::network::Node::attach_lora_bridge(
             node.clone(),
             dev.port_name.clone(),
             dev.recommended_baud,
-        ).await;
+        )
+        .await;
     } else {
         info!("📻 [LoRa Plug & Play] Monitoreando puertos serie (En espera de transceptor USB)");
     }
@@ -818,7 +910,9 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                 let mut n = node_ref.lock().await;
                                 match n.create_group(name).await {
                                     Ok(group) => {
-                                        if let Ok(resp) = bincode::serialize(&NodeResponse::GroupInfo(group)) {
+                                        if let Ok(resp) =
+                                            bincode::serialize(&NodeResponse::GroupInfo(group))
+                                        {
                                             let _ = socket.write_all(&resp).await;
                                         }
                                     }
@@ -893,7 +987,9 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                 let n = node_ref.lock().await;
                                 match n.generate_pairing_code(name).await {
                                     Ok(code) => {
-                                        if let Ok(resp) = bincode::serialize(&NodeResponse::PairingCode(code)) {
+                                        if let Ok(resp) =
+                                            bincode::serialize(&NodeResponse::PairingCode(code))
+                                        {
                                             let _ = socket.write_all(&resp).await;
                                         }
                                     }
@@ -946,11 +1042,13 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                 let n = node_ref.lock().await;
                                 match n.get_sync_payload().await {
                                     Ok((contacts, groups, conversations)) => {
-                                        if let Ok(resp) = bincode::serialize(&NodeResponse::SyncPayload {
-                                            contacts,
-                                            groups,
-                                            conversations,
-                                        }) {
+                                        if let Ok(resp) =
+                                            bincode::serialize(&NodeResponse::SyncPayload {
+                                                contacts,
+                                                groups,
+                                                conversations,
+                                            })
+                                        {
                                             let _ = socket.write_all(&resp).await;
                                         }
                                     }

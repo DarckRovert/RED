@@ -110,7 +110,7 @@ impl GossipMessage {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        
+
         now.saturating_sub(self.timestamp) > max_age_secs
     }
 }
@@ -252,7 +252,8 @@ impl GossipProtocol {
             // drain oldest entries to ensure memory remains bounded
             if self.seen_cache.len() >= MAX_CACHE_SIZE {
                 let excess = self.seen_cache.len() - (MAX_CACHE_SIZE * 3 / 4);
-                let mut entries: Vec<(MessageId, Instant)> = self.seen_cache
+                let mut entries: Vec<(MessageId, Instant)> = self
+                    .seen_cache
                     .iter()
                     .map(|(k, v)| (k.clone(), v.first_seen))
                     .collect();
@@ -263,20 +264,21 @@ impl GossipProtocol {
             }
         }
 
-        self.seen_cache.insert(id.clone(), CacheEntry {
-            first_seen: Instant::now(),
-            receive_count: 1,
-        });
+        self.seen_cache.insert(
+            id.clone(),
+            CacheEntry {
+                first_seen: Instant::now(),
+                receive_count: 1,
+            },
+        );
     }
 
     /// Cleanup expired cache entries
     pub fn cleanup_cache(&mut self) {
         let duration = self.cache_duration;
-        self.seen_cache.retain(|_, entry| {
-            entry.first_seen.elapsed() < duration
-        });
+        self.seen_cache
+            .retain(|_, entry| entry.first_seen.elapsed() < duration);
     }
-
 
     /// Get current statistics
     pub fn stats(&self) -> &GossipStats {
@@ -328,15 +330,12 @@ pub mod peer_selection {
     use rand::thread_rng;
 
     /// Select random peers for gossip
-    pub fn select_random_peers<T>(
-        peers: &[T],
-        count: usize,
-        exclude: Option<&T>,
-    ) -> Vec<T>
+    pub fn select_random_peers<T>(peers: &[T], count: usize, exclude: Option<&T>) -> Vec<T>
     where
         T: Clone + PartialEq,
     {
-        let mut available: Vec<_> = peers.iter()
+        let mut available: Vec<_> = peers
+            .iter()
             .filter(|p| exclude.map(|e| *p != e).unwrap_or(true))
             .cloned()
             .collect();
@@ -355,9 +354,9 @@ mod tests {
     #[test]
     fn test_broadcast() {
         let mut gossip = GossipProtocol::with_defaults();
-        
+
         let id = gossip.broadcast(b"Hello, World!".to_vec(), None);
-        
+
         assert!(gossip.is_seen(&id));
         assert_eq!(gossip.outbound_queue_size(), 1);
     }
@@ -365,10 +364,10 @@ mod tests {
     #[test]
     fn test_receive_new_message() {
         let mut gossip = GossipProtocol::with_defaults();
-        
+
         let message = GossipMessage::new(b"Test".to_vec(), 5, None);
         let result = gossip.receive(message);
-        
+
         assert_eq!(result, ReceiveResult::AcceptedAndForward);
         assert_eq!(gossip.inbound_queue_size(), 1);
     }
@@ -376,12 +375,12 @@ mod tests {
     #[test]
     fn test_duplicate_filtering() {
         let mut gossip = GossipProtocol::with_defaults();
-        
+
         let message = GossipMessage::new(b"Test".to_vec(), 5, None);
-        
+
         let result1 = gossip.receive(message.clone());
         let result2 = gossip.receive(message);
-        
+
         assert_eq!(result1, ReceiveResult::AcceptedAndForward);
         assert_eq!(result2, ReceiveResult::Duplicate);
         assert_eq!(gossip.stats().duplicates_filtered, 1);
@@ -390,10 +389,10 @@ mod tests {
     #[test]
     fn test_ttl_expiration() {
         let mut gossip = GossipProtocol::with_defaults();
-        
+
         let message = GossipMessage::new(b"Test".to_vec(), 0, None);
         let result = gossip.receive(message);
-        
+
         // TTL 0 means accepted but not forwarded
         assert_eq!(result, ReceiveResult::Accepted);
     }

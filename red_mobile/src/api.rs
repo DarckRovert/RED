@@ -5,31 +5,37 @@
 //! Includes an SSE endpoint for real-time message delivery.
 
 use axum::{
-    extract::{Path, State, Query, ws::{WebSocket, Message as WsMessage, WebSocketUpgrade}},
+    extract::{
+        ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
+        Path, Query, State,
+    },
     http::{header, HeaderValue, StatusCode},
-    response::{IntoResponse, Response, Sse, sse::{Event, KeepAlive}},
+    response::{
+        sse::{Event, KeepAlive},
+        IntoResponse, Response, Sse,
+    },
     routing::{delete, get, post, put},
     Json, Router,
 };
+use futures::{stream::Stream, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use futures::{StreamExt, SinkExt, stream::Stream};
+use std::{convert::Infallible, sync::Arc, sync::OnceLock, time::Duration};
 use subtle::ConstantTimeEq;
-use std::{sync::Arc, sync::OnceLock, convert::Infallible, time::Duration};
 use tokio::sync::{broadcast, Mutex};
 use tower_http::{
-    cors::{CorsLayer, AllowOrigin},
-    trace::TraceLayer,
+    cors::{AllowOrigin, CorsLayer},
     set_header::SetResponseHeaderLayer,
+    trace::TraceLayer,
 };
 
-use red_core::network::Node;
 use red_core::identity::IdentityHash;
+use red_core::network::Node;
 use red_core::protocol::{Message, MessageType};
 
 pub type AsyncState = Arc<Mutex<Option<ApiState>>>;
 
-/// Helper para limpiar el Identity Hash escaneado (QR) 
-/// Helper para limpiar el Identity Hash escaneado (QR) 
+/// Helper para limpiar el Identity Hash escaneado (QR)
+/// Helper para limpiar el Identity Hash escaneado (QR)
 /// y quitar los prefijos "did:red:" o espacios invisibles.
 /// Ahora soporta resolución de Short IDs (8-16 chars) buscando en la tabla de peers.
 fn parse_identity_hash(raw: &str) -> std::result::Result<IdentityHash, String> {
@@ -39,21 +45,22 @@ fn parse_identity_hash(raw: &str) -> std::result::Result<IdentityHash, String> {
     } else if clean.starts_with("red:") {
         clean = &clean[4..];
     }
-    
+
     let parts: Vec<&str> = clean.split(':').collect();
     let hash_part = parts[0].trim();
-    
+
     if hash_part.len() == 64 {
         if let Ok(h) = IdentityHash::from_hex(hash_part) {
             return Ok(h);
         }
     }
-    
+
     if hash_part.len() < 64 && hash_part.len() >= 8 {
         return Err(format!("SHORT_ID:{}", hash_part));
     }
 
-    IdentityHash::from_hex(hash_part).map_err(|_| "Formato HEX inválido o longitud incorrecta".to_string())
+    IdentityHash::from_hex(hash_part)
+        .map_err(|_| "Formato HEX inválido o longitud incorrecta".to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,23 +71,31 @@ pub struct RustLogEntry {
     pub message: String,
 }
 
-static GLOBAL_BOOT_LOGS: std::sync::OnceLock<Arc<std::sync::RwLock<std::collections::VecDeque<RustLogEntry>>>> = std::sync::OnceLock::new();
+static GLOBAL_BOOT_LOGS: std::sync::OnceLock<
+    Arc<std::sync::RwLock<std::collections::VecDeque<RustLogEntry>>>,
+> = std::sync::OnceLock::new();
 
-pub fn get_or_init_global_logs() -> Arc<std::sync::RwLock<std::collections::VecDeque<RustLogEntry>>> {
-    GLOBAL_BOOT_LOGS.get_or_init(|| {
-        let mut initial = std::collections::VecDeque::new();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
-        initial.push_back(RustLogEntry {
-            timestamp: now,
-            level: "INFO".to_string(),
-            target: "red_mobile::core".to_string(),
-            message: format!("Motor Nativo RED Rust v{} inicializado en puerto 7333", env!("CARGO_PKG_VERSION")),
-        });
-        Arc::new(std::sync::RwLock::new(initial))
-    }).clone()
+pub fn get_or_init_global_logs() -> Arc<std::sync::RwLock<std::collections::VecDeque<RustLogEntry>>>
+{
+    GLOBAL_BOOT_LOGS
+        .get_or_init(|| {
+            let mut initial = std::collections::VecDeque::new();
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64;
+            initial.push_back(RustLogEntry {
+                timestamp: now,
+                level: "INFO".to_string(),
+                target: "red_mobile::core".to_string(),
+                message: format!(
+                    "Motor Nativo RED Rust v{} inicializado en puerto 7333",
+                    env!("CARGO_PKG_VERSION")
+                ),
+            });
+            Arc::new(std::sync::RwLock::new(initial))
+        })
+        .clone()
 }
 
 pub fn record_log_sync(level: &str, target: &str, message: &str) {
@@ -125,7 +140,6 @@ pub struct ApiState {
     pub guardian_engine: Arc<crate::guardian::GuardianEngine>,
     pub logs: Arc<std::sync::RwLock<std::collections::VecDeque<RustLogEntry>>>,
 }
-
 
 // ─── Response types ───────────────────────────────────────────────────────────
 
@@ -197,7 +211,7 @@ pub struct MessageItem {
 }
 
 fn map_message_to_item(m: &Message, is_mine: bool) -> MessageItem {
-    use base64::{Engine as _, engine::general_purpose};
+    use base64::{engine::general_purpose, Engine as _};
     let mut item = MessageItem {
         id: m.id.to_hex(),
         sender: m.sender.to_hex(),
@@ -223,10 +237,19 @@ fn map_message_to_item(m: &Message, is_mine: bool) -> MessageItem {
             item.msg_type = "text".to_string();
             item.content = text.clone();
         }
-        MessageType::Image { data, mime_type, width, height } => {
+        MessageType::Image {
+            data,
+            mime_type,
+            width,
+            height,
+        } => {
             item.msg_type = "image".to_string();
             item.content = "[Image]".to_string();
-            item.media_data = Some(format!("data:{};base64,{}", mime_type, general_purpose::STANDARD.encode(data)));
+            item.media_data = Some(format!(
+                "data:{};base64,{}",
+                mime_type,
+                general_purpose::STANDARD.encode(data)
+            ));
             item.mime_type = Some(mime_type.clone());
             item.width = Some(*width);
             item.height = Some(*height);
@@ -234,32 +257,60 @@ fn map_message_to_item(m: &Message, is_mine: bool) -> MessageItem {
         MessageType::Voice { data, duration_ms } => {
             item.msg_type = "voice".to_string();
             item.content = "[Voice Note]".to_string();
-            item.media_data = Some(format!("data:audio/webm;base64,{}", general_purpose::STANDARD.encode(data)));
+            item.media_data = Some(format!(
+                "data:audio/webm;base64,{}",
+                general_purpose::STANDARD.encode(data)
+            ));
             item.duration_ms = Some(*duration_ms);
         }
-        MessageType::Video { data, duration_ms, mime_type, width, height } => {
+        MessageType::Video {
+            data,
+            duration_ms,
+            mime_type,
+            width,
+            height,
+        } => {
             item.msg_type = "video".to_string();
             item.content = "[Video]".to_string();
-            item.media_data = Some(format!("data:{};base64,{}", mime_type, general_purpose::STANDARD.encode(data)));
+            item.media_data = Some(format!(
+                "data:{};base64,{}",
+                mime_type,
+                general_purpose::STANDARD.encode(data)
+            ));
             item.mime_type = Some(mime_type.clone());
             item.duration_ms = Some(*duration_ms);
             item.width = Some(*width);
             item.height = Some(*height);
         }
-        MessageType::File { data, filename, mime_type } => {
+        MessageType::File {
+            data,
+            filename,
+            mime_type,
+        } => {
             item.msg_type = "file".to_string();
             item.content = filename.clone();
-            item.media_data = Some(format!("data:{};base64,{}", mime_type, general_purpose::STANDARD.encode(data)));
+            item.media_data = Some(format!(
+                "data:{};base64,{}",
+                mime_type,
+                general_purpose::STANDARD.encode(data)
+            ));
             item.mime_type = Some(mime_type.clone());
         }
-        MessageType::Location { latitude, longitude, accuracy } => {
+        MessageType::Location {
+            latitude,
+            longitude,
+            accuracy,
+        } => {
             item.msg_type = "location".to_string();
             item.content = "[Location]".to_string();
             item.latitude = Some(*latitude);
             item.longitude = Some(*longitude);
             item.accuracy = *accuracy;
         }
-        MessageType::Reaction { target_message_id, emoji } => {
+        MessageType::Reaction {
+            target_message_id,
+            emoji,
+        } => {
             item.msg_type = "reaction".to_string();
             item.content = emoji.clone();
             item.target_message_id = Some(target_message_id.to_hex());
@@ -276,9 +327,16 @@ fn map_message_to_item(m: &Message, is_mine: bool) -> MessageItem {
         }
         MessageType::Typing { is_typing } => {
             item.msg_type = "typing".to_string();
-            item.content = if *is_typing { "true".to_string() } else { "false".to_string() };
+            item.content = if *is_typing {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            };
         }
-        MessageType::Contact { identity_hash, display_name } => {
+        MessageType::Contact {
+            identity_hash,
+            display_name,
+        } => {
             item.msg_type = "contact".to_string();
             item.content = display_name.clone();
             item.target_message_id = Some(identity_hash.to_hex());
@@ -291,11 +349,17 @@ fn map_message_to_item(m: &Message, is_mine: bool) -> MessageItem {
             item.msg_type = "timer_update".to_string();
             item.content = seconds.to_string();
         }
-        MessageType::Ephemeral { expires_at: _expires_at, content } => {
-            let mut inner = map_message_to_item(&Message {
-                content: *content.clone(),
-                ..m.clone()
-            }, is_mine);
+        MessageType::Ephemeral {
+            expires_at: _expires_at,
+            content,
+        } => {
+            let mut inner = map_message_to_item(
+                &Message {
+                    content: *content.clone(),
+                    ..m.clone()
+                },
+                is_mine,
+            );
             inner.msg_type = format!("ephemeral_{}", inner.msg_type);
             return inner;
         }
@@ -319,15 +383,26 @@ fn map_message_to_item(m: &Message, is_mine: bool) -> MessageItem {
             item.msg_type = "contact_update".to_string();
             item.content = "[Contact Update]".to_string();
         }
-        MessageType::ChannelHopCoordination { target_channel, frequency_mhz, .. } => {
+        MessageType::ChannelHopCoordination {
+            target_channel,
+            frequency_mhz,
+            ..
+        } => {
             item.msg_type = "channel_hop".to_string();
-            item.content = format!("[Salto de Canal a Ch {} ({} MHz)]", target_channel, frequency_mhz);
+            item.content = format!(
+                "[Salto de Canal a Ch {} ({} MHz)]",
+                target_channel, frequency_mhz
+            );
         }
         MessageType::MedicalTriageReport(_) => {
             item.msg_type = "medical_triage".to_string();
             item.content = "[Reporte de Triaje START]".to_string();
         }
-        MessageType::EmergencyBeacon { distress_type, message: msg, .. } => {
+        MessageType::EmergencyBeacon {
+            distress_type,
+            message: msg,
+            ..
+        } => {
             item.msg_type = "emergency_beacon".to_string();
             item.content = format!("[BALIZA SOS: {} - {}]", distress_type, msg);
         }
@@ -376,117 +451,176 @@ fn map_req_to_type(req: &SendMessageRequest) -> MessageType {
                 "mime_type": req.mime_type,
             });
             MessageType::StatusPacket(serde_json::to_vec(&payload).unwrap_or_default())
-        },
-        Some("webrtc_signal") => {
-            MessageType::WebRTCSignal(req.content.clone())
-        },
-        Some("contact_request") => {
-            MessageType::ContactRequest(req.content.clone())
-        },
-        Some("contact_response") => {
-            MessageType::ContactResponse(req.content.clone())
-        },
+        }
+        Some("webrtc_signal") => MessageType::WebRTCSignal(req.content.clone()),
+        Some("contact_request") => MessageType::ContactRequest(req.content.clone()),
+        Some("contact_response") => MessageType::ContactResponse(req.content.clone()),
         Some("image") => {
-            use base64::{Engine as _, engine::general_purpose};
-            let raw = req.media_data.as_deref().filter(|s| !s.is_empty()).unwrap_or(req.content.as_str());
-            let clean = if let Some(idx) = raw.find(',') { &raw[idx + 1..] } else { raw };
-            let data = general_purpose::STANDARD.decode(clean.trim()).unwrap_or_default();
+            use base64::{engine::general_purpose, Engine as _};
+            let raw = req
+                .media_data
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .unwrap_or(req.content.as_str());
+            let clean = if let Some(idx) = raw.find(',') {
+                &raw[idx + 1..]
+            } else {
+                raw
+            };
+            let data = general_purpose::STANDARD
+                .decode(clean.trim())
+                .unwrap_or_default();
             MessageType::Image {
                 data,
-                mime_type: req.mime_type.clone().unwrap_or_else(|| "image/jpeg".to_string()),
+                mime_type: req
+                    .mime_type
+                    .clone()
+                    .unwrap_or_else(|| "image/jpeg".to_string()),
                 width: req.width.unwrap_or(0),
                 height: req.height.unwrap_or(0),
             }
-        },
+        }
         Some("voice") | Some("audio") => {
-            use base64::{Engine as _, engine::general_purpose};
-            let raw = req.media_data.as_deref().filter(|s| !s.is_empty()).unwrap_or(req.content.as_str());
-            let clean = if let Some(idx) = raw.find(',') { &raw[idx + 1..] } else { raw };
-            let data = general_purpose::STANDARD.decode(clean.trim()).unwrap_or_default();
+            use base64::{engine::general_purpose, Engine as _};
+            let raw = req
+                .media_data
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .unwrap_or(req.content.as_str());
+            let clean = if let Some(idx) = raw.find(',') {
+                &raw[idx + 1..]
+            } else {
+                raw
+            };
+            let data = general_purpose::STANDARD
+                .decode(clean.trim())
+                .unwrap_or_default();
             MessageType::Voice {
                 data,
                 duration_ms: req.duration_ms.unwrap_or(0),
             }
-        },
+        }
         Some("video") => {
-            use base64::{Engine as _, engine::general_purpose};
-            let raw = req.media_data.as_deref().filter(|s| !s.is_empty()).unwrap_or(req.content.as_str());
-            let clean = if let Some(idx) = raw.find(',') { &raw[idx + 1..] } else { raw };
-            let data = general_purpose::STANDARD.decode(clean.trim()).unwrap_or_default();
+            use base64::{engine::general_purpose, Engine as _};
+            let raw = req
+                .media_data
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .unwrap_or(req.content.as_str());
+            let clean = if let Some(idx) = raw.find(',') {
+                &raw[idx + 1..]
+            } else {
+                raw
+            };
+            let data = general_purpose::STANDARD
+                .decode(clean.trim())
+                .unwrap_or_default();
             MessageType::Video {
                 data,
                 duration_ms: req.duration_ms.unwrap_or(0),
-                mime_type: req.mime_type.clone().unwrap_or_else(|| "video/mp4".to_string()),
+                mime_type: req
+                    .mime_type
+                    .clone()
+                    .unwrap_or_else(|| "video/mp4".to_string()),
                 width: req.width.unwrap_or(0),
                 height: req.height.unwrap_or(0),
             }
-        },
+        }
         Some("file") => {
-            use base64::{Engine as _, engine::general_purpose};
-            let raw = req.media_data.as_deref().filter(|s| !s.is_empty()).unwrap_or(req.content.as_str());
-            let clean = if let Some(idx) = raw.find(',') { &raw[idx + 1..] } else { raw };
-            let data = general_purpose::STANDARD.decode(clean.trim()).unwrap_or_default();
+            use base64::{engine::general_purpose, Engine as _};
+            let raw = req
+                .media_data
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .unwrap_or(req.content.as_str());
+            let clean = if let Some(idx) = raw.find(',') {
+                &raw[idx + 1..]
+            } else {
+                raw
+            };
+            let data = general_purpose::STANDARD
+                .decode(clean.trim())
+                .unwrap_or_default();
             MessageType::File {
                 data,
                 filename: req.content.clone(),
-                mime_type: req.mime_type.clone().unwrap_or_else(|| "application/octet-stream".to_string()),
+                mime_type: req
+                    .mime_type
+                    .clone()
+                    .unwrap_or_else(|| "application/octet-stream".to_string()),
             }
-        },
-        Some("location") => {
-            MessageType::Location {
-                latitude: req.latitude.unwrap_or(0.0),
-                longitude: req.longitude.unwrap_or(0.0),
-                accuracy: req.accuracy,
-            }
+        }
+        Some("location") => MessageType::Location {
+            latitude: req.latitude.unwrap_or(0.0),
+            longitude: req.longitude.unwrap_or(0.0),
+            accuracy: req.accuracy,
         },
         Some("reaction") => {
-            let target_id = req.target_message_id.as_deref()
+            let target_id = req
+                .target_message_id
+                .as_deref()
                 .and_then(|id_str| hex::decode(id_str).ok())
                 .and_then(|bytes| {
                     if bytes.len() == 32 {
                         let mut arr = [0u8; 32];
                         arr.copy_from_slice(&bytes);
                         Some(red_core::protocol::MessageId::from_bytes(arr))
-                    } else { None }
+                    } else {
+                        None
+                    }
                 })
                 .unwrap_or_else(red_core::protocol::MessageId::generate);
             MessageType::Reaction {
                 target_message_id: target_id,
                 emoji: req.content.clone(),
             }
-        },
+        }
         Some("delete") => {
-            let target_id = req.target_message_id.as_deref()
+            let target_id = req
+                .target_message_id
+                .as_deref()
                 .and_then(|id_str| hex::decode(id_str).ok())
                 .and_then(|bytes| {
                     if bytes.len() == 32 {
                         let mut arr = [0u8; 32];
                         arr.copy_from_slice(&bytes);
                         Some(red_core::protocol::MessageId::from_bytes(arr))
-                    } else { None }
+                    } else {
+                        None
+                    }
                 })
                 .unwrap_or_else(red_core::protocol::MessageId::generate);
-            MessageType::Delete { target_message_id: target_id }
-        },
+            MessageType::Delete {
+                target_message_id: target_id,
+            }
+        }
         Some("read_receipt") => {
-            let message_ids = req.message_ids.as_ref().unwrap_or(&vec![]).iter().filter_map(|id_str| {
-                hex::decode(id_str).ok().and_then(|bytes| {
-                    if bytes.len() == 32 {
-                        let mut arr = [0u8; 32];
-                        arr.copy_from_slice(&bytes);
-                        Some(red_core::protocol::MessageId::from_bytes(arr))
-                    } else { None }
+            let message_ids = req
+                .message_ids
+                .as_ref()
+                .unwrap_or(&vec![])
+                .iter()
+                .filter_map(|id_str| {
+                    hex::decode(id_str).ok().and_then(|bytes| {
+                        if bytes.len() == 32 {
+                            let mut arr = [0u8; 32];
+                            arr.copy_from_slice(&bytes);
+                            Some(red_core::protocol::MessageId::from_bytes(arr))
+                        } else {
+                            None
+                        }
+                    })
                 })
-            }).collect();
+                .collect();
             MessageType::ReadReceipt { message_ids }
-        },
-        Some("typing") => {
-            MessageType::Typing { is_typing: req.content == "true" }
+        }
+        Some("typing") => MessageType::Typing {
+            is_typing: req.content == "true",
         },
         Some("timer_update") => {
             let seconds = req.content.parse().unwrap_or(0);
             MessageType::TimerUpdate { seconds }
-        },
+        }
         _ => MessageType::Text(req.content.clone()),
     };
 
@@ -679,17 +813,16 @@ pub struct BurnerModeRequest {
 
 // ── Async Handlers (Phase 2 & Phase 18 Mesh Transports) ──────────────────────────
 
-
-
 // ─── Signaling WS Channel ────────────────────────────────────────────────────────
 fn signaling_channel() -> broadcast::Sender<String> {
     static CHANNEL: OnceLock<broadcast::Sender<String>> = OnceLock::new();
-    CHANNEL.get_or_init(|| {
-        let (tx, _) = broadcast::channel(100);
-        tx
-    }).clone()
+    CHANNEL
+        .get_or_init(|| {
+            let (tx, _) = broadcast::channel(100);
+            tx
+        })
+        .clone()
 }
-
 
 // ─── Router ───────────────────────────────────────────────────────────────────
 
@@ -707,117 +840,185 @@ pub fn build_router(state: ApiState) -> Router {
     let auth_layer = axum::middleware::from_fn_with_state(state.clone(), validate_auth);
 
     Router::new()
-        .route("/api/status",          get(handle_status))
-        .route("/api/identity",        get(handle_identity))
+        .route("/api/status", get(handle_status))
+        .route("/api/identity", get(handle_identity))
         .route("/api/identity/export", get(handle_identity_export))
-        .route("/api/messages/send",   post(handle_send_message))
+        .route("/api/messages/send", post(handle_send_message))
         // ... (resto de rutas seguras)
-        .route("/api/mesh/receive",    post(handle_mesh_receive))
+        .route("/api/mesh/receive", post(handle_mesh_receive))
         .route("/api/network/outbound", get(handle_outbound_sse))
-        .route("/api/conversations",   get(handle_list_conversations))
+        .route("/api/conversations", get(handle_list_conversations))
         .route("/api/conversations/:id/messages", get(handle_get_messages))
-        .route("/api/contacts",        get(handle_list_contacts).post(handle_add_contact))
-        .route("/api/contacts/:hash",   delete(handle_delete_contact))
-        .route("/api/groups",          get(handle_list_groups).post(handle_create_group))
+        .route(
+            "/api/contacts",
+            get(handle_list_contacts).post(handle_add_contact),
+        )
+        .route("/api/contacts/:hash", delete(handle_delete_contact))
+        .route(
+            "/api/groups",
+            get(handle_list_groups).post(handle_create_group),
+        )
         .route("/api/groups/:id/send", post(handle_send_group_message))
         .route("/api/groups/:id/members", post(handle_add_group_member))
-        .route("/api/groups/:id/members/:hash", delete(handle_remove_group_member))
-        .route("/api/groups/:id/members/:hash/role", put(handle_set_group_member_role))
-        .route("/api/groups/:id/members/:hash/mute", put(handle_mute_group_member))
+        .route(
+            "/api/groups/:id/members/:hash",
+            delete(handle_remove_group_member),
+        )
+        .route(
+            "/api/groups/:id/members/:hash/role",
+            put(handle_set_group_member_role),
+        )
+        .route(
+            "/api/groups/:id/members/:hash/mute",
+            put(handle_mute_group_member),
+        )
         .route("/api/groups/:id/broadcast", put(handle_set_group_broadcast))
-        .route("/api/groups/history/request", post(handle_group_history_request))
-        .route("/api/peers",              get(handle_get_peers))
-        .route("/api/network/connect",     post(handle_connect_peer))
-        .route("/api/network/blackout",    get(handle_get_blackout).post(handle_set_blackout))
-        .route("/api/network/rf_metrics",   get(handle_get_rf_metrics))
+        .route(
+            "/api/groups/history/request",
+            post(handle_group_history_request),
+        )
+        .route("/api/peers", get(handle_get_peers))
+        .route("/api/network/connect", post(handle_connect_peer))
+        .route(
+            "/api/network/blackout",
+            get(handle_get_blackout).post(handle_set_blackout),
+        )
+        .route("/api/network/rf_metrics", get(handle_get_rf_metrics))
         .route("/api/network/rf/channel_hop", post(handle_channel_hop))
-        .route("/api/network/rf/fec",       post(handle_set_fec))
-        .route("/api/system/health",        get(handle_system_health))
-        .route("/api/triage/reports",       get(handle_get_triage_reports).post(handle_create_triage_report))
-        .route("/api/triage/reports/:id",   delete(handle_delete_triage_report))
-        .route("/api/beacon/sos",            get(handle_get_emergency_beacons).post(handle_broadcast_emergency_beacon))
-        .route("/api/beacon/sos/cancel",     post(handle_cancel_emergency_beacon))
-        .route("/api/beacon/soundmesh/inject", post(handle_inject_soundmesh))
-        .route("/api/stego/vault",           get(handle_get_stego_vault).post(handle_save_stego_vault))
-        .route("/api/stego/vault/:id",       delete(handle_delete_stego_vault))
-        .route("/api/stego/capsules",        get(handle_get_stego_vault).post(handle_save_stego_vault))
-        .route("/api/stego/capsules/:id",    delete(handle_delete_stego_vault))
-        .route("/api/settings/dms",          get(handle_get_dms_config).post(handle_save_dms_config))
-        .route("/api/settings/dms/ping",     post(handle_ping_dms))
+        .route("/api/network/rf/fec", post(handle_set_fec))
+        .route("/api/system/health", get(handle_system_health))
+        .route(
+            "/api/triage/reports",
+            get(handle_get_triage_reports).post(handle_create_triage_report),
+        )
+        .route(
+            "/api/triage/reports/:id",
+            delete(handle_delete_triage_report),
+        )
+        .route(
+            "/api/beacon/sos",
+            get(handle_get_emergency_beacons).post(handle_broadcast_emergency_beacon),
+        )
+        .route(
+            "/api/beacon/sos/cancel",
+            post(handle_cancel_emergency_beacon),
+        )
+        .route(
+            "/api/beacon/soundmesh/inject",
+            post(handle_inject_soundmesh),
+        )
+        .route(
+            "/api/stego/vault",
+            get(handle_get_stego_vault).post(handle_save_stego_vault),
+        )
+        .route("/api/stego/vault/:id", delete(handle_delete_stego_vault))
+        .route(
+            "/api/stego/capsules",
+            get(handle_get_stego_vault).post(handle_save_stego_vault),
+        )
+        .route("/api/stego/capsules/:id", delete(handle_delete_stego_vault))
+        .route(
+            "/api/settings/dms",
+            get(handle_get_dms_config).post(handle_save_dms_config),
+        )
+        .route("/api/settings/dms/ping", post(handle_ping_dms))
         .route("/api/settings/dms/panic_wipe", post(handle_panic_wipe))
-        .route("/api/proximity",               get(handle_get_proximity_nodes))
-        .route("/api/proximity/ping",          post(handle_ping_proximity))
-        .route("/api/proximity/shake_pair",    post(handle_shake_pair))
-        .route("/api/voice/bursts",            get(handle_get_voice_bursts).post(handle_send_voice_burst))
-        .route("/api/voice/bursts/:id",        delete(handle_delete_voice_burst))
-        .route("/api/network/ip",          get(handle_get_network_ip))
-        .route("/api/dns/query",           post(handle_dns_query))
-        .route("/api/network/vault",       get(handle_get_vault))
-        .route("/api/crypto/renegotiate",  post(handle_renegotiate_crypto))
-        .route("/api/blockchain/blocks",      get(handle_get_blocks))
-        .route("/api/blockchain/validators",  get(handle_get_validators))
-        .route("/api/blockchain/consensus",   get(handle_get_consensus))
-        .route("/api/blockchain/stake",       post(handle_stake))
+        .route("/api/proximity", get(handle_get_proximity_nodes))
+        .route("/api/proximity/ping", post(handle_ping_proximity))
+        .route("/api/proximity/shake_pair", post(handle_shake_pair))
+        .route(
+            "/api/voice/bursts",
+            get(handle_get_voice_bursts).post(handle_send_voice_burst),
+        )
+        .route("/api/voice/bursts/:id", delete(handle_delete_voice_burst))
+        .route("/api/network/ip", get(handle_get_network_ip))
+        .route("/api/dns/query", post(handle_dns_query))
+        .route("/api/network/vault", get(handle_get_vault))
+        .route("/api/crypto/renegotiate", post(handle_renegotiate_crypto))
+        .route("/api/blockchain/blocks", get(handle_get_blocks))
+        .route("/api/blockchain/validators", get(handle_get_validators))
+        .route("/api/blockchain/consensus", get(handle_get_consensus))
+        .route("/api/blockchain/stake", post(handle_stake))
         // --- Sovereign P2P Payments & Vouchers (v32.0) ---
-        .route("/api/p2p/wallet",                         get(handle_get_p2p_wallet))
-        .route("/api/p2p/voucher",                        post(handle_create_p2p_voucher))
-        .route("/api/p2p/redeem",                         post(handle_redeem_p2p_voucher))
+        .route("/api/p2p/wallet", get(handle_get_p2p_wallet))
+        .route("/api/p2p/voucher", post(handle_create_p2p_voucher))
+        .route("/api/p2p/redeem", post(handle_redeem_p2p_voucher))
         // --- Social Network ---
-        .route("/api/social/feed",                        get(handle_social_feed))
-        .route("/api/social/post",                        post(handle_social_post))
-        .route("/api/social/posts",                       get(handle_social_feed).post(handle_social_post))
-        .route("/api/social/posts/:id",                   delete(handle_social_post_delete))
-        .route("/api/social/react",                       post(handle_social_react))
-        .route("/api/social/follow",                      post(handle_social_follow))
-        .route("/api/social/unfollow",                    post(handle_social_unfollow))
-        .route("/api/social/following",                   get(handle_social_following))
-        .route("/api/profile",                         axum::routing::put(handle_update_profile))
-        .route("/api/settings/burner",                   post(handle_set_burner_mode))
-        .route("/api/settings/lora",                      post(handle_set_lora_config))
-        .route("/api/conversations/:id/read",             post(handle_mark_conversation_read))
-        .route("/api/conversations/:id/clear",            axum::routing::delete(handle_clear_conversation))
+        .route("/api/social/feed", get(handle_social_feed))
+        .route("/api/social/post", post(handle_social_post))
+        .route(
+            "/api/social/posts",
+            get(handle_social_feed).post(handle_social_post),
+        )
+        .route("/api/social/posts/:id", delete(handle_social_post_delete))
+        .route("/api/social/react", post(handle_social_react))
+        .route("/api/social/follow", post(handle_social_follow))
+        .route("/api/social/unfollow", post(handle_social_unfollow))
+        .route("/api/social/following", get(handle_social_following))
+        .route("/api/profile", axum::routing::put(handle_update_profile))
+        .route("/api/settings/burner", post(handle_set_burner_mode))
+        .route("/api/settings/lora", post(handle_set_lora_config))
+        .route(
+            "/api/conversations/:id/read",
+            post(handle_mark_conversation_read),
+        )
+        .route(
+            "/api/conversations/:id/clear",
+            axum::routing::delete(handle_clear_conversation),
+        )
         // SOS
-        .route("/api/sos/broadcast",      post(handle_emit_sos))
-        .route("/api/sos/resolve/:id",    post(handle_resolve_sos))
-        .route("/api/sos/active",         get(handle_get_active_sos))
+        .route("/api/sos/broadcast", post(handle_emit_sos))
+        .route("/api/sos/resolve/:id", post(handle_resolve_sos))
+        .route("/api/sos/active", get(handle_get_active_sos))
         // Channels
         .route("/api/channels/messages", get(handle_get_channel_messages))
-        .route("/api/channels/post",     post(handle_post_channel_message))
+        .route("/api/channels/post", post(handle_post_channel_message))
         // Voice & Weather
-        .route("/api/voice/send",        post(handle_send_voice_burst))
-        .route("/api/weather/report",    post(handle_post_weather_report))
-        .route("/api/weather/reports",   get(handle_get_weather_reports))
+        .route("/api/voice/send", post(handle_send_voice_burst))
+        .route("/api/weather/report", post(handle_post_weather_report))
+        .route("/api/weather/reports", get(handle_get_weather_reports))
         // Discovery & Battery & Ephemeral
         .route("/api/discovery/proximity", get(handle_get_proximity_nodes))
-        .route("/api/discovery/wave",      post(handle_trigger_wave))
-        .route("/api/discovery/config",    get(handle_get_discovery_config).post(handle_set_discovery_config))
-        .route("/api/discovery/digest",    get(handle_get_discovery_digest))
-        .route("/api/battery/status",      get(handle_get_battery_status))
-        .route("/api/battery/optimize",    post(handle_update_battery_optimize))
+        .route("/api/discovery/wave", post(handle_trigger_wave))
+        .route(
+            "/api/discovery/config",
+            get(handle_get_discovery_config).post(handle_set_discovery_config),
+        )
+        .route("/api/discovery/digest", get(handle_get_discovery_digest))
+        .route("/api/battery/status", get(handle_get_battery_status))
+        .route(
+            "/api/battery/optimize",
+            post(handle_update_battery_optimize),
+        )
         .route("/api/ephemeral/set_timer", post(handle_set_ephemeral_timer))
-        .route("/api/sanitizer/clean",     post(handle_clean_image_exif))
+        .route("/api/sanitizer/clean", post(handle_clean_image_exif))
         // AI Copilot / Summarizer / Translator
-        .route("/api/ai/copilot",   post(handle_ai_copilot_query))
+        .route("/api/ai/copilot", post(handle_ai_copilot_query))
         .route("/api/ai/summarize", post(handle_ai_summarize_channel))
         .route("/api/ai/translate", post(handle_ai_translate_text))
         // AMBER & Guardian
-        .route("/api/amber/alert",           post(handle_create_amber_alert))
-        .route("/api/amber/alerts",          get(handle_list_amber_alerts))
-        .route("/api/amber/alerts/:id",      get(handle_get_amber_alert))
-        .route("/api/amber/alerts/:id/resolve", post(handle_resolve_amber_alert))
-        .route("/api/amber/alerts/:id/sighting", post(handle_report_sighting))
-        .route("/api/guardian/status",      get(handle_guardian_status))
-        .route("/api/guardian/report",      post(handle_report_content))
-        .route("/api/logs",                 get(handle_get_logs))
-        .route("/api/events",          get(handle_sse))
-        .route("/local-signal",        get(handle_local_signal))
-
+        .route("/api/amber/alert", post(handle_create_amber_alert))
+        .route("/api/amber/alerts", get(handle_list_amber_alerts))
+        .route("/api/amber/alerts/:id", get(handle_get_amber_alert))
+        .route(
+            "/api/amber/alerts/:id/resolve",
+            post(handle_resolve_amber_alert),
+        )
+        .route(
+            "/api/amber/alerts/:id/sighting",
+            post(handle_report_sighting),
+        )
+        .route("/api/guardian/status", get(handle_guardian_status))
+        .route("/api/guardian/report", post(handle_report_content))
+        .route("/api/logs", get(handle_get_logs))
+        .route("/api/events", get(handle_sse))
+        .route("/local-signal", get(handle_local_signal))
         // P5 FIX: El orden de capas en Axum es outer-last (la última capa aplicada
         // se ejecuta PRIMERO en cada request). Por tanto CORS debe estar DESPUÉS de
         // auth en el código para que se aplique ANTES en la pipeline — así los preflight
         // OPTIONS nunca son rechazados por el middleware de autenticación.
         .layer(auth_layer)
-        .layer(cors)                   // ← CORS ejecuta antes que auth (outer layer)
+        .layer(cors) // ← CORS ejecuta antes que auth (outer layer)
         .layer(TraceLayer::new_for_http())
         .layer(SetResponseHeaderLayer::if_not_present(
             header::X_CONTENT_TYPE_OPTIONS,
@@ -829,7 +1030,6 @@ pub fn build_router(state: ApiState) -> Router {
         ))
         .with_state(state)
 }
-
 
 // ─── API Handlers ─────────────────────────────────────────────────────────────
 
@@ -904,7 +1104,6 @@ async fn handle_update_profile(
 
 // ─── DMS config — GET loads current config, POST saves full config ────────────
 
-
 async fn handle_set_dms_config(
     State(state): State<ApiState>,
     Json(cfg): Json<DmsConfig>,
@@ -912,14 +1111,16 @@ async fn handle_set_dms_config(
     let mut node = state.node.lock().await;
     // Apply each config field to the node
     let hours = cfg.trigger_hours as u64;
-    node.set_dead_mans_days(hours / 24 + if !hours.is_multiple_of(24) { 1 } else { 0 }).await;
+    node.set_dead_mans_days(hours / 24 + if !hours.is_multiple_of(24) { 1 } else { 0 })
+        .await;
     node.set_dms_config(
         cfg.enabled,
         cfg.trigger_hours as u64,
         cfg.wipe_messages,
         cfg.wipe_identity,
         cfg.dead_message.unwrap_or_default(),
-    ).await;
+    )
+    .await;
     StatusCode::OK
 }
 
@@ -933,25 +1134,31 @@ async fn handle_set_lora_config(
     State(state): State<ApiState>,
     Json(req): Json<LoraConfigRequest>,
 ) -> impl IntoResponse {
-    tracing::info!("[LoRa] Config received: port={} baud={}", req.port, req.baud);
-    
-    // Acquire lock and spawn new hardware bridge linked to the exact port
-    let mut node = state.node.lock().await;
-    
-    let mut lora = red_core::network::lora_bridge::LoraBridge::new(
-        state.node.clone(), 
-        req.port.clone(), 
+    tracing::info!(
+        "[LoRa] Config received: port={} baud={}",
+        req.port,
         req.baud
     );
-    
+
+    // Acquire lock and spawn new hardware bridge linked to the exact port
+    let mut node = state.node.lock().await;
+
+    let mut lora = red_core::network::lora_bridge::LoraBridge::new(
+        state.node.clone(),
+        req.port.clone(),
+        req.baud,
+    );
+
     if let Err(e) = lora.start().await {
         tracing::error!("Failed to hot-reload LoRa bridge hardware: {}", e);
-        return Json(serde_json::json!({"ok": false, "error": format!("Hardware exception: {}", e)}));
+        return Json(
+            serde_json::json!({"ok": false, "error": format!("Hardware exception: {}", e)}),
+        );
     }
-    
+
     // Overwrite old driver instance
     node.lora_bridge = Some(lora);
-    
+
     Json(serde_json::json!({"ok": true, "port": req.port, "baud": req.baud}))
 }
 
@@ -964,9 +1171,10 @@ async fn handle_mark_conversation_read(
     // So we iterate through conversations to find the matching one, like handle_get_messages does.
     let mut target_conv_id = None;
     if let Ok((_, _, conversations)) = node.get_sync_payload().await {
-        if let Some(conv) = conversations.iter().find(|c| {
-            format!("{}-{}", c.our_identity.short(), c.their_identity.short()) == conv_id
-        }) {
+        if let Some(conv) = conversations
+            .iter()
+            .find(|c| format!("{}-{}", c.our_identity.short(), c.their_identity.short()) == conv_id)
+        {
             target_conv_id = Some(conv.id.clone());
         }
     }
@@ -980,7 +1188,7 @@ async fn handle_mark_conversation_read(
     } else {
         tracing::warn!("[read] Conversation {} not found for marking read", conv_id);
     }
-    
+
     StatusCode::OK
 }
 
@@ -994,11 +1202,12 @@ async fn handle_clear_conversation(
     let conv_storage_id: Option<String> = {
         let node = state.node.lock().await;
         match node.get_sync_payload().await {
-            Ok((_, _, conversations)) => {
-                conversations.iter().find(|c| {
+            Ok((_, _, conversations)) => conversations
+                .iter()
+                .find(|c| {
                     format!("{}-{}", c.our_identity.short(), c.their_identity.short()) == conv_id
-                }).map(|c| c.id.to_hex())
-            }
+                })
+                .map(|c| c.id.to_hex()),
             Err(_) => None,
         }
     }; // lock liberado aquí
@@ -1010,14 +1219,21 @@ async fn handle_clear_conversation(
                 Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
                 Err(e) => {
                     tracing::warn!("[clear] Failed to clear conversation {}: {}", conv_id, e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"ok": false, "error": format!("{}", e)}))).into_response()
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({"ok": false, "error": format!("{}", e)})),
+                    )
+                        .into_response()
                 }
             }
         }
-        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok": false, "error": "Conversation not found"}))).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"ok": false, "error": "Conversation not found"})),
+        )
+            .into_response(),
     }
 }
-
 
 async fn handle_send_message(
     State(state): State<ApiState>,
@@ -1029,8 +1245,15 @@ async fn handle_send_message(
             let short = &e[9..];
             let node = state.node.lock().await;
             let peers = node.get_peers().await.unwrap_or_default();
-            if let Some(p) = peers.iter().find(|p| p.identity_hash.as_ref().map(|h| h.short() == short || h.to_hex().starts_with(short)).unwrap_or(false)) {
-                p.identity_hash.clone().unwrap_or_else(|| IdentityHash::from_bytes([0u8; 32]))
+            if let Some(p) = peers.iter().find(|p| {
+                p.identity_hash
+                    .as_ref()
+                    .map(|h| h.short() == short || h.to_hex().starts_with(short))
+                    .unwrap_or(false)
+            }) {
+                p.identity_hash
+                    .clone()
+                    .unwrap_or_else(|| IdentityHash::from_bytes([0u8; 32]))
             } else {
                 let mut bytes = [0u8; 32];
                 let sb = short.as_bytes();
@@ -1043,7 +1266,8 @@ async fn handle_send_message(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": "Invalid recipient identity hash"})),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
@@ -1052,7 +1276,9 @@ async fn handle_send_message(
 
     let content = map_req_to_type(&req);
 
-    let reply_to = req.target_message_id.as_deref()
+    let reply_to = req
+        .target_message_id
+        .as_deref()
         .filter(|_| req.msg_type.as_deref() == Some("text") || req.msg_type.is_none())
         .and_then(|id_str| hex::decode(id_str).ok())
         .and_then(|bytes| {
@@ -1060,7 +1286,9 @@ async fn handle_send_message(
                 let mut arr = [0u8; 32];
                 arr.copy_from_slice(&bytes);
                 Some(red_core::protocol::MessageId::from_bytes(arr))
-            } else { None }
+            } else {
+                None
+            }
         });
 
     let message = Message {
@@ -1081,7 +1309,8 @@ async fn handle_send_message(
         return (
             StatusCode::PAYLOAD_TOO_LARGE,
             Json(serde_json::json!({"error": "Message payload too large"})),
-        ).into_response();
+        )
+            .into_response();
     }
 
     match node.send_message(recipient, message).await {
@@ -1089,7 +1318,8 @@ async fn handle_send_message(
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": format!("{}", e)})),
-        ).into_response(),
+        )
+            .into_response(),
     }
 }
 
@@ -1104,7 +1334,8 @@ async fn handle_mesh_receive(
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"error": "Hex payload length must be even"})),
-        ).into_response();
+        )
+            .into_response();
     }
 
     // 2. Control de desbordamiento DoS previo a asignación de memoria (max 1MB hex)
@@ -1117,10 +1348,13 @@ async fn handle_mesh_receive(
 
     let bytes = match hex::decode(hex_str) {
         Ok(b) => b,
-        Err(_) => return (
-            StatusCode::BAD_REQUEST, 
-            Json(serde_json::json!({"error": "Invalid hex string"}))
-        ).into_response(),
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid hex string"})),
+            )
+                .into_response()
+        }
     };
 
     // 3. Verificación de trama mínima para framing de red
@@ -1135,14 +1369,15 @@ async fn handle_mesh_receive(
         return (
             StatusCode::PAYLOAD_TOO_LARGE,
             Json(serde_json::json!({"error": "Decoded frame exceeds maximum 512KB limit"})),
-        ).into_response();
+        )
+            .into_response();
     }
 
     let mut node = state.node.lock().await;
-    
+
     // 1. Inject into local node for decryption/delivery (if addressed to us)
     let inject_result = node.inject_raw_payload(bytes.clone()).await;
-    
+
     // 2. If via_lora flag is set, also forward over the LoRa radio bridge.
     //    This enables the mesh to use LoRa as a transport layer for long-range hops.
     if req.via_lora == Some(true) {
@@ -1154,13 +1389,14 @@ async fn handle_mesh_receive(
             }
         }
     }
-    
+
     match inject_result {
         Ok(_) => Json(serde_json::json!({"status": "injected"})).into_response(),
         Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR, 
-            Json(serde_json::json!({"error": format!("{}", e)}))
-        ).into_response(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
     }
 }
 
@@ -1197,7 +1433,6 @@ async fn handle_socket(socket: WebSocket) {
     };
 }
 
-
 async fn handle_list_conversations(State(state): State<ApiState>) -> impl IntoResponse {
     let node = state.node.lock().await;
     match node.get_sync_payload().await {
@@ -1205,51 +1440,51 @@ async fn handle_list_conversations(State(state): State<ApiState>) -> impl IntoRe
             let my_hash = node.identity_hash();
             // Build a fast lookup set of group IDs (as raw 32-byte arrays)
             // to detect group conversations in O(1) per item.
-            let group_id_set: std::collections::HashSet<[u8; 32]> = groups
-                .iter()
-                .map(|g| g.id.0)
-                .collect();
+            let group_id_set: std::collections::HashSet<[u8; 32]> =
+                groups.iter().map(|g| g.id.0).collect();
 
-            let items: Vec<ConversationItem> = conversations.iter().map(|c| {
-                let msgs = c.messages();
-                let last_msg = msgs.last().and_then(|m| {
-                    match &m.content {
+            let items: Vec<ConversationItem> = conversations
+                .iter()
+                .map(|c| {
+                    let msgs = c.messages();
+                    let last_msg = msgs.last().and_then(|m| match &m.content {
                         MessageType::Text(text) => Some(text.chars().take(60).collect::<String>()),
                         MessageType::Image { .. } => Some("📷 Imagen".to_string()),
                         MessageType::Voice { .. } => Some("🎤 Nota de voz".to_string()),
                         MessageType::Location { .. } => Some("📍 Ubicación".to_string()),
                         MessageType::File { filename, .. } => Some(format!("📄 {}", filename)),
                         _ => None,
-                    }
-                });
-                let last_timestamp = msgs.last().map(|m| m.timestamp).unwrap_or(0);
-                let peer = if &c.our_identity == my_hash {
-                    c.their_identity.to_hex()
-                } else {
-                    c.our_identity.to_hex()
-                };
-                // Read actual unread count explicitly saved in the Conversation struct
-                let unread_count = c.unread_count;
-                // Detect group conversations: their_identity bytes match a known GroupId
-                let is_group = group_id_set.contains(c.their_identity.as_bytes());
+                    });
+                    let last_timestamp = msgs.last().map(|m| m.timestamp).unwrap_or(0);
+                    let peer = if &c.our_identity == my_hash {
+                        c.their_identity.to_hex()
+                    } else {
+                        c.our_identity.to_hex()
+                    };
+                    // Read actual unread count explicitly saved in the Conversation struct
+                    let unread_count = c.unread_count;
+                    // Detect group conversations: their_identity bytes match a known GroupId
+                    let is_group = group_id_set.contains(c.their_identity.as_bytes());
 
-                ConversationItem {
-                    id: format!("{}-{}", c.our_identity.short(), c.their_identity.short()),
-                    peer,
-                    message_count: msgs.len(),
-                    last_message: last_msg,
-                    last_timestamp,
-                    disappearing_timer: c.disappearing_timer,
-                    unread_count,
-                    is_group,
-                }
-            }).collect();
+                    ConversationItem {
+                        id: format!("{}-{}", c.our_identity.short(), c.their_identity.short()),
+                        peer,
+                        message_count: msgs.len(),
+                        last_message: last_msg,
+                        last_timestamp,
+                        disappearing_timer: c.disappearing_timer,
+                        unread_count,
+                        is_group,
+                    }
+                })
+                .collect();
             Json(items).into_response()
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": format!("{}", e)})),
-        ).into_response(),
+        )
+            .into_response(),
     }
 }
 
@@ -1262,23 +1497,33 @@ async fn handle_get_messages(
         Ok((_, _, conversations)) => {
             let conv = conversations.iter().find(|c| {
                 let id = format!("{}-{}", c.our_identity.short(), c.their_identity.short());
-                id == conv_id ||
-                c.their_identity.to_hex() == conv_id ||
-                c.their_identity.short() == conv_id ||
-                conv_id.contains(&c.their_identity.short())
+                id == conv_id
+                    || c.their_identity.to_hex() == conv_id
+                    || c.their_identity.short() == conv_id
+                    || conv_id.contains(&c.their_identity.short())
             });
             match conv {
                 Some(c) => {
                     let my_hash = node.identity_hash();
-                    let items: Vec<MessageItem> = c.messages().iter().map(|m| {
-                        map_message_to_item(m, &m.sender == my_hash)
-                    }).collect();
+                    let items: Vec<MessageItem> = c
+                        .messages()
+                        .iter()
+                        .map(|m| map_message_to_item(m, &m.sender == my_hash))
+                        .collect();
                     Json(items).into_response()
                 }
-                None => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Conversation not found"}))).into_response(),
+                None => (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({"error": "Conversation not found"})),
+                )
+                    .into_response(),
             }
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
     }
 }
 
@@ -1286,14 +1531,21 @@ async fn handle_list_contacts(State(state): State<ApiState>) -> impl IntoRespons
     let node = state.node.lock().await;
     match node.get_sync_payload().await {
         Ok((contacts, _, _)) => {
-            let items: Vec<ContactItem> = contacts.iter().map(|c| ContactItem {
-                identity_hash: c.identity_hash.to_hex(),
-                display_name: c.display_name.clone(),
-                verified: c.verified,
-            }).collect();
+            let items: Vec<ContactItem> = contacts
+                .iter()
+                .map(|c| ContactItem {
+                    identity_hash: c.identity_hash.to_hex(),
+                    display_name: c.display_name.clone(),
+                    verified: c.verified,
+                })
+                .collect();
             Json(items).into_response()
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
     }
 }
 
@@ -1301,57 +1553,92 @@ async fn handle_add_contact(
     State(state): State<ApiState>,
     Json(req): Json<AddContactRequest>,
 ) -> impl IntoResponse {
-    let hash = match parse_identity_hash(&req.identity_hash) {
-        Ok(h) => h,
-        Err(e) if e.starts_with("SHORT_ID:") => {
-            let short = &e[9..];
-            // First: try to resolve from active peers (peer online)
-            let node = state.node.lock().await;
-            let peers = node.get_peers().await.unwrap_or_default();
-            if let Some(p) = peers.iter().find(|p| p.identity_hash.as_ref().map(|h| h.short() == short || h.to_hex().starts_with(short)).unwrap_or(false)) {
-                p.identity_hash.clone().unwrap_or_else(|| IdentityHash::from_bytes([0u8; 32]))
-            } else {
-                // Peer offline — persist as best-effort contact with padded hash.
-                // Frontend will upgrade to canonical hash once peer comes online via meshRouter.
-                drop(node); // release lock before constructing padded hash
-                let padded = format!("{:0<64}", short);
-                match IdentityHash::from_hex(&padded) {
-                    Ok(h) => h,
-                    Err(_) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-                        "error": format!("Short ID inválido (no es hexadecimal): {}", short)
-                    }))).into_response(),
+    let hash =
+        match parse_identity_hash(&req.identity_hash) {
+            Ok(h) => h,
+            Err(e) if e.starts_with("SHORT_ID:") => {
+                let short = &e[9..];
+                // First: try to resolve from active peers (peer online)
+                let node = state.node.lock().await;
+                let peers = node.get_peers().await.unwrap_or_default();
+                if let Some(p) = peers.iter().find(|p| {
+                    p.identity_hash
+                        .as_ref()
+                        .map(|h| h.short() == short || h.to_hex().starts_with(short))
+                        .unwrap_or(false)
+                }) {
+                    p.identity_hash
+                        .clone()
+                        .unwrap_or_else(|| IdentityHash::from_bytes([0u8; 32]))
+                } else {
+                    // Peer offline — persist as best-effort contact with padded hash.
+                    // Frontend will upgrade to canonical hash once peer comes online via meshRouter.
+                    drop(node); // release lock before constructing padded hash
+                    let padded = format!("{:0<64}", short);
+                    match IdentityHash::from_hex(&padded) {
+                        Ok(h) => h,
+                        Err(_) => return (
+                            StatusCode::BAD_REQUEST,
+                            Json(serde_json::json!({
+                                "error": format!("Short ID inválido (no es hexadecimal): {}", short)
+                            })),
+                        )
+                            .into_response(),
+                    }
                 }
             }
-        }
-        Err(e) => {
-            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": format!("Identidad inválida: {}", e)}))).into_response();
-        }
-    };
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": format!("Identidad inválida: {}", e)})),
+                )
+                    .into_response();
+            }
+        };
 
     let pub_key_bytes = if let Some(ref pk_hex) = req.public_key {
         let pk_clean = pk_hex.trim().replace("did:red:", "");
         let pk_val = pk_clean.split(':').next_back().unwrap_or(&pk_clean);
-        hex::decode(pk_val).ok().and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32])
+        hex::decode(pk_val)
+            .ok()
+            .and_then(|b| b.try_into().ok())
+            .unwrap_or([0u8; 32])
     } else {
         let parts: Vec<&str> = req.identity_hash.split(':').collect();
         if parts.len() >= 4 && parts[0] == "did" && parts[1] == "red" {
-            hex::decode(parts[3]).ok().and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32])
+            hex::decode(parts[3])
+                .ok()
+                .and_then(|b| b.try_into().ok())
+                .unwrap_or([0u8; 32])
         } else if parts.len() >= 2 {
-            hex::decode(parts[1]).ok().and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32])
+            hex::decode(parts[1])
+                .ok()
+                .and_then(|b| b.try_into().ok())
+                .unwrap_or([0u8; 32])
         } else {
             [0u8; 32]
         }
     };
 
     let node = state.node.lock().await;
-    let existing = node.get_sync_payload().await.ok().and_then(|(contacts, _, _)| {
-        contacts.into_iter().find(|c| c.identity_hash == hash)
-    });
+    let existing = node
+        .get_sync_payload()
+        .await
+        .ok()
+        .and_then(|(contacts, _, _)| contacts.into_iter().find(|c| c.identity_hash == hash));
 
     let display_name = if let Some(ref ex) = existing {
-        if !req.display_name.is_empty() && !req.display_name.starts_with("Nodo ") && !req.display_name.starts_with("Par Escaneado") && !req.display_name.starts_with("Operador ") {
+        if !req.display_name.is_empty()
+            && !req.display_name.starts_with("Nodo ")
+            && !req.display_name.starts_with("Par Escaneado")
+            && !req.display_name.starts_with("Operador ")
+        {
             req.display_name
-        } else if !ex.display_name.is_empty() && !ex.display_name.starts_with("Nodo ") && !ex.display_name.starts_with("Par Escaneado") && !ex.display_name.starts_with("Operador ") {
+        } else if !ex.display_name.is_empty()
+            && !ex.display_name.starts_with("Nodo ")
+            && !ex.display_name.starts_with("Par Escaneado")
+            && !ex.display_name.starts_with("Operador ")
+        {
             ex.display_name.clone()
         } else if !req.display_name.is_empty() {
             req.display_name
@@ -1367,9 +1654,15 @@ async fn handle_add_contact(
     let contact = red_core::storage::Contact {
         identity_hash: hash,
         display_name,
-        public_key: if pub_key_bytes != [0u8; 32] { pub_key_bytes } else { existing.map(|e| e.public_key).unwrap_or([0u8; 32]) },
+        public_key: if pub_key_bytes != [0u8; 32] {
+            pub_key_bytes
+        } else {
+            existing.map(|e| e.public_key).unwrap_or([0u8; 32])
+        },
         added_at: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
         verified: false,
         blocked: false,
         notes: None,
@@ -1380,7 +1673,11 @@ async fn handle_add_contact(
 
     match node.add_contact(contact).await {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
     }
 }
 
@@ -1414,26 +1711,35 @@ async fn handle_delete_contact(
     }
 }
 
-
 async fn handle_list_groups(State(state): State<ApiState>) -> impl IntoResponse {
     let node = state.node.lock().await;
     match node.list_groups().await {
         Ok(groups) => {
-            let items: Vec<GroupItem> = groups.iter().map(|g| GroupItem {
-                id: hex::encode(g.id.0),
-                name: g.name.clone(),
-                member_count: g.member_count(),
-                broadcast_only: g.broadcast_only,
-                members: g.members().map(|m| GroupMemberResponse {
-                    identity_hash: m.identity_hash.to_hex(),
-                    role: format!("{:?}", m.role),
-                    joined_at: m.joined_at,
-                    muted: m.muted,
-                }).collect(),
-            }).collect();
+            let items: Vec<GroupItem> = groups
+                .iter()
+                .map(|g| GroupItem {
+                    id: hex::encode(g.id.0),
+                    name: g.name.clone(),
+                    member_count: g.member_count(),
+                    broadcast_only: g.broadcast_only,
+                    members: g
+                        .members()
+                        .map(|m| GroupMemberResponse {
+                            identity_hash: m.identity_hash.to_hex(),
+                            role: format!("{:?}", m.role),
+                            joined_at: m.joined_at,
+                            muted: m.muted,
+                        })
+                        .collect(),
+                })
+                .collect();
             Json(items).into_response()
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
     }
 }
 
@@ -1444,11 +1750,17 @@ async fn handle_create_group(
     let mut node = state.node.lock().await;
     match node.create_group(req.name).await {
         Ok(mut group) => {
-            let existing_contacts = node.get_sync_payload().await.ok().map(|(c, _, _)| c).unwrap_or_default();
+            let existing_contacts = node
+                .get_sync_payload()
+                .await
+                .ok()
+                .map(|(c, _, _)| c)
+                .unwrap_or_default();
             let mut added_members = Vec::new();
             for member_hash in req.members {
                 if let Ok(id_hash) = parse_identity_hash(&member_hash) {
-                    let member_pub_key = existing_contacts.iter()
+                    let member_pub_key = existing_contacts
+                        .iter()
                         .find(|c| c.identity_hash == id_hash)
                         .map(|c| c.public_key)
                         .unwrap_or_else(|| *id_hash.as_bytes());
@@ -1481,9 +1793,14 @@ async fn handle_create_group(
             Json(serde_json::json!({
                 "id": hex::encode(group.id.0),
                 "name": group.name,
-            })).into_response()
-        },
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+            }))
+            .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
     }
 }
 
@@ -1497,15 +1814,25 @@ async fn handle_send_group_message(
             let mut arr = [0u8; 32];
             arr.copy_from_slice(&b);
             arr
-        },
-        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group ID"}))).into_response(),
+        }
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid group ID"})),
+            )
+                .into_response()
+        }
     };
     let group_id = red_core::protocol::GroupId(group_id_bytes);
     let content = map_req_to_type(&req);
     let mut node = state.node.lock().await;
     match node.send_group_message(group_id, content).await {
         Ok(_) => Json(serde_json::json!({"status": "sent"})).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("Network error: {}", e)}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("Network error: {}", e)})),
+        )
+            .into_response(),
     }
 }
 
@@ -1520,11 +1847,23 @@ async fn handle_add_group_member(
             a.copy_from_slice(&b);
             a
         }
-        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid group id"})),
+            )
+                .into_response()
+        }
     };
     let member_hash = match parse_identity_hash(&req.identity_hash) {
         Ok(h) => h,
-        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e})),
+            )
+                .into_response()
+        }
     };
     let public_key_bytes = match req.public_key.as_deref() {
         Some(pk_hex) => match hex::decode(pk_hex) {
@@ -1562,7 +1901,8 @@ async fn handle_add_group_member(
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": format!("{}", e)})),
-        ).into_response(),
+        )
+            .into_response(),
     }
 }
 
@@ -1576,11 +1916,23 @@ async fn handle_remove_group_member(
             a.copy_from_slice(&b);
             a
         }
-        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid group id"})),
+            )
+                .into_response()
+        }
     };
     let member_hash = match parse_identity_hash(&member_hash_hex) {
         Ok(h) => h,
-        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e})),
+            )
+                .into_response()
+        }
     };
     let mut node = state.node.lock().await;
     match node
@@ -1591,7 +1943,8 @@ async fn handle_remove_group_member(
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": format!("{}", e)})),
-        ).into_response(),
+        )
+            .into_response(),
     }
 }
 
@@ -1606,11 +1959,23 @@ async fn handle_set_group_member_role(
             a.copy_from_slice(&b);
             a
         }
-        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid group id"})),
+            )
+                .into_response()
+        }
     };
     let member_hash = match parse_identity_hash(&member_hash_hex) {
         Ok(h) => h,
-        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e})),
+            )
+                .into_response()
+        }
     };
     let new_role = match req.role.as_str() {
         "Admin" => red_core::protocol::MemberRole::Admin,
@@ -1631,10 +1996,15 @@ async fn handle_set_group_member_role(
             Err(e) => (
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": format!("{}", e)})),
-            ).into_response(),
+            )
+                .into_response(),
         }
     } else {
-        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Group not found"}))).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Group not found"})),
+        )
+            .into_response()
     }
 }
 
@@ -1649,11 +2019,23 @@ async fn handle_mute_group_member(
             a.copy_from_slice(&b);
             a
         }
-        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid group id"})),
+            )
+                .into_response()
+        }
     };
     let member_hash = match parse_identity_hash(&member_hash_hex) {
         Ok(h) => h,
-        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e})),
+            )
+                .into_response()
+        }
     };
 
     let node = state.node.lock().await;
@@ -1668,10 +2050,15 @@ async fn handle_mute_group_member(
             Err(e) => (
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": format!("{}", e)})),
-            ).into_response(),
+            )
+                .into_response(),
         }
     } else {
-        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Group not found"}))).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Group not found"})),
+        )
+            .into_response()
     }
 }
 
@@ -1686,7 +2073,13 @@ async fn handle_set_group_broadcast(
             a.copy_from_slice(&b);
             a
         }
-        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid group id"})),
+            )
+                .into_response()
+        }
     };
 
     let node = state.node.lock().await;
@@ -1697,7 +2090,11 @@ async fn handle_set_group_broadcast(
         let _ = s.add_group(group);
         (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
     } else {
-        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Group not found"}))).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Group not found"})),
+        )
+            .into_response()
     }
 }
 
@@ -1710,7 +2107,11 @@ async fn handle_group_history_request(
         req.group_id,
         req.requester_hash
     );
-    (StatusCode::OK, Json(serde_json::json!({"ok": true, "status": "DTN sync request queued"}))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"ok": true, "status": "DTN sync request queued"})),
+    )
+        .into_response()
 }
 
 async fn handle_get_blocks(State(state): State<ApiState>) -> impl IntoResponse {
@@ -1758,7 +2159,8 @@ async fn handle_get_consensus(State(state): State<ApiState>) -> impl IntoRespons
         total_stake: state.consensus.total_stake(),
         active_validators: state.consensus.active_validator_count(),
         chain_height: state.chain.height(),
-    }).into_response()
+    })
+    .into_response()
 }
 
 async fn handle_stake(
@@ -1770,12 +2172,20 @@ async fn handle_stake(
         *node.identity_hash().as_bytes()
     };
     match state.consensus.add_stake(&validator_key, req.amount) {
-        Ok(_) => Json(serde_json::json!({"status": "staked", "amount": req.amount})).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+        Ok(_) => {
+            Json(serde_json::json!({"status": "staked", "amount": req.amount})).into_response()
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_sse(State(state): State<ApiState>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+async fn handle_sse(
+    State(state): State<ApiState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let mut rx = state.msg_tx.subscribe();
     let my_hash = state.node.lock().await.identity_hash().clone();
     let stream = async_stream::stream! {
@@ -1802,7 +2212,9 @@ async fn handle_sse(State(state): State<ApiState>) -> Sse<impl Stream<Item = Res
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
-async fn handle_outbound_sse(State(state): State<ApiState>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+async fn handle_outbound_sse(
+    State(state): State<ApiState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     // P2 FIX: El SSE outbound ahora retransmite los mensajes ENVIADOS al WebView para
     // que el MeshRouter pueda broadcast físico por BLE/WiFi.
     // Compartimos el mismo canal msg_tx: los mensajes donde sender == my_hash son salientes.
@@ -1833,23 +2245,34 @@ async fn handle_outbound_sse(State(state): State<ApiState>) -> Sse<impl Stream<I
 async fn handle_get_peers(State(state): State<ApiState>) -> impl IntoResponse {
     let node = state.node.lock().await;
     let known = node.known_peers();
-    let items: Vec<PeerItem> = known.into_iter().map(|p| {
-        let hex_id = p.identity_hash.as_ref().map(|h| h.to_hex()).unwrap_or_else(|| p.id.to_string());
-        let addr = p.addresses.first().map(|a| a.to_string());
-        let transport = if addr.as_ref().map(|a| a.contains("ble") || a.contains("gatt")).unwrap_or(false) {
-            "ble".to_string()
-        } else {
-            "wifi".to_string()
-        };
-        PeerItem {
-            id: hex_id,
-            is_connected: true,
-            transport,
-            latency_ms: None,
-            noise_session: true,
-            addr,
-        }
-    }).collect();
+    let items: Vec<PeerItem> = known
+        .into_iter()
+        .map(|p| {
+            let hex_id = p
+                .identity_hash
+                .as_ref()
+                .map(|h| h.to_hex())
+                .unwrap_or_else(|| p.id.to_string());
+            let addr = p.addresses.first().map(|a| a.to_string());
+            let transport = if addr
+                .as_ref()
+                .map(|a| a.contains("ble") || a.contains("gatt"))
+                .unwrap_or(false)
+            {
+                "ble".to_string()
+            } else {
+                "wifi".to_string()
+            };
+            PeerItem {
+                id: hex_id,
+                is_connected: true,
+                transport,
+                latency_ms: None,
+                noise_session: true,
+                addr,
+            }
+        })
+        .collect();
     Json(items).into_response()
 }
 
@@ -1868,14 +2291,16 @@ async fn handle_connect_peer(
             "ok": true,
             "connected": req.multiaddr,
             "status": "Dialing multiaddr over P2P network"
-        })).into_response(),
+        }))
+        .into_response(),
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({
                 "ok": false,
                 "error": format!("{}", e)
             })),
-        ).into_response(),
+        )
+            .into_response(),
     }
 }
 
@@ -1891,7 +2316,8 @@ async fn handle_get_network_ip(State(_state): State<ApiState>) -> impl IntoRespo
             "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTKI8XwOSPNKZbPEmLkXNA5yRxklDDe",
             "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ"
         ]
-    })).into_response()
+    }))
+    .into_response()
 }
 
 #[derive(Debug, Deserialize)]
@@ -1902,9 +2328,7 @@ pub struct DnsQueryRequest {
     pub server: Option<String>,
 }
 
-async fn handle_dns_query(
-    Json(req): Json<DnsQueryRequest>,
-) -> impl IntoResponse {
+async fn handle_dns_query(Json(req): Json<DnsQueryRequest>) -> impl IntoResponse {
     let query_host = req.query.trim();
     if query_host.is_empty() {
         return (
@@ -1941,7 +2365,9 @@ async fn handle_dns_query(
         packet.extend_from_slice(&[0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
         for part in query_host.split('.') {
-            if part.is_empty() { continue; }
+            if part.is_empty() {
+                continue;
+            }
             let bytes = part.as_bytes();
             if bytes.len() > 63 {
                 return Err("DNS label too long".to_string());
@@ -1951,7 +2377,13 @@ async fn handle_dns_query(
         }
         packet.push(0x00);
 
-        let qtype = match req.record_type.as_deref().unwrap_or("TXT").to_uppercase().as_str() {
+        let qtype = match req
+            .record_type
+            .as_deref()
+            .unwrap_or("TXT")
+            .to_uppercase()
+            .as_str()
+        {
             "A" => 1u16,
             "AAAA" => 28u16,
             _ => 16u16,
@@ -1985,7 +2417,8 @@ async fn handle_dns_query(
         } else {
             Ok("ACK_OK_EMPTY".to_string())
         }
-    }).await;
+    })
+    .await;
 
     let latency_ms = start.elapsed().as_millis() as u64;
 
@@ -2037,13 +2470,13 @@ async fn handle_get_vault(State(state): State<ApiState>) -> impl IntoResponse {
         sybil_blocked: 0,
         chain_height,
         version: env!("CARGO_PKG_VERSION").to_string(),
-    }).into_response()
+    })
+    .into_response()
 }
 
 async fn handle_renegotiate_crypto() -> impl IntoResponse {
     Json(serde_json::json!({"status": "ok", "message": "Keys refreshed"})).into_response()
 }
-
 
 // ─── Async Router (Allows booting API before Node is ready) ───────────────────
 //
@@ -2076,109 +2509,219 @@ pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>
 
     Router::new()
         // Early-boot routes — respond even with None state
-        .route("/api/status",   get(handle_status_async))
+        .route("/api/status", get(handle_status_async))
         .route("/api/identity", get(handle_identity_async))
-        .route("/api/events",   get(handle_sse_async))
-        .route("/api/logs",     get(handle_logs_async))
+        .route("/api/events", get(handle_sse_async))
+        .route("/api/logs", get(handle_logs_async))
         .route("/api/network/outbound", get(handle_outbound_sse_async))
-        .route("/api/dns/query",        post(handle_dns_query))
+        .route("/api/dns/query", post(handle_dns_query))
         .route("/local-signal", get(handle_local_signal))
-        .route("/api/ai/status", get(handle_ai_status_public).post(handle_ai_status_public))
-        .route("/api/tags",      get(handle_ollama_tags_public))
-        .route("/v1/models",     get(handle_openai_models_public))
+        .route(
+            "/api/ai/status",
+            get(handle_ai_status_public).post(handle_ai_status_public),
+        )
+        .route("/api/tags", get(handle_ollama_tags_public))
+        .route("/v1/models", get(handle_openai_models_public))
         .route("/api/ai/copilot", post(handle_ai_copilot_query_async))
-        .route("/api/generate",  post(handle_ollama_generate_async))
-        .route("/v1/chat/completions", post(handle_openai_chat_completions_async))
+        .route("/api/generate", post(handle_ollama_generate_async))
+        .route(
+            "/v1/chat/completions",
+            post(handle_openai_chat_completions_async),
+        )
         // All other routes: 503 if not ready, delegate to full router if ready
-        .route("/api/contacts",                           get(handle_contacts_get_async).post(handle_contacts_post_async))
-        .route("/api/contacts/:hash",                     delete(handle_contacts_delete_async))
-        .route("/api/conversations",                      get(handle_conversations_get_async))
-        .route("/api/conversations/:id/messages",         get(handle_get_messages_async))
-        .route("/api/messages/send",                      post(handle_send_message_async))
-        .route("/api/mesh/receive",                       post(handle_mesh_receive_async))
-        .route("/api/groups",                             get(handle_groups_get_async).post(handle_groups_post_async))
-        .route("/api/groups/:id/send",                    post(handle_groups_send_async))
-        .route("/api/peers",                              get(handle_peers_get_async))
-        .route("/api/network/blackout",                  get(handle_get_blackout_async).post(handle_set_blackout_async))
-        .route("/api/blackout/status",                   get(handle_get_blackout_async))
-        .route("/api/blackout/mode",                     post(handle_set_blackout_async))
-        .route("/api/network/rf_metrics",                 get(handle_get_rf_metrics_async))
-        .route("/api/network/rf/channel_hop",               post(handle_channel_hop_async))
-        .route("/api/network/rf/fec",                       post(handle_set_fec_async))
-        .route("/api/system/health",                        get(handle_system_health_async))
-        .route("/api/triage/reports",                       get(handle_get_triage_reports_async).post(handle_create_triage_report_async))
-        .route("/api/triage/reports/:id",                   delete(handle_delete_triage_report_async))
-        .route("/api/beacon/sos",                            get(handle_get_emergency_beacons_async).post(handle_broadcast_emergency_beacon_async))
-        .route("/api/beacon/sos/cancel",                     post(handle_cancel_emergency_beacon_async))
-        .route("/api/emergency/beacons",                     get(handle_get_emergency_beacons_async).post(handle_broadcast_emergency_beacon_async))
-        .route("/api/emergency/beacons/:id/cancel",          post(handle_cancel_emergency_beacon_async))
-        .route("/api/beacon/soundmesh/inject",                 post(handle_inject_soundmesh_async))
-        .route("/api/stego/vault",                            get(handle_get_stego_vault_async).post(handle_save_stego_vault_async))
-        .route("/api/stego/vault/:id",                        delete(handle_delete_stego_vault_async))
-        .route("/api/stego/capsules",                         get(handle_get_stego_vault_async).post(handle_save_stego_vault_async))
-        .route("/api/stego/capsules/:id",                     delete(handle_delete_stego_vault_async))
-        .route("/api/settings/dms",                            get(handle_get_dms_config_async).post(handle_save_dms_config_async))
-        .route("/api/settings/dms/ping",                       post(handle_ping_dms_async))
-        .route("/api/settings/dms/panic_wipe",                 post(handle_panic_wipe_async))
-        .route("/api/dms/ping",                                post(handle_ping_dms_async))
-        .route("/api/dms/panic",                               post(handle_panic_wipe_async))
-        .route("/api/proximity",                               get(handle_get_proximity_nodes_async))
-        .route("/api/proximity/ping",                          post(handle_ping_proximity_async))
-        .route("/api/proximity/shake_pair",                    post(handle_shake_pair_async))
-        .route("/api/voice/bursts",                            get(handle_get_voice_bursts_async).post(handle_send_voice_burst_async))
-        .route("/api/voice/bursts/:id",                        delete(handle_delete_voice_burst_async))
-        .route("/api/network/vault",                      get(handle_vault_get_async))
-        .route("/api/crypto/renegotiate",                 post(handle_renegotiate_async))
-        .route("/api/blockchain/blocks",                  get(handle_blocks_get_async))
-        .route("/api/blockchain/validators",              get(handle_validators_get_async))
-        .route("/api/blockchain/consensus",               get(handle_consensus_get_async))
-        .route("/api/blockchain/stake",                   post(handle_stake_post_async))
+        .route(
+            "/api/contacts",
+            get(handle_contacts_get_async).post(handle_contacts_post_async),
+        )
+        .route("/api/contacts/:hash", delete(handle_contacts_delete_async))
+        .route("/api/conversations", get(handle_conversations_get_async))
+        .route(
+            "/api/conversations/:id/messages",
+            get(handle_get_messages_async),
+        )
+        .route("/api/messages/send", post(handle_send_message_async))
+        .route("/api/mesh/receive", post(handle_mesh_receive_async))
+        .route(
+            "/api/groups",
+            get(handle_groups_get_async).post(handle_groups_post_async),
+        )
+        .route("/api/groups/:id/send", post(handle_groups_send_async))
+        .route("/api/peers", get(handle_peers_get_async))
+        .route(
+            "/api/network/blackout",
+            get(handle_get_blackout_async).post(handle_set_blackout_async),
+        )
+        .route("/api/blackout/status", get(handle_get_blackout_async))
+        .route("/api/blackout/mode", post(handle_set_blackout_async))
+        .route("/api/network/rf_metrics", get(handle_get_rf_metrics_async))
+        .route(
+            "/api/network/rf/channel_hop",
+            post(handle_channel_hop_async),
+        )
+        .route("/api/network/rf/fec", post(handle_set_fec_async))
+        .route("/api/system/health", get(handle_system_health_async))
+        .route(
+            "/api/triage/reports",
+            get(handle_get_triage_reports_async).post(handle_create_triage_report_async),
+        )
+        .route(
+            "/api/triage/reports/:id",
+            delete(handle_delete_triage_report_async),
+        )
+        .route(
+            "/api/beacon/sos",
+            get(handle_get_emergency_beacons_async).post(handle_broadcast_emergency_beacon_async),
+        )
+        .route(
+            "/api/beacon/sos/cancel",
+            post(handle_cancel_emergency_beacon_async),
+        )
+        .route(
+            "/api/emergency/beacons",
+            get(handle_get_emergency_beacons_async).post(handle_broadcast_emergency_beacon_async),
+        )
+        .route(
+            "/api/emergency/beacons/:id/cancel",
+            post(handle_cancel_emergency_beacon_async),
+        )
+        .route(
+            "/api/beacon/soundmesh/inject",
+            post(handle_inject_soundmesh_async),
+        )
+        .route(
+            "/api/stego/vault",
+            get(handle_get_stego_vault_async).post(handle_save_stego_vault_async),
+        )
+        .route(
+            "/api/stego/vault/:id",
+            delete(handle_delete_stego_vault_async),
+        )
+        .route(
+            "/api/stego/capsules",
+            get(handle_get_stego_vault_async).post(handle_save_stego_vault_async),
+        )
+        .route(
+            "/api/stego/capsules/:id",
+            delete(handle_delete_stego_vault_async),
+        )
+        .route(
+            "/api/settings/dms",
+            get(handle_get_dms_config_async).post(handle_save_dms_config_async),
+        )
+        .route("/api/settings/dms/ping", post(handle_ping_dms_async))
+        .route(
+            "/api/settings/dms/panic_wipe",
+            post(handle_panic_wipe_async),
+        )
+        .route("/api/dms/ping", post(handle_ping_dms_async))
+        .route("/api/dms/panic", post(handle_panic_wipe_async))
+        .route("/api/proximity", get(handle_get_proximity_nodes_async))
+        .route("/api/proximity/ping", post(handle_ping_proximity_async))
+        .route("/api/proximity/shake_pair", post(handle_shake_pair_async))
+        .route(
+            "/api/voice/bursts",
+            get(handle_get_voice_bursts_async).post(handle_send_voice_burst_async),
+        )
+        .route(
+            "/api/voice/bursts/:id",
+            delete(handle_delete_voice_burst_async),
+        )
+        .route("/api/network/vault", get(handle_vault_get_async))
+        .route("/api/crypto/renegotiate", post(handle_renegotiate_async))
+        .route("/api/blockchain/blocks", get(handle_blocks_get_async))
+        .route(
+            "/api/blockchain/validators",
+            get(handle_validators_get_async),
+        )
+        .route("/api/blockchain/consensus", get(handle_consensus_get_async))
+        .route("/api/blockchain/stake", post(handle_stake_post_async))
         // --- Sovereign P2P Payments & Vouchers (v32.0) ---
-        .route("/api/p2p/wallet",                         get(handle_get_p2p_wallet_async))
-        .route("/api/p2p/voucher",                        post(handle_create_p2p_voucher_async))
-        .route("/api/p2p/redeem",                         post(handle_redeem_p2p_voucher_async))
-        .route("/api/profile",                            axum::routing::put(handle_profile_put_async))
-        .route("/api/settings/burner",                   post(handle_set_burner_mode_async))
-        .route("/api/settings/lora",                      post(handle_set_lora_async))
-        .route("/api/conversations/:id/read",             post(handle_mark_read_async))
-        .route("/api/conversations/:id/clear",            axum::routing::delete(handle_clear_async))
+        .route("/api/p2p/wallet", get(handle_get_p2p_wallet_async))
+        .route("/api/p2p/voucher", post(handle_create_p2p_voucher_async))
+        .route("/api/p2p/redeem", post(handle_redeem_p2p_voucher_async))
+        .route("/api/profile", axum::routing::put(handle_profile_put_async))
+        .route("/api/settings/burner", post(handle_set_burner_mode_async))
+        .route("/api/settings/lora", post(handle_set_lora_async))
+        .route("/api/conversations/:id/read", post(handle_mark_read_async))
+        .route(
+            "/api/conversations/:id/clear",
+            axum::routing::delete(handle_clear_async),
+        )
         // --- Social Network ---
-        .route("/api/social/feed",                        get(handle_social_feed_async))
-        .route("/api/social/post",                        post(handle_social_post_async))
-        .route("/api/social/posts",                       get(handle_social_feed_async).post(handle_social_post_async))
-        .route("/api/social/posts/:id",                   delete(handle_social_post_delete_async))
-        .route("/api/social/react",                       post(handle_social_react_async))
-        .route("/api/social/follow",                      post(handle_social_follow_async))
-        .route("/api/social/unfollow",                    post(handle_social_unfollow_async))
-        .route("/api/social/following",                   get(handle_social_following_async))
-        .route("/api/channels/messages", get(handle_get_channel_messages_async))
-        .route("/api/channels/post",     post(handle_post_channel_message_async))
+        .route("/api/social/feed", get(handle_social_feed_async))
+        .route("/api/social/post", post(handle_social_post_async))
+        .route(
+            "/api/social/posts",
+            get(handle_social_feed_async).post(handle_social_post_async),
+        )
+        .route(
+            "/api/social/posts/:id",
+            delete(handle_social_post_delete_async),
+        )
+        .route("/api/social/react", post(handle_social_react_async))
+        .route("/api/social/follow", post(handle_social_follow_async))
+        .route("/api/social/unfollow", post(handle_social_unfollow_async))
+        .route("/api/social/following", get(handle_social_following_async))
+        .route(
+            "/api/channels/messages",
+            get(handle_get_channel_messages_async),
+        )
+        .route(
+            "/api/channels/post",
+            post(handle_post_channel_message_async),
+        )
         // Voice & Weather
-        .route("/api/voice/send",        post(handle_send_voice_burst_async))
-        .route("/api/weather/report",    post(handle_post_weather_report_async))
-        .route("/api/weather/reports",   get(handle_get_weather_reports_async))
+        .route("/api/voice/send", post(handle_send_voice_burst_async))
+        .route(
+            "/api/weather/report",
+            post(handle_post_weather_report_async),
+        )
+        .route(
+            "/api/weather/reports",
+            get(handle_get_weather_reports_async),
+        )
         // Discovery & Battery & Ephemeral
-        .route("/api/discovery/proximity", get(handle_get_proximity_nodes_async))
-        .route("/api/discovery/wave",      post(handle_trigger_wave_async))
-        .route("/api/discovery/config",    get(handle_get_discovery_config_async).post(handle_set_discovery_config_async))
-        .route("/api/discovery/digest",    get(handle_get_discovery_digest_async))
-        .route("/api/battery/status",      get(handle_get_battery_status_async))
-        .route("/api/battery/optimize",    post(handle_update_battery_optimize_async))
-        .route("/api/ephemeral/set_timer", post(handle_set_ephemeral_timer_async))
-        .route("/api/sanitizer/clean",     post(handle_clean_image_exif))
+        .route(
+            "/api/discovery/proximity",
+            get(handle_get_proximity_nodes_async),
+        )
+        .route("/api/discovery/wave", post(handle_trigger_wave_async))
+        .route(
+            "/api/discovery/config",
+            get(handle_get_discovery_config_async).post(handle_set_discovery_config_async),
+        )
+        .route(
+            "/api/discovery/digest",
+            get(handle_get_discovery_digest_async),
+        )
+        .route("/api/battery/status", get(handle_get_battery_status_async))
+        .route(
+            "/api/battery/optimize",
+            post(handle_update_battery_optimize_async),
+        )
+        .route(
+            "/api/ephemeral/set_timer",
+            post(handle_set_ephemeral_timer_async),
+        )
+        .route("/api/sanitizer/clean", post(handle_clean_image_exif))
         // AI Summarizer / Translator / Embeddings (Copilot & LLM endpoints are registered above as public early-boot routes)
         .route("/api/ai/summarize", post(handle_ai_summarize_channel_async))
         .route("/api/ai/translate", post(handle_ai_translate_text_async))
         .route("/api/ai/embeddings", post(handle_extract_embeddings_async))
         // AMBER & Guardian
-        .route("/api/amber/alert",           post(handle_create_amber_alert_async))
-        .route("/api/amber/alerts",          get(handle_list_amber_alerts_async))
-        .route("/api/amber/alerts/:id",      get(handle_get_amber_alert_async))
-        .route("/api/amber/alerts/:id/resolve", post(handle_resolve_amber_alert_async))
-        .route("/api/amber/alerts/:id/sighting", post(handle_report_sighting_async))
-        .route("/api/guardian/status",      get(handle_guardian_status_async))
-        .route("/api/guardian/report",      post(handle_report_content_async))
-
+        .route("/api/amber/alert", post(handle_create_amber_alert_async))
+        .route("/api/amber/alerts", get(handle_list_amber_alerts_async))
+        .route("/api/amber/alerts/:id", get(handle_get_amber_alert_async))
+        .route(
+            "/api/amber/alerts/:id/resolve",
+            post(handle_resolve_amber_alert_async),
+        )
+        .route(
+            "/api/amber/alerts/:id/sighting",
+            post(handle_report_sighting_async),
+        )
+        .route("/api/guardian/status", get(handle_guardian_status_async))
+        .route("/api/guardian/report", post(handle_report_content_async))
         .fallback(handle_node_not_ready)
         .layer(auth_layer)
         .layer(cors)
@@ -2194,9 +2737,6 @@ pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>
         .with_state(state)
 }
 
-
-
-
 // --- Zero-Trust Authentication Middleware ---
 
 async fn validate_auth(
@@ -2205,16 +2745,29 @@ async fn validate_auth(
     next: axum::middleware::Next,
 ) -> Response {
     let path = request.uri().path();
-    if path == "/local-signal" || path == "/api/status" || path == "/api/events" || path == "/api/network/outbound" || path == "/api/dns/query" || path == "/api/ai/status" || path == "/api/tags" || path == "/v1/models" || path == "/v1/chat/completions" || path == "/api/generate" || path == "/api/ai/copilot" {
+    if path == "/local-signal"
+        || path == "/api/status"
+        || path == "/api/events"
+        || path == "/api/network/outbound"
+        || path == "/api/dns/query"
+        || path == "/api/ai/status"
+        || path == "/api/tags"
+        || path == "/v1/models"
+        || path == "/v1/chat/completions"
+        || path == "/api/generate"
+        || path == "/api/ai/copilot"
+    {
         return next.run(request).await;
     }
 
     let headers = request.headers();
-    let actual_key = headers.get("X-API-Key")
+    let actual_key = headers
+        .get("X-API-Key")
         .or_else(|| headers.get("X-Red-Session-Token"))
         .and_then(|h| h.to_str().ok())
         .or_else(|| {
-            headers.get("Authorization")
+            headers
+                .get("Authorization")
                 .and_then(|h| h.to_str().ok())
                 .and_then(|v| v.strip_prefix("Bearer "))
         });
@@ -2223,11 +2776,17 @@ async fn validate_auth(
 
     if let Some(key) = actual_key {
         let key_clean = key.trim();
-        if subtle::ConstantTimeEq::ct_eq(key_clean.as_bytes(), expected_key.as_bytes()).unwrap_u8() == 1 {
+        if subtle::ConstantTimeEq::ct_eq(key_clean.as_bytes(), expected_key.as_bytes()).unwrap_u8()
+            == 1
+        {
             return next.run(request).await;
         }
     }
-    (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "X-API-Key missing or invalid (Zero-Trust Violation)"}))).into_response()
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(serde_json::json!({"error": "X-API-Key missing or invalid (Zero-Trust Violation)"})),
+    )
+        .into_response()
 }
 
 async fn validate_auth_async(
@@ -2237,7 +2796,18 @@ async fn validate_auth_async(
 ) -> Response {
     // Bypass auth for public boot and SSE discovery endpoints.
     let path = request.uri().path();
-    if path == "/api/status" || path == "/api/events" || path == "/api/network/outbound" || path == "/api/dns/query" || path == "/local-signal" || path == "/api/ai/status" || path == "/api/tags" || path == "/v1/models" || path == "/v1/chat/completions" || path == "/api/generate" || path == "/api/ai/copilot" {
+    if path == "/api/status"
+        || path == "/api/events"
+        || path == "/api/network/outbound"
+        || path == "/api/dns/query"
+        || path == "/local-signal"
+        || path == "/api/ai/status"
+        || path == "/api/tags"
+        || path == "/v1/models"
+        || path == "/v1/chat/completions"
+        || path == "/api/generate"
+        || path == "/api/ai/copilot"
+    {
         return next.run(request).await;
     }
 
@@ -2249,26 +2819,37 @@ async fn validate_auth_async(
 
     if let Some(expected_key) = expected_key {
         let headers = request.headers();
-        let actual_key = headers.get("X-API-Key")
+        let actual_key = headers
+            .get("X-API-Key")
             .or_else(|| headers.get("X-Red-Session-Token"))
             .and_then(|h| h.to_str().ok())
             .or_else(|| {
-                headers.get("Authorization")
+                headers
+                    .get("Authorization")
                     .and_then(|h| h.to_str().ok())
                     .and_then(|v| v.strip_prefix("Bearer "))
             });
 
         if let Some(key) = actual_key {
             let key_clean = key.trim();
-            if subtle::ConstantTimeEq::ct_eq(key_clean.as_bytes(), expected_key.as_bytes()).unwrap_u8() == 1 {
+            if subtle::ConstantTimeEq::ct_eq(key_clean.as_bytes(), expected_key.as_bytes())
+                .unwrap_u8()
+                == 1
+            {
                 return next.run(request).await;
             }
         }
-        (StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({"error": "Unauthorized (Zero-Trust Violation)"}))).into_response()
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Unauthorized (Zero-Trust Violation)"})),
+        )
+            .into_response()
     } else {
-        (StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({"error": "Node initializing"}))).into_response()
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Node initializing"})),
+        )
+            .into_response()
     }
 }
 
@@ -2302,25 +2883,57 @@ macro_rules! async_wrap_post {
     };
 }
 
-async_wrap_get!(handle_contacts_get_async,     handle_list_contacts);
-async_wrap_post!(handle_contacts_post_async,   handle_add_contact,       AddContactRequest);
+async_wrap_get!(handle_contacts_get_async, handle_list_contacts);
+async_wrap_post!(
+    handle_contacts_post_async,
+    handle_add_contact,
+    AddContactRequest
+);
 async_wrap_get!(handle_conversations_get_async, handle_list_conversations);
-async_wrap_post!(handle_send_message_async,    handle_send_message,      SendMessageRequest);
-async_wrap_post!(handle_mesh_receive_async,    handle_mesh_receive,      MeshReceiveRequest);
-async_wrap_get!(handle_groups_get_async,       handle_list_groups);
-async_wrap_post!(handle_groups_post_async,     handle_create_group,      CreateGroupRequest);
-async_wrap_get!(handle_peers_get_async,        handle_get_peers);
-async_wrap_get!(handle_vault_get_async,        handle_get_vault);
-async_wrap_post!(handle_renegotiate_async,     handle_renegotiate_crypto_body, EmptyRequest);
-async_wrap_get!(handle_blocks_get_async,       handle_get_blocks);
-async_wrap_get!(handle_validators_get_async,   handle_get_validators);
-async_wrap_get!(handle_consensus_get_async,    handle_get_consensus);
-async_wrap_post!(handle_stake_post_async,      handle_stake,             StakeRequest);
-async_wrap_post!(handle_set_burner_mode_async, handle_set_burner_mode,   BurnerModeRequest);
-async_wrap_post!(handle_profile_put_async,     handle_update_profile,    UpdateProfileRequest);
-async_wrap_get!(handle_get_dms_async,          handle_get_dms_config);
-async_wrap_post!(handle_set_dms_async,         handle_set_dms_config,    DmsConfig);
-async_wrap_post!(handle_set_lora_async,        handle_set_lora_config,   LoraConfigRequest);
+async_wrap_post!(
+    handle_send_message_async,
+    handle_send_message,
+    SendMessageRequest
+);
+async_wrap_post!(
+    handle_mesh_receive_async,
+    handle_mesh_receive,
+    MeshReceiveRequest
+);
+async_wrap_get!(handle_groups_get_async, handle_list_groups);
+async_wrap_post!(
+    handle_groups_post_async,
+    handle_create_group,
+    CreateGroupRequest
+);
+async_wrap_get!(handle_peers_get_async, handle_get_peers);
+async_wrap_get!(handle_vault_get_async, handle_get_vault);
+async_wrap_post!(
+    handle_renegotiate_async,
+    handle_renegotiate_crypto_body,
+    EmptyRequest
+);
+async_wrap_get!(handle_blocks_get_async, handle_get_blocks);
+async_wrap_get!(handle_validators_get_async, handle_get_validators);
+async_wrap_get!(handle_consensus_get_async, handle_get_consensus);
+async_wrap_post!(handle_stake_post_async, handle_stake, StakeRequest);
+async_wrap_post!(
+    handle_set_burner_mode_async,
+    handle_set_burner_mode,
+    BurnerModeRequest
+);
+async_wrap_post!(
+    handle_profile_put_async,
+    handle_update_profile,
+    UpdateProfileRequest
+);
+async_wrap_get!(handle_get_dms_async, handle_get_dms_config);
+async_wrap_post!(handle_set_dms_async, handle_set_dms_config, DmsConfig);
+async_wrap_post!(
+    handle_set_lora_async,
+    handle_set_lora_config,
+    LoraConfigRequest
+);
 
 // Path-param routes need manual wrappers (macros can't handle Path extractors generically)
 async fn handle_contacts_delete_async(
@@ -2329,9 +2942,14 @@ async fn handle_contacts_delete_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(ready) => handle_delete_contact(State(ready.clone()), path).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"}))).into_response(),
+        Some(ready) => handle_delete_contact(State(ready.clone()), path)
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"})),
+        )
+            .into_response(),
     }
 }
 
@@ -2341,9 +2959,14 @@ async fn handle_get_messages_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(ready) => handle_get_messages(State(ready.clone()), path).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"}))).into_response(),
+        Some(ready) => handle_get_messages(State(ready.clone()), path)
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"})),
+        )
+            .into_response(),
     }
 }
 
@@ -2354,9 +2977,14 @@ async fn handle_groups_send_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(ready) => handle_send_group_message(State(ready.clone()), path, Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"}))).into_response(),
+        Some(ready) => handle_send_group_message(State(ready.clone()), path, Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"})),
+        )
+            .into_response(),
     }
 }
 
@@ -2366,9 +2994,14 @@ async fn handle_mark_read_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(ready) => handle_mark_conversation_read(State(ready.clone()), path).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"}))).into_response(),
+        Some(ready) => handle_mark_conversation_read(State(ready.clone()), path)
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"})),
+        )
+            .into_response(),
     }
 }
 
@@ -2378,9 +3011,14 @@ async fn handle_clear_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(ready) => handle_clear_conversation(State(ready.clone()), path).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"}))).into_response(),
+        Some(ready) => handle_clear_conversation(State(ready.clone()), path)
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"})),
+        )
+            .into_response(),
     }
 }
 
@@ -2396,7 +3034,10 @@ async fn handle_renegotiate_crypto_body(
 }
 
 async fn handle_node_not_ready() -> impl IntoResponse {
-    (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"})))
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"})),
+    )
 }
 
 async fn handle_status_async(State(state): State<AsyncState>) -> impl IntoResponse {
@@ -2412,7 +3053,8 @@ async fn handle_status_async(State(state): State<AsyncState>) -> impl IntoRespon
             gossip_latency_ms: None,
             noise_packets_sent: 0,
             sybil_blocked: 0,
-        }).into_response()
+        })
+        .into_response(),
     }
 }
 
@@ -2425,7 +3067,8 @@ async fn handle_identity_async(State(state): State<AsyncState>) -> impl IntoResp
             short_id: "INIT".to_string(),
             nickname: None,
             public_key: String::new(),
-        }).into_response()
+        })
+        .into_response(),
     }
 }
 
@@ -2433,15 +3076,21 @@ async fn handle_sse_async(State(state): State<AsyncState>) -> impl IntoResponse 
     let s = state.lock().await;
     match &*s {
         Some(ready) => handle_sse(State(ready.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, "SSE Source not ready").into_response()
+        None => (StatusCode::SERVICE_UNAVAILABLE, "SSE Source not ready").into_response(),
     }
 }
 
 async fn handle_outbound_sse_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(ready) => handle_outbound_sse(State(ready.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, "Outbound SSE Source not ready").into_response()
+        Some(ready) => handle_outbound_sse(State(ready.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Outbound SSE Source not ready",
+        )
+            .into_response(),
     }
 }
 
@@ -2476,15 +3125,23 @@ async fn handle_get_channel_messages(
     State(state): State<ApiState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let channel_id = params.get("channel").or_else(|| params.get("channel_id")).cloned().unwrap_or_else(|| "red-local-general".to_string());
-    let limit = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(50);
+    let channel_id = params
+        .get("channel")
+        .or_else(|| params.get("channel_id"))
+        .cloned()
+        .unwrap_or_else(|| "red-local-general".to_string());
+    let limit = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50);
     let msgs = state.channel_store.get_channel_messages(&channel_id, limit);
     let channels = state.channel_store.list_active_channels();
     Json(serde_json::json!({
         "channel_id": channel_id,
         "channels": channels,
         "messages": msgs
-    })).into_response()
+    }))
+    .into_response()
 }
 
 async fn handle_post_channel_message(
@@ -2499,8 +3156,9 @@ async fn handle_post_channel_message(
                 "ok": false,
                 "error": format!("⛔ RED Guardian: {}", reason),
                 "category": category
-            }))
-        ).into_response();
+            })),
+        )
+            .into_response();
     }
     let (msg, sys_msg) = {
         let node = state.node.lock().await;
@@ -2589,7 +3247,10 @@ async fn handle_get_voice_bursts(
     State(state): State<ApiState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let limit = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(20);
+    let limit = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
     let mut bursts = state.voice_store.get_recent_bursts(limit);
     if bursts.is_empty() {
         let node = state.node.lock().await;
@@ -2624,7 +3285,11 @@ async fn handle_delete_voice_burst(
     let storage = node.get_storage();
     let s = storage.lock().await;
     let _ = s.delete_voice_burst(&id);
-    (StatusCode::OK, Json(serde_json::json!({"success": true, "deleted": id}))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"success": true, "deleted": id})),
+    )
+        .into_response()
 }
 async fn handle_post_weather_report(
     State(state): State<ApiState>,
@@ -2657,7 +3322,10 @@ async fn handle_get_weather_reports(
     State(state): State<ApiState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let limit = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(50);
+    let limit = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50);
     let reports = state.weather_store.list_reports(limit);
     Json(serde_json::json!({ "ok": true, "reports": reports })).into_response()
 }
@@ -2672,7 +3340,11 @@ async fn handle_register_ble_device(
     State(state): State<ApiState>,
     Json(req): Json<crate::discovery::RegisterBleDeviceRequest>,
 ) -> impl IntoResponse {
-    state.discovery_engine.register_ble_device(req.identity_hash, req.rssi_dbm, req.distance_meters);
+    state.discovery_engine.register_ble_device(
+        req.identity_hash,
+        req.rssi_dbm,
+        req.distance_meters,
+    );
     Json(serde_json::json!({ "ok": true })).into_response()
 }
 
@@ -2736,20 +3408,28 @@ async fn handle_clean_image_exif(
 ) -> impl IntoResponse {
     match crate::sanitizer::ImageSanitizer::sanitize_image(req) {
         Ok(res) => Json(res).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e }))).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e })),
+        )
+            .into_response(),
     }
 }
 
 // AI Handlers
 async fn handle_ai_status_public() -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({
-        "status": "ok",
-        "service": "RED Sovereign Node AI",
-        "version": env!("CARGO_PKG_VERSION"),
-        "engine": "Candle GGUF / Offline Hybrid",
-        "model": "red-tactical",
-        "capabilities": ["copilot", "chat_completions", "emergency_triage"]
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "ok",
+            "service": "RED Sovereign Node AI",
+            "version": env!("CARGO_PKG_VERSION"),
+            "engine": "Candle GGUF / Offline Hybrid",
+            "model": "red-tactical",
+            "capabilities": ["copilot", "chat_completions", "emergency_triage"]
+        })),
+    )
+        .into_response()
 }
 
 async fn handle_ollama_tags_public() -> impl IntoResponse {
@@ -2774,17 +3454,21 @@ async fn handle_ollama_tags_public() -> impl IntoResponse {
 }
 
 async fn handle_openai_models_public() -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({
-        "object": "list",
-        "data": [
-            {
-                "id": "red-tactical",
-                "object": "model",
-                "created": 1700000000,
-                "owned_by": "red-node"
-            }
-        ]
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "object": "list",
+            "data": [
+                {
+                    "id": "red-tactical",
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "red-node"
+                }
+            ]
+        })),
+    )
+        .into_response()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -2805,12 +3489,16 @@ async fn handle_ollama_generate(
         model_id: req.model,
     };
     let res = state.ai_copilot.query_async(copilot_req).await;
-    (StatusCode::OK, Json(serde_json::json!({
-        "model": "red-tactical",
-        "created_at": chrono::Utc::now().to_rfc3339(),
-        "response": res.answer,
-        "done": true
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "model": "red-tactical",
+            "created_at": chrono::Utc::now().to_rfc3339(),
+            "response": res.answer,
+            "done": true
+        })),
+    )
+        .into_response()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -2831,12 +3519,17 @@ async fn handle_openai_chat_completions(
     State(state): State<ApiState>,
     Json(req): Json<OpenAIChatCompletionRequest>,
 ) -> impl IntoResponse {
-    let last_user_msg = req.messages.iter().rev()
+    let last_user_msg = req
+        .messages
+        .iter()
+        .rev()
         .find(|m| m.role == "user")
         .map(|m| m.content.clone())
         .unwrap_or_else(|| "ping".to_string());
-    
-    let system_context = req.messages.iter()
+
+    let system_context = req
+        .messages
+        .iter()
         .find(|m| m.role == "system")
         .map(|m| m.content.clone());
 
@@ -2847,31 +3540,41 @@ async fn handle_openai_chat_completions(
         model_id: req.model.clone(),
     };
     let res = state.ai_copilot.query_async(copilot_req).await;
-    
-    let completion_id = format!("chatcmpl-{}", red_core::protocol::MessageId::generate().to_hex());
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "id": completion_id,
-        "object": "chat.completion",
-        "created": now,
-        "model": req.model.unwrap_or_else(|| "red-tactical".to_string()),
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": res.answer
-                },
-                "finish_reason": "stop"
+    let completion_id = format!(
+        "chatcmpl-{}",
+        red_core::protocol::MessageId::generate().to_hex()
+    );
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": now,
+            "model": req.model.unwrap_or_else(|| "red-tactical".to_string()),
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": res.answer
+                    },
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30
             }
-        ],
-        "usage": {
-            "prompt_tokens": 10,
-            "completion_tokens": 20,
-            "total_tokens": 30
-        }
-    }))).into_response()
+        })),
+    )
+        .into_response()
 }
 
 async fn handle_ai_copilot_query(
@@ -2905,7 +3608,11 @@ async fn handle_create_amber_alert(
 ) -> impl IntoResponse {
     match state.amber_store.create_alert(req) {
         Ok(alert) => Json(serde_json::json!({ "ok": true, "alert": alert })).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
     }
 }
 
@@ -2920,7 +3627,11 @@ async fn handle_get_amber_alert(
 ) -> impl IntoResponse {
     match state.amber_store.get_alert(&id) {
         Some(alert) => Json(alert).into_response(),
-        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Alert not found" }))).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Alert not found" })),
+        )
+            .into_response(),
     }
 }
 
@@ -2929,9 +3640,16 @@ async fn handle_resolve_amber_alert(
     Path(id): Path<String>,
     Json(req): Json<crate::amber::ResolveAmberAlertRequest>,
 ) -> impl IntoResponse {
-    match state.amber_store.resolve_alert(&id, &req.authority_node_id, req.resolution_notes) {
+    match state
+        .amber_store
+        .resolve_alert(&id, &req.authority_node_id, req.resolution_notes)
+    {
         Ok(alert) => Json(serde_json::json!({ "ok": true, "alert": alert })).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
     }
 }
 
@@ -2941,9 +3659,18 @@ async fn handle_report_sighting(
     Json(req): Json<crate::amber::ReportSightingRequest>,
 ) -> impl IntoResponse {
     let reporter_node_id = state.node.lock().await.identity_hash().to_hex();
-    match state.amber_store.report_sighting(&id, &reporter_node_id, req.lat, req.lon, req.notes) {
-        Ok(sighting) => Json(serde_json::json!({ "ok": true, "sighting": sighting })).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+    match state
+        .amber_store
+        .report_sighting(&id, &reporter_node_id, req.lat, req.lon, req.notes)
+    {
+        Ok(sighting) => {
+            Json(serde_json::json!({ "ok": true, "sighting": sighting })).into_response()
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
     }
 }
 
@@ -2958,7 +3685,8 @@ async fn handle_guardian_status(State(state): State<ApiState>) -> impl IntoRespo
         "model": "RED Local Heuristic Engine (<15MB RAM)",
         "stats": stats,
         "authorities": authorities
-    })).into_response()
+    }))
+    .into_response()
 }
 
 #[derive(Deserialize)]
@@ -2971,21 +3699,22 @@ async fn handle_report_content(
     State(state): State<ApiState>,
     Json(req): Json<GuardianReportRequest>,
 ) -> impl IntoResponse {
-    let content = req.content.as_deref().or(req.reason.as_deref()).unwrap_or("");
+    let content = req
+        .content
+        .as_deref()
+        .or(req.reason.as_deref())
+        .unwrap_or("");
     let verdict = state.guardian_engine.analyze_text(content);
     let report_id = format!("rep_{}", chrono::Utc::now().timestamp_millis());
     Json(serde_json::json!({
         "ok": true,
         "report_id": report_id,
         "verdict": verdict
-    })).into_response()
+    }))
+    .into_response()
 }
 
-
-
 // ─── Async Wrappers (build_router_async delegates) ────────────────────────────
-
-
 
 // ─── Tactical Blackout Simulator Handlers (v33.0) ──────────────────────────
 
@@ -3004,7 +3733,6 @@ pub struct BlackoutStatusResponse {
 pub struct SetBlackoutRequest {
     pub enabled: bool,
 }
-
 
 // ─── RF Spectrum & Electronic Countermeasures Handlers (v33.0) ────────────
 
@@ -3048,7 +3776,6 @@ fn get_channel_freq(channel: u8) -> (u32, &'static str) {
         _ => (2412, "Canal 1 (2.412 GHz)"),
     }
 }
-
 
 // ─── System Health & Kernel Hardware Benchmark Handlers (v34.0) ──────────
 
@@ -3101,7 +3828,6 @@ pub struct NetworkTelemetryMetrics {
     pub transports: Vec<String>,
 }
 
-
 // ─── Medical Triage START & Vital Signs Telemetry Handlers (v35.0) ────────
 
 #[derive(Debug, Clone, Deserialize)]
@@ -3120,7 +3846,6 @@ pub struct CreateTriageReportRequest {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
 }
-
 
 // ─── Tactical Emergency SOS Beacon & SoundMesh Handlers (v36.0) ───────────
 
@@ -3145,7 +3870,6 @@ pub struct InjectSoundMeshRequest {
     pub payload: String,
 }
 
-
 // ─── Tactical Stego Vault Handlers (v37.0) ────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -3160,7 +3884,6 @@ pub struct SaveStegoCapsuleRequest {
     #[serde(default, alias = "author")]
     pub notes: Option<String>,
 }
-
 
 // ─── Dead Man's Switch (DMS) Handlers (v38.0) ─────────────────────────────
 
@@ -3184,7 +3907,6 @@ pub struct DmsStatusResponse {
     pub seconds_remaining: i64,
     pub is_triggered: bool,
 }
-
 
 // ─── Proximity Radar and Shake-Pair Handlers (v39.0) ───────────────────────
 
@@ -3215,7 +3937,10 @@ async fn handle_get_proximity_nodes(State(state): State<ApiState>) -> impl IntoR
     // If no nodes explicitly pinged into sled, derive from active peers and contacts
     if nodes.is_empty() {
         let contacts = s.get_contacts();
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         for (i, c) in contacts.iter().enumerate() {
             let angle = ((i as f32) * 75.0 + 30.0) % 360.0;
             let dist = 12.0 + ((i as f32) * 8.5);
@@ -3226,7 +3951,11 @@ async fn handle_get_proximity_nodes(State(state): State<ApiState>) -> impl IntoR
                 did: format!("did:red:{}", c.identity_hash.to_hex()),
                 distance_meters: dist,
                 azimuth: angle,
-                transport: if i % 2 == 0 { "BLE Mesh".into() } else { "WiFi 7331".into() },
+                transport: if i % 2 == 0 {
+                    "BLE Mesh".into()
+                } else {
+                    "WiFi 7331".into()
+                },
                 rssi,
                 is_active: true,
                 last_seen: now.saturating_sub((i as u64) * 15),
@@ -3237,7 +3966,6 @@ async fn handle_get_proximity_nodes(State(state): State<ApiState>) -> impl IntoR
     Json(nodes).into_response()
 }
 
-
 async fn handle_ping_proximity(
     State(state): State<ApiState>,
     Json(req): Json<ProximityPingRequest>,
@@ -3245,7 +3973,10 @@ async fn handle_ping_proximity(
     let node = state.node.lock().await;
     let storage = node.get_storage();
     let s = storage.lock().await;
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
 
     let record = red_core::storage::ProximityNodeRecord {
         id: req.id.clone(),
@@ -3260,7 +3991,14 @@ async fn handle_ping_proximity(
     };
 
     let _ = s.store_proximity_node(&record);
-    record_log_sync("INFO", "red_core::proximity", &format!("📡 BALIZA DE PROXIMIDAD: '{}' a {}m (Azimut: {}°)", record.name, record.distance_meters, record.azimuth));
+    record_log_sync(
+        "INFO",
+        "red_core::proximity",
+        &format!(
+            "📡 BALIZA DE PROXIMIDAD: '{}' a {}m (Azimut: {}°)",
+            record.name, record.distance_meters, record.azimuth
+        ),
+    );
 
     (StatusCode::OK, Json(record)).into_response()
 }
@@ -3274,21 +4012,38 @@ async fn handle_shake_pair(
     let my_name = req.sender_name.unwrap_or_else(|| "Nodo RED".into());
     let sender_pk = req.sender_pk.unwrap_or_default();
 
-    record_log_sync("INFO", "red_core::shake_pair", &format!("ðŸ“³ SHAKE PAIR BROADCAST: Transmitido handshake desde {}", my_name));
+    record_log_sync(
+        "INFO",
+        "red_core::shake_pair",
+        &format!(
+            "ðŸ“³ SHAKE PAIR BROADCAST: Transmitido handshake desde {}",
+            my_name
+        ),
+    );
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "sender_hash": my_hash,
-        "sender_name": my_name,
-        "sender_pk": sender_pk
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "sender_hash": my_hash,
+            "sender_name": my_name,
+            "sender_pk": sender_pk
+        })),
+    )
+        .into_response()
 }
 
 async fn handle_get_proximity_nodes_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_proximity_nodes(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_proximity_nodes(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3298,8 +4053,14 @@ async fn handle_ping_proximity_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_ping_proximity(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_ping_proximity(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3309,8 +4070,14 @@ async fn handle_shake_pair_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_shake_pair(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_shake_pair(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3318,19 +4085,31 @@ async fn handle_get_dms_config(State(state): State<ApiState>) -> impl IntoRespon
     let node = state.node.lock().await;
     let storage = node.get_storage();
     let s = storage.lock().await;
-    let config = s.get_dms_config().unwrap_or(red_core::storage::DmsConfigRecord {
-        enabled: false,
-        trigger_hours: 72,
-        wipe_messages: true,
-        wipe_identity: false,
-        dead_message: String::new(),
-        last_active_timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-    });
+    let config = s
+        .get_dms_config()
+        .unwrap_or(red_core::storage::DmsConfigRecord {
+            enabled: false,
+            trigger_hours: 72,
+            wipe_messages: true,
+            wipe_identity: false,
+            dead_message: String::new(),
+            last_active_timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        });
 
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
     let elapsed = now.saturating_sub(config.last_active_timestamp);
     let trigger_secs = (config.trigger_hours as u64) * 3600;
-    let seconds_remaining = if config.enabled { (trigger_secs as i64) - (elapsed as i64) } else { trigger_secs as i64 };
+    let seconds_remaining = if config.enabled {
+        (trigger_secs as i64) - (elapsed as i64)
+    } else {
+        trigger_secs as i64
+    };
     let is_triggered = config.enabled && seconds_remaining <= 0;
 
     Json(DmsStatusResponse {
@@ -3342,7 +4121,8 @@ async fn handle_get_dms_config(State(state): State<ApiState>) -> impl IntoRespon
         last_active_timestamp: config.last_active_timestamp,
         seconds_remaining: seconds_remaining.max(0),
         is_triggered,
-    }).into_response()
+    })
+    .into_response()
 }
 
 async fn handle_save_dms_config(
@@ -3352,7 +4132,10 @@ async fn handle_save_dms_config(
     let node = state.node.lock().await;
     let storage = node.get_storage();
     let s = storage.lock().await;
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
 
     let record = red_core::storage::DmsConfigRecord {
         enabled: req.enabled,
@@ -3374,8 +4157,16 @@ async fn handle_ping_dms(State(state): State<ApiState>) -> impl IntoResponse {
     let storage = node.get_storage();
     let s = storage.lock().await;
     let ts = s.ping_dms_activity().unwrap_or_default();
-    record_log_sync("INFO", "red_core::dms", "ðŸ”„ DMS CHECK-IN: Presencia de operador registrada.");
-    (StatusCode::OK, Json(serde_json::json!({"success": true, "last_active_timestamp": ts}))).into_response()
+    record_log_sync(
+        "INFO",
+        "red_core::dms",
+        "ðŸ”„ DMS CHECK-IN: Presencia de operador registrada.",
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"success": true, "last_active_timestamp": ts})),
+    )
+        .into_response()
 }
 
 async fn handle_panic_wipe(State(state): State<ApiState>) -> impl IntoResponse {
@@ -3383,15 +4174,29 @@ async fn handle_panic_wipe(State(state): State<ApiState>) -> impl IntoResponse {
     let storage = node.get_storage();
     let mut s = storage.lock().await;
     let _ = s.execute_dms_purge(true, true);
-    record_log_sync("CRITICAL", "red_core::dms", "🚨 PURGA DE PÁNICO EJECUTADA: Base de datos Sled y claves purgadas.");
-    (StatusCode::OK, Json(serde_json::json!({"success": true, "wiped": true}))).into_response()
+    record_log_sync(
+        "CRITICAL",
+        "red_core::dms",
+        "🚨 PURGA DE PÁNICO EJECUTADA: Base de datos Sled y claves purgadas.",
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"success": true, "wiped": true})),
+    )
+        .into_response()
 }
 
 async fn handle_get_dms_config_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_dms_config(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_dms_config(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3401,8 +4206,14 @@ async fn handle_save_dms_config_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_save_dms_config(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_save_dms_config(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3410,7 +4221,11 @@ async fn handle_ping_dms_async(State(state): State<AsyncState>) -> impl IntoResp
     let s = state.lock().await;
     match &*s {
         Some(r) => handle_ping_dms(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3418,7 +4233,11 @@ async fn handle_panic_wipe_async(State(state): State<AsyncState>) -> impl IntoRe
     let s = state.lock().await;
     match &*s {
         Some(r) => handle_panic_wipe(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3437,8 +4256,13 @@ async fn handle_save_stego_vault(
     let node = state.node.lock().await;
     let storage = node.get_storage();
     let s = storage.lock().await;
-    let id = req.id.unwrap_or_else(|| red_core::protocol::MessageId::generate().to_hex());
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let id = req
+        .id
+        .unwrap_or_else(|| red_core::protocol::MessageId::generate().to_hex());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
 
     let image_data = req.image_data.unwrap_or_default();
 
@@ -3452,7 +4276,14 @@ async fn handle_save_stego_vault(
     };
 
     let _ = s.store_stego_capsule(&record);
-    record_log_sync("INFO", "red_core::stego", &format!("ðŸ–¼ï¸ CÁPSULA ESTEGANOGRÁFICA GUARDADA: '{}' (Cifrada: {})", record.title, record.has_password));
+    record_log_sync(
+        "INFO",
+        "red_core::stego",
+        &format!(
+            "ðŸ–¼ï¸ CÁPSULA ESTEGANOGRÁFICA GUARDADA: '{}' (Cifrada: {})",
+            record.title, record.has_password
+        ),
+    );
 
     (StatusCode::CREATED, Json(record)).into_response()
 }
@@ -3465,14 +4296,24 @@ async fn handle_delete_stego_vault(
     let storage = node.get_storage();
     let s = storage.lock().await;
     let _ = s.delete_stego_capsule(&id);
-    (StatusCode::OK, Json(serde_json::json!({"success": true, "deleted": id}))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"success": true, "deleted": id})),
+    )
+        .into_response()
 }
 
 async fn handle_get_stego_vault_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_stego_vault(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_stego_vault(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3482,8 +4323,14 @@ async fn handle_save_stego_vault_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_save_stego_vault(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_save_stego_vault(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3493,8 +4340,14 @@ async fn handle_delete_stego_vault_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_delete_stego_vault(State(r.clone()), Path(id)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_delete_stego_vault(State(r.clone()), Path(id))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3512,10 +4365,19 @@ async fn handle_broadcast_emergency_beacon(
 ) -> impl IntoResponse {
     let mut node = state.node.lock().await;
     let sender_hash = node.identity_hash().clone();
-    let beacon_id = req.beacon_id.unwrap_or_else(|| red_core::protocol::MessageId::generate().to_hex());
-    let distress_type = req.distress_type.unwrap_or_else(|| "SOS_GENERAL".to_string());
-    let msg_text = req.message.unwrap_or_else(|| "¡EMERGENCIA TÁCTICA SOS ACTIVA!".to_string());
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let beacon_id = req
+        .beacon_id
+        .unwrap_or_else(|| red_core::protocol::MessageId::generate().to_hex());
+    let distress_type = req
+        .distress_type
+        .unwrap_or_else(|| "SOS_GENERAL".to_string());
+    let msg_text = req
+        .message
+        .unwrap_or_else(|| "¡EMERGENCIA TÁCTICA SOS ACTIVA!".to_string());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
 
     let record = red_core::storage::EmergencyBeaconRecord {
         beacon_id: beacon_id.clone(),
@@ -3560,10 +4422,19 @@ async fn handle_broadcast_emergency_beacon(
         status: red_core::protocol::MessageStatus::Sent,
         edited: false,
     };
-    let _ = node.send_message(red_core::identity::IdentityHash::from_bytes([0; 32]), msg.clone()).await;
+    let _ = node
+        .send_message(
+            red_core::identity::IdentityHash::from_bytes([0; 32]),
+            msg.clone(),
+        )
+        .await;
     let _ = state.msg_tx.send(msg);
 
-    record_log_sync("WARN", "red_core::sos", &format!("🚨 BALIZA SOS ACTIVADA: [{}] {}", distress_type, msg_text));
+    record_log_sync(
+        "WARN",
+        "red_core::sos",
+        &format!("🚨 BALIZA SOS ACTIVADA: [{}] {}", distress_type, msg_text),
+    );
 
     (StatusCode::CREATED, Json(record)).into_response()
 }
@@ -3574,7 +4445,10 @@ async fn handle_cancel_emergency_beacon(
 ) -> impl IntoResponse {
     let mut node = state.node.lock().await;
     let sender_hash = node.identity_hash().clone();
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
 
     // 1. Remove from Sled DB
     {
@@ -3604,27 +4478,58 @@ async fn handle_cancel_emergency_beacon(
         status: red_core::protocol::MessageStatus::Sent,
         edited: false,
     };
-    let _ = node.send_message(red_core::identity::IdentityHash::from_bytes([0; 32]), msg.clone()).await;
+    let _ = node
+        .send_message(
+            red_core::identity::IdentityHash::from_bytes([0; 32]),
+            msg.clone(),
+        )
+        .await;
     let _ = state.msg_tx.send(msg);
 
-    record_log_sync("INFO", "red_core::sos", &format!("ðŸŸ¢ BALIZA SOS CANCELADA: #{}", req.beacon_id));
+    record_log_sync(
+        "INFO",
+        "red_core::sos",
+        &format!("ðŸŸ¢ BALIZA SOS CANCELADA: #{}", req.beacon_id),
+    );
 
-    (StatusCode::OK, Json(serde_json::json!({"success": true, "cancelled": req.beacon_id}))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"success": true, "cancelled": req.beacon_id})),
+    )
+        .into_response()
 }
 
 async fn handle_inject_soundmesh(
     State(_state): State<ApiState>,
     Json(req): Json<InjectSoundMeshRequest>,
 ) -> impl IntoResponse {
-    record_log_sync("INFO", "red_core::soundmesh", &format!("📡 TRAMA ULTRASONIDO INYECTADA: {} ({} bytes)", req.payload, req.payload.len()));
-    (StatusCode::OK, Json(serde_json::json!({"success": true, "injected_bytes": req.payload.len()}))).into_response()
+    record_log_sync(
+        "INFO",
+        "red_core::soundmesh",
+        &format!(
+            "📡 TRAMA ULTRASONIDO INYECTADA: {} ({} bytes)",
+            req.payload,
+            req.payload.len()
+        ),
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"success": true, "injected_bytes": req.payload.len()})),
+    )
+        .into_response()
 }
 
 async fn handle_get_emergency_beacons_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_emergency_beacons(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_emergency_beacons(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3634,8 +4539,14 @@ async fn handle_broadcast_emergency_beacon_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_broadcast_emergency_beacon(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_broadcast_emergency_beacon(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3645,8 +4556,14 @@ async fn handle_cancel_emergency_beacon_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_cancel_emergency_beacon(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_cancel_emergency_beacon(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3656,8 +4573,14 @@ async fn handle_inject_soundmesh_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_inject_soundmesh(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_inject_soundmesh(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3675,8 +4598,13 @@ async fn handle_create_triage_report(
 ) -> impl IntoResponse {
     let mut node = state.node.lock().await;
     let sender_hash = node.identity_hash().clone();
-    let id = req.id.unwrap_or_else(|| red_core::protocol::MessageId::generate().to_hex());
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let id = req
+        .id
+        .unwrap_or_else(|| red_core::protocol::MessageId::generate().to_hex());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
 
     let record = red_core::storage::TriageReportRecord {
         id: id.clone(),
@@ -3731,11 +4659,23 @@ async fn handle_create_triage_report(
             status: red_core::protocol::MessageStatus::Sent,
             edited: false,
         };
-        let _ = node.send_message(red_core::identity::IdentityHash::from_bytes([0; 32]), msg.clone()).await;
+        let _ = node
+            .send_message(
+                red_core::identity::IdentityHash::from_bytes([0; 32]),
+                msg.clone(),
+            )
+            .await;
         let _ = state.msg_tx.send(msg);
     }
 
-    record_log_sync("WARN", "red_core::triage", &format!("🚨 REPORTE DE TRIAJE EMITIDO: {} [{}]", record.victim_label, record.category));
+    record_log_sync(
+        "WARN",
+        "red_core::triage",
+        &format!(
+            "🚨 REPORTE DE TRIAJE EMITIDO: {} [{}]",
+            record.victim_label, record.category
+        ),
+    );
 
     (StatusCode::CREATED, Json(record)).into_response()
 }
@@ -3748,14 +4688,24 @@ async fn handle_delete_triage_report(
     let storage = node.get_storage();
     let s = storage.lock().await;
     let _ = s.delete_triage_report(&id);
-    (StatusCode::OK, Json(serde_json::json!({"success": true, "deleted": id}))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"success": true, "deleted": id})),
+    )
+        .into_response()
 }
 
 async fn handle_get_triage_reports_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_triage_reports(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_triage_reports(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3765,8 +4715,14 @@ async fn handle_create_triage_report_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_create_triage_report(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_create_triage_report(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3776,8 +4732,14 @@ async fn handle_delete_triage_report_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_delete_triage_report(State(r.clone()), Path(id)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_delete_triage_report(State(r.clone()), Path(id))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -3871,16 +4833,14 @@ async fn handle_system_health(State(state): State<ApiState>) -> impl IntoRespons
         // C. ChaCha20-Poly1305 AEAD Encryption/Decryption
         let sym_key = shared1;
         match red_core::crypto::encrypt(&sym_key, &payload_1kb) {
-            Ok(enc) => {
-                match red_core::crypto::decrypt(&sym_key, &enc) {
-                    Ok(dec) if dec == payload_1kb => {}
-                    _ => {
-                        crypto_passed = false;
-                        crypto_err = "Fallo en descifrado ChaCha20-Poly1305".to_string();
-                        break;
-                    }
+            Ok(enc) => match red_core::crypto::decrypt(&sym_key, &enc) {
+                Ok(dec) if dec == payload_1kb => {}
+                _ => {
+                    crypto_passed = false;
+                    crypto_err = "Fallo en descifrado ChaCha20-Poly1305".to_string();
+                    break;
                 }
-            }
+            },
             Err(e) => {
                 crypto_passed = false;
                 crypto_err = format!("Fallo en cifrado: {:?}", e);
@@ -3919,7 +4879,10 @@ async fn handle_system_health(State(state): State<ApiState>) -> impl IntoRespons
     Json(SystemHealthResponse {
         status: overall_status,
         node_id,
-        uptime_seconds: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+        uptime_seconds: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
         storage_benchmark: StorageBenchmarkMetrics {
             passed: storage_passed,
             entries_tested: count,
@@ -3927,7 +4890,12 @@ async fn handle_system_health(State(state): State<ApiState>) -> impl IntoRespons
             ops_per_sec: storage_ops_per_sec,
             engine: "Sled Embedded B-Tree Engine".to_string(),
             details: if storage_passed {
-                format!("{} escrituras/lecturas en {}µs ({} IOPS)", count * 2, storage_us, storage_ops_per_sec)
+                format!(
+                    "{} escrituras/lecturas en {}µs ({} IOPS)",
+                    count * 2,
+                    storage_us,
+                    storage_ops_per_sec
+                )
             } else {
                 storage_err
             },
@@ -3939,7 +4907,10 @@ async fn handle_system_health(State(state): State<ApiState>) -> impl IntoRespons
             duration_us: crypto_us,
             total_ops_per_sec: crypto_ops_per_sec,
             details: if crypto_passed {
-                format!("{} operaciones criptográficas en {}µs ({} ops/seg)", total_crypto_ops, crypto_us, crypto_ops_per_sec)
+                format!(
+                    "{} operaciones criptográficas en {}µs ({} ops/seg)",
+                    total_crypto_ops, crypto_us, crypto_ops_per_sec
+                )
             } else {
                 crypto_err
             },
@@ -3954,7 +4925,11 @@ async fn handle_system_health(State(state): State<ApiState>) -> impl IntoRespons
             packets_sent,
             blackout_active: is_blackout,
             active_rf_channel: rf_channel,
-            fec_rate: if fec_rate_val == 2 { "1/4 (Anti-Jamming)".to_string() } else { "1/2 (Estándar)".to_string() },
+            fec_rate: if fec_rate_val == 2 {
+                "1/4 (Anti-Jamming)".to_string()
+            } else {
+                "1/2 (Estándar)".to_string()
+            },
             transports: if is_blackout {
                 vec![
                     "mDNS / LAN UDP (7331)".to_string(),
@@ -3970,15 +4945,23 @@ async fn handle_system_health(State(state): State<ApiState>) -> impl IntoRespons
                 ]
             },
         },
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-    }).into_response()
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    })
+    .into_response()
 }
 
 async fn handle_system_health_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
         Some(r) => handle_system_health(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4007,15 +4990,23 @@ async fn handle_get_rf_metrics(State(state): State<ApiState>) -> impl IntoRespon
         current_channel: channel,
         frequency_mhz: freq,
         channel_label: label.to_string(),
-        fec_rate: if fec_rate == 2 { "1/4 (Anti-Jamming Reed-Solomon)".to_string() } else { "1/2 (Estándar)".to_string() },
+        fec_rate: if fec_rate == 2 {
+            "1/4 (Anti-Jamming Reed-Solomon)".to_string()
+        } else {
+            "1/2 (Estándar)".to_string()
+        },
         fec_active: fec_rate == 2,
         hops_count,
         noise_floor_db: -95,
         average_snr_db: 18.4,
         packet_error_rate: if fec_rate == 2 { 0.002 } else { 0.015 },
         active_transports,
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-    }).into_response()
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    })
+    .into_response()
 }
 
 async fn handle_channel_hop(
@@ -4024,7 +5015,7 @@ async fn handle_channel_hop(
 ) -> impl IntoResponse {
     let mut node = state.node.lock().await;
     let (current_channel, _, _) = node.get_rf_state();
-    
+
     // Hop sequence: 1 -> 6 -> 11 -> 37 -> 38 -> 39 -> 1
     let next_channel = req.target_channel.unwrap_or({
         match current_channel {
@@ -4040,8 +5031,17 @@ async fn handle_channel_hop(
     let (freq, label) = get_channel_freq(next_channel);
     node.set_rf_channel(next_channel);
 
-    let reason = req.reason.unwrap_or_else(|| "Evasión de interferencia de espectro".to_string());
-    record_log_sync("WARN", "red_core::rf", &format!("📡 SALTO DE FRECUENCIA TÁCTICO: Enjambre migrado a {} - Razón: {}", label, reason));
+    let reason = req
+        .reason
+        .unwrap_or_else(|| "Evasión de interferencia de espectro".to_string());
+    record_log_sync(
+        "WARN",
+        "red_core::rf",
+        &format!(
+            "📡 SALTO DE FRECUENCIA TÁCTICO: Enjambre migrado a {} - Razón: {}",
+            label, reason
+        ),
+    );
 
     let (_, fec_rate, hops_count) = node.get_rf_state();
 
@@ -4054,21 +5054,36 @@ async fn handle_channel_hop(
             target_channel: next_channel,
             frequency_mhz: freq,
             reason: reason.clone(),
-            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
         },
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64,
         reply_to: None,
         status: red_core::protocol::MessageStatus::Sent,
         edited: false,
     };
-    let _ = node.send_message(red_core::identity::IdentityHash::from_bytes([0; 32]), hop_msg.clone()).await;
+    let _ = node
+        .send_message(
+            red_core::identity::IdentityHash::from_bytes([0; 32]),
+            hop_msg.clone(),
+        )
+        .await;
     let _ = state.msg_tx.send(hop_msg);
 
     Json(RfMetricsResponse {
         current_channel: next_channel,
         frequency_mhz: freq,
         channel_label: label.to_string(),
-        fec_rate: if fec_rate == 2 { "1/4 (Anti-Jamming Reed-Solomon)".to_string() } else { "1/2 (Estándar)".to_string() },
+        fec_rate: if fec_rate == 2 {
+            "1/4 (Anti-Jamming Reed-Solomon)".to_string()
+        } else {
+            "1/2 (Estándar)".to_string()
+        },
         fec_active: fec_rate == 2,
         hops_count,
         noise_floor_db: -95,
@@ -4079,8 +5094,12 @@ async fn handle_channel_hop(
             "Bluetooth LE Mesh (GATT)".to_string(),
             "LoRa Serial Radio (915MHz)".to_string(),
         ],
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-    }).into_response()
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    })
+    .into_response()
 }
 
 async fn handle_set_fec(
@@ -4092,9 +5111,17 @@ async fn handle_set_fec(
     node.set_fec_rate(rate);
 
     if req.enabled {
-        record_log_sync("CRYPTO", "red_core::rf", "🛡ï¸ CODIFICACIÓN FEC REED-SOLOMON 1/4 ACTIVADA (Modo Anti-Jamming)");
+        record_log_sync(
+            "CRYPTO",
+            "red_core::rf",
+            "🛡ï¸ CODIFICACIÓN FEC REED-SOLOMON 1/4 ACTIVADA (Modo Anti-Jamming)",
+        );
     } else {
-        record_log_sync("INFO", "red_core::rf", "â„¹ï¸ CODIFICACIÓN FEC 1/2 ESTÁNDAR RESTABLECIDA");
+        record_log_sync(
+            "INFO",
+            "red_core::rf",
+            "â„¹ï¸ CODIFICACIÓN FEC 1/2 ESTÁNDAR RESTABLECIDA",
+        );
     }
 
     let (channel, fec_rate, hops_count) = node.get_rf_state();
@@ -4104,7 +5131,11 @@ async fn handle_set_fec(
         current_channel: channel,
         frequency_mhz: freq,
         channel_label: label.to_string(),
-        fec_rate: if fec_rate == 2 { "1/4 (Anti-Jamming Reed-Solomon)".to_string() } else { "1/2 (Estándar)".to_string() },
+        fec_rate: if fec_rate == 2 {
+            "1/4 (Anti-Jamming Reed-Solomon)".to_string()
+        } else {
+            "1/2 (Estándar)".to_string()
+        },
         fec_active: fec_rate == 2,
         hops_count,
         noise_floor_db: -95,
@@ -4115,15 +5146,25 @@ async fn handle_set_fec(
             "Bluetooth LE Mesh (GATT)".to_string(),
             "LoRa Serial Radio (915MHz)".to_string(),
         ],
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-    }).into_response()
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    })
+    .into_response()
 }
 
 async fn handle_get_rf_metrics_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_rf_metrics(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_rf_metrics(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4133,8 +5174,14 @@ async fn handle_channel_hop_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_channel_hop(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_channel_hop(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4144,8 +5191,14 @@ async fn handle_set_fec_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_set_fec(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_set_fec(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4153,7 +5206,7 @@ async fn handle_get_blackout(State(state): State<ApiState>) -> impl IntoResponse
     let node = state.node.lock().await;
     let is_blackout = node.is_blackout_mode();
     let local_peers = node.transport_peer_count();
-    
+
     let active_transports = if is_blackout {
         vec![
             "mDNS / LAN UDP (7331)".to_string(),
@@ -4176,8 +5229,12 @@ async fn handle_get_blackout(State(state): State<ApiState>) -> impl IntoResponse
         local_peers,
         epidemic_ttl: if is_blackout { 7 } else { 3 },
         blocked_wan_peers: node.get_blocked_wan_peers(),
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-    }).into_response()
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    })
+    .into_response()
 }
 
 async fn handle_set_blackout(
@@ -4187,11 +5244,15 @@ async fn handle_set_blackout(
     let node = state.node.lock().await;
     node.set_blackout_mode(req.enabled);
     node.enforce_blackout().await;
-    
+
     if req.enabled {
         record_log_sync("WARN", "red_core::network", "⚠️ï¸ PROTOCOLO DE APAGÓN ACTIVADO: Sockets WAN desconectados. Enrutamiento restringido a mDNS + BLE + LoRa (Epidemic TTL=7)");
     } else {
-        record_log_sync("INFO", "red_core::network", "✅ PROTOCOLO DE APAGÓN DESACTIVADO: Reconectando relé WAN libp2p y nodos semilla");
+        record_log_sync(
+            "INFO",
+            "red_core::network",
+            "✅ PROTOCOLO DE APAGÓN DESACTIVADO: Reconectando relé WAN libp2p y nodos semilla",
+        );
     }
 
     let is_blackout = req.enabled;
@@ -4218,15 +5279,23 @@ async fn handle_set_blackout(
         local_peers,
         epidemic_ttl: if is_blackout { 7 } else { 3 },
         blocked_wan_peers: node.get_blocked_wan_peers(),
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-    }).into_response()
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    })
+    .into_response()
 }
 
 async fn handle_get_blackout_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
         Some(r) => handle_get_blackout(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4236,8 +5305,14 @@ async fn handle_set_blackout_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_set_blackout(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_set_blackout(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4308,16 +5383,28 @@ async fn handle_emit_sos_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_emit_sos(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_emit_sos(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
 async fn handle_get_active_sos_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_active_sos(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_active_sos(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4327,8 +5414,14 @@ async fn handle_post_channel_message_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_post_channel_message(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_post_channel_message(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4338,8 +5431,14 @@ async fn handle_send_voice_burst_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_send_voice_burst(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_send_voice_burst(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4349,8 +5448,14 @@ async fn handle_delete_voice_burst_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_delete_voice_burst(State(r.clone()), Path(id)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_delete_voice_burst(State(r.clone()), Path(id))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 async fn handle_post_weather_report_async(
@@ -4359,16 +5464,30 @@ async fn handle_post_weather_report_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_post_weather_report(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_post_weather_report(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_get_discovery_proximity_async(State(state): State<AsyncState>) -> impl IntoResponse {
+async fn handle_get_discovery_proximity_async(
+    State(state): State<AsyncState>,
+) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_discovery_proximity(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_discovery_proximity(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4378,8 +5497,14 @@ async fn handle_register_ble_device_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_register_ble_device(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_register_ble_device(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4389,16 +5514,28 @@ async fn handle_trigger_wave_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_trigger_wave(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_trigger_wave(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
 async fn handle_get_discovery_config_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_discovery_config(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_discovery_config(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4408,24 +5545,42 @@ async fn handle_set_discovery_config_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_set_discovery_config(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_set_discovery_config(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
 async fn handle_get_discovery_digest_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_discovery_digest(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_discovery_digest(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
 async fn handle_get_battery_status_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_battery_status(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_battery_status(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4435,8 +5590,14 @@ async fn handle_update_battery_optimize_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_update_battery_optimize(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_update_battery_optimize(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4446,8 +5607,14 @@ async fn handle_set_ephemeral_timer_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_set_ephemeral_timer(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_set_ephemeral_timer(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4484,12 +5651,16 @@ async fn handle_ollama_generate_async(
         model_id: req.model,
     };
     let res = copilot_engine.query_async(copilot_req).await;
-    (StatusCode::OK, Json(serde_json::json!({
-        "model": "red-tactical",
-        "created_at": chrono::Utc::now().to_rfc3339(),
-        "response": res.answer,
-        "done": true
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "model": "red-tactical",
+            "created_at": chrono::Utc::now().to_rfc3339(),
+            "response": res.answer,
+            "done": true
+        })),
+    )
+        .into_response()
 }
 
 async fn handle_openai_chat_completions_async(
@@ -4503,12 +5674,17 @@ async fn handle_openai_chat_completions_async(
             None => crate::ai_copilot::AICopilotEngine::global(),
         }
     };
-    let last_user_msg = req.messages.iter().rev()
+    let last_user_msg = req
+        .messages
+        .iter()
+        .rev()
         .find(|m| m.role == "user")
         .map(|m| m.content.clone())
         .unwrap_or_else(|| "ping".to_string());
-    
-    let system_context = req.messages.iter()
+
+    let system_context = req
+        .messages
+        .iter()
         .find(|m| m.role == "system")
         .map(|m| m.content.clone());
 
@@ -4519,31 +5695,41 @@ async fn handle_openai_chat_completions_async(
         model_id: req.model.clone(),
     };
     let res = copilot_engine.query_async(copilot_req).await;
-    
-    let completion_id = format!("chatcmpl-{}", red_core::protocol::MessageId::generate().to_hex());
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "id": completion_id,
-        "object": "chat.completion",
-        "created": now,
-        "model": req.model.unwrap_or_else(|| "red-tactical".to_string()),
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": res.answer
-                },
-                "finish_reason": "stop"
+    let completion_id = format!(
+        "chatcmpl-{}",
+        red_core::protocol::MessageId::generate().to_hex()
+    );
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": now,
+            "model": req.model.unwrap_or_else(|| "red-tactical".to_string()),
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": res.answer
+                    },
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30
             }
-        ],
-        "usage": {
-            "prompt_tokens": 10,
-            "completion_tokens": 20,
-            "total_tokens": 30
-        }
-    }))).into_response()
+        })),
+    )
+        .into_response()
 }
 
 async fn handle_ai_summarize_channel_async(
@@ -4552,8 +5738,14 @@ async fn handle_ai_summarize_channel_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_ai_summarize_channel(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_ai_summarize_channel(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4563,14 +5755,18 @@ async fn handle_ai_translate_text_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_ai_translate_text(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_ai_translate_text(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_extract_embeddings_async(
-    Json(req): Json<serde_json::Value>,
-) -> impl IntoResponse {
+async fn handle_extract_embeddings_async(Json(req): Json<serde_json::Value>) -> impl IntoResponse {
     let text = req.get("text").and_then(|v| v.as_str()).unwrap_or("");
     let res = crate::embeddings::NativeEmbeddingEngine::extract(text);
     (StatusCode::OK, Json(res))
@@ -4582,24 +5778,42 @@ async fn handle_create_amber_alert_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_create_amber_alert(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_create_amber_alert(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
 async fn handle_list_amber_alerts_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_list_amber_alerts(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_list_amber_alerts(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
 async fn handle_guardian_status_async(State(state): State<AsyncState>) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_guardian_status(State(r.clone())).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_guardian_status(State(r.clone()))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4609,68 +5823,137 @@ async fn handle_report_content_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_report_content(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_report_content(State(r.clone()), Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_resolve_sos_async(State(state): State<AsyncState>, path: Path<String>) -> impl IntoResponse {
+async fn handle_resolve_sos_async(
+    State(state): State<AsyncState>,
+    path: Path<String>,
+) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_resolve_sos(State(r.clone()), path).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_resolve_sos(State(r.clone()), path)
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_get_channel_messages_async(State(state): State<AsyncState>, axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>) -> impl IntoResponse {
+async fn handle_get_channel_messages_async(
+    State(state): State<AsyncState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_channel_messages(State(r.clone()), axum::extract::Query(params)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_channel_messages(State(r.clone()), axum::extract::Query(params))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_get_voice_bursts_async(State(state): State<AsyncState>, axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>) -> impl IntoResponse {
+async fn handle_get_voice_bursts_async(
+    State(state): State<AsyncState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_voice_bursts(State(r.clone()), axum::extract::Query(params)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_voice_bursts(State(r.clone()), axum::extract::Query(params))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_get_weather_reports_async(State(state): State<AsyncState>, axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>) -> impl IntoResponse {
+async fn handle_get_weather_reports_async(
+    State(state): State<AsyncState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_weather_reports(State(r.clone()), axum::extract::Query(params)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_weather_reports(State(r.clone()), axum::extract::Query(params))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_get_amber_alert_async(State(state): State<AsyncState>, path: Path<String>) -> impl IntoResponse {
+async fn handle_get_amber_alert_async(
+    State(state): State<AsyncState>,
+    path: Path<String>,
+) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_get_amber_alert(State(r.clone()), path).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_get_amber_alert(State(r.clone()), path)
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_resolve_amber_alert_async(State(state): State<AsyncState>, path: Path<String>, Json(req): Json<crate::amber::ResolveAmberAlertRequest>) -> impl IntoResponse {
+async fn handle_resolve_amber_alert_async(
+    State(state): State<AsyncState>,
+    path: Path<String>,
+    Json(req): Json<crate::amber::ResolveAmberAlertRequest>,
+) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_resolve_amber_alert(State(r.clone()), path, Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_resolve_amber_alert(State(r.clone()), path, Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_report_sighting_async(State(state): State<AsyncState>, path: Path<String>, Json(req): Json<crate::amber::ReportSightingRequest>) -> impl IntoResponse {
+async fn handle_report_sighting_async(
+    State(state): State<AsyncState>,
+    path: Path<String>,
+    Json(req): Json<crate::amber::ReportSightingRequest>,
+) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_report_sighting(State(r.clone()), path, Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_report_sighting(State(r.clone()), path, Json(req))
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
-
-
 
 // --- Social Network APIs ---
 #[derive(Deserialize)]
@@ -4714,32 +5997,44 @@ async fn handle_social_feed(State(state): State<ApiState>) -> impl IntoResponse 
     let s = storage.lock().await;
     match s.get_social_feed(50) {
         Ok(posts) => {
-            let mapped: Vec<SocialPostItem> = posts.into_iter().map(|p| SocialPostItem {
-                id: p.id,
-                author_hash: p.author_hash.to_hex(),
-                author_name: p.author_name,
-                content: p.content,
-                media_data: p.media_data,
-                timestamp: p.timestamp,
-                reply_to: p.reply_to,
-                signature: p.signature,
-                reactions: p.reactions,
-            }).collect();
+            let mapped: Vec<SocialPostItem> = posts
+                .into_iter()
+                .map(|p| SocialPostItem {
+                    id: p.id,
+                    author_hash: p.author_hash.to_hex(),
+                    author_name: p.author_name,
+                    content: p.content,
+                    media_data: p.media_data,
+                    timestamp: p.timestamp,
+                    reply_to: p.reply_to,
+                    signature: p.signature,
+                    reactions: p.reactions,
+                })
+                .collect();
             (StatusCode::OK, Json(mapped)).into_response()
-        },
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_social_post(State(state): State<ApiState>, Json(req): Json<CreateSocialPostRequest>) -> impl IntoResponse {
+async fn handle_social_post(
+    State(state): State<ApiState>,
+    Json(req): Json<CreateSocialPostRequest>,
+) -> impl IntoResponse {
     let mut node = state.node.lock().await;
     let sender_hash = node.identity_hash().clone();
     let sender_name = match req.author_name {
         Some(name) => name,
         None => {
             let storage = node.get_storage();
-            let s = storage.lock().await; 
-            s.get_profile().map(|p| p.display_name).unwrap_or_else(|| "Operador RED".to_string()) 
+            let s = storage.lock().await;
+            s.get_profile()
+                .map(|p| p.display_name)
+                .unwrap_or_else(|| "Operador RED".to_string())
         }
     };
     let payload = red_core::protocol::SocialPostPayload {
@@ -4747,7 +6042,10 @@ async fn handle_social_post(State(state): State<ApiState>, Json(req): Json<Creat
         author_name: sender_name,
         content: req.content,
         media_data: req.media_data,
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
         reply_to: req.reply_to,
     };
     let data = serde_json::to_vec(&payload).unwrap_or_default();
@@ -4755,14 +6053,19 @@ async fn handle_social_post(State(state): State<ApiState>, Json(req): Json<Creat
     let out_msg = red_core::protocol::Message {
         id: red_core::protocol::MessageId::generate(),
         sender: sender_hash.clone(),
-        recipient: red_core::identity::IdentityHash::from_bytes([0;32]),
+        recipient: red_core::identity::IdentityHash::from_bytes([0; 32]),
         content: msg_type.clone(),
         timestamp: payload.timestamp as u64 * 1000,
         reply_to: None,
         status: red_core::protocol::MessageStatus::Sent,
         edited: false,
     };
-    let _ = node.send_message(red_core::identity::IdentityHash::from_bytes([0;32]), out_msg).await;
+    let _ = node
+        .send_message(
+            red_core::identity::IdentityHash::from_bytes([0; 32]),
+            out_msg,
+        )
+        .await;
     // Guardar copia local
     {
         let storage = node.get_storage();
@@ -4784,7 +6087,7 @@ async fn handle_social_post(State(state): State<ApiState>, Json(req): Json<Creat
     let notification = red_core::protocol::Message {
         id: red_core::protocol::MessageId::generate(),
         sender: sender_hash,
-        recipient: red_core::identity::IdentityHash::from_bytes([0;32]),
+        recipient: red_core::identity::IdentityHash::from_bytes([0; 32]),
         content: msg_type,
         timestamp: payload.timestamp as u64 * 1000,
         reply_to: None,
@@ -4796,34 +6099,55 @@ async fn handle_social_post(State(state): State<ApiState>, Json(req): Json<Creat
     (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
 }
 
-async fn handle_social_react(State(state): State<ApiState>, Json(req): Json<ReactSocialPostRequest>) -> impl IntoResponse {
+async fn handle_social_react(
+    State(state): State<ApiState>,
+    Json(req): Json<ReactSocialPostRequest>,
+) -> impl IntoResponse {
     let node = state.node.lock().await;
     let my_hash = node.identity_hash().to_hex();
     let storage = node.get_storage();
     let mut s = storage.lock().await;
     match s.react_to_post(&req.post_id, req.emoji, my_hash) {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to react"}))).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to react"})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_social_follow(State(state): State<ApiState>, Json(req): Json<FollowUserRequest>) -> impl IntoResponse {
+async fn handle_social_follow(
+    State(state): State<ApiState>,
+    Json(req): Json<FollowUserRequest>,
+) -> impl IntoResponse {
     let node = state.node.lock().await;
     let storage = node.get_storage();
     let mut s = storage.lock().await;
     match s.follow_user(&req.target_hash) {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to follow"}))).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to follow"})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_social_unfollow(State(state): State<ApiState>, Json(req): Json<FollowUserRequest>) -> impl IntoResponse {
+async fn handle_social_unfollow(
+    State(state): State<ApiState>,
+    Json(req): Json<FollowUserRequest>,
+) -> impl IntoResponse {
     let node = state.node.lock().await;
     let storage = node.get_storage();
     let mut s = storage.lock().await;
     match s.unfollow_user(&req.target_hash) {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to unfollow"}))).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to unfollow"})),
+        )
+            .into_response(),
     }
 }
 
@@ -4833,20 +6157,34 @@ async fn handle_social_following(State(state): State<ApiState>) -> impl IntoResp
     let s = storage.lock().await;
     match s.get_following_list() {
         Ok(list) => (StatusCode::OK, Json(list)).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to get following"}))).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to get following"})),
+        )
+            .into_response(),
     }
 }
 
-
 async_wrap_get!(handle_social_feed_async, handle_social_feed);
-async_wrap_post!(handle_social_post_async, handle_social_post, CreateSocialPostRequest);
-async fn handle_social_post_delete(State(state): State<ApiState>, axum::extract::Path(post_id): axum::extract::Path<String>) -> impl IntoResponse {
+async_wrap_post!(
+    handle_social_post_async,
+    handle_social_post,
+    CreateSocialPostRequest
+);
+async fn handle_social_post_delete(
+    State(state): State<ApiState>,
+    axum::extract::Path(post_id): axum::extract::Path<String>,
+) -> impl IntoResponse {
     let node = state.node.lock().await;
     let storage = node.get_storage();
     let mut s = storage.lock().await;
     match s.delete_social_post(&post_id) {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to delete"}))).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to delete"})),
+        )
+            .into_response(),
     }
 }
 async fn handle_social_post_delete_async(
@@ -4855,17 +6193,37 @@ async fn handle_social_post_delete_async(
 ) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(ready) => handle_social_post_delete(State(ready.clone()), path).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error": "Initializing"}))).into_response(),
+        Some(ready) => handle_social_post_delete(State(ready.clone()), path)
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Initializing"})),
+        )
+            .into_response(),
     }
 }
-async_wrap_post!(handle_social_react_async, handle_social_react, ReactSocialPostRequest);
-async_wrap_post!(handle_social_follow_async, handle_social_follow, FollowUserRequest);
-async_wrap_post!(handle_social_unfollow_async, handle_social_unfollow, FollowUserRequest);
+async_wrap_post!(
+    handle_social_react_async,
+    handle_social_react,
+    ReactSocialPostRequest
+);
+async_wrap_post!(
+    handle_social_follow_async,
+    handle_social_follow,
+    FollowUserRequest
+);
+async_wrap_post!(
+    handle_social_unfollow_async,
+    handle_social_unfollow,
+    FollowUserRequest
+);
 async_wrap_get!(handle_social_following_async, handle_social_following);
 
-
-async fn handle_contact_sync(State(state): State<ApiState>, axum::extract::Path(target_hash): axum::extract::Path<String>) -> impl IntoResponse {
+async fn handle_contact_sync(
+    State(state): State<ApiState>,
+    axum::extract::Path(target_hash): axum::extract::Path<String>,
+) -> impl IntoResponse {
     let mut node = state.node.lock().await;
     let my_hash = node.identity_hash().clone();
     if let Ok(recipient) = red_core::identity::IdentityHash::from_hex(&target_hash) {
@@ -4874,7 +6232,10 @@ async fn handle_contact_sync(State(state): State<ApiState>, axum::extract::Path(
             sender: my_hash,
             recipient,
             content: red_core::protocol::MessageType::ProfileSyncRequest,
-            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
             reply_to: None,
             status: red_core::protocol::MessageStatus::Sent,
             edited: false,
@@ -4882,21 +6243,30 @@ async fn handle_contact_sync(State(state): State<ApiState>, axum::extract::Path(
         let _ = node.send_message(msg.recipient.clone(), msg).await;
         (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
     } else {
-        (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid hash"}))).into_response()
+        (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid hash"})),
+        )
+            .into_response()
     }
 }
 
-async fn handle_contact_sync_async(State(state): State<AsyncState>, path: axum::extract::Path<String>) -> impl IntoResponse {
+async fn handle_contact_sync_async(
+    State(state): State<AsyncState>,
+    path: axum::extract::Path<String>,
+) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_contact_sync(State(r.clone()), path).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+        Some(r) => handle_contact_sync(State(r.clone()), path)
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error":"Node initializing"})),
+        )
+            .into_response(),
     }
 }
-
-
-
-
 
 // ─── Sovereign P2P Payments & Vouchers Handlers (v32.0) ──────────────────────────
 
@@ -4919,22 +6289,37 @@ async fn handle_get_p2p_wallet(State(state): State<ApiState>) -> impl IntoRespon
     match s.get_p2p_wallet() {
         Ok(wallet) => {
             let vouchers = s.get_p2p_vouchers().unwrap_or_default();
-            (StatusCode::OK, Json(serde_json::json!({
-                "ok": true,
-                "balance": wallet.balance,
-                "total_minted": wallet.total_minted,
-                "total_received": wallet.total_received,
-                "total_spent": wallet.total_spent,
-                "vouchers": vouchers
-            }))).into_response()
-        },
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "ok": true,
+                    "balance": wallet.balance,
+                    "total_minted": wallet.total_minted,
+                    "total_received": wallet.total_received,
+                    "total_spent": wallet.total_spent,
+                    "vouchers": vouchers
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
     }
 }
 
-async fn handle_create_p2p_voucher(State(state): State<ApiState>, Json(req): Json<CreateP2PVoucherRequest>) -> impl IntoResponse {
+async fn handle_create_p2p_voucher(
+    State(state): State<ApiState>,
+    Json(req): Json<CreateP2PVoucherRequest>,
+) -> impl IntoResponse {
     if req.amount <= 0.0 {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "El monto debe ser mayor a 0"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "El monto debe ser mayor a 0"})),
+        )
+            .into_response();
     }
 
     let mut node = state.node.lock().await;
@@ -4944,27 +6329,49 @@ async fn handle_create_p2p_voucher(State(state): State<ApiState>, Json(req): Jso
     let mut wallet = match s.get_p2p_wallet() {
         Ok(w) => w,
         Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
         }
     };
 
     if wallet.balance < req.amount {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Saldo insuficiente en boveda"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Saldo insuficiente en boveda"})),
+        )
+            .into_response();
     }
 
     // Deduct balance
     wallet.balance -= req.amount;
     wallet.total_spent += req.amount;
     if let Err(e) = s.save_p2p_wallet(&wallet) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response();
     }
 
     let creator_hash = node.identity_hash().clone();
-    let creator_name = s.get_profile().map(|p| p.display_name).unwrap_or_else(|| "Nodo Soberano".to_string());
+    let creator_name = s
+        .get_profile()
+        .map(|p| p.display_name)
+        .unwrap_or_else(|| "Nodo Soberano".to_string());
     let recipient = req.recipient.unwrap_or_else(|| "Anónimo".to_string());
-    let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
     let hash_hex = creator_hash.to_hex();
-    let short_id = if hash_hex.len() >= 6 { &hash_hex[..6] } else { "RED" };
+    let short_id = if hash_hex.len() >= 6 {
+        &hash_hex[..6]
+    } else {
+        "RED"
+    };
     let voucher_id = format!("VOUCHER_{}_{}", timestamp, short_id);
 
     // Cryptographic signature over voucher payload: (id + amount + timestamp + creator_hash)
@@ -5004,34 +6411,56 @@ async fn handle_create_p2p_voucher(State(state): State<ApiState>, Json(req): Jso
         let out_msg = red_core::protocol::Message {
             id: red_core::protocol::MessageId::generate(),
             sender: creator_hash,
-            recipient: red_core::identity::IdentityHash::from_bytes([0;32]),
+            recipient: red_core::identity::IdentityHash::from_bytes([0; 32]),
             content: msg_type,
             timestamp,
             reply_to: None,
             status: red_core::protocol::MessageStatus::Sent,
             edited: false,
         };
-        let _ = node.send_message(red_core::identity::IdentityHash::from_bytes([0;32]), out_msg).await;
+        let _ = node
+            .send_message(
+                red_core::identity::IdentityHash::from_bytes([0; 32]),
+                out_msg,
+            )
+            .await;
     }
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "ok": true,
-        "voucher": voucher_record,
-        "new_balance": wallet.balance
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "ok": true,
+            "voucher": voucher_record,
+            "new_balance": wallet.balance
+        })),
+    )
+        .into_response()
 }
 
-async fn handle_redeem_p2p_voucher(State(state): State<ApiState>, Json(req): Json<RedeemP2PVoucherRequest>) -> impl IntoResponse {
+async fn handle_redeem_p2p_voucher(
+    State(state): State<ApiState>,
+    Json(req): Json<RedeemP2PVoucherRequest>,
+) -> impl IntoResponse {
     // Format expected: RED_PAY:<VOUCHER_ID>:<AMOUNT>:<SIGNATURE>
     let parts: Vec<&str> = req.qr_payload.split(':').collect();
     if parts.len() < 4 || parts[0] != "RED_PAY" {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Formato de voucher QR inválido"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Formato de voucher QR inválido"})),
+        )
+            .into_response();
     }
 
     let voucher_id = parts[1].to_string();
     let amount: f64 = match parts[2].parse() {
         Ok(a) if a > 0.0 => a,
-        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Monto inválido en voucher"}))).into_response(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Monto inválido en voucher"})),
+            )
+                .into_response()
+        }
     };
     let signature = parts[3].to_string();
 
@@ -5042,16 +6471,23 @@ async fn handle_redeem_p2p_voucher(State(state): State<ApiState>, Json(req): Jso
     // Check if already redeemed locally
     if let Some(existing) = s.get_p2p_voucher(&voucher_id) {
         if existing.redeemed {
-            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Este voucher ya fue canjeado previamente"}))).into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Este voucher ya fue canjeado previamente"})),
+            )
+                .into_response();
         }
     }
 
     let my_hash = node.identity_hash().clone();
-    let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
 
     let voucher_record = red_core::storage::P2PVoucherRecord {
         id: voucher_id.clone(),
-        creator_hash: red_core::identity::IdentityHash::from_bytes([0;32]),
+        creator_hash: red_core::identity::IdentityHash::from_bytes([0; 32]),
         creator_name: "Emisor P2P".to_string(),
         recipient: my_hash.to_hex(),
         amount,
@@ -5066,7 +6502,11 @@ async fn handle_redeem_p2p_voucher(State(state): State<ApiState>, Json(req): Jso
     let mut wallet = match s.get_p2p_wallet() {
         Ok(w) => w,
         Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
         }
     };
 
@@ -5074,14 +6514,26 @@ async fn handle_redeem_p2p_voucher(State(state): State<ApiState>, Json(req): Jso
     wallet.total_received += amount;
     let _ = s.save_p2p_wallet(&wallet);
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "ok": true,
-        "amount": amount,
-        "new_balance": wallet.balance,
-        "voucher": voucher_record
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "ok": true,
+            "amount": amount,
+            "new_balance": wallet.balance,
+            "voucher": voucher_record
+        })),
+    )
+        .into_response()
 }
 
 async_wrap_get!(handle_get_p2p_wallet_async, handle_get_p2p_wallet);
-async_wrap_post!(handle_create_p2p_voucher_async, handle_create_p2p_voucher, CreateP2PVoucherRequest);
-async_wrap_post!(handle_redeem_p2p_voucher_async, handle_redeem_p2p_voucher, RedeemP2PVoucherRequest);
+async_wrap_post!(
+    handle_create_p2p_voucher_async,
+    handle_create_p2p_voucher,
+    CreateP2PVoucherRequest
+);
+async_wrap_post!(
+    handle_redeem_p2p_voucher_async,
+    handle_redeem_p2p_voucher,
+    RedeemP2PVoucherRequest
+);

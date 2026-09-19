@@ -1,6 +1,6 @@
 //! LoRaWAN / Sub-1GHz Radio Bridge API
-//! 
-//! Provides the abstraction layer to route encrypted OnionPackets across physical 
+//!
+//! Provides the abstraction layer to route encrypted OnionPackets across physical
 //! LoRa boundaries when cellular networks are subjected to state-level blackouts.
 
 use std::sync::Arc;
@@ -34,8 +34,11 @@ impl LoraBridge {
     /// Spin up the serial listener loop
     pub async fn start(&mut self) -> Result<(), String> {
         self.is_active = true;
-        info!("LoRa Bridge initialized on {} @ {} bps", self.port, self.baud_rate);
-        
+        info!(
+            "LoRa Bridge initialized on {} @ {} bps",
+            self.port, self.baud_rate
+        );
+
         let node_ptr = self.node_ref.clone();
         let port_path = self.port.clone();
         let baud = self.baud_rate;
@@ -45,8 +48,8 @@ impl LoraBridge {
         self.tx = Some(tx);
 
         tokio::spawn(async move {
-            use tokio_serial::SerialPortBuilderExt;
             use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+            use tokio_serial::SerialPortBuilderExt;
 
             let builder = tokio_serial::new(&port_path, baud);
             match builder.open_native_async() {
@@ -74,7 +77,10 @@ impl LoraBridge {
                         }
                     }
                 }
-                Err(e) => info!("LoRa radio hardware en {} no detectado (omitido puerto serial físico: {})", port_path, e),
+                Err(e) => info!(
+                    "LoRa radio hardware en {} no detectado (omitido puerto serial físico: {})",
+                    port_path, e
+                ),
             }
         });
 
@@ -109,4 +115,3 @@ impl LoraBridge {
         }
     }
 }
-

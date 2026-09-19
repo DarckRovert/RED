@@ -68,14 +68,20 @@ fn test_chacha20_poly1305_aead_tamper_rejection() {
     let mut tampered_body = encrypted.clone();
     tampered_body.ciphertext[0] ^= 0x01;
     let err_body = decrypt(&key, &tampered_body);
-    assert!(err_body.is_err(), "Bit flip in ciphertext must fail AEAD tag verification");
+    assert!(
+        err_body.is_err(),
+        "Bit flip in ciphertext must fail AEAD tag verification"
+    );
 
     // Tamper with Poly1305 MAC tag
     let mut tampered_tag = encrypted.clone();
     let last_idx = tampered_tag.ciphertext.len() - 1;
     tampered_tag.ciphertext[last_idx] ^= 0x80;
     let err_tag = decrypt(&key, &tampered_tag);
-    assert!(err_tag.is_err(), "Bit flip in Poly1305 tag must fail AEAD verification");
+    assert!(
+        err_tag.is_err(),
+        "Bit flip in Poly1305 tag must fail AEAD verification"
+    );
 
     // Decryption with incorrect key
     let wrong_key = [0x5bu8; 32];
@@ -135,17 +141,30 @@ fn test_blake3_determinism_and_hkdf_domain_separation() {
 
     let input2 = b"RED Sovereign OS Identity Seed 2";
     let h3 = hash(input2);
-    assert_ne!(h1, h3, "Different inputs must produce completely distinct BLAKE3 hashes");
+    assert_ne!(
+        h1, h3,
+        "Different inputs must produce completely distinct BLAKE3 hashes"
+    );
 
     // Domain separation with HKDF
     let ikm = [0x77u8; 32];
     let key_chat = derive_key(&ikm, &[], b"RED-v63-chat-transport", 32).expect("Derive chat key");
-    let key_voice = derive_key(&ikm, &[], b"RED-v63-voice-transport", 32).expect("Derive voice key");
+    let key_voice =
+        derive_key(&ikm, &[], b"RED-v63-voice-transport", 32).expect("Derive voice key");
     let key_dtn = derive_key(&ikm, &[], b"RED-v63-dtn-storage", 32).expect("Derive dtn key");
 
-    assert_ne!(key_chat, key_voice, "Different domains must yield distinct keys");
-    assert_ne!(key_voice, key_dtn, "Different domains must yield distinct keys");
-    assert_ne!(key_chat, key_dtn, "Different domains must yield distinct keys");
+    assert_ne!(
+        key_chat, key_voice,
+        "Different domains must yield distinct keys"
+    );
+    assert_ne!(
+        key_voice, key_dtn,
+        "Different domains must yield distinct keys"
+    );
+    assert_ne!(
+        key_chat, key_dtn,
+        "Different domains must yield distinct keys"
+    );
 
     // Salted symmetric derivation
     let salt = [0x11u8; 32];
@@ -204,6 +223,10 @@ fn test_zk_merkle_tree_proof_and_verification() {
     // Test ZK Identity Ownership Proof
     let private_key = [0x42u8; 32];
     let public_key = [0x42u8; 32];
-    let id_proof = IdentityProof::create(&private_key, &public_key, &tree, 0).expect("Identity proof creation");
-    assert!(id_proof.verify(&[]), "Identity proof must verify against Merkle root");
+    let id_proof = IdentityProof::create(&private_key, &public_key, &tree, 0)
+        .expect("Identity proof creation");
+    assert!(
+        id_proof.verify(&[]),
+        "Identity proof must verify against Merkle root"
+    );
 }

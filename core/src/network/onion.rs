@@ -5,9 +5,9 @@
 //! - Layered encryption with ephemeral keys
 //! - Path selection from d-regular graph
 
-use crate::crypto::encryption::{encrypt, decrypt};
-use crate::crypto::keys::{EphemeralKeyPair, x25519_diffie_hellman};
+use crate::crypto::encryption::{decrypt, encrypt};
 use crate::crypto::hashing::blake3_hash;
+use crate::crypto::keys::{x25519_diffie_hellman, EphemeralKeyPair};
 use subtle::ConstantTimeEq;
 
 /// Number of onion routing hops (L = 3)
@@ -108,7 +108,7 @@ impl OnionRoute {
 }
 
 /// Build an onion packet for a message
-/// 
+///
 /// Creates layered encryption: innermost layer is for destination,
 /// each outer layer is for an intermediate node.
 pub fn build_onion(
@@ -147,21 +147,15 @@ pub fn build_onion(
             Some(route.hops[route.hops.len() - i].address.clone())
         };
 
-        let (layer, _) = encrypt_layer(
-            &current_payload,
-            &hop.node_pk,
-            sender_sk,
-            next_address,
-        )?;
+        let (layer, _) = encrypt_layer(&current_payload, &hop.node_pk, sender_sk, next_address)?;
         current_payload = layer.to_bytes();
     }
 
-    OnionPacket::from_bytes(&current_payload)
-        .ok_or(OnionError::SerializationError)
+    OnionPacket::from_bytes(&current_payload).ok_or(OnionError::SerializationError)
 }
 
 /// Peel one layer of the onion
-/// 
+///
 /// Returns the inner payload and the next hop address (if any)
 pub fn peel_onion(
     packet: &OnionPacket,
@@ -183,11 +177,12 @@ pub fn peel_onion(
     // The AAD is the node's public key, which was used as recipient_pk during encryption
     let static_secret = x25519_dalek::StaticSecret::from(*node_sk);
     let node_pk_bytes = x25519_dalek::PublicKey::from(&static_secret).to_bytes();
-    
+
     let encrypted_data = crate::crypto::encryption::EncryptedData::from_bytes(&packet.payload)
         .map_err(|_| OnionError::DecryptionFailed)?;
-    let decrypted = crate::crypto::encryption::decrypt_with_aad(&key, &encrypted_data, &node_pk_bytes)
-        .map_err(|_| OnionError::DecryptionFailed)?;
+    let decrypted =
+        crate::crypto::encryption::decrypt_with_aad(&key, &encrypted_data, &node_pk_bytes)
+            .map_err(|_| OnionError::DecryptionFailed)?;
 
     // Parse decrypted data
     // Format: [next_hop_len: u16][next_hop: String][inner_payload]
@@ -227,7 +222,8 @@ fn encrypt_layer(
     let ephemeral_public = ephemeral.public.clone();
 
     // Compute shared secret
-    let shared_secret = ephemeral.key_exchange(&crate::crypto::keys::PublicKey::from_bytes(*recipient_pk));
+    let shared_secret =
+        ephemeral.key_exchange(&crate::crypto::keys::PublicKey::from_bytes(*recipient_pk));
 
     // Derive encryption key
     let key = derive_layer_key(&shared_secret);
@@ -283,7 +279,7 @@ fn pad_message(message: &[u8]) -> Vec<u8> {
     let padded_len = num_cells * CELL_SIZE;
 
     let mut padded = Vec::with_capacity(padded_len);
-    
+
     // Prepend original length
     padded.extend_from_slice(&(message.len() as u32).to_le_bytes());
     padded.extend_from_slice(message);
@@ -327,7 +323,9 @@ pub enum OnionError {
 impl std::fmt::Display for OnionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            OnionError::InvalidRouteLength => write!(f, "Invalid route length (expected {})", ONION_HOPS),
+            OnionError::InvalidRouteLength => {
+                write!(f, "Invalid route length (expected {})", ONION_HOPS)
+            }
             OnionError::PayloadTooLarge => write!(f, "Payload exceeds maximum size"),
             OnionError::EncryptionFailed => write!(f, "Encryption failed"),
             OnionError::DecryptionFailed => write!(f, "Decryption failed"),
@@ -390,9 +388,9 @@ mod tests {
     fn test_pad_unpad() {
         let message = b"Hello, World!";
         let padded = pad_message(message);
-        
+
         assert!(padded.len().is_multiple_of(CELL_SIZE));
-        
+
         let unpadded = unpad_message(&padded).unwrap();
         assert_eq!(unpadded, message);
     }
@@ -420,17 +418,20 @@ mod tests {
         let node_pk_bytes = node_pk.to_bytes();
 
         let message = b"Confidential Payload";
-        let route = OnionRoute::new(vec![], HopInfo { 
-            node_pk: node_pk_bytes, 
-            address: "127.0.0.1:7331".to_string() 
-        });
+        let route = OnionRoute::new(
+            vec![],
+            HopInfo {
+                node_pk: node_pk_bytes,
+                address: "127.0.0.1:7331".to_string(),
+            },
+        );
 
         // Test single layer peel
         // We simulate a raw encrypt_layer for direct testing of the peel logic.
         // Important: encrypted payload must be padded as build_onion does.
         let padded = pad_message(message);
         let (packet, _) = encrypt_layer(&padded, &node_pk_bytes, &[0u8; 32], None).unwrap();
-        
+
         // Correct peel
         let (decrypted, next) = peel_onion(&packet, &node_sk).unwrap();
         assert_eq!(decrypted, message);
@@ -445,10 +446,10 @@ mod tests {
 
         let message = b"Tamper test";
         let (mut packet, _) = encrypt_layer(message, &node_pk_bytes, &[0u8; 32], None).unwrap();
-        
+
         // Tamper with MAC
         packet.mac[0] ^= 0xFF;
-        
+
         let result = peel_onion(&packet, &node_sk);
         assert!(result.is_err(), "Peel should fail if MAC is tampered");
     }

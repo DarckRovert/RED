@@ -12,6 +12,7 @@ import { toast } from "./Toast";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import TacIcon from "./ui/TacIcon";
+import { synapticMeshRouter, SynapticMeshTelemetry } from "../lib/neuro/SynapticMeshRouterEngine";
 
 interface BearerTacticalInfo {
     name: string;
@@ -101,6 +102,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
     const { navigate } = useRedStore();
     const bearerInfoMap = useMemo(() => getBearerInfoMap(t), [t]);
     const [telemetry, setTelemetry] = useState<SwarmHealthTelemetry>(() => dynamicBearerGovernor.getTelemetry());
+    const [synapticTelem, setSynapticTelem] = useState<SynapticMeshTelemetry>(() => synapticMeshRouter.getTelemetry());
     const [currentHop, setCurrentHop] = useState<HoppingChannel>(() => frequencyHopping.getCurrentChannel());
     const [dtnCount, setDtnCount] = useState<number>(() => dtnStorage.count);
     const [expandedBearer, setExpandedBearer] = useState<TacticalBearerType | null>(null);
@@ -117,6 +119,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
 
     useEffect(() => {
         const unsub = dynamicBearerGovernor.subscribe(setTelemetry);
+        const unsubSynaptic = synapticMeshRouter.subscribe(setSynapticTelem);
         const hopInterval = setInterval(() => {
             setCurrentHop(frequencyHopping.getCurrentChannel());
         }, 500);
@@ -126,6 +129,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
 
         return () => {
             unsub();
+            unsubSynaptic();
             clearInterval(hopInterval);
             clearInterval(dtnTimer);
         };
@@ -327,6 +331,50 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
                             {currentHop.hasHardwareTransceiver ? (t('swarm_health_hud.lora_active') || 'LoRa SX1262 Activo') : (t('swarm_health_hud.operating_wifi_ble') || 'Operando Wi-Fi / BLE')}
                         </div>
                     </div>
+                </div>
+            </div>
+
+            {/* Bio-Neuromorphic Synaptic Connectome Card (FlyWire / Murthy Lab) */}
+            <div style={{
+                background: "linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(2, 6, 23, 0.6) 100%)",
+                borderRadius: "14px", padding: "10px 12px",
+                border: "1px solid rgba(16, 185, 129, 0.25)",
+                display: "flex", flexDirection: "column", gap: "8px"
+            }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ fontSize: "0.85rem" }}>🧠</span>
+                        <span style={{ fontSize: "0.72rem", color: "#10B981", fontWeight: 900, letterSpacing: "0.5px" }}>
+                            TOPOLOGÍA SINÁPTICA HEBBIANA
+                        </span>
+                    </div>
+                    <span style={{ fontSize: "0.60rem", color: "#A7F3D0", background: "rgba(16, 185, 129, 0.15)", padding: "2px 6px", borderRadius: "4px", fontWeight: 700 }}>
+                        CONNECTOME v1.0
+                    </span>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px", textAlign: "center" }}>
+                    <div style={{ background: "rgba(0,0,0,0.35)", padding: "6px 4px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#34D399" }}>{synapticTelem.totalSynapses}</div>
+                        <div style={{ fontSize: "0.55rem", color: "#94A3B8" }}>Sinapsis</div>
+                    </div>
+                    <div style={{ background: "rgba(0,0,0,0.35)", padding: "6px 4px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#FBBF24" }}>{synapticTelem.richClubHubs.length}</div>
+                        <div style={{ fontSize: "0.55rem", color: "#94A3B8" }}>Rich Hubs</div>
+                    </div>
+                    <div style={{ background: "rgba(0,0,0,0.35)", padding: "6px 4px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#F87171" }}>{synapticTelem.prunedLinksCount}</div>
+                        <div style={{ fontSize: "0.55rem", color: "#94A3B8" }}>Podados</div>
+                    </div>
+                    <div style={{ background: "rgba(0,0,0,0.35)", padding: "6px 4px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#60A5FA" }}>{Math.round(synapticTelem.meanWeight * 100)}%</div>
+                        <div style={{ fontSize: "0.55rem", color: "#94A3B8" }}>Peso W̄</div>
+                    </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.62rem", color: "#64748B", paddingTop: "2px" }}>
+                    <span>⚡ Tormentas suprimidas: <strong style={{ color: "#FCD34D" }}>{synapticTelem.suppressedStormsCount}</strong></span>
+                    <span>📦 Ruteo bio: <strong style={{ color: "#A7F3D0" }}>{synapticTelem.packetsRoutedBio}</strong></span>
                 </div>
             </div>
 

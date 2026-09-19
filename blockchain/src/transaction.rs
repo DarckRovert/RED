@@ -1,8 +1,8 @@
 //! Transaction types for identity management.
 
+use ed25519_dalek::Signer;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use ed25519_dalek::Signer;
 
 use crate::{BlockchainError, BlockchainResult};
 
@@ -122,11 +122,7 @@ impl Transaction {
     }
 
     /// Create a revocation transaction
-    pub fn revoke_identity(
-        identity_hash: [u8; 32],
-        sender: [u8; 32],
-        nonce: u64,
-    ) -> Self {
+    pub fn revoke_identity(identity_hash: [u8; 32], sender: [u8; 32], nonce: u64) -> Self {
         Self {
             tx_type: TransactionType::RevokeIdentity {
                 identity_hash,
@@ -151,14 +147,14 @@ impl Transaction {
     /// Get data to sign
     pub fn signing_data(&self) -> Vec<u8> {
         let mut data = Vec::new();
-        
+
         // Serialize tx_type
         let tx_type_bytes = bincode::serialize(&self.tx_type).unwrap_or_default();
         data.extend_from_slice(&tx_type_bytes);
         data.extend_from_slice(&self.nonce.to_le_bytes());
         data.extend_from_slice(&self.timestamp.to_le_bytes());
         data.extend_from_slice(&self.sender);
-        
+
         data
     }
 
@@ -169,27 +165,27 @@ impl Transaction {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        
+
         if self.timestamp > now + 300 {
             return Err(BlockchainError::InvalidTransaction(
-                "Timestamp too far in future".to_string()
+                "Timestamp too far in future".to_string(),
             ));
         }
 
         // Validate based on type
         match &self.tx_type {
-            TransactionType::RegisterIdentity { zk_proof, .. }
-                if zk_proof.is_empty() => {
-                    return Err(BlockchainError::InvalidTransaction(
-                        "Missing ZK proof".to_string()
-                    ));
-                }
-            TransactionType::Stake { amount, .. }
-                if *amount < crate::MIN_VALIDATOR_STAKE => {
-                    return Err(BlockchainError::InvalidTransaction(
-                        format!("Stake too low: {} < {}", amount, crate::MIN_VALIDATOR_STAKE)
-                    ));
-                }
+            TransactionType::RegisterIdentity { zk_proof, .. } if zk_proof.is_empty() => {
+                return Err(BlockchainError::InvalidTransaction(
+                    "Missing ZK proof".to_string(),
+                ));
+            }
+            TransactionType::Stake { amount, .. } if *amount < crate::MIN_VALIDATOR_STAKE => {
+                return Err(BlockchainError::InvalidTransaction(format!(
+                    "Stake too low: {} < {}",
+                    amount,
+                    crate::MIN_VALIDATOR_STAKE
+                )));
+            }
             _ => {}
         }
 
@@ -211,15 +207,17 @@ impl Transaction {
 
     /// Verify transaction signature
     pub fn verify_signature(&self) -> BlockchainResult<()> {
-        use ed25519_dalek::{Verifier, VerifyingKey, Signature};
+        use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
-        let verifying_key = VerifyingKey::from_bytes(&self.sender)
-            .map_err(|e| BlockchainError::InvalidTransaction(format!("Invalid sender key: {}", e)))?;
-        
+        let verifying_key = VerifyingKey::from_bytes(&self.sender).map_err(|e| {
+            BlockchainError::InvalidTransaction(format!("Invalid sender key: {}", e))
+        })?;
+
         let signature = Signature::from_bytes(&self.signature);
         let data = self.signing_data();
 
-        verifying_key.verify(&data, &signature)
+        verifying_key
+            .verify(&data, &signature)
             .map_err(|_| BlockchainError::InvalidTransaction("Invalid signature".to_string()))?;
 
         Ok(())
@@ -271,7 +269,7 @@ mod tests {
 
         let hash1 = tx.hash();
         let hash2 = tx.hash();
-        
+
         assert_eq!(hash1, hash2);
     }
 }

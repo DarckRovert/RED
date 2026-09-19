@@ -2,7 +2,7 @@ use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-pub use red_core::protocol::tactical::{WeatherReport, PostWeatherReportRequest};
+pub use red_core::protocol::tactical::{PostWeatherReportRequest, WeatherReport};
 
 #[derive(Clone)]
 pub struct WeatherStore {

@@ -86,6 +86,10 @@ public class RedNodeService extends Service {
     public static RedProxyServer getProxyServer() {
         return RedProxyServer.getInstance();
     }
+
+    public static void setProxyZeroRatingConfig(String sniHost, String ipTarget, String provider, String mode, boolean enabled) {
+        RedProxyServer.getInstance().setZeroRatingConfig(sniHost, ipTarget, provider, mode, enabled);
+    }
     private BluetoothLeAdvertiser bleAdvertiser = null;
     private AdvertiseCallback advertiseCallback = null;
     private BluetoothGattServer gattServer = null;

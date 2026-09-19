@@ -65,9 +65,11 @@ pub struct OnionRouter {
 impl OnionRouter {
     /// Create a new onion router
     pub fn new(path_length: usize) -> Self {
-        Self { 
+        Self {
             path_length,
-            seen_nonces: std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashSet::new())),
+            seen_nonces: std::sync::Arc::new(tokio::sync::Mutex::new(
+                std::collections::HashSet::new(),
+            )),
         }
     }
 
@@ -91,17 +93,15 @@ impl OnionRouter {
         destination: &PeerInfo,
     ) -> NetworkResult<Route> {
         if available_peers.len() < self.path_length {
-            return Err(NetworkError::RoutingFailed(
-                format!(
-                    "Not enough peers for route: need {}, have {}",
-                    self.path_length,
-                    available_peers.len()
-                )
-            ));
+            return Err(NetworkError::RoutingFailed(format!(
+                "Not enough peers for route: need {}, have {}",
+                self.path_length,
+                available_peers.len()
+            )));
         }
 
         let mut rng = rand::thread_rng();
-        
+
         // Select random intermediate hops
         let selected: Vec<&PeerInfo> = available_peers
             .choose_multiple(&mut rng, self.path_length - 1)
@@ -111,9 +111,13 @@ impl OnionRouter {
         let mut hops = Vec::new();
         for peer in selected {
             // SEC-FIX M-4: Panic-safe address selection
-            let address = peer.addresses.first()
-                .ok_or_else(|| NetworkError::RoutingFailed(format!("Intermediate peer {} has no addresses", peer.id)))?;
-            
+            let address = peer.addresses.first().ok_or_else(|| {
+                NetworkError::RoutingFailed(format!(
+                    "Intermediate peer {} has no addresses",
+                    peer.id
+                ))
+            })?;
+
             hops.push(RouteHop {
                 peer_id: peer.id.clone(),
                 public_key: peer.public_key.clone(),
@@ -123,8 +127,12 @@ impl OnionRouter {
 
         // Add destination as final hop
         // SEC-FIX M-4: Panic-safe address selection
-        let dest_address = destination.addresses.first()
-            .ok_or_else(|| NetworkError::RoutingFailed(format!("Destination peer {} has no addresses", destination.id)))?;
+        let dest_address = destination.addresses.first().ok_or_else(|| {
+            NetworkError::RoutingFailed(format!(
+                "Destination peer {} has no addresses",
+                destination.id
+            ))
+        })?;
 
         hops.push(RouteHop {
             peer_id: destination.id.clone(),
@@ -145,7 +153,7 @@ impl OnionRouter {
     ) -> CryptoResult<OnionPacket> {
         if route.hops.len() != shared_secrets.len() {
             return Err(crate::crypto::CryptoError::EncryptionError(
-                "Route and secrets length mismatch".to_string()
+                "Route and secrets length mismatch".to_string(),
             ));
         }
 
@@ -153,7 +161,7 @@ impl OnionRouter {
         let mut current_payload = message.to_vec();
 
         // Phase 18: Constant-Size Padding (Anti-NSA Payload Correlation)
-        // To prevent traffic analysis algorithms from correlating a 50-byte 'Hello' 
+        // To prevent traffic analysis algorithms from correlating a 50-byte 'Hello'
         // across network hops, we mathematically pad ALL payloads to exactly 4096 bytes.
         // Bincode deserialization securely ignores trailing suffix bytes.
         const CONSTANT_MTU_SIZE: usize = 4096;
@@ -165,13 +173,21 @@ impl OnionRouter {
             rand::thread_rng().fill_bytes(&mut padding);
             current_payload.extend_from_slice(&padding);
         } else if current_payload.len() > CONSTANT_MTU_SIZE {
-            tracing::warn!("Payload exceeds 4KB anonymity MTU. Mixnet entropy degraded for this transmission.");
+            tracing::warn!(
+                "Payload exceeds 4KB anonymity MTU. Mixnet entropy degraded for this transmission."
+            );
         }
 
         // Build layers from inside out (last hop first)
-        for (i, (_hop, secret)) in route.hops.iter().zip(shared_secrets.iter()).rev().enumerate() {
+        for (i, (_hop, secret)) in route
+            .hops
+            .iter()
+            .zip(shared_secrets.iter())
+            .rev()
+            .enumerate()
+        {
             let is_final = i == 0;
-            
+
             // Create routing info
             let routing_info = if is_final {
                 RoutingInfo {
@@ -190,7 +206,7 @@ impl OnionRouter {
             // Serialize and encrypt
             let routing_bytes = bincode::serialize(&routing_info)
                 .map_err(|e| crate::crypto::CryptoError::EncryptionError(e.to_string()))?;
-            
+
             let encrypted = encrypt(secret, &routing_bytes)?;
 
             layers.push(OnionLayer {
@@ -220,14 +236,16 @@ impl OnionRouter {
         // SEC-D: Replay protection via nonce caching
         let mut seen = self.seen_nonces.lock().await;
         if seen.contains(&layer.encrypted.nonce) {
-            return Err(crate::crypto::CryptoError::DecryptionError("Replay detected".to_string()));
+            return Err(crate::crypto::CryptoError::DecryptionError(
+                "Replay detected".to_string(),
+            ));
         }
 
         let decrypted = decrypt(secret, &layer.encrypted)?;
-        
+
         // Add nonce to seen cache after successful decryption
         seen.insert(layer.encrypted.nonce);
-        
+
         // Optional: limit cache size to prevent memory leak
         if seen.len() > 10000 {
             // Very simple cleanup: clear half the cache if it grows too large
@@ -238,7 +256,7 @@ impl OnionRouter {
             }
         }
         drop(seen);
-        
+
         bincode::deserialize(&decrypted)
             .map_err(|e| crate::crypto::CryptoError::DecryptionError(e.to_string()))
     }
@@ -278,7 +296,7 @@ mod tests {
         let destination = create_test_peers(1).pop().unwrap();
 
         let route = router.select_route(&peers, &destination).unwrap();
-        
+
         assert_eq!(route.hops.len(), 3);
     }
 
@@ -289,7 +307,7 @@ mod tests {
         let destination = create_test_peers(1).pop().unwrap();
 
         let result = router.select_route(&peers, &destination);
-        
+
         assert!(result.is_err());
     }
 
@@ -298,25 +316,25 @@ mod tests {
         let router = OnionRouter::new(3);
         let kp = KeyPair::generate();
         let secret = kp.secret.as_bytes();
-        
+
         // Correct payload for routing: RoutingInfo serialized
         let info = RoutingInfo {
             next_hop: None,
             payload: b"Hello".to_vec(),
         };
         let plaintext = bincode::serialize(&info).unwrap();
-        
+
         let mut layers = Vec::new();
         let encrypted = crate::crypto::encryption::encrypt(secret, &plaintext).unwrap();
         layers.push(OnionLayer {
             ephemeral_pk: *kp.public.as_bytes(),
             encrypted: encrypted.clone(),
         });
-        
+
         // First peel succeeds
         let result1 = router.peel_layer(&layers[0], secret).await;
         assert!(result1.is_ok());
-        
+
         // Second peel with same nonce fails (replay)
         let result2 = router.peel_layer(&layers[0], secret).await;
         assert!(result2.is_err());

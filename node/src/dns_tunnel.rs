@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 use tokio::net::UdpSocket;
-use tracing::{info, error};
+use tracing::{error, info};
 
 use red_core::network::Node;
 use tokio::sync::Mutex;
@@ -35,7 +35,10 @@ impl DnsTunnelServer {
                 match UdpSocket::bind(&fallback_addr).await {
                     Ok(s) => (s, fallback_addr),
                     Err(e) => {
-                        error!("Failed to bind DNS tunnel to {} (fallback {}): {}", addr, fallback_addr, e);
+                        error!(
+                            "Failed to bind DNS tunnel to {} (fallback {}): {}",
+                            addr, fallback_addr, e
+                        );
                         return;
                     }
                 }
@@ -47,7 +50,9 @@ impl DnsTunnelServer {
         loop {
             match socket.recv_from(&mut buf).await {
                 Ok((len, src)) => {
-                    if !self.is_active { continue; }
+                    if !self.is_active {
+                        continue;
+                    }
                     let query = &buf[..len];
                     if let Ok(response) = self.process_dns_query_async(query).await {
                         let _ = socket.send_to(&response, src).await;
@@ -62,11 +67,12 @@ impl DnsTunnelServer {
 
     /// Process raw UDP 53 DNS Packet Payload and extract base32 subdomains
     pub async fn process_dns_query_async(&self, query_bytes: &[u8]) -> Result<Vec<u8>, String> {
-        self.packets_processed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.packets_processed
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         if query_bytes.len() < 12 {
             return Err("DNS query too short".to_string());
         }
-        
+
         let id = &query_bytes[0..2];
         let qdcount = u16::from_be_bytes([query_bytes[4], query_bytes[5]]);
         if qdcount == 0 {
@@ -87,7 +93,7 @@ impl DnsTunnelServer {
             if !qname.is_empty() {
                 qname.push(b'.');
             }
-            qname.extend_from_slice(&query_bytes[idx + 1 .. idx + 1 + len]);
+            qname.extend_from_slice(&query_bytes[idx + 1..idx + 1 + len]);
             idx += 1 + len;
         }
 
@@ -121,10 +127,15 @@ impl DnsTunnelServer {
         let payload_str = payload_parts.join("");
 
         // Use base32 decode (standard RFC4648 without padding)
-        let decoded = data_encoding::BASE32_NOPAD.decode(payload_str.as_bytes()).unwrap_or_default();
-        
+        let decoded = data_encoding::BASE32_NOPAD
+            .decode(payload_str.as_bytes())
+            .unwrap_or_default();
+
         if !decoded.is_empty() {
-            info!("[DNS Tunnel] Recibido payload real Base32, bytes: {}", decoded.len());
+            info!(
+                "[DNS Tunnel] Recibido payload real Base32, bytes: {}",
+                decoded.len()
+            );
             // Attempt to deserialize into a Message
             if let Ok(msg) = bincode::deserialize::<red_core::protocol::Message>(&decoded) {
                 let mut node = self.node.lock().await;
@@ -138,7 +149,7 @@ impl DnsTunnelServer {
         // 4. Construct DNS Response (TXT)
         let mut response = Vec::new();
         response.extend_from_slice(id); // ID
-        
+
         let mut resp_flags = [0u8; 2];
         resp_flags[0] = 0x84; // QR=1, AA=1, TC=0, RD=0
         resp_flags[1] = 0x00; // RA=0, Z=0, RCODE=0 (NOERROR)

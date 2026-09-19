@@ -9,7 +9,7 @@ import { redCyberTunnel, CyberTunnelStats, CyberTunnelMode } from "../../lib/net
 import { SniTarget } from "../../lib/network/sniSpoofEngine";
 
 export function RedCyberTunnelModal() {
-    const { navigate } = useRedStore();
+    const { navigate, goBack } = useRedStore();
     const { t } = useTranslation();
 
     const [stats, setStats] = useState<CyberTunnelStats>(() => redCyberTunnel.getStats());
@@ -21,11 +21,11 @@ export function RedCyberTunnelModal() {
     // Manejo de retroceso Android y ESC
     useEffect(() => {
         const unregister = BackHandlerRegistry.register(() => {
-            navigate("sidebar");
+            goBack();
             return true;
         });
         return () => unregister();
-    }, [navigate]);
+    }, [goBack]);
 
     // Suscripción a estadísticas en tiempo real del túnel
     useEffect(() => {
@@ -155,7 +155,7 @@ export function RedCyberTunnelModal() {
                 </div>
 
                 <button
-                    onClick={() => navigate("sidebar")}
+                    onClick={() => goBack()}
                     style={{
                         background: "rgba(255, 255, 255, 0.05)",
                         border: "1px solid rgba(255, 255, 255, 0.2)",
@@ -443,21 +443,37 @@ export function RedCyberTunnelModal() {
                             color: "#cbd5e1",
                         }}>
                             <div style={{ fontWeight: "bold", color: "#38bdf8", marginBottom: "6px" }}>
-                                MÉTODO 1: CONFIGURACIÓN POR APN CELULAR (DATOS MÓVILES SIN SALDO)
+                                MÉTODO 1: CONFIGURACIÓN POR APN CELULAR (NAVEGADORES WEB Y APPS HTTP)
                             </div>
+                            <p style={{ margin: "0 0 8px 0", color: "#94a3b8" }}>
+                                Este método deriva el tráfico HTTP/HTTPS de tu sistema a través del socket proxy soberano en <strong>127.0.0.1:8088</strong>, aplicando resolución DNS anti-bloqueo y Domain Fronting:
+                            </p>
                             <ol style={{ paddingLeft: "20px", margin: "0 0 14px 0" }}>
                                 <li>Abre los <strong>Ajustes</strong> de tu teléfono Android ➔ <strong>Redes móviles</strong> ➔ <strong>Nombres de Puntos de Acceso (APN)</strong>.</li>
                                 <li>Toca sobre tu APN actual o crea uno nuevo duplicando el de tu operador.</li>
                                 <li>Edita el campo <strong>Proxy</strong> y escribe: <code style={{ color: "#4ade80", backgroundColor: "#000", padding: "2px 6px", borderRadius: "4px" }}>127.0.0.1</code></li>
                                 <li>Edita el campo <strong>Puerto</strong> y escribe: <code style={{ color: "#4ade80", backgroundColor: "#000", padding: "2px 6px", borderRadius: "4px" }}>8088</code></li>
                                 <li>Guarda el APN y actívalo. Desactiva y reactiva los datos móviles una vez.</li>
+                                <li>Abre tu navegador (Chrome, Firefox, Brave, DuckDuckGo) y navega libremente.</li>
                             </ol>
 
+                            <div style={{
+                                backgroundColor: "rgba(56, 189, 248, 0.1)",
+                                border: "1px solid rgba(56, 189, 248, 0.3)",
+                                borderRadius: "8px",
+                                padding: "10px 14px",
+                                marginBottom: "14px",
+                                fontSize: "11px",
+                                color: "#bae6fd",
+                            }}>
+                                💡 <strong>Nota Técnica de Enrutamiento Celular:</strong> El proxy APN intercepta todo el tráfico web HTTP/HTTPS. Aplicaciones nativas que usan sockets binarios directos (ej. llamadas de WhatsApp o streaming UDP QUIC de la app YouTube) ignoran los proxies APN del sistema. Para ver YouTube o buscar información en Google sin restricciones, abre la versión web desde Chrome o utiliza el <strong>Navegador RED Soberano</strong> integrado.
+                            </div>
+
                             <div style={{ fontWeight: "bold", color: "#38bdf8", marginBottom: "6px" }}>
-                                MÉTODO 2: NAVEGACIÓN DIRECTA IN-APP (SIN MODIFICAR AJUSTES)
+                                MÉTODO 2: NAVEGACIÓN DIRECTA IN-APP (RECOMENDADO, CERO CONFIGURACIÓN)
                             </div>
                             <p style={{ margin: "0 0 10px 0" }}>
-                                Si no deseas modificar la configuración de red de tu teléfono, simplemente pulsa en <strong>"Abrir Navegador RED"</strong> arriba. El navegador soberano integrado navegará automáticamente a través del túnel sin necesidad de cambiar ninguna opción del sistema.
+                                Si no deseas modificar los ajustes APN de tu teléfono, simplemente pulsa en <strong>"Abrir Navegador RED"</strong> arriba. El navegador soberano integrado navega automáticamente a través del túnel con camuflaje de cabeceras y respaldo por malla P2P sin necesidad de cambiar ninguna opción del sistema.
                             </p>
                         </div>
                     )}

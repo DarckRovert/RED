@@ -6,15 +6,15 @@
 //! - Contact storage
 //! - Key backup
 
-use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::crypto::encryption::{decrypt, encrypt, EncryptedData};
-use crate::identity::{Identity, IdentityHash, AuthorizedDevice, DeviceId};
-use crate::protocol::{Conversation, ConversationId, Message, Group, GroupId};
+use crate::identity::{AuthorizedDevice, DeviceId, Identity, IdentityHash};
+use crate::protocol::{Conversation, ConversationId, Group, GroupId, Message};
 
 /// Storage-related errors
 #[derive(Error, Debug)]
@@ -191,8 +191,7 @@ impl Storage {
     pub fn open(&mut self) -> StorageResult<()> {
         std::fs::create_dir_all(&self.path)?;
         let db_path = self.path.join("red_db");
-        let db = sled::open(db_path)
-            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        let db = sled::open(db_path).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         self.db = Some(db);
         self.is_open = true;
         Ok(())
@@ -200,7 +199,9 @@ impl Storage {
 
     pub fn close(&mut self) -> StorageResult<()> {
         if let Some(db) = &self.db {
-            let _ = db.flush().map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+            let _ = db
+                .flush()
+                .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         }
         self.is_open = false;
         Ok(())
@@ -222,27 +223,47 @@ impl Storage {
     }
 
     fn store<V: Serialize>(&self, tree_name: &str, key: &[u8], value: &V) -> StorageResult<()> {
-        if self.burner_mode && tree_name == "conversations" { return Ok(()); }
-        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
-        let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
-        let serialized = bincode::serialize(value).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+        if self.burner_mode && tree_name == "conversations" {
+            return Ok(());
+        }
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db
+            .open_tree(tree_name)
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        let serialized = bincode::serialize(value)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
         let encrypted = encrypt(&self.encryption_key, &serialized)?;
-        tree.insert(key, encrypted.to_bytes()).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        tree.insert(key, encrypted.to_bytes())
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         // tree.flush() persists THIS tree's WAL to disk (~3ms) — ACID safe per write.
         // db.flush() (global fsync, ~10-50ms) is intentionally NOT called here to avoid
         // blocking the message-receive hot path in high-frequency BLE mesh scenarios.
         // Use flush_db() at node shutdown or checkpoint boundaries instead.
-        let _ = tree.flush().map_err(|e| StorageError::DatabaseError(e.to_string()));
+        let _ = tree
+            .flush()
+            .map_err(|e| StorageError::DatabaseError(e.to_string()));
         Ok(())
     }
 
     fn fetch<V: DeserializeOwned>(&self, tree_name: &str, key: &[u8]) -> StorageResult<Option<V>> {
-        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
-        let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
-        if let Some(encrypted_data) = tree.get(key).map_err(|e| StorageError::DatabaseError(e.to_string()))? {
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db
+            .open_tree(tree_name)
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        if let Some(encrypted_data) = tree
+            .get(key)
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?
+        {
             let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
             let decrypted = decrypt(&self.encryption_key, &encrypted)?;
-            let value = bincode::deserialize(&decrypted).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            let value = bincode::deserialize(&decrypted)
+                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
             Ok(Some(value))
         } else {
             Ok(None)
@@ -250,14 +271,21 @@ impl Storage {
     }
 
     fn fetch_all<V: DeserializeOwned>(&self, tree_name: &str) -> StorageResult<Vec<V>> {
-        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
-        let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db
+            .open_tree(tree_name)
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         let mut results = Vec::new();
         for item in tree.iter() {
-            let (_, encrypted_data) = item.map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+            let (_, encrypted_data) =
+                item.map_err(|e| StorageError::DatabaseError(e.to_string()))?;
             let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
             let decrypted = decrypt(&self.encryption_key, &encrypted)?;
-            let value = bincode::deserialize(&decrypted).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            let value = bincode::deserialize(&decrypted)
+                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
             results.push(value);
         }
         Ok(results)
@@ -275,22 +303,30 @@ impl Storage {
         cursor_key: Option<&[u8]>,
         page_size: usize,
     ) -> StorageResult<(Vec<V>, Option<Vec<u8>>)> {
-        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
-        let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db
+            .open_tree(tree_name)
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
 
         let iter: Box<dyn Iterator<Item = sled::Result<(sled::IVec, sled::IVec)>>> =
             match cursor_key {
                 // Range starting AFTER the cursor key (exclusive lower bound)
-                Some(key) => Box::new(tree.range::<&[u8], _>((std::ops::Bound::Excluded(key), std::ops::Bound::Unbounded))),
-                None       => Box::new(tree.iter()),
+                Some(key) => Box::new(tree.range::<&[u8], _>((
+                    std::ops::Bound::Excluded(key),
+                    std::ops::Bound::Unbounded,
+                ))),
+                None => Box::new(tree.iter()),
             };
-
 
         let mut results = Vec::with_capacity(page_size);
         let mut last_key: Option<Vec<u8>> = None;
 
         for item in iter.take(page_size) {
-            let (k, encrypted_data) = item.map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+            let (k, encrypted_data) =
+                item.map_err(|e| StorageError::DatabaseError(e.to_string()))?;
             let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
             let decrypted = decrypt(&self.encryption_key, &encrypted)?;
             let value = bincode::deserialize(&decrypted)
@@ -300,33 +336,50 @@ impl Storage {
         }
 
         // If we received a full page, there may be more records — return the last key as cursor
-        let next_cursor = if results.len() == page_size { last_key } else { None };
+        let next_cursor = if results.len() == page_size {
+            last_key
+        } else {
+            None
+        };
         Ok((results, next_cursor))
     }
 
-
-
     fn delete(&self, tree_name: &str, key: &[u8]) -> StorageResult<()> {
-        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
-        let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
-        tree.remove(key).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db
+            .open_tree(tree_name)
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        tree.remove(key)
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         // tree.flush() is sufficient for durability per-operation.
         // db.flush() (global fsync) is reserved for node shutdown via flush_db().
-        let _ = tree.flush().map_err(|e| StorageError::DatabaseError(e.to_string()));
+        let _ = tree
+            .flush()
+            .map_err(|e| StorageError::DatabaseError(e.to_string()));
         Ok(())
     }
 
     /// Global WAL flush for use at node shutdown or checkpoint boundaries.
     /// Do NOT call on every write — use tree.flush() in store()/delete() instead.
     pub fn flush_db(&self) -> StorageResult<()> {
-        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
-        db.flush().map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        db.flush()
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     /// Prunes expired emergency beacons and voice bursts to compact flash storage on mobile nodes.
     pub fn prune_expired_records(&self, max_age_seconds: u64) -> StorageResult<usize> {
-        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -386,7 +439,8 @@ impl Storage {
             for (k, encrypted_data) in tree.iter().flatten() {
                 if let Ok(encrypted) = EncryptedData::from_bytes(&encrypted_data) {
                     if let Ok(decrypted) = decrypt(&self.encryption_key, &encrypted) {
-                        if let Ok(record) = bincode::deserialize::<ProximityNodeRecord>(&decrypted) {
+                        if let Ok(record) = bincode::deserialize::<ProximityNodeRecord>(&decrypted)
+                        {
                             if record.last_seen < cutoff {
                                 to_remove.push(k);
                             }
@@ -407,7 +461,11 @@ impl Storage {
     }
 
     // Config
-    pub fn set_config(&mut self, key: impl Into<String>, value: impl Into<String>) -> StorageResult<()> {
+    pub fn set_config(
+        &mut self,
+        key: impl Into<String>,
+        value: impl Into<String>,
+    ) -> StorageResult<()> {
         let k = key.into();
         self.store("config", k.as_bytes(), &value.into())
     }
@@ -497,8 +555,12 @@ impl Storage {
         false
     }
 
-    pub fn path(&self) -> &PathBuf { &self.path }
-    pub fn is_open(&self) -> bool { self.is_open }
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
+    pub fn is_open(&self) -> bool {
+        self.is_open
+    }
 
     // Groups
     pub fn add_group(&mut self, group: Group) -> StorageResult<()> {
@@ -528,10 +590,17 @@ impl Storage {
     }
 
     pub fn add_message(&mut self, message: Message) -> StorageResult<()> {
-        if self.burner_mode { return Ok(()); }
-        let is_group = self.get_group(&crate::protocol::GroupId(*message.recipient.as_bytes())).is_some();
-        let my_hash = self.get_identity().map(|i| i.identity_hash().clone()).unwrap_or_else(|| message.sender.clone());
-        
+        if self.burner_mode {
+            return Ok(());
+        }
+        let is_group = self
+            .get_group(&crate::protocol::GroupId(*message.recipient.as_bytes()))
+            .is_some();
+        let my_hash = self
+            .get_identity()
+            .map(|i| i.identity_hash().clone())
+            .unwrap_or_else(|| message.sender.clone());
+
         let conv_id = if is_group {
             ConversationId::from_participants(&my_hash, &message.recipient)
         } else {
@@ -539,16 +608,23 @@ impl Storage {
         };
 
         let mut conv = self.get_conversation(&conv_id).unwrap_or_else(|| {
-            let sender_for_conv = if is_group { my_hash.clone() } else { message.sender.clone() };
+            let sender_for_conv = if is_group {
+                my_hash.clone()
+            } else {
+                message.sender.clone()
+            };
             Conversation::new(sender_for_conv, message.recipient.clone())
         });
 
-        conv.add_message(message).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+        conv.add_message(message)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
         self.save_conversation(&conv)
     }
 
     pub fn save_conversation(&mut self, conv: &Conversation) -> StorageResult<()> {
-        if self.burner_mode { return Ok(()); }
+        if self.burner_mode {
+            return Ok(());
+        }
         let id = ConversationId::from_participants(&conv.our_identity, &conv.their_identity);
         self.store("conversations", id.as_bytes(), conv)
     }
@@ -571,7 +647,10 @@ impl Storage {
     }
     /// Mark specific message IDs as `Read` in every conversation where they appear.
     /// Called when a `ReadReceipt` arrives from a peer.
-    pub fn mark_messages_as_read_by_ids(&mut self, ids: &[crate::protocol::MessageId]) -> StorageResult<()> {
+    pub fn mark_messages_as_read_by_ids(
+        &mut self,
+        ids: &[crate::protocol::MessageId],
+    ) -> StorageResult<()> {
         let id_set: std::collections::HashSet<_> = ids.iter().collect();
         let convs = self.get_conversations();
         for mut conv in convs {
@@ -596,15 +675,22 @@ impl Storage {
     pub fn delete_message(&mut self, conv_id_path: &str, msg_id_hex: &str) -> StorageResult<()> {
         let key = self.find_conv_key(conv_id_path)?;
         if let Some(mut conv) = self.get_conversation(&key) {
-            conv.remove_message(msg_id_hex).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            conv.remove_message(msg_id_hex)
+                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
             self.save_conversation(&conv)?;
         }
         Ok(())
     }
-    pub fn edit_message(&mut self, conv_id_path: &str, msg_id_hex: &str, new_content: String) -> StorageResult<()> {
+    pub fn edit_message(
+        &mut self,
+        conv_id_path: &str,
+        msg_id_hex: &str,
+        new_content: String,
+    ) -> StorageResult<()> {
         let key = self.find_conv_key(conv_id_path)?;
         if let Some(mut conv) = self.get_conversation(&key) {
-            conv.edit_message_content(msg_id_hex, new_content).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            conv.edit_message_content(msg_id_hex, new_content)
+                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
             self.save_conversation(&conv)?;
         }
         Ok(())
@@ -620,7 +706,10 @@ impl Storage {
     pub fn prune_expired_messages(&mut self) -> StorageResult<usize> {
         let mut pruned = 0;
         let convs = self.get_conversations();
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
         for mut conv in convs {
             let p = conv.prune_expired(now);
             if p > 0 {
@@ -633,16 +722,23 @@ impl Storage {
 
     fn find_conv_key(&self, id_str: &str) -> StorageResult<ConversationId> {
         if let Ok(cid) = ConversationId::from_hex(id_str) {
-            if self.get_conversation(&cid).is_some() { return Ok(cid); }
+            if self.get_conversation(&cid).is_some() {
+                return Ok(cid);
+            }
         }
         for conv in self.get_conversations() {
             let cid = ConversationId::from_participants(&conv.our_identity, &conv.their_identity);
             let hex = cid.to_hex();
             let our_hex = conv.our_identity.to_hex();
             let their_hex = conv.their_identity.to_hex();
-            if hex == id_str || hex.starts_with(id_str) || hex.ends_with(id_str)
-                || their_hex == id_str || our_hex == id_str
-                || (id_str.len() >= 8 && (their_hex.starts_with(id_str) || our_hex.starts_with(id_str))) {
+            if hex == id_str
+                || hex.starts_with(id_str)
+                || hex.ends_with(id_str)
+                || their_hex == id_str
+                || our_hex == id_str
+                || (id_str.len() >= 8
+                    && (their_hex.starts_with(id_str) || our_hex.starts_with(id_str)))
+            {
                 return Ok(cid);
             }
         }
@@ -655,13 +751,20 @@ impl Storage {
                     let our_hex = conv.our_identity.to_hex();
                     let their_hex = conv.their_identity.to_hex();
                     if (our_hex.starts_with(p0) && their_hex.starts_with(p1))
-                        || (our_hex.starts_with(p1) && their_hex.starts_with(p0)) {
-                        return Ok(ConversationId::from_participants(&conv.our_identity, &conv.their_identity));
+                        || (our_hex.starts_with(p1) && their_hex.starts_with(p0))
+                    {
+                        return Ok(ConversationId::from_participants(
+                            &conv.our_identity,
+                            &conv.their_identity,
+                        ));
                     }
                 }
             }
         }
-        Err(StorageError::NotFound(format!("Conversation not found for id: {}", id_str)))
+        Err(StorageError::NotFound(format!(
+            "Conversation not found for id: {}",
+            id_str
+        )))
     }
 
     // Pending deliveries for offline queueing
@@ -674,14 +777,21 @@ impl Storage {
     }
 
     pub fn get_pending_deliveries(&self) -> StorageResult<Vec<(Vec<u8>, Message)>> {
-        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
-        let tree = db.open_tree("pending_deliveries").map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db
+            .open_tree("pending_deliveries")
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         let mut results = Vec::new();
         for item in tree.iter() {
-            let (key, encrypted_data) = item.map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+            let (key, encrypted_data) =
+                item.map_err(|e| StorageError::DatabaseError(e.to_string()))?;
             let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
             let decrypted = decrypt(&self.encryption_key, &encrypted)?;
-            let message = bincode::deserialize(&decrypted).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            let message = bincode::deserialize(&decrypted)
+                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
             results.push((key.to_vec(), message));
         }
         Ok(results)
@@ -700,10 +810,16 @@ impl Storage {
     }
 
     pub fn get_social_post(&self, post_id: &str) -> Option<SocialPost> {
-        self.fetch("social_posts", post_id.as_bytes()).unwrap_or(None)
+        self.fetch("social_posts", post_id.as_bytes())
+            .unwrap_or(None)
     }
 
-    pub fn react_to_post(&mut self, post_id: &str, emoji: String, reactor_hash: String) -> StorageResult<()> {
+    pub fn react_to_post(
+        &mut self,
+        post_id: &str,
+        emoji: String,
+        reactor_hash: String,
+    ) -> StorageResult<()> {
         if let Some(mut post) = self.get_social_post(post_id) {
             post.reactions.entry(emoji).or_default().push(reactor_hash);
             self.store_social_post(&post)?;
@@ -724,8 +840,13 @@ impl Storage {
     }
 
     pub fn get_following_list(&self) -> StorageResult<Vec<String>> {
-        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
-        let tree = db.open_tree("social_following").map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db
+            .open_tree("social_following")
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         let mut results = Vec::new();
         for item in tree.iter() {
             let (key, _) = item.map_err(|e| StorageError::DatabaseError(e.to_string()))?;
@@ -764,7 +885,8 @@ impl Storage {
     }
 
     pub fn get_p2p_voucher(&self, voucher_id: &str) -> Option<P2PVoucherRecord> {
-        self.fetch("p2p_vouchers", voucher_id.as_bytes()).unwrap_or(None)
+        self.fetch("p2p_vouchers", voucher_id.as_bytes())
+            .unwrap_or(None)
     }
 
     pub fn get_p2p_vouchers(&self) -> StorageResult<Vec<P2PVoucherRecord>> {
@@ -796,7 +918,9 @@ impl Storage {
 
     pub fn delete_triage_report(&self, id: &str) -> StorageResult<()> {
         if let Some(db) = &self.db {
-            let tree = db.open_tree("triage_reports").map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+            let tree = db
+                .open_tree("triage_reports")
+                .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
             let _ = tree.remove(id.as_bytes());
             let _ = db.flush();
         }
@@ -815,7 +939,9 @@ impl Storage {
 
     pub fn remove_emergency_beacon(&self, beacon_id: &str) -> StorageResult<()> {
         if let Some(db) = &self.db {
-            let tree = db.open_tree("emergency_beacons").map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+            let tree = db
+                .open_tree("emergency_beacons")
+                .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
             let _ = tree.remove(beacon_id.as_bytes());
             let _ = db.flush();
         }
@@ -834,7 +960,9 @@ impl Storage {
 
     pub fn delete_stego_capsule(&self, id: &str) -> StorageResult<()> {
         if let Some(db) = &self.db {
-            let tree = db.open_tree("stego_vault").map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+            let tree = db
+                .open_tree("stego_vault")
+                .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
             let _ = tree.remove(id.as_bytes());
             let _ = db.flush();
         }
@@ -842,7 +970,10 @@ impl Storage {
     }
 
     pub fn get_dms_config(&self) -> StorageResult<DmsConfigRecord> {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         if let Some(config) = self.fetch::<DmsConfigRecord>("dms_config", b"active_config")? {
             Ok(config)
         } else {
@@ -862,14 +993,21 @@ impl Storage {
     }
 
     pub fn ping_dms_activity(&self) -> StorageResult<u64> {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         let mut config = self.get_dms_config()?;
         config.last_active_timestamp = now;
         self.save_dms_config(&config)?;
         Ok(now)
     }
 
-    pub fn execute_dms_purge(&mut self, wipe_messages: bool, wipe_identity: bool) -> StorageResult<()> {
+    pub fn execute_dms_purge(
+        &mut self,
+        wipe_messages: bool,
+        wipe_identity: bool,
+    ) -> StorageResult<()> {
         if let Some(db) = &self.db {
             if wipe_messages {
                 let _ = db.drop_tree("conversations");
@@ -898,7 +1036,11 @@ impl Storage {
 
     pub fn get_proximity_nodes(&self) -> StorageResult<Vec<ProximityNodeRecord>> {
         let mut list: Vec<ProximityNodeRecord> = self.fetch_all("proximity_nodes")?;
-        list.sort_by(|a, b| a.distance_meters.partial_cmp(&b.distance_meters).unwrap_or(std::cmp::Ordering::Equal));
+        list.sort_by(|a, b| {
+            a.distance_meters
+                .partial_cmp(&b.distance_meters)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         Ok(list)
     }
 
@@ -914,7 +1056,9 @@ impl Storage {
 
     pub fn delete_voice_burst(&self, id: &str) -> StorageResult<()> {
         if let Some(db) = &self.db {
-            let tree = db.open_tree("voice_bursts").map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+            let tree = db
+                .open_tree("voice_bursts")
+                .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
             let _ = tree.remove(id.as_bytes());
             let _ = db.flush();
         }

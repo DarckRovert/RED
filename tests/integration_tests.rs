@@ -5,24 +5,21 @@
 
 #[cfg(test)]
 mod crypto_tests {
-    use red_core::crypto::{
-        encryption,
-        hashing,
-        keys::SigningKeyPair,
-    };
+    use red_core::crypto::{encryption, hashing, keys::SigningKeyPair};
 
     #[test]
     fn test_chacha20_encrypt_decrypt_roundtrip() {
         let key = [0x42u8; 32];
         let plaintext = b"RED Protocol secret message";
 
-        let encrypted = encryption::encrypt(&key, plaintext)
-            .expect("Encryption should succeed");
+        let encrypted = encryption::encrypt(&key, plaintext).expect("Encryption should succeed");
 
-        assert_ne!(encrypted.ciphertext, plaintext, "Ciphertext must differ from plaintext");
+        assert_ne!(
+            encrypted.ciphertext, plaintext,
+            "Ciphertext must differ from plaintext"
+        );
 
-        let decrypted = encryption::decrypt(&key, &encrypted)
-            .expect("Decryption should succeed");
+        let decrypted = encryption::decrypt(&key, &encrypted).expect("Decryption should succeed");
 
         assert_eq!(decrypted, plaintext, "Decrypted text must match original");
     }
@@ -33,11 +30,13 @@ mod crypto_tests {
         let wrong_key = [0x99u8; 32];
         let plaintext = b"secret";
 
-        let encrypted = encryption::encrypt(&key, plaintext)
-            .expect("Encryption should succeed");
+        let encrypted = encryption::encrypt(&key, plaintext).expect("Encryption should succeed");
 
         let result = encryption::decrypt(&wrong_key, &encrypted);
-        assert!(result.is_err(), "Decryption with wrong key must fail (AEAD integrity check)");
+        assert!(
+            result.is_err(),
+            "Decryption with wrong key must fail (AEAD integrity check)"
+        );
     }
 
     #[test]
@@ -46,7 +45,10 @@ mod crypto_tests {
         let message = b"RED Network block data";
 
         let signature = kp.sign(message);
-        assert!(kp.verify(message, &signature).is_ok(), "Valid signature must verify");
+        assert!(
+            kp.verify(message, &signature).is_ok(),
+            "Valid signature must verify"
+        );
     }
 
     #[test]
@@ -58,8 +60,10 @@ mod crypto_tests {
         let mut tampered = message.to_vec();
         tampered[0] ^= 0xFF; // Flip bits in the first byte
 
-        assert!(kp.verify(&tampered, &signature).is_err(),
-            "Tampered message must fail signature verification");
+        assert!(
+            kp.verify(&tampered, &signature).is_err(),
+            "Tampered message must fail signature verification"
+        );
     }
 
     #[test]
@@ -92,7 +96,11 @@ mod crypto_tests {
         let h1 = blake3::hash(data);
         let h2 = blake3::hash(data);
         assert_eq!(h1, h2, "BLAKE3 hash must be deterministic");
-        assert_ne!(blake3::hash(b"other"), h1, "Different inputs must hash differently");
+        assert_ne!(
+            blake3::hash(b"other"),
+            h1,
+            "Different inputs must hash differently"
+        );
     }
 }
 
@@ -120,25 +128,32 @@ mod identity_tests {
         let alice_shared = alice.key_exchange(bob.public_key());
         let bob_shared = bob.key_exchange(alice.public_key());
 
-        assert_eq!(alice_shared, bob_shared,
-            "Diffie-Hellman key exchange must yield the same shared secret for both parties");
-        assert_ne!(alice_shared, [0u8; 32],
-            "Shared secret must not be all zeros");
+        assert_eq!(
+            alice_shared, bob_shared,
+            "Diffie-Hellman key exchange must yield the same shared secret for both parties"
+        );
+        assert_ne!(
+            alice_shared, [0u8; 32],
+            "Shared secret must not be all zeros"
+        );
     }
 
     #[test]
     fn test_identity_hash_is_32_bytes() {
         let id = Identity::generate().unwrap();
-        assert_eq!(id.identity_hash().as_bytes().len(), 32,
-            "Identity hash must be exactly 32 bytes");
+        assert_eq!(
+            id.identity_hash().as_bytes().len(),
+            32,
+            "Identity hash must be exactly 32 bytes"
+        );
     }
 }
 
 #[cfg(test)]
 mod storage_tests {
-    use red_core::storage::Storage;
-    use red_core::identity::Identity;
     use red_core::crypto::hashing;
+    use red_core::identity::Identity;
+    use red_core::storage::Storage;
     use std::path::PathBuf;
 
     struct TempStorageDir {
@@ -167,8 +182,11 @@ mod storage_tests {
 
         s.set_identity(id.clone()).expect("Should save identity");
         let loaded = s.get_identity().expect("Should load identity");
-        assert_eq!(loaded.identity_hash(), id.identity_hash(),
-            "Loaded identity must match saved identity");
+        assert_eq!(
+            loaded.identity_hash(),
+            id.identity_hash(),
+            "Loaded identity must match saved identity"
+        );
     }
 
     #[test]
@@ -203,18 +221,23 @@ mod blockchain_tests {
         let consensus = Consensus::new();
         let key = [0x01u8; 32];
 
-        consensus.register_validator(key, MIN_VALIDATOR_STAKE * 10).unwrap();
+        consensus
+            .register_validator(key, MIN_VALIDATOR_STAKE * 10)
+            .unwrap();
 
         // Simulate a double sign infraction
-        consensus.slash_validator(&key, red_blockchain::consensus::SlashReason::DoubleSign)
+        consensus
+            .slash_validator(&key, red_blockchain::consensus::SlashReason::DoubleSign)
             .expect("Slashing should succeed");
 
         let validators = consensus.get_validators();
         let v = validators.get(&key).unwrap();
 
         // After slashing, stake should be reduced
-        assert!(v.stake < MIN_VALIDATOR_STAKE * 10,
-            "Stake must be reduced after slashing");
+        assert!(
+            v.stake < MIN_VALIDATOR_STAKE * 10,
+            "Stake must be reduced after slashing"
+        );
     }
 
     #[test]
@@ -227,33 +250,42 @@ mod blockchain_tests {
 
         // Slash until stake falls below minimum
         for _ in 0..10 {
-            let _ = consensus.slash_validator(&key, red_blockchain::consensus::SlashReason::DoubleSign);
+            let _ =
+                consensus.slash_validator(&key, red_blockchain::consensus::SlashReason::DoubleSign);
         }
 
         let validators = consensus.get_validators();
         let v = validators.get(&key).unwrap();
-        assert!(!v.active || v.stake < MIN_VALIDATOR_STAKE,
-            "Validator must be deactivated or below min stake after repeated slashing");
+        assert!(
+            !v.active || v.stake < MIN_VALIDATOR_STAKE,
+            "Validator must be deactivated or below min stake after repeated slashing"
+        );
     }
 
     #[test]
     fn test_deterministic_leader_selection() {
         let consensus = Consensus::new();
-        consensus.register_validator([0x01u8; 32], MIN_VALIDATOR_STAKE).unwrap();
-        consensus.register_validator([0x02u8; 32], MIN_VALIDATOR_STAKE * 2).unwrap();
+        consensus
+            .register_validator([0x01u8; 32], MIN_VALIDATOR_STAKE)
+            .unwrap();
+        consensus
+            .register_validator([0x02u8; 32], MIN_VALIDATOR_STAKE * 2)
+            .unwrap();
 
         // Same slot must always produce the same leader
         let leader_slot_0_a = consensus.select_leader(0);
         let leader_slot_0_b = consensus.select_leader(0);
-        assert_eq!(leader_slot_0_a, leader_slot_0_b,
-            "Leader selection must be deterministic for the same slot");
+        assert_eq!(
+            leader_slot_0_a, leader_slot_0_b,
+            "Leader selection must be deterministic for the same slot"
+        );
     }
 }
 
 #[cfg(test)]
 mod protocol_tests {
-    use red_core::protocol::{Message, MessageType, MessageId};
     use red_core::identity::IdentityHash;
+    use red_core::protocol::{Message, MessageId, MessageType};
 
     #[test]
     fn test_message_serialization_roundtrip() {
@@ -272,7 +304,8 @@ mod protocol_tests {
         };
 
         let serialized = msg.serialize().expect("Serialization should succeed");
-        let deserialized = Message::deserialize(&serialized).expect("Deserialization should succeed");
+        let deserialized =
+            Message::deserialize(&serialized).expect("Deserialization should succeed");
 
         assert_eq!(msg.id.to_hex(), deserialized.id.to_hex());
         match deserialized.content {
@@ -294,6 +327,9 @@ mod protocol_tests {
             status: red_core::protocol::MessageStatus::Pending,
             edited: false,
         };
-        assert!(msg.is_too_large(), "Message over 2MB limit must be flagged as too large");
+        assert!(
+            msg.is_too_large(),
+            "Message over 2MB limit must be flagged as too large"
+        );
     }
 }

@@ -19,7 +19,11 @@ fn test_blake3_known_answer_determinism() {
     let digest2 = hash(input);
 
     assert_eq!(digest1, digest2, "BLAKE3 debe ser 100% determinista");
-    assert_eq!(digest1.len(), 32, "El hash BLAKE3 debe tener exactamente 32 bytes");
+    assert_eq!(
+        digest1.len(),
+        32,
+        "El hash BLAKE3 debe tener exactamente 32 bytes"
+    );
 
     let ikm = b"master_secret_deterministic_seed";
     let derived_key1 = derive_key(ikm, &[], b"RED_ENCRYPTION_DOMAIN_V1", 32).unwrap();
@@ -27,7 +31,10 @@ fn test_blake3_known_answer_determinism() {
     let derived_key3 = derive_key(ikm, &[], b"RED_SIGNING_DOMAIN_V2", 32).unwrap();
 
     assert_eq!(derived_key1, derived_key2);
-    assert_ne!(derived_key1, derived_key3, "La separación de dominios en HKDF debe producir claves distintas");
+    assert_ne!(
+        derived_key1, derived_key3,
+        "La separación de dominios en HKDF debe producir claves distintas"
+    );
 }
 
 #[test]
@@ -39,7 +46,10 @@ fn test_chacha20_poly1305_aead_known_answer_tamper_rejection() {
 
     // 1. Desencriptación correcta
     let decrypted = decrypt(&key, &encrypted).expect("Decryption failed");
-    assert_eq!(decrypted, plaintext, "El texto plano recuperado debe coincidir bit a bit");
+    assert_eq!(
+        decrypted, plaintext,
+        "El texto plano recuperado debe coincidir bit a bit"
+    );
 
     // 2. Fallo ante clave incorrecta
     let wrong_key = [0x99u8; 32];
@@ -52,7 +62,10 @@ fn test_chacha20_poly1305_aead_known_answer_tamper_rejection() {
         corrupted_encrypted.ciphertext[0] ^= 0x01; // Invertir 1 bit
     }
     let bitflip_result = decrypt(&key, &corrupted_encrypted);
-    assert!(bitflip_result.is_err(), "Debe detectar e invalidar cualquier bit modificado");
+    assert!(
+        bitflip_result.is_err(),
+        "Debe detectar e invalidar cualquier bit modificado"
+    );
 }
 
 #[test]
@@ -63,8 +76,15 @@ fn test_x25519_key_exchange_commutativity_kat() {
     let shared_alice = alice.key_exchange(&bob.public);
     let shared_bob = bob.key_exchange(&alice.public);
 
-    assert_eq!(shared_alice, shared_bob, "El secreto compartido X25519 debe ser exactamente conmutativo (DH(A, B) == DH(B, A))");
-    assert_eq!(shared_alice.len(), 32, "El secreto compartido debe tener exactamente 32 bytes");
+    assert_eq!(
+        shared_alice, shared_bob,
+        "El secreto compartido X25519 debe ser exactamente conmutativo (DH(A, B) == DH(B, A))"
+    );
+    assert_eq!(
+        shared_alice.len(),
+        32,
+        "El secreto compartido debe tener exactamente 32 bytes"
+    );
 }
 
 #[test]
@@ -98,11 +118,17 @@ fn test_ed25519_signatures_and_anti_malleability() {
     let message = b"CRITICAL_EMERGENCY_SOS_BEACON_PAYLOAD";
 
     let signature = signing_keys.sign(message);
-    assert!(signing_keys.verify(message, &signature).is_ok(), "La firma válida debe verificarse correctamente");
+    assert!(
+        signing_keys.verify(message, &signature).is_ok(),
+        "La firma válida debe verificarse correctamente"
+    );
 
     // Verificar que falla si el mensaje cambia
     let tampered_message = b"CRITICAL_EMERGENCY_SOS_BEACON_PAYLOAD_TAMPERED";
-    assert!(signing_keys.verify(tampered_message, &signature).is_err(), "Debe rechazar mensaje alterado");
+    assert!(
+        signing_keys.verify(tampered_message, &signature).is_err(),
+        "Debe rechazar mensaje alterado"
+    );
 }
 
 #[test]
@@ -122,11 +148,17 @@ fn test_zk_merkle_tree_proof_and_verification_kat() {
     // Generar y validar prueba para leaf1 (índice 1)
     let proof = tree.generate_proof(1).expect("Proof generation");
     let is_valid = MerkleTree::verify_proof(&proof);
-    assert!(is_valid, "La prueba de Merkle Tree ZK debe ser válida para la raíz del árbol");
+    assert!(
+        is_valid,
+        "La prueba de Merkle Tree ZK debe ser válida para la raíz del árbol"
+    );
 
     // Fallo si se intenta verificar con una prueba alterada
     let mut fake_proof = proof;
     fake_proof.leaf = hash(b"leaf_identity_forged");
     let is_fake_valid = MerkleTree::verify_proof(&fake_proof);
-    assert!(!is_fake_valid, "Debe rechazar pruebas con hojas falsificadas");
+    assert!(
+        !is_fake_valid,
+        "Debe rechazar pruebas con hojas falsificadas"
+    );
 }

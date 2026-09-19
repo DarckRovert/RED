@@ -16,7 +16,7 @@ impl ConversationId {
     /// Create from two identity hashes (order-independent)
     pub fn from_participants(a: &IdentityHash, b: &IdentityHash) -> Self {
         use crate::crypto::hashing::hash_many;
-        
+
         // Sort to ensure same ID regardless of order
         let (first, second) = if a.as_bytes() < b.as_bytes() {
             (a.as_bytes(), b.as_bytes())
@@ -88,7 +88,7 @@ impl Conversation {
     /// Create a new conversation
     pub fn new(our_identity: IdentityHash, their_identity: IdentityHash) -> Self {
         let id = ConversationId::from_participants(&our_identity, &their_identity);
-        
+
         Self {
             id,
             our_identity,
@@ -108,7 +108,9 @@ impl Conversation {
         let mut count = 0;
         let mut i = 0;
         while i < self.messages.len() {
-            let expires_at = if let crate::protocol::MessageType::Ephemeral { expires_at, .. } = self.messages[i].content {
+            let expires_at = if let crate::protocol::MessageType::Ephemeral { expires_at, .. } =
+                self.messages[i].content
+            {
                 Some(expires_at)
             } else {
                 None
@@ -140,9 +142,7 @@ impl Conversation {
         shared_secret: [u8; 32],
         their_public: crate::crypto::keys::PublicKey,
     ) -> ProtocolResult<()> {
-        self.ratchet = Some(
-            DoubleRatchet::new_initiator(shared_secret, their_public)?
-        );
+        self.ratchet = Some(DoubleRatchet::new_initiator(shared_secret, their_public)?);
         Ok(())
     }
 
@@ -152,31 +152,33 @@ impl Conversation {
         shared_secret: [u8; 32],
         our_keypair: crate::crypto::keys::KeyPair,
     ) -> ProtocolResult<()> {
-        self.ratchet = Some(
-            DoubleRatchet::new_responder(shared_secret, our_keypair)?
-        );
+        self.ratchet = Some(DoubleRatchet::new_responder(shared_secret, our_keypair)?);
         Ok(())
     }
 
     /// Encrypt a message for sending
     pub fn encrypt_message(&mut self, message: &Message) -> ProtocolResult<RatchetMessage> {
-        let ratchet = self.ratchet.as_mut()
+        let ratchet = self
+            .ratchet
+            .as_mut()
             .ok_or_else(|| ProtocolError::InvalidFormat("Ratchet not initialized".to_string()))?;
-        
+
         let serialized = message.serialize()?;
         let encrypted = ratchet.encrypt(&serialized)?;
-        
+
         Ok(encrypted)
     }
 
     /// Decrypt a received message
     pub fn decrypt_message(&mut self, encrypted: &RatchetMessage) -> ProtocolResult<Message> {
-        let ratchet = self.ratchet.as_mut()
+        let ratchet = self
+            .ratchet
+            .as_mut()
             .ok_or_else(|| ProtocolError::InvalidFormat("Ratchet not initialized".to_string()))?;
-        
+
         let decrypted = ratchet.decrypt(encrypted)?;
         let message = Message::deserialize(&decrypted)?;
-        
+
         Ok(message)
     }
 
@@ -193,10 +195,10 @@ impl Conversation {
 
         let index = self.messages.len();
         self.message_index.insert(message.id.clone(), index);
-        
+
         // Update last activity
         self.last_activity = message.timestamp;
-        
+
         // Increment unread if from other party
         if message.sender == self.their_identity {
             self.unread_count += 1;
@@ -237,10 +239,12 @@ impl Conversation {
     /// Remove a message by its hex ID (A2: delete message)
     pub fn remove_message(&mut self, msg_id_hex: &str) -> ProtocolResult<()> {
         // Find the index via the message_index map
-        let target_id = MessageId::from_hex(msg_id_hex)
-            .map_err(|_| ProtocolError::InvalidFormat(format!("Invalid message id: {}", msg_id_hex)))?;
-        let idx = *self.message_index.get(&target_id)
-            .ok_or_else(|| ProtocolError::InvalidFormat(format!("Message not found: {}", msg_id_hex)))?;
+        let target_id = MessageId::from_hex(msg_id_hex).map_err(|_| {
+            ProtocolError::InvalidFormat(format!("Invalid message id: {}", msg_id_hex))
+        })?;
+        let idx = *self.message_index.get(&target_id).ok_or_else(|| {
+            ProtocolError::InvalidFormat(format!("Message not found: {}", msg_id_hex))
+        })?;
         // Remove from vec
         self.messages.remove(idx);
         // Rebuild full index (indices shift after removal)
@@ -252,11 +256,17 @@ impl Conversation {
     }
 
     /// Replace the text content of a message in-place (A3: edit message)
-    pub fn edit_message_content(&mut self, msg_id_hex: &str, new_text: String) -> ProtocolResult<()> {
-        let target_id = MessageId::from_hex(msg_id_hex)
-            .map_err(|_| ProtocolError::InvalidFormat(format!("Invalid message id: {}", msg_id_hex)))?;
-        let idx = *self.message_index.get(&target_id)
-            .ok_or_else(|| ProtocolError::InvalidFormat(format!("Message not found: {}", msg_id_hex)))?;
+    pub fn edit_message_content(
+        &mut self,
+        msg_id_hex: &str,
+        new_text: String,
+    ) -> ProtocolResult<()> {
+        let target_id = MessageId::from_hex(msg_id_hex).map_err(|_| {
+            ProtocolError::InvalidFormat(format!("Invalid message id: {}", msg_id_hex))
+        })?;
+        let idx = *self.message_index.get(&target_id).ok_or_else(|| {
+            ProtocolError::InvalidFormat(format!("Message not found: {}", msg_id_hex))
+        })?;
         self.messages[idx].content = MessageType::Text(new_text);
         self.messages[idx].edited = true;
         Ok(())
@@ -347,7 +357,7 @@ mod tests {
         let their = create_test_identity(0x02);
 
         let mut conv = Conversation::new(our.clone(), their.clone());
-        
+
         // Message from them
         let msg1 = Message::text(their.clone(), our.clone(), "Hi!").unwrap();
         conv.add_message(msg1).unwrap();

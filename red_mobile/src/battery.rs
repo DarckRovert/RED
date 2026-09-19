@@ -27,7 +27,10 @@ impl BatteryOptimizer {
     }
 
     pub fn get_status(&self) -> EcoMeshStatus {
-        self.status.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.status
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     pub fn update_battery(&self, level: u8) -> EcoMeshStatus {

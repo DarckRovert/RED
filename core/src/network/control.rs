@@ -1,8 +1,8 @@
 //! Control protocol for Client-Node communication.
 
+use crate::identity::{AuthorizedDevice, IdentityHash};
+use crate::protocol::{Conversation, Group, GroupId, GroupMember, GroupMessage, Message};
 use serde::{Deserialize, Serialize};
-use crate::protocol::{Message, Group, GroupId, GroupMessage, GroupMember, Conversation};
-use crate::identity::{IdentityHash, AuthorizedDevice};
 
 /// Commands from the client to the node
 #[derive(Debug, Serialize, Deserialize)]
@@ -16,9 +16,15 @@ pub enum ClientCommand {
     /// Create a new group
     CreateGroup { name: String },
     /// Add a member to a group
-    AddMember { group_id: GroupId, member: GroupMember },
+    AddMember {
+        group_id: GroupId,
+        member: GroupMember,
+    },
     /// Send a group message (plaintext, node encrypts it)
-    SendGroupMessage { group_id: GroupId, content: crate::protocol::MessageType },
+    SendGroupMessage {
+        group_id: GroupId,
+        content: crate::protocol::MessageType,
+    },
     /// List all groups
     ListGroups,
     /// Generate a pairing code for a new device

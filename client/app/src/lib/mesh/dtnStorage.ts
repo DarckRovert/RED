@@ -9,6 +9,7 @@
 import { MeshPacket, bytesToHex, hexToBytes } from './meshProtocol';
 import { GeohashSpatialRouting } from './GeohashSpatialRouting';
 import { TacticalLocationEngine } from '../sensors/TacticalLocationEngine';
+import { dtnMushroomBody } from '../neuro/DtnMushroomBodyEngine';
 
 export interface DtnQueueItem {
   id: string; // Packet nonce
@@ -459,21 +460,60 @@ class DtnStorage {
       targetGeohash: finalGeohash,
     };
 
-    // If queue is overflowing, prune lowest priority / oldest items without in-place array mutation
+    // If queue is overflowing, consult Mushroom Body LTD Arbiter for bio-neuromorphic eviction
     if (items.length >= MAX_QUEUE_SIZE) {
-      let lowestIdx = 0;
-      for (let i = 1; i < items.length; i++) {
-        const a = items[i];
-        const lowest = items[lowestIdx];
-        if (a.priority < lowest.priority || (a.priority === lowest.priority && a.createdAt < lowest.createdAt)) {
-          lowestIdx = i;
+      const candidates = dtnMushroomBody.selectEvictionCandidates(
+        items.map(it => ({
+          id: it.id,
+          priority: it.priority,
+          createdAt: it.createdAt,
+          attempts: it.attempts,
+        })),
+        1
+      );
+
+      let droppedId: string | null = null;
+      if (candidates.length > 0) {
+        droppedId = candidates[0];
+        const idx = items.findIndex(it => it.id === droppedId);
+        if (idx !== -1) {
+          items.splice(idx, 1);
+        }
+      } else {
+        // Fallback defensivo si todos están protegidos por LTP (sólo descartar si no es SOS)
+        let lowestIdx = -1;
+        for (let i = 0; i < items.length; i++) {
+          const a = items[i];
+          if (a.priority >= 9) continue;
+          if (lowestIdx === -1) {
+            lowestIdx = i;
+          } else {
+            const lowest = items[lowestIdx];
+            if (a.priority < lowest.priority || (a.priority === lowest.priority && a.createdAt < lowest.createdAt)) {
+              lowestIdx = i;
+            }
+          }
+        }
+        if (lowestIdx !== -1) {
+          const dropped = items.splice(lowestIdx, 1)[0];
+          droppedId = dropped ? dropped.id : null;
         }
       }
-      const dropped = items.splice(lowestIdx, 1)[0];
-      if (dropped) {
-        this.removeItemFromDB(dropped.id);
+
+      if (droppedId) {
+        this.removeItemFromDB(droppedId);
       }
     }
+
+    // Registrar en el Cuerpo Fungiforme (Mushroom Body Associative Memory)
+    dtnMushroomBody.memorizePacket(
+      nonce,
+      packet.recipient,
+      calculatedPriority,
+      packet.flags,
+      packet.payload,
+      packet.payload.byteLength
+    );
 
     items.push(item);
     this.saveItems(items);
@@ -553,7 +593,10 @@ class DtnStorage {
       // Remove successfully delivered item
       const removed = items.splice(idx, 1)[0];
       this.saveItems(items);
-      if (removed) this.removeItemFromDB(removed.id);
+      if (removed) {
+        this.removeItemFromDB(removed.id);
+        dtnMushroomBody.forgetPacket(removed.id);
+      }
       console.log(`[DtnStorage] Packet ${nonce.slice(0, 8)} delivered and removed from DTN queue`);
     } else {
       // Calculate exponential backoff: 3s, 6s, 12s, 24s... capped at 5 minutes
@@ -610,7 +653,10 @@ class DtnStorage {
 
     if (filtered.length !== initialLen) {
       this.saveItems(filtered);
-      toRemove.forEach(id => this.removeItemFromDB(id));
+      toRemove.forEach(id => {
+        this.removeItemFromDB(id);
+        dtnMushroomBody.forgetPacket(id);
+      });
       console.log(`[DtnStorage] ✅ Successfully purged ${toRemove.length} DTN packet(s) for target '${cleanTarget.slice(0, 8)}'`);
       return true;
     }
@@ -630,7 +676,10 @@ class DtnStorage {
 
     if (filtered.length !== items.length) {
       this.saveItems(filtered);
-      toRemove.forEach(id => this.removeItemFromDB(id));
+      toRemove.forEach(id => {
+        this.removeItemFromDB(id);
+        dtnMushroomBody.forgetPacket(id);
+      });
     }
   }
 
