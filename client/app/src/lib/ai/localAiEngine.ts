@@ -71,6 +71,23 @@ class LocalAIEngineClass {
     private worker: Worker | null = null;
     private pendingWorkerRequests = new Map<string, { resolve: (v: any) => void; reject: (e: any) => void }>();
 
+    // ─── Metabolic Power Throttling ─────────────────────────────────────────────
+    private heavyWorkloadsPaused: boolean = false;
+
+    public pauseHeavyWorkloads(): void {
+        this.heavyWorkloadsPaused = true;
+        console.log('[LocalAIEngine] ⚡ Heavy AI workloads paused by Metabolic Governor (TORPOR)');
+    }
+
+    public resumeWorkloads(): void {
+        this.heavyWorkloadsPaused = false;
+        console.log('[LocalAIEngine] ⚡ Heavy AI workloads resumed (Metabolic Recovery)');
+    }
+
+    public isHeavyWorkloadsPaused(): boolean {
+        return this.heavyWorkloadsPaused;
+    }
+
     /** Crea (una sola vez) el Web Worker que ejecuta inferencia ONNX fuera del hilo principal */
     private getWorker(): Worker | null {
         if (this.worker) return this.worker;
@@ -2002,3 +2019,4 @@ class LocalAIEngineClass {
 }
 
 export const LocalAIEngine = new LocalAIEngineClass();
+export const localAiEngine = LocalAIEngine;

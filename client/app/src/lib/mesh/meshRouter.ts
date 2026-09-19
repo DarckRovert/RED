@@ -48,6 +48,7 @@ import { broadcastStormGuardEngine } from './BroadcastStormGuardEngine';
 import { tacticalMicroBurst } from './TacticalMicroBurstEngine';
 import { synapticMeshRouter } from '../neuro/SynapticMeshRouterEngine';
 import { giantFiberReflex } from '../neuro/GiantFiberReflexEngine';
+import { dtnMushroomBody, SwarmPheromoneType } from '../neuro/DtnMushroomBodyEngine';
 
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
 const DEDUP_WINDOW_MSG_MS = 30 * 60 * 1000;       // 30m  — chat messages (reduces Map size ~95% in long sessions)
@@ -1238,6 +1239,30 @@ class MeshRouter {
   }
 
   /**
+   * Emite y difunde una feromona de enjambre (Swarm Pheromone) a través de la red mesh.
+   * Permite señalización estigmérgica sin servidor (ALARM, TRAIL, AGGREGATION).
+   */
+  async broadcastPheromone(
+    type: SwarmPheromoneType,
+    intensity = 1.0,
+    notes?: string,
+    geohash?: string,
+    coords?: { xMeters?: number; yMeters?: number }
+  ): Promise<boolean> {
+    const ph = dtnMushroomBody.emitPheromone(type, intensity, notes, coords, geohash);
+    const envelope = {
+      type: 'SWARM_PHEROMONE',
+      sender: this.myIdentityHash,
+      timestamp: Date.now(),
+      pheromone: ph,
+    };
+    const payload = new TextEncoder().encode(JSON.stringify(envelope));
+    const sentCount = await this.broadcast(payload);
+    console.log(`[MeshRouter] 🍄 Broadcasted Swarm Pheromone ${type} (geohash: ${geohash || 'global'}) to ${sentCount} peers`);
+    return sentCount > 0;
+  }
+
+  /**
    * Broadcast a raw payload to ALL connected peers (mesh flood) and WAN relays.
    * Throttled by CognitiveRadioArbiter to prevent battery exhaustion during flood storms.
    */
@@ -1477,6 +1502,34 @@ class MeshRouter {
 
     try {
       payloadStr = new TextDecoder().decode(packet.payload);
+
+      // 0. SWARM PHEROMONE INGESTION (Estigmergia de Malla P2P)
+      if (payloadStr.startsWith('{') && (payloadStr.includes('SWARM_PHEROMONE') || payloadStr.includes('"pheromone"'))) {
+        try {
+          const parsed = JSON.parse(payloadStr);
+          const ph = parsed.type === 'SWARM_PHEROMONE' ? parsed.pheromone : parsed.pheromone;
+          if (ph && ph.type) {
+            dtnMushroomBody.ingestPheromone({
+              id: ph.id || `ph_${ph.type.toLowerCase()}_${Date.now()}`,
+              type: ph.type,
+              intensity: typeof ph.intensity === 'number' ? ph.intensity : 1.0,
+              originPeerId: ph.originPeerId || packet.sender,
+              createdAt: ph.createdAt || Date.now(),
+              ttlMs: ph.ttlMs || 15 * 60 * 1000,
+              geohash: ph.geohash,
+              xMeters: ph.xMeters,
+              yMeters: ph.yMeters,
+              notes: ph.notes,
+            });
+            console.log(`[MeshRouter] 🍄 Ingested P2P Swarm Pheromone ${ph.type} from ${packet.sender.slice(0, 8)}`);
+
+            // Si es ALARMA, reforzar aversión sináptica inmediata para desviar tráfico de esa ruta
+            if (ph.type === 'ALARM') {
+              synapticMeshRouter.reinforceAversion(packet.sender, 0.4);
+            }
+          }
+        } catch {}
+      }
 
       // 1. DELIVERY_ACK Handling
       if (payloadStr.startsWith('{') && payloadStr.includes('DELIVERY_ACK')) {

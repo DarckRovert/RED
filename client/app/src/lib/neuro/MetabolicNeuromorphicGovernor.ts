@@ -23,6 +23,9 @@
  *   LoRa TDMA restringido a balizas SOS críticas. Extiende la vida del dispositivo de horas a días.
  */
 
+import { loraTdmaScheduler } from '../mesh/LoRaTdmaSchedulerEngine';
+import { localAiEngine } from '../ai/localAiEngine';
+
 export type MetabolicRegime = 'SATIATED' | 'CONSERVATIVE' | 'TORPOR';
 
 export interface MetabolicGovernorTelemetry {
@@ -50,6 +53,7 @@ export class MetabolicNeuromorphicGovernor {
   private isCharging = false;
   private temperatureC = 25.0;
   private overrideRegime: MetabolicRegime | null = null;
+  private batteryListenersAttached = false;
 
   // Temporizadores
   private pollIntervalId: any = null;
@@ -105,6 +109,32 @@ export class MetabolicNeuromorphicGovernor {
   private async hydrateBatteryStateSafe(): Promise<void> {
     try {
       if (typeof window !== 'undefined') {
+        // 1. Prioridad: API nativa de batería W3C (navigator.getBattery)
+        if (typeof navigator !== 'undefined' && (navigator as any).getBattery) {
+          try {
+            const battery = await (navigator as any).getBattery();
+            if (battery && typeof battery.level === 'number') {
+              this.batteryPct = Math.round(battery.level * 100);
+              this.isCharging = !!battery.charging;
+
+              if (!this.batteryListenersAttached) {
+                this.batteryListenersAttached = true;
+                battery.addEventListener('levelchange', () => {
+                  this.batteryPct = Math.round(battery.level * 100);
+                  this.recalculateRegime();
+                  this.notifyListeners();
+                });
+                battery.addEventListener('chargingchange', () => {
+                  this.isCharging = !!battery.charging;
+                  this.recalculateRegime();
+                  this.notifyListeners();
+                });
+              }
+            }
+          } catch {}
+        }
+
+        // 2. Fallback: Plugin nativo Device de Capacitor
         const { Capacitor } = await import('@capacitor/core');
         const devicePlugin = (Capacitor as any)?.Plugins?.Device || (window as any).Capacitor?.Plugins?.Device;
         if (devicePlugin && typeof devicePlugin.getBatteryInfo === 'function') {
@@ -129,6 +159,8 @@ export class MetabolicNeuromorphicGovernor {
    * Recalcula el régimen metabólico y los niveles neuroendocrinos IPC y NPF.
    */
   private recalculateRegime(): void {
+    const previousRegime = this.currentRegime;
+
     if (this.overrideRegime) {
       this.currentRegime = this.overrideRegime;
       if (this.currentRegime === 'SATIATED') {
@@ -141,18 +173,11 @@ export class MetabolicNeuromorphicGovernor {
         this.ipcLevel = 0.10;
         this.npfLevel = 0.95;
       }
-      return;
-    }
-
-    if (this.isCharging) {
+    } else if (this.isCharging) {
       this.currentRegime = 'SATIATED';
       this.ipcLevel = 1.0;
       this.npfLevel = 0.05;
-      return;
-    }
-
-    // Reglas de transición metabólica bio-inspiradas
-    if (this.batteryPct < 20 || this.temperatureC >= 48.0) {
+    } else if (this.batteryPct < 20 || this.temperatureC >= 48.0) {
       // Estado de Torpor / Letargo de Supervivencia
       this.currentRegime = 'TORPOR';
       this.ipcLevel = Math.max(0.05, this.batteryPct / 200.0);
@@ -167,6 +192,17 @@ export class MetabolicNeuromorphicGovernor {
       this.currentRegime = 'SATIATED';
       this.ipcLevel = 0.8 + (this.batteryPct / 100.0) * 0.2;
       this.npfLevel = Math.max(0.05, 0.3 - (this.batteryPct / 100.0) * 0.25);
+    }
+
+    // Actuación física sobre hardware y subsistemas ante transición
+    if (this.currentRegime !== previousRegime) {
+      if (this.currentRegime === 'TORPOR') {
+        try { loraTdmaScheduler.setTorporThrottle(true); } catch {}
+        try { localAiEngine.pauseHeavyWorkloads(); } catch {}
+      } else if (previousRegime === 'TORPOR') {
+        try { loraTdmaScheduler.setTorporThrottle(false); } catch {}
+        try { localAiEngine.resumeWorkloads(); } catch {}
+      }
     }
   }
 

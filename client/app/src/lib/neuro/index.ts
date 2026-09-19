@@ -12,4 +12,6 @@ export * from './DtnMushroomBodyEngine';
 export * from './GiantFiberReflexEngine';
 export * from './JohnstonOrganEngine';
 export * from './MetabolicNeuromorphicGovernor';
+export * from './OpticLobeEngine';
+export * from './TacticalMotorActuatorEngine';
 export * from './ConnectomeEcosystemOrchestrator';

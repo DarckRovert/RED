@@ -24,6 +24,7 @@
 
 import { ringAttractor, RingAttractorTelemetry } from './RingAttractorEngine';
 import { pedestrianDeadReckoning, PdrState } from '../sensors/PedestrianDeadReckoningEngine';
+import { getBaroHistory } from '../sensors/weatherBarometerEngine';
 
 export interface SpatialVector3D {
   xMeters: number; // Desplazamiento Este (+) / Oeste (-)
@@ -79,6 +80,7 @@ export class FanShapedBodyEngine {
   private posY = 0.0; // Metros Norte
   private posZ = 0.0; // Metros Altitud relativa
   private totalDistanceTraveled = 0.0;
+  private lastPressureHpa: number | null = null; // Presión barométrica para integración hipsométrica ICAO
 
   // Vector de Origen / Nido (Home Datum)
   private homeOriginX = 0.0;
@@ -136,7 +138,15 @@ export class FanShapedBodyEngine {
       this.onHeadingUpdated(telem.headingDeg);
     });
 
-    // 2. Acoplar Odometría Inercial de Pasos de PDR
+    // 2. Inicializar referencia de presión barométrica histórica
+    try {
+      const history = getBaroHistory();
+      if (history.length > 0) {
+        this.lastPressureHpa = history[history.length - 1].pressureHpa;
+      }
+    } catch {}
+
+    // 3. Acoplar Odometría Inercial de Pasos de PDR con Desnivel Hipsométrico Real
     let lastStepCount = 0;
     this.pdrUnsub = pedestrianDeadReckoning.subscribe((pdrState: PdrState) => {
       if (pdrState.totalSteps > lastStepCount) {
@@ -147,8 +157,23 @@ export class FanShapedBodyEngine {
           ? pdrState.distanceMeters / pdrState.totalSteps
           : 0.75;
 
+        // Calcular variación hipsométrica real desde el barómetro
+        let stepDeltaZ = 0.0;
+        try {
+          const history = getBaroHistory();
+          if (history.length > 0) {
+            const currentP = history[history.length - 1].pressureHpa;
+            if (this.lastPressureHpa !== null && Math.abs(this.lastPressureHpa - currentP) >= 0.05) {
+              stepDeltaZ = FanShapedBodyEngine.calculateDeltaAltitudeFromPressure(this.lastPressureHpa, currentP);
+              this.lastPressureHpa = currentP;
+            } else if (this.lastPressureHpa === null) {
+              this.lastPressureHpa = currentP;
+            }
+          }
+        } catch {}
+
         for (let i = 0; i < stepsDelta; i++) {
-          this.integrateStep(stepStride, pdrState.currentHeadingDeg, 0.0);
+          this.integrateStep(stepStride, pdrState.currentHeadingDeg, stepDeltaZ / stepsDelta);
         }
       }
     });
@@ -210,12 +235,39 @@ export class FanShapedBodyEngine {
     this.posY = 0.0;
     this.posZ = 0.0;
     this.totalDistanceTraveled = 0.0;
+    this.lastPressureHpa = null;
     this.homeOriginX = 0.0;
     this.homeOriginY = 0.0;
     this.homeOriginZ = 0.0;
     this.targetX = null;
     this.targetY = null;
     this.targetZ = null;
+    this.recomputeActivationMatrix();
+    this.notifyListeners();
+  }
+
+  /**
+   * Fórmula Hipsométrica ICAO para calcular el desnivel en metros entre dos presiones barométricas (hPa).
+   * Δz = 44330.77 * [ (P_prev / 1013.25)^0.190263 - (P_curr / 1013.25)^0.190263 ]
+   */
+  public static calculateDeltaAltitudeFromPressure(pPrevHpa: number, pCurrHpa: number): number {
+    if (!isFinite(pPrevHpa) || !isFinite(pCurrHpa) || pPrevHpa <= 0 || pCurrHpa <= 0) return 0.0;
+    const altPrev = 44330.77 * (1.0 - Math.pow(pPrevHpa / 1013.25, 0.190263));
+    const altCurr = 44330.77 * (1.0 - Math.pow(pCurrHpa / 1013.25, 0.190263));
+    const delta = altCurr - altPrev;
+    return isFinite(delta) ? Math.round(delta * 100) / 100 : 0.0;
+  }
+
+  /**
+   * Inyecta una lectura barométrica física directa y actualiza el componente altimétrico vertical posZ.
+   */
+  public injectBarometricPressure(pressureHpa: number): void {
+    if (!isFinite(pressureHpa) || pressureHpa < 600 || pressureHpa > 1150) return;
+    if (this.lastPressureHpa !== null) {
+      const deltaZ = FanShapedBodyEngine.calculateDeltaAltitudeFromPressure(this.lastPressureHpa, pressureHpa);
+      this.posZ += deltaZ;
+    }
+    this.lastPressureHpa = pressureHpa;
     this.recomputeActivationMatrix();
     this.notifyListeners();
   }

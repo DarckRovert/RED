@@ -36,6 +36,7 @@ export interface SwarmPheromone {
   ttlMs: number;
   xMeters?: number;
   yMeters?: number;
+  geohash?: string;
   notes?: string;
 }
 
@@ -579,7 +580,8 @@ export class DtnMushroomBodyEngine {
     type: SwarmPheromoneType,
     intensity = 1.0,
     notes?: string,
-    coords?: { xMeters?: number; yMeters?: number }
+    coords?: { xMeters?: number; yMeters?: number },
+    geohash?: string
   ): SwarmPheromone {
     const id = `ph_${type.toLowerCase()}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const pheromone: SwarmPheromone = {
@@ -591,6 +593,7 @@ export class DtnMushroomBodyEngine {
       ttlMs: 15 * 60 * 1000, // 15 minutos de vida media
       xMeters: coords?.xMeters,
       yMeters: coords?.yMeters,
+      geohash,
       notes,
     };
 

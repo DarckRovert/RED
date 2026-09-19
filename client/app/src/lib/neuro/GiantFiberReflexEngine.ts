@@ -26,6 +26,7 @@ export type ReflexTriggerSource =
   | 'IMSI_CATCHER' 
   | 'ROGUE_CARRIER_DOWNGRADE' 
   | 'GONIOMETRIC_PING' 
+  | 'VISUAL_LOOMING_THREAT'
   | 'MANUAL_TACTICAL_SCRAM';
 
 export interface GiantFiberReflexResult {

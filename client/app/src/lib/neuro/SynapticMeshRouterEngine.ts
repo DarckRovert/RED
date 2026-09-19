@@ -268,6 +268,25 @@ export class SynapticMeshRouterEngine {
   }
 
   /**
+   * Deprime activamente la conductancia sináptica de un par ante hostilidad,
+   * detección de guerra electrónica (EW), o feromona ALARM, forzando la evasión de la ruta.
+   */
+  public reinforceAversion(peerId: string, penalty = 0.25): void {
+    if (!peerId) return;
+    const cleanId = peerId.trim().toLowerCase();
+    const link = this.touchPeer(cleanId);
+    link.failedDeliveries++;
+    link.weight = Math.max(SynapticMeshRouterEngine.MIN_WEIGHT, link.weight - penalty);
+    if (!link.isPruned && link.weight < SynapticMeshRouterEngine.PRUNE_THRESHOLD) {
+      link.isPruned = true;
+    }
+    link.weight = Number(link.weight.toFixed(4));
+    this.recalculateTopology();
+    this.persistToStorage();
+    this.notifyListeners();
+  }
+
+  /**
    * Filtra y selecciona los pares óptimos para recibir una difusión de broadcast.
    * Evita la saturación por inundación ciega (Controlled Percolation).
    */

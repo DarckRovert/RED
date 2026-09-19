@@ -27,7 +27,18 @@ export const MAX_HOPS = 20;    // maximum mesh relay hops
 export const FLAG_ENCRYPTED = 0x01;     // Payload is encrypted
 export const FLAG_ACK_REQUESTED = 0x02; // Receiver should emit cryptographic DELIVERY_ACK
 export const FLAG_IS_RELAY = 0x04;      // Packet has been relayed by intermediate node
+export const FLAG_PHEROMONE = 0x10;     // Bit 4: Packet carries Swarm Pheromone envelope in payload/header
 export const FLAG_PQC_ENCRYPTED = 0x20; // NIST FIPS 203 ML-KEM-768 + X25519 hybrid post-quantum encapsulation
+
+/** Envelope de Feromona de Enjambre (Swarm Pheromone) para propagación estigmérgica en malla */
+export interface SwarmPheromoneEnvelope {
+  type: 'ALARM' | 'TRAIL' | 'AGGREGATION';
+  intensity: number;      // 0.0 - 1.0
+  geohash?: string;       // 6-8 caracteres para poda espacial
+  originPeerId: string;
+  timestamp: number;
+  notes?: string;
+}
 
 /** JSON packet type for out-of-band PQC key announcements broadcast over the mesh */
 export const PQC_TYPE_KEY_ANNOUNCE = 'PQC_KEY_ANNOUNCEMENT';
@@ -39,7 +50,7 @@ export interface MeshPacket {
   sender: string;
   /** Remaining relay hops */
   ttl: number;
-  /** Bit flags: 0x01=encrypted 0x02=ack_requested 0x04=is_relay 0x20=pqc_encrypted */
+  /** Bit flags: 0x01=encrypted 0x02=ack_requested 0x04=is_relay 0x10=pheromone 0x20=pqc_encrypted */
   flags: number;
   /** Timestamp (unix ms) */
   timestamp: number;
@@ -49,6 +60,8 @@ export interface MeshPacket {
   payload: Uint8Array;
   /** Optional transient flag indicating verified PQC decapsulation */
   isPqcEncrypted?: boolean;
+  /** Opcional: Sobre de feromona de enjambre estigmérgica */
+  pheromone?: SwarmPheromoneEnvelope;
 }
 
 /**

@@ -8,6 +8,8 @@ import { giantFiberReflex, GiantFiberTelemetry } from "../lib/neuro/GiantFiberRe
 import { dtnMushroomBody, MushroomBodyTelemetry } from "../lib/neuro/DtnMushroomBodyEngine";
 import { johnstonOrgan, JohnstonOrganTelemetry } from "../lib/neuro/JohnstonOrganEngine";
 import { metabolicGovernor, MetabolicGovernorTelemetry } from "../lib/neuro/MetabolicNeuromorphicGovernor";
+import { opticLobe, OpticLobeTelemetry } from "../lib/neuro/OpticLobeEngine";
+import { tacticalMotorActuator, TacticalMotorActuatorTelemetry } from "../lib/neuro/TacticalMotorActuatorEngine";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacIcon } from "./ui/TacIcon";
@@ -51,6 +53,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const [mbTelemetry, setMbTelemetry] = useState<MushroomBodyTelemetry>(() => dtnMushroomBody.getTelemetry());
   const [joTelemetry, setJoTelemetry] = useState<JohnstonOrganTelemetry>(() => johnstonOrgan.getTelemetry());
   const [metTelemetry, setMetTelemetry] = useState<MetabolicGovernorTelemetry>(() => metabolicGovernor.getTelemetry());
+  const [opticTelemetry, setOpticTelemetry] = useState<OpticLobeTelemetry>(() => opticLobe.getTelemetry());
+  const [motorTelemetry, setMotorTelemetry] = useState<TacticalMotorActuatorTelemetry>(() => tacticalMotorActuator.getTelemetry());
   const [rfBearings, setRfBearings] = useState<RfPeerBearing[]>(() => synapticMeshRouter.getAllActiveBearings());
 
   // Filtros de visualización y control de cámara 3D
@@ -100,6 +104,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     const unsubMb = dtnMushroomBody.subscribe(setMbTelemetry);
     const unsubJo = johnstonOrgan.subscribe(setJoTelemetry);
     const unsubMet = metabolicGovernor.subscribe(setMetTelemetry);
+    const unsubOptic = opticLobe.subscribe(setOpticTelemetry);
+    const unsubMotor = tacticalMotorActuator.subscribe(setMotorTelemetry);
 
     return () => {
       unsubCx();
@@ -109,6 +115,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       unsubMb();
       unsubJo();
       unsubMet();
+      unsubOptic();
+      unsubMotor();
     };
   }, []);
 
@@ -1126,6 +1134,84 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
             <span style={{ color: "#94A3B8" }}>Latencia Refleja:</span>
             <span style={{ color: gfsTelemetry.emconLockActive ? "#FF3355" : "#00E676" }}>&lt; 15 ms (Conexinas)</span>
+          </div>
+        </div>
+
+        {/* Card 5: Optic Lobes T4/T5 & Looming LC4 */}
+        <div
+          style={{
+            padding: "10px",
+            borderRadius: "10px",
+            background: opticTelemetry.loomingThreat.isThreatDetected ? "rgba(255, 51, 85, 0.12)" : "rgba(0, 229, 255, 0.05)",
+            border: `1px solid ${opticTelemetry.loomingThreat.isThreatDetected ? '#FF3355' : 'rgba(0, 229, 255, 0.25)'}`,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+            <span style={{ fontSize: "0.65rem", color: opticTelemetry.loomingThreat.isThreatDetected ? '#FF3355' : '#00E5FF', fontWeight: 900 }}>
+              👁️ LÓBULOS ÓPTICOS (T4/T5 &amp; LC4)
+            </span>
+            <span style={{
+              fontSize: "0.58rem",
+              padding: "2px 6px",
+              borderRadius: "4px",
+              fontWeight: 900,
+              background: opticTelemetry.loomingThreat.isThreatDetected ? '#FF3355' : '#00E5FF',
+              color: '#000000',
+            }}>
+              {opticTelemetry.loomingThreat.isThreatDetected ? '🚨 LOOMING' : 'DESPEJADO'}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", fontWeight: 800 }}>
+            <span style={{ color: "#94A3B8" }}>Flujo Óptico H/V:</span>
+            <span style={{ color: "#00E5FF" }}>HS: {opticTelemetry.hsHorizontalMotion.toFixed(2)} | VS: {opticTelemetry.vsVerticalMotion.toFixed(2)}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+            <span style={{ color: "#94A3B8" }}>Vías ON/OFF:</span>
+            <span style={{ color: "#76FF03" }}>T4: {opticTelemetry.t4OnMotionMagnitude} | T5: {opticTelemetry.t5OffMotionMagnitude}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+            <span style={{ color: "#94A3B8" }}>Odometría Visual:</span>
+            <span style={{ color: "#FFD600" }}>{opticTelemetry.visualOdometryDistanceMeters} m ({opticTelemetry.fpsProcessed} FPS)</span>
+          </div>
+        </div>
+
+        {/* Card 6: Tactical Motor Actuators DNa01/02 & Haptics */}
+        <div
+          style={{
+            padding: "10px",
+            borderRadius: "10px",
+            background: "rgba(255, 179, 0, 0.05)",
+            border: "1px solid rgba(255, 179, 0, 0.25)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+            <span style={{ fontSize: "0.65rem", color: "#FFB300", fontWeight: 900 }}>
+              📳 ACTUADOR MOTOR (DNa01/02)
+            </span>
+            <span style={{
+              fontSize: "0.58rem",
+              padding: "2px 6px",
+              borderRadius: "4px",
+              fontWeight: 900,
+              background: motorTelemetry.currentHapticMode === 'EMERGENCY' ? '#FF3355' : motorTelemetry.currentHapticMode === 'ALIGNED' ? '#00E676' : '#FFB300',
+              color: '#000000',
+            }}>
+              {motorTelemetry.currentHapticMode}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", fontWeight: 800 }}>
+            <span style={{ color: "#94A3B8" }}>Error Timoneo:</span>
+            <span style={{ color: Math.abs(motorTelemetry.steeringErrorDeg) <= 15 ? '#00E676' : '#FFB300' }}>
+              {motorTelemetry.steeringErrorDeg > 0 ? `+${motorTelemetry.steeringErrorDeg}° ESTRIBOR` : `${motorTelemetry.steeringErrorDeg}° BABOR`}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+            <span style={{ color: "#94A3B8" }}>Excitación DNa:</span>
+            <span style={{ color: "#FFB300" }}>DNa01: {motorTelemetry.dna01IpsilateralExcitation} | DNa02: {motorTelemetry.dna02ContralateralExcitation}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+            <span style={{ color: "#94A3B8" }}>Pulsos Hápticos:</span>
+            <span style={{ color: "#00E5FF" }}>{motorTelemetry.totalPulsesDispatched} despachados</span>
           </div>
         </div>
 

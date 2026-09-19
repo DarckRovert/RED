@@ -56,6 +56,10 @@ export class LoRaTdmaSchedulerEngine {
     private transmitHandler: ((payload: Uint8Array) => Promise<boolean>) | null = null;
     private timerHandle: any = null;
 
+    private isTorporThrottled: boolean = false;
+    private lastTorporTxTimestamp: number = 0;
+    public static readonly TORPOR_MIN_TX_INTERVAL_MS = 15_000; // Mínimo 15 segundos entre transmisiones no vitales en Torpor
+
     private metrics: TdmaSchedulerMetrics = {
         packetsScheduled: 0,
         packetsTransmittedOnSlot: 0,
@@ -85,6 +89,19 @@ export class LoRaTdmaSchedulerEngine {
     public setTransmitHandler(handler: (payload: Uint8Array) => Promise<boolean>): void {
         this.transmitHandler = handler;
     }
+
+    /**
+     * Activa o desactiva la limitación de ciclo de trabajo por Torpor Metabólico.
+     */
+    public setTorporThrottle(enabled: boolean): void {
+        this.isTorporThrottled = enabled;
+        console.log(`[LoRaTDMA] ⚡ Torpor duty-cycle throttle ${enabled ? 'ACTIVATED (15s spacing / SOS only)' : 'DEACTIVATED (Nominal TDMA)'}`);
+    }
+
+    public getIsTorporThrottled(): boolean {
+        return this.isTorporThrottled;
+    }
+
 
     /**
      * Calcula determinísticamente la ranura de datos (1..8) asignada para este nodo en la época actual.
@@ -157,6 +174,16 @@ export class LoRaTdmaSchedulerEngine {
                 return await this.transmitHandler(payload);
             }
             return false;
+        }
+
+        // RESTRICCIÓN DE TORPOR METABÓLICO: En inanición energética, reprimir paquetes de baja prioridad
+        if (this.isTorporThrottled && !isEmergency && priority < 8) {
+            const now = Date.now();
+            if (now - this.lastTorporTxTimestamp < LoRaTdmaSchedulerEngine.TORPOR_MIN_TX_INTERVAL_MS) {
+                console.log('[LoRaTDMA] 🛑 Paquete no crítico suprimido por Gobernador Metabólico (Régimen TORPOR)');
+                return false;
+            }
+            this.lastTorporTxTimestamp = now;
         }
 
         return new Promise<boolean>((resolve) => {

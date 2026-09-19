@@ -23,12 +23,14 @@ import { dtnMushroomBody, MushroomBodyTelemetry } from './DtnMushroomBodyEngine'
 import { giantFiberReflex, GiantFiberTelemetry } from './GiantFiberReflexEngine';
 import { johnstonOrgan, JohnstonOrganTelemetry } from './JohnstonOrganEngine';
 import { metabolicGovernor, MetabolicGovernorTelemetry } from './MetabolicNeuromorphicGovernor';
+import { opticLobe, OpticLobeTelemetry } from './OpticLobeEngine';
+import { tacticalMotorActuator, TacticalMotorActuatorTelemetry } from './TacticalMotorActuatorEngine';
 
 export interface EcosystemConnectomeSnapshot {
   timestamp: number;
   organismState: 'OPTIMAL' | 'CONSERVING' | 'EMCON_SILENCED' | 'TORPOR';
   healthScore: number; // 0 - 100
-  // Telemetrías de los 7 subsistemas
+  // Telemetrías de los subsistemas bio-cibernéticos
   compass: RingAttractorTelemetry;
   fanShapedBody: FanShapedBodyTelemetry;
   synapticRouter: SynapticMeshTelemetry;
@@ -36,6 +38,8 @@ export interface EcosystemConnectomeSnapshot {
   giantFiber: GiantFiberTelemetry;
   johnstonOrgan: JohnstonOrganTelemetry;
   metabolicGovernor: MetabolicGovernorTelemetry;
+  opticLobe: OpticLobeTelemetry;
+  motorActuator: TacticalMotorActuatorTelemetry;
   // Resumen sintético táctico
   tacticalSummary: string;
 }
@@ -68,6 +72,8 @@ export class ConnectomeEcosystemOrchestrator {
     fanShapedBody.start();
     johnstonOrgan.start();
     metabolicGovernor.start();
+    opticLobe.start();
+    tacticalMotorActuator.start();
 
     // 2. Acoplar Johnston's Organ con Giant Fiber Reflex
     // Si Johnston Organ detecta choque extremo -> alerta y refuerzo aversivo PPL1
@@ -96,8 +102,15 @@ export class ConnectomeEcosystemOrchestrator {
     const unSubFb = fanShapedBody.subscribe(() => this.notifyListeners());
     const unSubMb = dtnMushroomBody.subscribe(() => this.notifyListeners());
     const unSubGfs = giantFiberReflex.subscribe(() => this.notifyListeners());
+    const unSubOptic = opticLobe.subscribe((opticTelem: OpticLobeTelemetry) => {
+      if (opticTelem.loomingThreat.isThreatDetected) {
+        tacticalMotorActuator.triggerEmergencyBurst();
+      }
+      this.notifyListeners();
+    });
+    const unSubMotor = tacticalMotorActuator.subscribe(() => this.notifyListeners());
 
-    this.unsubs.push(unSubCompass, unSubFb, unSubMb, unSubGfs);
+    this.unsubs.push(unSubCompass, unSubFb, unSubMb, unSubGfs, unSubOptic, unSubMotor);
     this.notifyListeners();
   }
 
@@ -111,6 +124,8 @@ export class ConnectomeEcosystemOrchestrator {
     fanShapedBody.stop();
     johnstonOrgan.stop();
     metabolicGovernor.stop();
+    opticLobe.stop();
+    tacticalMotorActuator.stop();
     this.notifyListeners();
   }
 
@@ -125,6 +140,8 @@ export class ConnectomeEcosystemOrchestrator {
     const giantFiber = giantFiberReflex.getTelemetry();
     const jo = johnstonOrgan.getTelemetry();
     const metabolic = metabolicGovernor.getTelemetry();
+    const optic = opticLobe.getTelemetry();
+    const motor = tacticalMotorActuator.getTelemetry();
 
     // Determinar estado de salud y régimen global del organismo
     let organismState: EcosystemConnectomeSnapshot['organismState'] = 'OPTIMAL';
@@ -142,12 +159,15 @@ export class ConnectomeEcosystemOrchestrator {
     if (giantFiber.emconLockActive) healthScore -= 20;
     if (mushroomBody.currentSaturationRatio > 0.8) healthScore -= 15;
     if (!compass.isSensoryAnchored) healthScore -= 10;
+    if (optic.loomingThreat.isThreatDetected) healthScore -= 25;
     healthScore = Math.max(10, healthScore);
 
     const tacticalSummary = `Conectoma Drosophila MaleCNS: Estado ${organismState} (Salud ${healthScore}%). ` +
       `Brújula E-PG a ${compass.headingDeg}° (${compass.cardinal}). ` +
       `Home Vector FB a ${fb.homeVector.distanceMeters}m rumbo ${fb.homeVector.bearingDeg}° (${fb.homeVector.cardinal}). ` +
       `Red: ${synapticRouter.totalSynapses} sinapsis, ${mushroomBody.totalEnqueuedRecords} engramas MB (${mushroomBody.behavioralDrive}). ` +
+      `Visión T4/T5: Flujo ${optic.translationalFlow.magnitude} m/s, Looming: ${optic.loomingThreat.isThreatDetected ? 'AMENAZA' : 'DESPEJADO'}. ` +
+      `Actuador Háptico DNa: Modo ${motor.currentHapticMode}. ` +
       `Mecanorrecepción JO: ${jo.acousticEnergyLevel > 0.5 ? 'ALERTA' : 'NOMINAL'}. ` +
       `Metabolismo: ${metabolic.regime} (Batería ${metabolic.batteryPct}%, Autonomía est. ${metabolic.estimatedStandbyHours}h).`;
 
@@ -162,6 +182,8 @@ export class ConnectomeEcosystemOrchestrator {
       giantFiber,
       johnstonOrgan: jo,
       metabolicGovernor: metabolic,
+      opticLobe: optic,
+      motorActuator: motor,
       tacticalSummary,
     };
   }
