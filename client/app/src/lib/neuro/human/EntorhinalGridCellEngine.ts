@@ -73,6 +73,9 @@ export class EntorhinalGridCellEngine {
   private breadcrumbs: CognitiveWaypoint[] = [];
   private lastBreadcrumbDistance = 0.0;
   private totalTraveledMeters = 0.0;
+  private lastPdrDistance = 0.0;
+
+  private static readonly STORAGE_BREADCRUMBS_KEY = 'red_entorhinal_breadcrumbs_v1';
 
   private isRunning = false;
   private unsubs: (() => void)[] = [];
@@ -80,6 +83,36 @@ export class EntorhinalGridCellEngine {
 
   private constructor() {
     this.modulePhases = EntorhinalGridCellEngine.WAVELENGTHS.map(() => ({ x: 0.0, y: 0.0 }));
+    this.hydrateFromStorage();
+  }
+
+  private hydrateFromStorage(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(EntorhinalGridCellEngine.STORAGE_BREADCRUMBS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.breadcrumbs = parsed;
+          const last = parsed[parsed.length - 1];
+          if (last && typeof last.xMeters === 'number') {
+            this.posX = last.xMeters;
+            this.posY = last.yMeters;
+            this.posZ = last.zMeters || 0.0;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  private persistToStorage(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(
+        EntorhinalGridCellEngine.STORAGE_BREADCRUMBS_KEY,
+        JSON.stringify(this.breadcrumbs)
+      );
+    } catch {}
   }
 
   public static getInstance(): EntorhinalGridCellEngine {
@@ -95,7 +128,19 @@ export class EntorhinalGridCellEngine {
 
     // 1. Suscripción a PDR (Pedestrian Dead Reckoning inercial)
     const unsubPdr = pedestrianDeadReckoning.subscribe((pdr: PdrState) => {
-      this.integrateMotion(pdr.distanceMeters, pdr.currentHeadingDeg);
+      // pdr.distanceMeters es el total acumulado desde inicio.
+      // Si el PDR se reinicia a 0, sincronizar base sin integrar delta espurio.
+      if (pdr.distanceMeters < this.lastPdrDistance) {
+        this.lastPdrDistance = pdr.distanceMeters;
+      }
+      const delta = pdr.distanceMeters - this.lastPdrDistance;
+      if (delta >= 0.01) {
+        const heading = (typeof pdr.currentHeadingDeg === 'number' && isFinite(pdr.currentHeadingDeg))
+          ? pdr.currentHeadingDeg
+          : ringAttractor.getTelemetry().headingDeg;
+        this.integrateMotion(delta, heading);
+        this.lastPdrDistance = pdr.distanceMeters;
+      }
     });
 
     // 2. Suscripción a Fan-Shaped Body para sincronización de altitud barométrica Z
@@ -119,7 +164,7 @@ export class EntorhinalGridCellEngine {
    * Integra el vector de desplazamiento inercial (Δd, rumbo) en la teselación hexagonal.
    */
   public integrateMotion(deltaDistanceMeters: number, headingDeg: number): void {
-    if (deltaDistanceMeters <= 0.001) return;
+    if (deltaDistanceMeters <= 0.001 || !isFinite(deltaDistanceMeters) || !isFinite(headingDeg)) return;
 
     const angleRad = (headingDeg * Math.PI) / 180;
     const dx = deltaDistanceMeters * Math.sin(angleRad); // Este (+)
@@ -193,6 +238,7 @@ export class EntorhinalGridCellEngine {
     if (this.breadcrumbs.length > 500) {
       this.breadcrumbs.shift();
     }
+    this.persistToStorage();
     this.notifyListeners();
     return wp;
   }
@@ -210,6 +256,7 @@ export class EntorhinalGridCellEngine {
     this.breadcrumbs = [];
     this.modulePhases = EntorhinalGridCellEngine.WAVELENGTHS.map(() => ({ x: 0.0, y: 0.0 }));
     this.dropBreadcrumb('ORIGEN TÁCTICO (DATUM 0,0,0)');
+    this.persistToStorage();
     this.notifyListeners();
   }
 

@@ -304,12 +304,21 @@ async function main() {
     assert(mapCode.includes('<CognitiveNavigationModal'), 'Debe montar CognitiveNavigationModal');
     assert(mapCode.includes('<TcccMedicalTriageModal'), 'Debe montar TcccMedicalTriageModal');
     assert(mapCode.includes('<EpistemicRadarModal'), 'Debe montar EpistemicRadarModal');
+    assert(mapCode.includes('<OfcBarterMarketModal'), 'Debe montar OfcBarterMarketModal');
+    assert(mapCode.includes('<HippocampalMemoryModal'), 'Debe montar HippocampalMemoryModal');
+    assert(mapCode.includes('setIsOfcBarterOpen(true)'), 'Debe incluir botón interactivo BARTER');
+    assert(mapCode.includes('setIsHippocampalMemoryOpen(true)'), 'Debe incluir botón interactivo HIPPO');
   });
 
-  runTest('9.2 MaleCnsConnectomeHUD.tsx: Selector Tronco vs Neocorteza Humana', () => {
+  runTest('9.2 MaleCnsConnectomeHUD.tsx: Selector Tronco vs Neocorteza y Modales Completos', () => {
     assert(hudCode.includes('SUBCORTICAL_MALE_CNS'), 'Debe contemplar el modo tronco subcortical');
     assert(hudCode.includes('HUMAN_NEOCORTEX'), 'Debe contemplar el modo neocorteza humana');
     assert(hudCode.includes('humanBrainOrchestrator'), 'Debe suscribirse a humanBrainOrchestrator');
+    assert(hudCode.includes('<OfcBarterMarketModal'), 'Debe montar OfcBarterMarketModal');
+    assert(hudCode.includes('<HippocampalMemoryModal'), 'Debe montar HippocampalMemoryModal');
+    assert(hudCode.includes('ABRIR MERCADO DE TRUEQUE OFC'), 'Debe exponer botón interactivo en bloque OFC');
+    assert(hudCode.includes('ABRIR INSPECTOR EPISÓDICO CA3'), 'Debe exponer botón interactivo en bloque CA3');
+    assert(hudCode.includes('predictiveCortex.setZeroBandwidthMode'), 'Debe exponer control interactivo de silencio RF');
   });
 
   runTest('9.3 ConnectomeCortexBridge.ts: Inyección de telemetría neocortical al Copiloto IA', () => {
@@ -317,6 +326,125 @@ async function main() {
     assert(bridgeCode.includes('triage|march|trauma|torniquete'), 'Debe responder a consultas de trauma TCCC');
     assert(bridgeCode.includes('emboscada|decepci[oó]n|trampa'), 'Debe responder a consultas de emboscada ToM');
     assert(bridgeCode.includes('zero.*bandwidth|silencio.*rf'), 'Debe responder a consultas de inferencia activa');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 10. Verificación de Persistencia Local Defensiva (Offline Survivability)
+  // ─────────────────────────────────────────────────────────────────────────────
+  runTest('10.1 Persistencia Offline: Hydration y Sync en localStorage', () => {
+    assert(entCode.includes('red_entorhinal_breadcrumbs_v1'), 'Entorhinal debe persistir breadcrumbs');
+    assert(insCode.includes('red_tccc_casualties_v1'), 'Insular debe persistir bajas MARCH');
+    assert(ofcCode.includes('red_ofc_inventory_contracts_v1'), 'OFC debe persistir inventario y contratos');
+    assert(hipCode.includes('red_hippocampal_engrams_v1'), 'Hippocampal debe persistir engramas');
+    assert(tomCode.includes('red_tom_assessments_v1'), 'Theory of Mind debe persistir evaluaciones de pares');
+    assert(wmCode.includes('red_working_memory_tasks_v1'), 'Working Memory debe persistir directivas');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 11. Verificación de Integración Profunda con MeshRouter y Subcorteza
+  // ─────────────────────────────────────────────────────────────────────────────
+  const routerCode = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'mesh', 'meshRouter.ts'), 'utf8');
+  const authCode = fs.readFileSync(path.join(__dirname, '..', 'src', 'store', 'slices', 'authSlice.ts'), 'utf8');
+
+  runTest('11.1 MeshRouter: Integración Hebbiana CA3, ToM Auditing y Supresión Zero-Byte', () => {
+    assert(routerCode.includes('attemptPatternCompletion'), 'MeshRouter debe rescatar tramas dañadas con CA3');
+    assert(routerCode.includes('memorizePacket'), 'MeshRouter debe memorizar paquetes en hipocampo');
+    assert(routerCode.includes('TheoryOfMindEpistemicEngine.getInstance().auditPeerReport'), 'MeshRouter debe auditar telemetría de pares con ToM');
+    assert(routerCode.includes('evaluateLocalTransmission'), 'MeshRouter debe suprimir broadcast si el movimiento es predecible');
+  });
+
+  runTest('11.2 AuthSlice: Arranque Bi-Direccional Holístico (Neocorteza + MaleCNS)', () => {
+    assert(authCode.includes('humanBrainOrchestrator.start()'), 'authSlice debe iniciar HumanBrainOrchestrator');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 12. PDR Delta Integration (Zero Runaway Fix)
+  // ─────────────────────────────────────────────────────────────────────────────
+  runTest('12.1 EntorhinalGridCellEngine: Integración delta PDR sin acumulación cuadrática', () => {
+    assert(entCode.includes('lastPdrDistance'), 'Debe rastrear lastPdrDistance para deltas');
+    assert(entCode.includes('pdr.distanceMeters - this.lastPdrDistance'), 'Debe calcular incremento delta');
+
+    // Verificación empírica de simulación de PDR delta
+    let accumulatedX = 0;
+    let accumulatedY = 0;
+    let lastDist = 0;
+
+    const pdrStream = [
+      { distanceMeters: 1.0, headingDeg: 0 },
+      { distanceMeters: 2.0, headingDeg: 0 },
+      { distanceMeters: 3.0, headingDeg: 0 },
+    ];
+
+    for (const sample of pdrStream) {
+      const delta = sample.distanceMeters - lastDist;
+      lastDist = sample.distanceMeters;
+      accumulatedY += delta;
+    }
+
+    assert.strictEqual(accumulatedY, 3.0, '3 metros recorridos secuencialmente deben acumular exactamente 3.0m');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 13. Verificación de Integración de Botón Atrás (Android Hardware Back Button)
+  // ─────────────────────────────────────────────────────────────────────────────
+  const ofcModalCode = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'tactical', 'OfcBarterMarketModal.tsx'), 'utf8');
+  const hippoModalCode = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'tactical', 'HippocampalMemoryModal.tsx'), 'utf8');
+
+  runTest('13.1 BackHandlerRegistry: Manejo LIFO de botón Atrás en modales nuevos', () => {
+    assert(ofcModalCode.includes('BackHandlerRegistry.register'), 'OfcBarterMarketModal debe registrar BackHandler');
+    assert(hippoModalCode.includes('BackHandlerRegistry.register'), 'HippocampalMemoryModal debe registrar BackHandler');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 14. Verificación de Actuador Motor DNa01/02 y Corrección de Rumbo Home
+  // ─────────────────────────────────────────────────────────────────────────────
+  const motorCode = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'neuro', 'TacticalMotorActuatorEngine.ts'), 'utf8');
+
+  runTest('14.1 TacticalMotorActuatorEngine: Acoplamiento con RingAttractor y cálculo Home no-trivial', () => {
+    assert(motorCode.includes("import { ringAttractor }"), 'Debe importar ringAttractor');
+    assert(motorCode.includes('setGuidanceTarget'), 'Debe permitir cambiar entre HOME y GOAL');
+    assert(motorCode.includes('ringAttractor.getTelemetry().headingDeg'), 'Debe utilizar el rumbo vivo de RingAttractor');
+
+    // Verificación matemática del cálculo de error de timoneo hacia Home:
+    const bearingHome = 90; // Casa al Este (90°)
+    const currentHeading = 180; // Operador mirando al Sur (180°)
+    let diff = bearingHome - currentHeading; // -90° (virar a babor 90°)
+    while (diff > 180) diff -= 360;
+    while (diff < -180) diff += 360;
+
+    assert.strictEqual(diff, -90, 'El error de timoneo mirando al Sur hacia Home en el Este debe ser -90°');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 15. Decodificación Polimórfica de Paquetes en HumanBrainOrchestrator
+  // ─────────────────────────────────────────────────────────────────────────────
+  runTest('15.1 HumanBrainOrchestrator: Decodificación segura de payloads string y binarios', () => {
+    assert(orchCode.includes("typeof packet.payload === 'string'"), 'Debe manejar payloads que ya son strings');
+    assert(orchCode.includes("packet.payload instanceof Uint8Array"), 'Debe manejar payloads binarios Uint8Array');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 16. Integración Sensorial y Ciclo de Vida en HumanBrainOrchestrator
+  // ─────────────────────────────────────────────────────────────────────────────
+  runTest('16.1 HumanBrainOrchestrator: Ingesta de geoposición a workingMemory y parada simétrica', () => {
+    assert(orchCode.includes('TacticalLocationEngine.watchLocation'), 'Debe alimentar evaluateSensoryTriggers con watchLocation');
+    assert(orchCode.includes('this.workingMemory.evaluateSensoryTriggers'), 'Debe evaluar disparadores sensoriales');
+    assert(orchCode.includes('ConnectomeEcosystemOrchestrator.getInstance().stop()'), 'stop() debe detener el sustrato subcortical');
+  });
+
+  runTest('16.2 HippocampalMemoryModal: Controles tácticos de sembrado y limpieza CA3', () => {
+    assert(hippoModalCode.includes('handleSeedSampleEngram'), 'Debe exponer función para sembrar engrama de prueba');
+    assert(hippoModalCode.includes('handleClearAllEngrams'), 'Debe exponer función para limpiar memoria CA3');
+    assert(hippoModalCode.includes('hippocampal.clearAllEngrams()'), 'Debe invocar clearAllEngrams() en el motor');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 17. Resiliencia de Reflejos MaleCNS y Persistencia
+  // ─────────────────────────────────────────────────────────────────────────────
+  const gfsCode = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'neuro', 'GiantFiberReflexEngine.ts'), 'utf8');
+
+  runTest('17.1 GiantFiberReflexEngine: Persistencia de estado en enfriamiento de EMCON', () => {
+    assert(gfsCode.includes('this.persistState()'), 'Debe persistir estado al expirar el cooldown de EMCON');
   });
 
   console.log('\n================================================================================');

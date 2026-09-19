@@ -46,13 +46,39 @@ export interface WorkingMemoryTelemetry {
 
 export class TacticalWorkingMemoryEngine {
   private static instance: TacticalWorkingMemoryEngine | null = null;
+  private static readonly STORAGE_KEY = 'red_working_memory_tasks_v1';
 
   private tasks: TacticalTaskItem[] = [];
   private listeners: Set<(telemetry: WorkingMemoryTelemetry) => void> = new Set();
   private lastCompletedTitle?: string;
 
   private constructor() {
+    this.hydrateFromStorage();
+  }
+
+  private hydrateFromStorage(): void {
+    if (typeof window === 'undefined') {
+      this.hydrateDefaultEmergencyPlan();
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(TacticalWorkingMemoryEngine.STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.tasks = parsed;
+          return;
+        }
+      }
+    } catch {}
     this.hydrateDefaultEmergencyPlan();
+  }
+
+  private persistToStorage(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(TacticalWorkingMemoryEngine.STORAGE_KEY, JSON.stringify(this.tasks));
+    } catch {}
   }
 
   public static getInstance(): TacticalWorkingMemoryEngine {
@@ -106,6 +132,9 @@ export class TacticalWorkingMemoryEngine {
    * Evalúa la posición actual (PDR/GNSS) para avanzar tareas de proximidad automáticamente.
    */
   public evaluateSensoryTriggers(currentLoc: { lat: number; lon: number }): boolean {
+    if (Math.abs(currentLoc.lat) <= 0.0001 && Math.abs(currentLoc.lon) <= 0.0001) {
+      return false;
+    }
     const active = this.getActiveTask();
     if (!active || active.triggerType !== 'PROXIMITY_COORDS' || !active.targetCoords) {
       return false;
@@ -142,6 +171,7 @@ export class TacticalWorkingMemoryEngine {
       navigator.vibrate([80, 50, 80]); // Confirmación háptica ejecutiva
     }
 
+    this.persistToStorage();
     this.notifyListeners();
   }
 
@@ -151,6 +181,7 @@ export class TacticalWorkingMemoryEngine {
       t.completedAt = undefined;
     });
     this.lastCompletedTitle = undefined;
+    this.persistToStorage();
     this.notifyListeners();
   }
 
@@ -180,6 +211,7 @@ export class TacticalWorkingMemoryEngine {
       targetDurationSeconds: options?.targetDurationSeconds
     };
     this.tasks.push(newTask);
+    this.persistToStorage();
     this.notifyListeners();
     return newTask;
   }

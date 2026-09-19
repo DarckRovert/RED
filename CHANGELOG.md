@@ -1,5 +1,36 @@
 # Changelog
 
+## [112.0.0-arquitectura-bio-cibernetica-neocortical-humana-memoria-hebbiana-ca3-y-mercado-barter-ofc] - 2026-09-19
+
+### 🧠 Arquitectura Bio-Cibernética Neocortical Humana, Memoria Hebbiana CA3 y Mercado Barter OFC (Release Oficial v112.0.0)
+
+- **Corteza Entorrinal Medial (`EntorhinalGridCellEngine.ts`):**
+  - Cartografía hexagonal 2D/3D con 4 módulos de Moser ($\lambda = [0.5, 2.0, 8.0, 32.0]\text{m}$) y simetría de 60° para navegación subterránea sin GNSS.
+  - Integración delta de odometría PDR inmune a acumulación cuadrática, protegida con `isFinite()`.
+  - Persistencia local en `red_entorhinal_breadcrumbs_v1`.
+- **Hipocampo CA3 / Giro Dentado (`HippocampalEpisodicEngine.ts`):**
+  - Proyección ortogonal dispersa DG de 1024 bits y red recurrente autoasociativa Hopfield CA3 para rescate de paquetes LoRa mutilados por EW/jamming (*Pattern Completion*).
+  - Persistencia en `red_hippocampal_engrams_v1`.
+- **Corteza Predictiva & Inferencia Activa (`PredictiveCortexEngine.ts`):**
+  - Minimización de Energía Libre de Friston y Gemelos Cinemáticos de Pares.
+  - Modo *Zero-Bandwidth*: supresión de balizas a 0 bytes cuando la cinemática es predecible, reduciendo consumo de radio hasta en 95%.
+- **Teoría de la Mente & Auditoría Epistémica (`TheoryOfMindEpistemicEngine.ts`):**
+  - Detección de Honey-Pots y emboscadas electromagnéticas mediante contraste de Path Loss Log-Distance RF vs cinemática.
+  - Erradicación de falsos positivos en Null Island (0,0).
+- **Memoria de Trabajo DLPFC 7±2 (`TacticalWorkingMemoryEngine.ts`):**
+  - Pila ejecutiva de tareas prioritarias con auto-avance por geofence conectado a `TacticalLocationEngine.watchLocation`.
+- **Ínsula Anterior & Triage TCCC MARCH (`InsularTcccInteroceptionEngine.ts`):**
+  - Triage médico táctico, desaceleración vagal Box Breathing 4-4-4-4, alarmas de isquemia de torniquetes a los 90/120 min y despacho de reportes MIST.
+- **Corteza Orbitofrontal & Economía de Asedio (`OrbitofrontalValuationEngine.ts`):**
+  - Valuación marginal decreciente de recursos vitales y protocolo de trueque peer-to-peer offline en malla.
+- **Elevación Gráfica Táctica e Interfaces de Usuario:**
+  - `HippocampalMemoryModal.tsx`: Visualizador de engramas, simulador Hebbiano en vivo, sembrado de engramas de prueba y purga CA3.
+  - `OfcBarterMarketModal.tsx`: Matriz de precios de trueque, libro mayor de contratos y propuestas en malla.
+  - `EyesFreeHapticModal.tsx` & `TacticalMotorActuatorEngine.ts`: Guiado somatosensorial háptico entre HOME y GOAL sincronizado con `RingAttractorEngine`.
+  - Integración en `NodeMap.tsx` y `MaleCnsConnectomeHUD.tsx` con manejo LIFO de botón Atrás de Android vía `BackHandlerRegistry`.
+- **Gobernanza Atómica SSOT v112.0.0 & Verificación en Hardware Físico Real:**
+  - 100% de paridad en los archivos maestros de versión (`v112.0.0`, build code `112000`).
+
 ## [111.0.0-bio-neuromorphic-connectome-os-y-malecns-v1.0-3d-hud] - 2026-09-19
 
 ### 🚀 Bio-Neuromorphic Connectome OS & MaleCNS v1.0 3D HUD (Release Oficial v111.0.0)

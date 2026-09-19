@@ -266,6 +266,7 @@ export class GiantFiberReflexEngine {
         // Enfriamiento gradual: desactiva EMCON automáticamente tras el periodo de silencio
         this.emconLockActive = false;
         this.isReflexActive = false;
+        this.persistState();
         this.notifyListeners();
       }, GiantFiberReflexEngine.DEFAULT_COOLDOWN_MS);
     }

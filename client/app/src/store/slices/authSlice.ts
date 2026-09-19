@@ -585,10 +585,10 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     meshRouter.init(finalIdentity.identity_hash);
                     meshRouter.updateIdentity(finalIdentity.identity_hash);
                     try {
-                        const { connectomeOrchestrator } = await import('../../lib/neuro/ConnectomeEcosystemOrchestrator');
-                        connectomeOrchestrator.start();
+                        const { humanBrainOrchestrator } = await import('../../lib/neuro/human/HumanBrainOrchestrator');
+                        humanBrainOrchestrator.start();
                     } catch (e) {
-                        console.warn('[RED] Failed to auto-start Connectome CNS:', e);
+                        console.warn('[RED] Failed to auto-start Human Neocortex & Connectome CNS:', e);
                     }
                 }
 

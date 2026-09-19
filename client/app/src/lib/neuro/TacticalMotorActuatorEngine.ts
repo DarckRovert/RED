@@ -24,6 +24,7 @@
 
 import { fanShapedBody, FanShapedBodyTelemetry } from './FanShapedBodyEngine';
 import { giantFiberReflex, GiantFiberTelemetry } from './GiantFiberReflexEngine';
+import { ringAttractor } from './RingAttractorEngine';
 
 export type HapticSteeringMode = 'ALIGNED' | 'TURN_LEFT' | 'TURN_RIGHT' | 'EMERGENCY' | 'IDLE';
 
@@ -51,6 +52,7 @@ export class TacticalMotorActuatorEngine {
   // Configuración de vibración
   private isEnabled = true;
   private isStealthActive = false;
+  private guidanceTarget: 'HOME' | 'GOAL' = 'HOME';
   private totalPulses = 0;
   private lastVibrateTime = 0;
   private minIntervalMs = 3000; // Máximo 1 pulso de guiado cada 3 segundos
@@ -76,7 +78,7 @@ export class TacticalMotorActuatorEngine {
 
     // 1. Acoplar al Fan-Shaped Body para error de timoneo hacia Home / Goal Vector
     this.fbUnsub = fanShapedBody.subscribe((fbTelem: FanShapedBodyTelemetry) => {
-      const error = fbTelem.goalVector.hasTarget
+      const error = (this.guidanceTarget === 'GOAL' && fbTelem.goalVector.hasTarget)
         ? fbTelem.goalVector.steeringErrorDeg
         : this.computeHomeSteeringError(fbTelem);
 
@@ -113,15 +115,28 @@ export class TacticalMotorActuatorEngine {
     this.notifyListeners();
   }
 
+  public setGuidanceTarget(target: 'HOME' | 'GOAL'): void {
+    this.guidanceTarget = target;
+    const fbTelem = fanShapedBody.getTelemetry();
+    const error = (this.guidanceTarget === 'GOAL' && fbTelem.goalVector.hasTarget)
+      ? fbTelem.goalVector.steeringErrorDeg
+      : this.computeHomeSteeringError(fbTelem);
+    this.updateSteeringError(error);
+  }
+
+  public getGuidanceTarget(): 'HOME' | 'GOAL' {
+    return this.guidanceTarget;
+  }
+
   /**
    * Calcula el error de timoneo angular respecto al Home Vector.
    */
   private computeHomeSteeringError(fbTelem: FanShapedBodyTelemetry): number {
     const bearing = fbTelem.homeVector.bearingDeg;
-    // Rumbo actual inercial
-    const currentHeading = ((bearing - fbTelem.goalVector.steeringErrorDeg) % 360 + 360) % 360;
-    let diff = (bearing - currentHeading + 180) % 360 - 180;
-    if (diff < -180) diff += 360;
+    const currentHeading = ringAttractor.getTelemetry().headingDeg;
+    let diff = bearing - currentHeading;
+    while (diff > 180) diff -= 360;
+    while (diff < -180) diff += 360;
     return diff;
   }
 

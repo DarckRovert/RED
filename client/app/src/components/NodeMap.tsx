@@ -36,6 +36,8 @@ import { CognitiveNavigationModal } from "./tactical/CognitiveNavigationModal";
 import { TcccMedicalTriageModal } from "./tactical/TcccMedicalTriageModal";
 import { EpistemicRadarModal } from "./tactical/EpistemicRadarModal";
 import { WorkingMemoryTaskRibbon } from "./tactical/WorkingMemoryTaskRibbon";
+import { OfcBarterMarketModal } from "./tactical/OfcBarterMarketModal";
+import { HippocampalMemoryModal } from "./tactical/HippocampalMemoryModal";
 
 function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
@@ -166,6 +168,8 @@ export default function NodeMap() {
     const [isCognitiveNavOpen, setIsCognitiveNavOpen] = useState<boolean>(false);
     const [isTcccModalOpen, setIsTcccModalOpen] = useState<boolean>(false);
     const [isEpistemicRadarOpen, setIsEpistemicRadarOpen] = useState<boolean>(false);
+    const [isOfcBarterOpen, setIsOfcBarterOpen] = useState<boolean>(false);
+    const [isHippocampalMemoryOpen, setIsHippocampalMemoryOpen] = useState<boolean>(false);
 
     useEffect(() => {
         const unsubCx = ringAttractor.subscribe(setCxTelem);
@@ -1180,7 +1184,7 @@ export default function NodeMap() {
                     </div>
                 </div>
 
-                <div style={{ display: "flex", gap: "4px", flexShrink: 0, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "4px", flexShrink: 1, minWidth: 0, overflowX: "auto", alignItems: "center", scrollbarWidth: "none" }}>
                     <button
                         onClick={async () => {
                             try {
@@ -1256,6 +1260,24 @@ export default function NodeMap() {
                     >
                         <span>🛡️</span>
                         <span>ToM</span>
+                    </button>
+                    <button
+                        onClick={() => setIsOfcBarterOpen(true)}
+                        className={isOfcBarterOpen ? "btn-tactical-primary" : "btn-tactical-secondary"}
+                        style={{ padding: "6px 8px", fontSize: "0.74rem", display: "flex", alignItems: "center", gap: "3px" }}
+                        title="Mercado de Trueque OFC (Economía Táctica & Raciones Mesh)"
+                    >
+                        <span>⚖️</span>
+                        <span>BARTER</span>
+                    </button>
+                    <button
+                        onClick={() => setIsHippocampalMemoryOpen(true)}
+                        className={isHippocampalMemoryOpen ? "btn-tactical-primary" : "btn-tactical-secondary"}
+                        style={{ padding: "6px 8px", fontSize: "0.74rem", display: "flex", alignItems: "center", gap: "3px" }}
+                        title="Inspector Hipocámpico CA3 (Memoria Episódica & Reconstrucción de Tramas)"
+                    >
+                        <span>🧬</span>
+                        <span>HIPPO</span>
                     </button>
                     <button
                         onClick={() => setIsPheromoneModalOpen(true)}
@@ -2123,6 +2145,18 @@ export default function NodeMap() {
             <EpistemicRadarModal
                 isOpen={isEpistemicRadarOpen}
                 onClose={() => setIsEpistemicRadarOpen(false)}
+            />
+
+            {/* Modal de Mercado de Trueque OFC */}
+            <OfcBarterMarketModal
+                isOpen={isOfcBarterOpen}
+                onClose={() => setIsOfcBarterOpen(false)}
+            />
+
+            {/* Modal de Memoria Episódica Hipocámpica CA3 */}
+            <HippocampalMemoryModal
+                isOpen={isHippocampalMemoryOpen}
+                onClose={() => setIsHippocampalMemoryOpen(false)}
             />
         </div>
     );

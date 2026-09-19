@@ -1420,6 +1420,32 @@ class MeshRouter {
     }
 
     if (!packet) {
+      // 0. Hipocampo CA3: Intentar rescate de paquete corrupto / mutilado por jamming RF
+      try {
+        const { HippocampalEpisodicEngine } = require('../neuro/human/HippocampalEpisodicEngine');
+        const hippocampal = HippocampalEpisodicEngine.getInstance();
+        const rawString = new TextDecoder().decode(raw);
+        const reconstructed = hippocampal.attemptPatternCompletion({
+          rawFragment: rawString,
+          corruptedFields: ['payload']
+        });
+        if (reconstructed.isSuccessfullyReconstructed && reconstructed.reconstructionConfidence >= 0.70) {
+          const restored = reconstructed.restoredPacket;
+          packet = {
+            recipient: this.getCanonicalId(this.myIdentityHash || 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'),
+            sender: this.getCanonicalId(restored.senderPeerId || fromTransportId || 'rescued_peer'),
+            ttl: 10,
+            flags: 0,
+            timestamp: Date.now(),
+            nonce: restored.id || `nonce_rescued_${Date.now().toString(36)}`,
+            payload: new TextEncoder().encode(restored.decodedSummary),
+          };
+          console.log(`[MeshRouter] 🧬 Rescued corrupted packet via Hippocampal CA3 Pattern Completion (conf: ${Math.round(reconstructed.reconstructionConfidence * 100)}%)`);
+        }
+      } catch {}
+    }
+
+    if (!packet) {
       console.warn('[MeshRouter] Received malformed packet, ignoring');
       try { globalShield.recordMalformedPacket(fromTransportId || 'UNKNOWN'); } catch {}
       return;
@@ -1433,6 +1459,21 @@ class MeshRouter {
     }
     this.markSeen(packet.nonce);
     slottedGossip.recordHeardFromPeer(packet.nonce);
+
+    // Memorización episódica bio-cibernética en CA3
+    try {
+      const { HippocampalEpisodicEngine } = require('../neuro/human/HippocampalEpisodicEngine');
+      const hippocampal = HippocampalEpisodicEngine.getInstance();
+      const preview = new TextDecoder().decode(packet.payload.slice(0, 100));
+      hippocampal.memorizePacket({
+        id: packet.nonce,
+        senderPeerId: packet.sender,
+        channel: 'mesh_rf',
+        payloadType: preview.includes('type') ? 'structured_json' : 'raw_binary',
+        geohashPrefix: 'geo_mesh',
+        summary: preview.slice(0, 60),
+      });
+    } catch {}
 
     // Bind packet sender to transport ID if provided
     if (packet.sender && packet.sender.length === 64) {
@@ -1797,6 +1838,34 @@ class MeshRouter {
             peer.lat = data.payload.lat;
             peer.lng = data.payload.lng;
           }
+
+          // Inferencia Activa & Teoría de la Mente mPFC/TPJ
+          try {
+            const { TheoryOfMindEpistemicEngine } = require('../neuro/human/TheoryOfMindEpistemicEngine');
+            const { PredictiveCortexEngine } = require('../neuro/human/PredictiveCortexEngine');
+            const { TacticalLocationEngine } = require('../sensors/TacticalLocationEngine');
+            
+            const myLoc = TacticalLocationEngine.getLastKnownLocation() || { lat: 0, lon: 0 };
+            const measuredRssi = peer?.rssi || -75;
+
+            TheoryOfMindEpistemicEngine.getInstance().auditPeerReport({
+              peerId: canonical,
+              claimedLat: data.payload.lat,
+              claimedLon: data.payload.lng,
+              measuredRssi,
+              timestamp: data.payload.timestamp || Date.now(),
+              localLat: myLoc.lat || 0,
+              localLon: myLoc.lon || 0,
+            });
+
+            PredictiveCortexEngine.getInstance().updatePeerPosition(
+              canonical,
+              data.payload.lat,
+              data.payload.lng,
+              data.payload.speed || 0,
+              data.payload.heading || 0
+            );
+          } catch {}
         }
       }
     } catch {}
@@ -2379,6 +2448,20 @@ class MeshRouter {
 
   async broadcastLocation(lat: number, lng: number, altitude?: number, accuracy?: number): Promise<void> {
     try {
+      // Inferencia Activa de Friston (Predictive Cortex): Supresión de emisión si el movimiento es predecible
+      try {
+        const { PredictiveCortexEngine } = await import('../neuro/human/PredictiveCortexEngine');
+        const decision = PredictiveCortexEngine.getInstance().evaluateLocalTransmission({
+          lat,
+          lon: lng,
+          alt: altitude,
+        });
+        if (!decision.shouldTransmit) {
+          // Ahorro del 100% de ancho de banda y radio silencio LPI
+          return;
+        }
+      } catch {}
+
       const payload = new TextEncoder().encode(JSON.stringify({
         type: 'NODE_LOCATION_UPDATE',
         payload: {

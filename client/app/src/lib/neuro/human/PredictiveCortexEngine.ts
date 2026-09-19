@@ -135,6 +135,18 @@ export class PredictiveCortexEngine {
       varianceMeters: 2.0,
     };
 
+    // Guard: Ignorar coordenadas Null Island (0,0) sin fix GNSS real
+    if (Math.abs(currentLoc.lat) <= 0.0001 && Math.abs(currentLoc.lon) <= 0.0001 && !currentLoc.isEmergency) {
+      return {
+        shouldTransmit: false,
+        freeEnergyScore: 0.0,
+        predictionErrorMeters: 0.0,
+        headingErrorDeg: 0.0,
+        reason: 'SUPPRESSED_SILENT',
+        bandwidthSavingsPercent: this.computeBandwidthSavings(),
+      };
+    }
+
     // 1. Bypass absoluto ante emergencias vitales
     if (currentLoc.isEmergency) {
       this.packetsDispatchedCount++;

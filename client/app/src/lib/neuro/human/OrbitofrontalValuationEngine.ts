@@ -20,6 +20,9 @@
  *    Generación y firma criptográfica SHA-256 / Ed25519 de acuerdos bilaterales intercambiables vía BLE/LoRa.
  */
 
+import { meshRouter } from '../../mesh/meshRouter';
+import { TacticalAudioEngine } from '../../audio/TacticalAudioEngine';
+
 export type SurvivalCommodity = 
   | 'WATER_POTABLE_L'       // Litros de agua potable
   | 'RATION_MRE_KCAL'       // Raciones / Kcal (unidades de 2000 kcal)
@@ -132,13 +135,46 @@ export class OrbitofrontalValuationEngine {
     COMMS_FILTER_SPARES: 5.0
   };
 
+  private static readonly STORAGE_KEY = 'red_ofc_inventory_contracts_v1';
+
   private squadHeadcount: number = 4; // Tamaño del destacamento dependiente
   private targetReserveDays: number = 14; // Horizonte de seguridad táctica (14 días)
   private contracts: Map<string, BarterContract> = new Map();
   private listeners: Array<(telemetry: OrbitofrontalTelemetry) => void> = [];
 
   private constructor() {
-    // Inicialización del motor orbitofrontal
+    this.hydrateFromStorage();
+  }
+
+  private hydrateFromStorage(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(OrbitofrontalValuationEngine.STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.localInventory) {
+          this.localInventory = { ...this.localInventory, ...parsed.localInventory };
+        }
+        if (typeof parsed.squadHeadcount === 'number') {
+          this.squadHeadcount = parsed.squadHeadcount;
+        }
+        if (Array.isArray(parsed.contracts)) {
+          parsed.contracts.forEach((c: BarterContract) => this.contracts.set(c.contractId, c));
+        }
+      }
+    } catch {}
+  }
+
+  private persistToStorage(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const data = {
+        localInventory: this.localInventory,
+        squadHeadcount: this.squadHeadcount,
+        contracts: Array.from(this.contracts.values())
+      };
+      localStorage.setItem(OrbitofrontalValuationEngine.STORAGE_KEY, JSON.stringify(data));
+    } catch {}
   }
 
   public static getInstance(): OrbitofrontalValuationEngine {
@@ -148,11 +184,16 @@ export class OrbitofrontalValuationEngine {
     return OrbitofrontalValuationEngine.instance;
   }
 
+  public getContracts(): BarterContract[] {
+    return Array.from(this.contracts.values()).sort((a, b) => b.timestamp - a.timestamp);
+  }
+
   /**
    * Actualiza el inventario físico local de la unidad
    */
   public updateLocalStock(commodity: SurvivalCommodity, quantity: number): void {
     this.localInventory[commodity] = Math.max(0, quantity);
+    this.persistToStorage();
     this.notifyListeners();
   }
 
@@ -166,7 +207,91 @@ export class OrbitofrontalValuationEngine {
 
   public setSquadHeadcount(headcount: number): void {
     this.squadHeadcount = Math.max(1, headcount);
+    this.persistToStorage();
     this.notifyListeners();
+  }
+
+  /**
+   * Difunde una propuesta de trueque firmada a través de la malla RF
+   */
+  public async broadcastTradeProposal(contract: BarterContract): Promise<boolean> {
+    const payload = {
+      type: 'OFC_BARTER_PROPOSAL',
+      contract,
+      timestamp: Date.now()
+    };
+
+    try {
+      const bytes = new TextEncoder().encode(JSON.stringify(payload));
+      await meshRouter.broadcast(bytes);
+      console.log(`[Orbitofrontal] ⚖️ Broadcasted barter proposal ${contract.contractId} to RF mesh`);
+      TacticalAudioEngine.playMessageSent();
+      return true;
+    } catch (err) {
+      console.warn('[Orbitofrontal] Failed to broadcast barter proposal:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Difunde la aceptación y cierre de un contrato barter por la malla
+   */
+  public async broadcastContractAccept(contractId: string): Promise<boolean> {
+    const contract = this.contracts.get(contractId);
+    if (!contract) return false;
+
+    contract.status = 'ACCEPTED';
+    this.persistToStorage();
+
+    const payload = {
+      type: 'OFC_BARTER_ACCEPT',
+      contractId,
+      acceptedBy: 'SELF',
+      timestamp: Date.now()
+    };
+
+    try {
+      const bytes = new TextEncoder().encode(JSON.stringify(payload));
+      await meshRouter.broadcast(bytes);
+      console.log(`[Orbitofrontal] ⚖️ Broadcasted barter acceptance ${contractId}`);
+      TacticalAudioEngine.playRogerBeep();
+      this.notifyListeners();
+      return true;
+    } catch (err) {
+      console.warn('[Orbitofrontal] Failed to broadcast barter acceptance:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Ingesta una propuesta de trueque recibida por la malla DTN
+   */
+  public ingestRemoteTradeProposal(proposal: any): void {
+    if (!proposal || !proposal.contract || !proposal.contract.contractId) return;
+    const remoteContract: BarterContract = proposal.contract;
+
+    // Si ya lo tenemos registrado, no sobreescribir si está asentado
+    const existing = this.contracts.get(remoteContract.contractId);
+    if (existing && existing.status === 'SETTLED') return;
+
+    this.contracts.set(remoteContract.contractId, remoteContract);
+    this.persistToStorage();
+    TacticalAudioEngine.playMessageReceived();
+    this.notifyListeners();
+  }
+
+  /**
+   * Ingesta la aceptación de un contrato remoto
+   */
+  public ingestRemoteTradeAccept(acceptData: any): void {
+    if (!acceptData || !acceptData.contractId) return;
+    const contract = this.contracts.get(acceptData.contractId);
+    if (contract) {
+      contract.status = 'ACCEPTED';
+      this.persistToStorage();
+      TacticalAudioEngine.playRogerBeep();
+      this.notifyListeners();
+    }
   }
 
   /**
@@ -251,6 +376,7 @@ export class OrbitofrontalValuationEngine {
     };
 
     this.contracts.set(contractId, contract);
+    this.persistToStorage();
     this.notifyListeners();
     return contract;
   }
@@ -269,6 +395,7 @@ export class OrbitofrontalValuationEngine {
 
     contract.status = 'SETTLED';
     this.contracts.set(contractId, contract);
+    this.persistToStorage();
     this.notifyListeners();
     return true;
   }

@@ -20,6 +20,8 @@
  */
 
 import { TacticalAudioEngine } from '../../audio/TacticalAudioEngine';
+import { meshRouter } from '../../mesh/meshRouter';
+import { tacticalTccc, LimbLocation as TacticalLimbLocation } from '../../tactical/TacticalTcccEngine';
 
 export type TriageCategory = 'RED_IMMEDIATE' | 'YELLOW_DELAYED' | 'GREEN_MINIMAL' | 'BLACK_EXPECTANT';
 
@@ -57,17 +59,69 @@ export interface InteroceptionTelemetry {
 
 export class InsularTcccInteroceptionEngine {
   private static instance: InsularTcccInteroceptionEngine | null = null;
+  private static readonly STORAGE_KEY = 'red_tccc_casualties_v1';
 
   private isBoxBreathing = false;
   private breathingTimer: any = null;
+  private tourniquetInterval: any = null;
   private currentPhaseIndex = 0; // 0=Inhalar, 1=Retener, 2=Exhalar, 3=Pausa
   private phaseSecondsLeft = 4;
+  private lastMistSummary?: string;
 
   private casualties: Map<string, TcccCasualtyCard> = new Map();
   private listeners: Set<(telemetry: InteroceptionTelemetry) => void> = new Set();
 
   private constructor() {
+    this.hydrateFromStorage();
     this.startTourniquetMonitorLoop();
+    this.bindTacticalTcccSync();
+  }
+
+  private hydrateFromStorage(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(InsularTcccInteroceptionEngine.STORAGE_KEY);
+      if (raw) {
+        const list: TcccCasualtyCard[] = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          list.forEach(c => this.casualties.set(c.casualtyId, c));
+        }
+      }
+    } catch {}
+  }
+
+  private persistToStorage(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const list = Array.from(this.casualties.values());
+      localStorage.setItem(InsularTcccInteroceptionEngine.STORAGE_KEY, JSON.stringify(list));
+    } catch {}
+  }
+
+  private bindTacticalTcccSync(): void {
+    try {
+      tacticalTccc.subscribe((tqs) => {
+        if (tqs.length > 0 && this.casualties.size === 0) {
+          // Si el módulo preexistente tiene TQs y la ínsula está vacía, crear ficha
+          const card = this.registerCasualty('Operador Local', 'RED_IMMEDIATE');
+          tqs.forEach(t => {
+            const loc: TourniquetRecord['limbLocation'] = 
+              t.limb === 'LEFT_ARM' ? 'BRAZO_IZQ' :
+              t.limb === 'RIGHT_ARM' ? 'BRAZO_DER' :
+              t.limb === 'LEFT_LEG' ? 'PIERNA_IZQ' : 'PIERNA_DER';
+            card.tourniquets.push({
+              id: t.id,
+              appliedAtTimestamp: t.appliedTimestamp,
+              limbLocation: loc,
+              elapsedMinutes: t.elapsedMinutes,
+              isApproachingNecrosisRisk: t.isIschemicAlert,
+            });
+          });
+          this.persistToStorage();
+          this.notifyListeners();
+        }
+      });
+    } catch {}
   }
 
   public static getInstance(): InsularTcccInteroceptionEngine {
@@ -179,6 +233,16 @@ export class InsularTcccInteroceptionEngine {
 
     casualty.tourniquets.push(tRecord);
     casualty.massiveBleedingControlled = true;
+    this.persistToStorage();
+
+    // Sincronización proactiva con TacticalTcccEngine preexistente
+    try {
+      const mappedLimb: TacticalLimbLocation =
+        limbLocation === 'BRAZO_IZQ' ? 'LEFT_ARM' :
+        limbLocation === 'BRAZO_DER' ? 'RIGHT_ARM' :
+        limbLocation === 'PIERNA_IZQ' ? 'LEFT_LEG' : 'RIGHT_LEG';
+      tacticalTccc.applyTourniquet(mappedLimb);
+    } catch {}
 
     TacticalAudioEngine.playRogerBeep();
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -190,8 +254,9 @@ export class InsularTcccInteroceptionEngine {
   }
 
   private startTourniquetMonitorLoop(): void {
+    if (this.tourniquetInterval) return;
     // Monitor de verificación de tiempo de torniquete cada minuto
-    setInterval(() => {
+    this.tourniquetInterval = setInterval(() => {
       const now = Date.now();
       let hasWarning = false;
 
@@ -236,6 +301,7 @@ export class InsularTcccInteroceptionEngine {
       createdAt: Date.now()
     };
     this.casualties.set(casualtyId, card);
+    this.persistToStorage();
     TacticalAudioEngine.playRogerBeep();
     this.notifyListeners();
     return card;
@@ -252,6 +318,7 @@ export class InsularTcccInteroceptionEngine {
       case 'C': casualty.pulsePresent = value; break;
       case 'H': casualty.hypothermiaCovered = value; break;
     }
+    this.persistToStorage();
     TacticalAudioEngine.playTap();
     this.notifyListeners();
   }
@@ -273,9 +340,51 @@ export class InsularTcccInteroceptionEngine {
       timestamp: Date.now()
     };
 
-    console.log('[InsularTCCC] Difundiendo MIST Report por malla DTN:', mistPayload);
+    try {
+      const bytes = new TextEncoder().encode(JSON.stringify(mistPayload));
+      await meshRouter.broadcast(bytes);
+      console.log('[InsularTCCC] 🩸 Broadcasted real TCCC MIST report to RF mesh');
+    } catch (err) {
+      console.warn('[InsularTCCC] Failed to broadcast MIST report:', err);
+    }
+
     TacticalAudioEngine.playRogerBeep();
+    this.lastMistSummary = `MIST [${casualty.callsign}] ${casualty.triageCategory} - ${casualty.tourniquets.length} TQs`;
+    this.notifyListeners();
     return true;
+  }
+
+  /**
+   * Ingesta un MIST report recibido de otro operador por la red mesh DTN
+   */
+  public ingestRemoteMistReport(report: any): void {
+    if (!report || !report.casualtyId) return;
+
+    let existing = this.casualties.get(report.casualtyId);
+    if (!existing) {
+      existing = {
+        casualtyId: report.casualtyId,
+        callsign: report.callsign || 'Baja Remota',
+        triageCategory: report.category || 'RED_IMMEDIATE',
+        massiveBleedingControlled: true,
+        airwayPatent: true,
+        respirationStable: true,
+        pulsePresent: true,
+        hypothermiaCovered: false,
+        tourniquets: [],
+        notes: `MIST remoto recibido: ${report.treatment || ''}`,
+        createdAt: report.timestamp || Date.now(),
+      };
+      this.casualties.set(report.casualtyId, existing);
+    } else {
+      existing.triageCategory = report.category || existing.triageCategory;
+      existing.notes = `Actualización MIST: ${report.treatment || ''}`;
+    }
+
+    this.persistToStorage();
+    TacticalAudioEngine.playEmergencyAlarm();
+    this.lastMistSummary = `REMOTE MIST [${existing.callsign}] ${existing.triageCategory}`;
+    this.notifyListeners();
   }
 
   public getTelemetry(): InteroceptionTelemetry {
@@ -302,7 +411,7 @@ export class InsularTcccInteroceptionEngine {
       activeCasualtiesCount: this.casualties.size,
       activeTourniquetsCount: totalTqs,
       criticalTourniquetWarning: criticalTq,
-      lastMistReportSummary: this.casualties.size > 0 ? `${this.casualties.size} bajas registradas` : undefined,
+      lastMistReportSummary: this.lastMistSummary || (this.casualties.size > 0 ? `${this.casualties.size} bajas registradas` : undefined),
     };
   }
 
@@ -321,6 +430,10 @@ export class InsularTcccInteroceptionEngine {
 
   public destroy(): void {
     this.stopBoxBreathing();
+    if (this.tourniquetInterval) {
+      clearInterval(this.tourniquetInterval);
+      this.tourniquetInterval = null;
+    }
     this.casualties.clear();
     this.listeners.clear();
     InsularTcccInteroceptionEngine.instance = null;

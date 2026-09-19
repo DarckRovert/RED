@@ -21,6 +21,9 @@ import { humanBrainOrchestrator, HumanBrainTelemetrySnapshot } from "../lib/neur
 import { CognitiveNavigationModal } from "./tactical/CognitiveNavigationModal";
 import { TcccMedicalTriageModal } from "./tactical/TcccMedicalTriageModal";
 import { EpistemicRadarModal } from "./tactical/EpistemicRadarModal";
+import { OfcBarterMarketModal } from "./tactical/OfcBarterMarketModal";
+import { HippocampalMemoryModal } from "./tactical/HippocampalMemoryModal";
+import { predictiveCortex } from "../lib/neuro/human/PredictiveCortexEngine";
 
 interface Point3D {
   x: number;
@@ -89,6 +92,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const [isCognitiveNavOpen, setIsCognitiveNavOpen] = useState<boolean>(false);
   const [isTcccModalOpen, setIsTcccModalOpen] = useState<boolean>(false);
   const [isEpistemicRadarOpen, setIsEpistemicRadarOpen] = useState<boolean>(false);
+  const [isOfcBarterOpen, setIsOfcBarterOpen] = useState<boolean>(false);
+  const [isHippocampalMemoryOpen, setIsHippocampalMemoryOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const unsub = humanBrainOrchestrator.subscribe(setHumanSnapshot);
@@ -1885,6 +1890,15 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
               <div style={{ fontSize: "0.65rem", color: "#64748B" }}>
                 Reconstrucción instantánea de paquetes dañados sin retransmisión RF.
               </div>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  setIsHippocampalMemoryOpen(true);
+                }}
+                style={{ padding: "6px", background: "#7C3AED", border: "none", borderRadius: "4px", color: "#FFF", fontSize: "0.70rem", fontWeight: 700, cursor: "pointer" }}
+              >
+                ABRIR INSPECTOR EPISÓDICO CA3
+              </button>
             </div>
 
             {/* 3. Corteza Predictiva */}
@@ -1904,6 +1918,26 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
               <div style={{ fontSize: "0.65rem", color: "#64748B" }}>
                 Emisión de radio suprimida (0 bytes) mientras el movimiento sea predecible.
               </div>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  const nextState = !humanSnapshot.predictive.isZeroBandwidthModeActive;
+                  predictiveCortex.setZeroBandwidthMode(nextState);
+                  toast.info(nextState ? "⚡ Modo Silencio RF Activo (Transmisión 0-Bytes)" : "⚡ Modo RF Continuo Restaurado");
+                }}
+                style={{
+                  padding: "6px",
+                  background: humanSnapshot.predictive.isZeroBandwidthModeActive ? "#065F46" : "#1E293B",
+                  border: "1px solid #10B981",
+                  borderRadius: "4px",
+                  color: "#10B981",
+                  fontSize: "0.70rem",
+                  fontWeight: 700,
+                  cursor: "pointer"
+                }}
+              >
+                {humanSnapshot.predictive.isZeroBandwidthModeActive ? "DESACTIVAR SILENCIO RF" : "ACTIVAR SILENCIO RF (0-BYTES)"}
+              </button>
             </div>
 
             {/* 4. Teoría de la Mente */}
@@ -1988,6 +2022,15 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
               <div style={{ fontSize: "0.65rem", color: "#64748B" }}>
                 Valoración no-fiduciaria de agua, raciones, munición, antibióticos y baterías.
               </div>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  setIsOfcBarterOpen(true);
+                }}
+                style={{ padding: "6px", background: "#0D9488", border: "none", borderRadius: "4px", color: "#FFF", fontSize: "0.70rem", fontWeight: 700, cursor: "pointer" }}
+              >
+                ABRIR MERCADO DE TRUEQUE OFC
+              </button>
             </div>
 
           </div>
@@ -2026,6 +2069,14 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       <EpistemicRadarModal
         isOpen={isEpistemicRadarOpen}
         onClose={() => setIsEpistemicRadarOpen(false)}
+      />
+      <OfcBarterMarketModal
+        isOpen={isOfcBarterOpen}
+        onClose={() => setIsOfcBarterOpen(false)}
+      />
+      <HippocampalMemoryModal
+        isOpen={isHippocampalMemoryOpen}
+        onClose={() => setIsHippocampalMemoryOpen(false)}
       />
     </div>
   );

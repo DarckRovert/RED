@@ -49,8 +49,32 @@ export class TheoryOfMindEpistemicEngine {
   private peerAssessments: Map<string, EpistemicAssessment> = new Map();
   private peerHistory: Map<string, { lat: number; lon: number; timestamp: number; rssi: number }[]> = new Map();
   private listeners: Set<(telemetry: TheoryOfMindTelemetry) => void> = new Set();
+  private static readonly STORAGE_KEY = 'red_tom_assessments_v1';
 
-  private constructor() {}
+  private constructor() {
+    this.hydrateFromStorage();
+  }
+
+  private hydrateFromStorage(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(TheoryOfMindEpistemicEngine.STORAGE_KEY);
+      if (raw) {
+        const list: EpistemicAssessment[] = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          list.forEach(a => this.peerAssessments.set(a.peerId, a));
+        }
+      }
+    } catch {}
+  }
+
+  private persistToStorage(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const list = Array.from(this.peerAssessments.values());
+      localStorage.setItem(TheoryOfMindEpistemicEngine.STORAGE_KEY, JSON.stringify(list));
+    } catch {}
+  }
 
   public static getInstance(): TheoryOfMindEpistemicEngine {
     if (!TheoryOfMindEpistemicEngine.instance) {
@@ -76,13 +100,19 @@ export class TheoryOfMindEpistemicEngine {
     const anomalies: string[] = [];
     let penalty = 0.0;
 
-    // 1. Distancia euclidiana / geodésica anunciada respecto a mí
-    const claimedDistanceMeters = this.getHaversineDistance(
-      report.localLat,
-      report.localLon,
-      report.claimedLat,
-      report.claimedLon
-    );
+    // 1. Distancia euclidiana / geodésica anunciada respecto a mí (solo con fix GNSS válido)
+    const hasLocalFix = Math.abs(report.localLat) > 0.0001 || Math.abs(report.localLon) > 0.0001;
+    const hasClaimedFix = Math.abs(report.claimedLat) > 0.0001 || Math.abs(report.claimedLon) > 0.0001;
+
+    let claimedDistanceMeters = 0.0;
+    if (hasLocalFix && hasClaimedFix) {
+      claimedDistanceMeters = this.getHaversineDistance(
+        report.localLat,
+        report.localLon,
+        report.claimedLat,
+        report.claimedLon
+      );
+    }
 
     // 2. Distancia física esperada deducida del RSSI real
     // RSSI = P0 - 10 * n * log10(d)  =>  d = 10 ^ ((P0 - RSSI) / (10 * n))
@@ -93,32 +123,39 @@ export class TheoryOfMindEpistemicEngine {
     );
 
     // 3. Auditoría de Incongruencia RF vs Posición Anunciada
-    // Si dice estar a 30m pero el RSSI es -115 dBm (o viceversa), hay falsificación de señal
-    const rfRatio = claimedDistanceMeters > 0 ? expectedDistFromRssi / claimedDistanceMeters : 1.0;
-    if (rfRatio > 5.0 || rfRatio < 0.15) {
-      anomalies.push(`Incongruencia RF severa: distancia declarada ${claimedDistanceMeters.toFixed(0)}m vs calculada por RSSI ${expectedDistFromRssi.toFixed(0)}m`);
-      penalty += 0.40;
+    // Solo auditable si ambos nodos tienen fix GNSS y distancia > 5m
+    if (hasLocalFix && hasClaimedFix && claimedDistanceMeters > 5.0) {
+      const rfRatio = expectedDistFromRssi / claimedDistanceMeters;
+      if (rfRatio > 5.0 || rfRatio < 0.15) {
+        anomalies.push(`Incongruencia RF severa: distancia declarada ${claimedDistanceMeters.toFixed(0)}m vs calculada por RSSI ${expectedDistFromRssi.toFixed(0)}m`);
+        penalty += 0.40;
+      }
     }
 
     // 4. Auditoría Cinemática de Teletransportación
     const history = this.peerHistory.get(report.peerId) || [];
     let kinematicSpeed = 0.0;
-    if (history.length > 0) {
+    if (hasClaimedFix && history.length > 0) {
       const last = history[history.length - 1];
-      const dtSec = Math.max(0.5, (now - last.timestamp) / 1000.0);
-      const deltaMeters = this.getHaversineDistance(last.lat, last.lon, report.claimedLat, report.claimedLon);
-      kinematicSpeed = deltaMeters / dtSec;
+      const hasLastFix = Math.abs(last.lat) > 0.0001 || Math.abs(last.lon) > 0.0001;
+      if (hasLastFix) {
+        const dtSec = Math.max(0.5, (now - last.timestamp) / 1000.0);
+        const deltaMeters = this.getHaversineDistance(last.lat, last.lon, report.claimedLat, report.claimedLon);
+        kinematicSpeed = deltaMeters / dtSec;
 
-      if (kinematicSpeed > TheoryOfMindEpistemicEngine.MAX_CREDIBLE_GROUND_SPEED_MPS) {
-        anomalies.push(`Teletransportación cinemática anómala: ${kinematicSpeed.toFixed(1)} m/s (~${(kinematicSpeed * 3.6).toFixed(0)} km/h)`);
-        penalty += 0.55;
+        if (kinematicSpeed > TheoryOfMindEpistemicEngine.MAX_CREDIBLE_GROUND_SPEED_MPS) {
+          anomalies.push(`Teletransportación cinemática anómala: ${kinematicSpeed.toFixed(1)} m/s (~${(kinematicSpeed * 3.6).toFixed(0)} km/h)`);
+          penalty += 0.55;
+        }
       }
     }
 
     // Guardar en historial
-    history.push({ lat: report.claimedLat, lon: report.claimedLon, timestamp: now, rssi: report.measuredRssi });
-    if (history.length > 20) history.shift();
-    this.peerHistory.set(report.peerId, history);
+    if (hasClaimedFix) {
+      history.push({ lat: report.claimedLat, lon: report.claimedLon, timestamp: now, rssi: report.measuredRssi });
+      if (history.length > 20) history.shift();
+      this.peerHistory.set(report.peerId, history);
+    }
 
     // 5. Evaluación de Emboscada / Decepción
     let trustScore = Math.max(0.05, Math.min(1.0, 1.0 - penalty));
@@ -149,6 +186,7 @@ export class TheoryOfMindEpistemicEngine {
     };
 
     this.peerAssessments.set(report.peerId, assessment);
+    this.persistToStorage();
     this.notifyListeners();
     return assessment;
   }

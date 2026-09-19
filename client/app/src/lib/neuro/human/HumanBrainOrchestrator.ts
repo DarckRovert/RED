@@ -107,7 +107,50 @@ export class HumanBrainOrchestrator {
     const unsubOfc = this.orbitofrontal.subscribe(() => this.notifyListeners());
     const unsubTom = this.theoryOfMind.subscribe(() => this.notifyListeners());
 
+    // 4. Ingesta reactiva de tráfico de malla DTN hacia los motores corticales
+    let unsubMesh: (() => void) | null = null;
+    try {
+      const { meshRouter } = require('../../mesh/meshRouter');
+      unsubMesh = meshRouter.onLocalDelivery((packet: any) => {
+        try {
+          if (!packet || !packet.payload) return;
+          let text: string;
+          if (typeof packet.payload === 'string') {
+            text = packet.payload;
+          } else if (packet.payload instanceof Uint8Array || ArrayBuffer.isView(packet.payload)) {
+            text = new TextDecoder().decode(packet.payload);
+          } else {
+            return;
+          }
+          const trimmed = text.trim();
+          if (trimmed.startsWith('{')) {
+            const parsed = JSON.parse(trimmed);
+            if (parsed.type === 'TCCC_MIST_REPORT') {
+              this.insular.ingestRemoteMistReport(parsed);
+            } else if (parsed.type === 'OFC_BARTER_PROPOSAL') {
+              this.orbitofrontal.ingestRemoteTradeProposal(parsed);
+            } else if (parsed.type === 'OFC_BARTER_ACCEPT') {
+              this.orbitofrontal.ingestRemoteTradeAccept(parsed);
+            }
+          }
+        } catch {}
+      });
+    } catch {}
+
+    // 5. Acoplar geoposición sensorial a la memoria de trabajo DLPFC
+    let unsubLocation: (() => void) | null = null;
+    try {
+      const { TacticalLocationEngine } = require('../../sensors/TacticalLocationEngine');
+      unsubLocation = TacticalLocationEngine.watchLocation((loc: any) => {
+        if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
+          this.workingMemory.evaluateSensoryTriggers({ lat: loc.lat, lon: loc.lon });
+        }
+      });
+    } catch {}
+
     this.unsubs.push(unsubInsular, unsubMemory, unsubOfc, unsubTom);
+    if (unsubMesh) this.unsubs.push(unsubMesh);
+    if (unsubLocation) this.unsubs.push(unsubLocation);
   }
 
   public stop(): void {
@@ -116,9 +159,14 @@ export class HumanBrainOrchestrator {
 
     this.entorhinal.stop();
     this.predictive.stop();
+    try {
+      ConnectomeEcosystemOrchestrator.getInstance().stop();
+    } catch {}
 
     for (const unsub of this.unsubs) {
-      unsub();
+      try {
+        unsub();
+      } catch {}
     }
     this.unsubs = [];
   }

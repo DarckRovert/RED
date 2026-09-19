@@ -66,6 +66,7 @@ export interface HippocampalTelemetry {
 
 export class HippocampalEpisodicEngine {
   private static instance: HippocampalEpisodicEngine | null = null;
+  private static readonly STORAGE_KEY = 'red_hippocampal_engrams_v1';
 
   public static readonly FEATURE_VECTOR_BYTES = 128; // 1024 bits
   public static readonly MAX_ENGRAMS = 2000;
@@ -76,7 +77,43 @@ export class HippocampalEpisodicEngine {
   private lastReconstructedAt = 0;
   private listeners: Set<(telemetry: HippocampalTelemetry) => void> = new Set();
 
-  private constructor() {}
+  private constructor() {
+    this.hydrateFromStorage();
+  }
+
+  private hydrateFromStorage(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(HippocampalEpisodicEngine.STORAGE_KEY);
+      if (raw) {
+        const list: any[] = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          list.forEach(item => {
+            const vector = new Uint8Array(item.binaryFeatureVector || HippocampalEpisodicEngine.FEATURE_VECTOR_BYTES);
+            this.engrams.set(item.id, {
+              ...item,
+              binaryFeatureVector: vector
+            });
+          });
+        }
+      }
+    } catch {}
+  }
+
+  private persistToStorage(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const serialized = Array.from(this.engrams.values()).slice(-200).map(e => ({
+        ...e,
+        binaryFeatureVector: Array.from(e.binaryFeatureVector)
+      }));
+      localStorage.setItem(HippocampalEpisodicEngine.STORAGE_KEY, JSON.stringify(serialized));
+    } catch {}
+  }
+
+  public getStoredEngrams(): EpisodicEngram[] {
+    return Array.from(this.engrams.values()).sort((a, b) => b.timestamp - a.timestamp);
+  }
 
   public static getInstance(): HippocampalEpisodicEngine {
     if (!HippocampalEpisodicEngine.instance) {
@@ -148,6 +185,7 @@ export class HippocampalEpisodicEngine {
     }
 
     this.engrams.set(packet.id, engram);
+    this.persistToStorage();
     this.notifyListeners();
     return engram;
   }
@@ -258,6 +296,14 @@ export class HippocampalEpisodicEngine {
     for (const cb of this.listeners) {
       try { cb(telem); } catch {}
     }
+  }
+
+  public clearAllEngrams(): void {
+    this.engrams.clear();
+    this.patternCompletionsCount = 0;
+    this.failedCompletionsCount = 0;
+    this.persistToStorage();
+    this.notifyListeners();
   }
 
   public destroy(): void {

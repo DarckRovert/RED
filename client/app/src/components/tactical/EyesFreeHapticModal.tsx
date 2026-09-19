@@ -74,7 +74,14 @@ export const EyesFreeHapticModal: React.FC<EyesFreeHapticModalProps> = ({ isOpen
     );
   }
 
-  const errorDeg = motor.steeringErrorDeg;
+  const errorDeg = targetMode === 'HOME'
+    ? (() => {
+        let diff = fb.homeVector.bearingDeg - compass.headingDeg;
+        while (diff > 180) diff -= 360;
+        while (diff < -180) diff += 360;
+        return diff;
+      })()
+    : motor.steeringErrorDeg;
   const isAligned = Math.abs(errorDeg) <= 15;
   const activeDistance = targetMode === 'HOME' ? fb.homeVector.distanceMeters : (fb.goalVector.hasTarget ? fb.goalVector.distanceMeters : 0);
   const activeBearing = targetMode === 'HOME' ? fb.homeVector.bearingDeg : (fb.goalVector.hasTarget ? fb.goalVector.bearingDeg : 0);
@@ -123,7 +130,11 @@ export const EyesFreeHapticModal: React.FC<EyesFreeHapticModalProps> = ({ isOpen
         {/* Selector de Destino */}
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
-            onClick={() => { TacticalAudioEngine.playTap(); setTargetMode('HOME'); }}
+            onClick={() => { 
+              TacticalAudioEngine.playTap(); 
+              setTargetMode('HOME'); 
+              tacticalMotorActuator.setGuidanceTarget('HOME'); 
+            }}
             style={{
               flex: 1, padding: '10px', borderRadius: '10px',
               background: targetMode === 'HOME' ? 'rgba(0, 229, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
@@ -146,6 +157,7 @@ export const EyesFreeHapticModal: React.FC<EyesFreeHapticModalProps> = ({ isOpen
                 toast.info("Fija un objetivo en el mapa táctico primero");
               } else {
                 setTargetMode('GOAL');
+                tacticalMotorActuator.setGuidanceTarget('GOAL');
               }
             }}
             style={{
