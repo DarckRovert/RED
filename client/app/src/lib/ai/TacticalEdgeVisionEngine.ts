@@ -498,12 +498,16 @@ export class TacticalEdgeVisionEngine {
             }
             targetCtx.putImageData(frame, 0, 0);
 
-            // Viñeteado óptico circular sutil de lente nocturna
-            const grad = targetCtx.createRadialGradient(width / 2, height / 2, width * 0.35, width / 2, height / 2, width * 0.65);
-            grad.addColorStop(0, 'rgba(0, 30, 10, 0)');
-            grad.addColorStop(1, 'rgba(0, 15, 5, 0.65)');
-            targetCtx.fillStyle = grad;
-            targetCtx.fillRect(0, 0, width, height);
+            // Viñeteado óptico circular sutil de lente nocturna con validación dimensional
+            if (width > 0 && height > 0 && Number.isFinite(width) && Number.isFinite(height)) {
+                try {
+                    const grad = targetCtx.createRadialGradient(width / 2, height / 2, width * 0.35, width / 2, height / 2, width * 0.65);
+                    grad.addColorStop(0, 'rgba(0, 30, 10, 0)');
+                    grad.addColorStop(1, 'rgba(0, 15, 5, 0.65)');
+                    targetCtx.fillStyle = grad;
+                    targetCtx.fillRect(0, 0, width, height);
+                } catch {}
+            }
 
         } else if (filter === 'FLIR_THERMAL') {
             // FLIR PSEUDOTÉRMICO IRONBOW LWIR:

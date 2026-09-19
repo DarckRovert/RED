@@ -343,95 +343,142 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
 
       // Si autoRotate está activo, rotar azimutalmente usando ref (0 re-renders de React)
       if (autoRotateRef.current) {
-        rotYRef.current = (rotYRef.current + 0.006) % (Math.PI * 2);
+        const currentRotY = Number.isFinite(rotYRef.current) ? rotYRef.current : 0;
+        rotYRef.current = (currentRotY + 0.006) % (Math.PI * 2);
       }
 
       pulseT = (pulseT + 0.04) % (Math.PI * 2);
 
-      // Proyección 3D isométrica a 2D escalada por DPR
-      const project = (p: Point3D): { x: number; y: number; zDepth: number } => {
-        // Rotación Y
-        const cosY = Math.cos(rotYRef.current);
-        const sinY = Math.sin(rotYRef.current);
-        const x1 = p.x * cosY - p.z * sinY;
-        const z1 = p.x * sinY + p.z * cosY;
+      try {
+        // Proyección 3D con Near-Clipping Plane y validación numérica estricta
+        const project = (p: Point3D): { x: number; y: number; zDepth: number; visible: boolean } => {
+          const rotY = Number.isFinite(rotYRef.current) ? rotYRef.current : 0;
+          const rotX = Number.isFinite(rotXRef.current) ? rotXRef.current : 0.3;
+          const zoom = Number.isFinite(zoomRef.current) && zoomRef.current > 0 ? zoomRef.current : 1.0;
 
-        // Rotación X
-        const cosX = Math.cos(rotXRef.current);
-        const sinX = Math.sin(rotXRef.current);
-        const y2 = p.y * cosX - z1 * sinX;
-        const z2 = p.y * sinX + z1 * cosX;
+          // Rotación Y
+          const cosY = Math.cos(rotY);
+          const sinY = Math.sin(rotY);
+          const px = Number.isFinite(p.x) ? p.x : 0;
+          const py = Number.isFinite(p.y) ? p.y : 0;
+          const pz = Number.isFinite(p.z) ? p.z : 0;
 
-        // Perspectiva
-        const fov = 380;
-        const scale = (fov / (fov + z2)) * zoomRef.current * dpr;
+          const x1 = px * cosY - pz * sinY;
+          const z1 = px * sinY + pz * cosY;
 
-        return {
-          x: cx + x1 * scale,
-          y: cy - y2 * scale, // Invertir Y para coordenadas de pantalla
-          zDepth: z2,
+          // Rotación X
+          const cosX = Math.cos(rotX);
+          const sinX = Math.sin(rotX);
+          const y2 = py * cosX - z1 * sinX;
+          const z2 = py * sinX + z1 * cosX;
+
+          // Perspectiva con Near-Clipping Plane (evitar división por 0 o valores detrás de cámara)
+          const fov = 380;
+          const denom = fov + z2;
+          if (denom <= 20) {
+            return { x: cx, y: cy, zDepth: z2, visible: false };
+          }
+
+          const scale = (fov / denom) * zoom * dpr;
+          if (!Number.isFinite(scale) || scale <= 0) {
+            return { x: cx, y: cy, zDepth: z2, visible: false };
+          }
+
+          const projX = cx + x1 * scale;
+          const projY = cy - y2 * scale;
+
+          if (!Number.isFinite(projX) || !Number.isFinite(projY)) {
+            return { x: cx, y: cy, zDepth: z2, visible: false };
+          }
+
+          return {
+            x: projX,
+            y: projY,
+            zDepth: z2,
+            visible: true,
+          };
         };
-      };
 
-      // 1. Dibujar Aristas Sinápticas (Axones)
-      edges.forEach((edge) => {
-        if (filterSystem !== "ALL" && edge.system !== filterSystem) return;
+        // 1. Dibujar Aristas Sinápticas (Axones)
+        edges.forEach((edge) => {
+          if (filterSystem !== "ALL" && edge.system !== filterSystem) return;
 
-        const srcNode = nodes.find((n) => n.id === edge.from);
-        const dstNode = nodes.find((n) => n.id === edge.to);
-        if (!srcNode || !dstNode) return;
+          const srcNode = nodes.find((n) => n.id === edge.from);
+          const dstNode = nodes.find((n) => n.id === edge.to);
+          if (!srcNode || !dstNode) return;
 
-        const p1 = project(srcNode.pos);
-        const p2 = project(dstNode.pos);
+          const p1 = project(srcNode.pos);
+          const p2 = project(dstNode.pos);
 
-        let strokeColor = "rgba(0, 229, 255, 0.2)";
-        if (edge.system === "MB") strokeColor = "rgba(179, 136, 255, 0.25)";
-        if (edge.system === "GFS") strokeColor = gfsTelemetry.emconLockActive ? "rgba(255, 51, 85, 0.6)" : "rgba(255, 145, 0, 0.35)";
+          if (!p1.visible || !p2.visible) return;
 
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = edge.weight * 1.5 * dpr;
-        ctx.stroke();
+          let strokeColor = "rgba(0, 229, 255, 0.2)";
+          if (edge.system === "MB") strokeColor = "rgba(179, 136, 255, 0.25)";
+          if (edge.system === "GFS") strokeColor = gfsTelemetry.emconLockActive ? "rgba(255, 51, 85, 0.6)" : "rgba(255, 145, 0, 0.35)";
 
-        // Pulso de potencial de acción viajando
-        const pulseRatio = (Math.sin(pulseT + (p1.x % 5)) + 1) / 2;
-        const px = p1.x + (p2.x - p1.x) * pulseRatio;
-        const py = p1.y + (p2.y - p1.y) * pulseRatio;
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = Math.max(0.5, (edge.weight || 1) * 1.5 * dpr);
+          ctx.stroke();
 
-        ctx.beginPath();
-        ctx.arc(px, py, 2 * dpr, 0, Math.PI * 2);
-        ctx.fillStyle = edge.system === "GFS" ? "#FF3355" : "#00E5FF";
-        ctx.fill();
-      });
+          // Pulso de potencial de acción viajando
+          const pulseRatio = Math.max(0, Math.min(1, (Math.sin(pulseT + (p1.x % 5)) + 1) / 2));
+          const px = p1.x + (p2.x - p1.x) * pulseRatio;
+          const py = p1.y + (p2.y - p1.y) * pulseRatio;
 
-      // 2. Dibujar Nodos Neuronales (Somas y Glomérulos)
-      // Ordenar por profundidad Z para renderizado correcto
-      const sortedNodes = [...nodes]
-        .filter((n) => filterSystem === "ALL" || n.system === filterSystem)
-        .map((n) => ({ node: n, proj: project(n.pos) }))
-        .sort((a, b) => b.proj.zDepth - a.proj.zDepth);
+          if (Number.isFinite(px) && Number.isFinite(py)) {
+            ctx.beginPath();
+            ctx.arc(px, py, Math.max(1, 2 * dpr), 0, Math.PI * 2);
+            ctx.fillStyle = edge.system === "GFS" ? "#FF3355" : "#00E5FF";
+            ctx.fill();
+          }
+        });
 
-      sortedNodes.forEach(({ node, proj }) => {
-        const glowRadius = node.size * (1 + node.activity * 0.8) * dpr;
+        // 2. Dibujar Nodos Neuronales (Somas y Glomérulos)
+        const sortedNodes = [...nodes]
+          .filter((n) => filterSystem === "ALL" || n.system === filterSystem)
+          .map((n) => ({ node: n, proj: project(n.pos) }))
+          .filter((item) => item.proj.visible)
+          .sort((a, b) => b.proj.zDepth - a.proj.zDepth);
 
-        // Resplandor externo
-        const grad = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, glowRadius * 2);
-        grad.addColorStop(0, node.color);
-        grad.addColorStop(1, "rgba(0,0,0,0)");
+        sortedNodes.forEach(({ node, proj }) => {
+          if (!Number.isFinite(proj.x) || !Number.isFinite(proj.y)) return;
 
-        ctx.beginPath();
-        ctx.arc(proj.x, proj.y, glowRadius * 2, 0, Math.PI * 2);
-        ctx.fillStyle = grad;
-        ctx.fill();
+          const rawActivity = Number.isFinite(node.activity) ? Math.max(0, Math.min(1, node.activity)) : 0.3;
+          const rawSize = Number.isFinite(node.size) && node.size > 0 ? node.size : 3;
+          const glowRadius = Math.max(1, rawSize * (1 + rawActivity * 0.8) * dpr);
 
-        // Núcleo del soma
-        ctx.beginPath();
-        ctx.arc(proj.x, proj.y, node.size * dpr, 0, Math.PI * 2);
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fill();
-      });
+          if (!Number.isFinite(glowRadius) || glowRadius <= 0) return;
+
+          // Resplandor externo con salvaguarda contra valores no-finitos
+          try {
+            const grad = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, glowRadius * 2);
+            grad.addColorStop(0, node.color || "#00E5FF");
+            grad.addColorStop(1, "rgba(0,0,0,0)");
+
+            ctx.beginPath();
+            ctx.arc(proj.x, proj.y, glowRadius * 2, 0, Math.PI * 2);
+            ctx.fillStyle = grad;
+            ctx.fill();
+          } catch (e) {
+            // Fallback en caso de incompatibilidad con contexto gráfico
+            ctx.beginPath();
+            ctx.arc(proj.x, proj.y, glowRadius, 0, Math.PI * 2);
+            ctx.fillStyle = node.color || "#00E5FF";
+            ctx.fill();
+          }
+
+          // Núcleo del soma
+          ctx.beginPath();
+          ctx.arc(proj.x, proj.y, Math.max(1, rawSize * dpr), 0, Math.PI * 2);
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fill();
+        });
+      } catch (renderErr) {
+        console.warn('[ConnectomeHUD] Error durante renderizado de frame:', renderErr);
+      }
 
       animationId = requestAnimationFrame(render);
     };
@@ -443,11 +490,13 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     };
   }, [nodes, edges, filterSystem, gfsTelemetry]);
 
-  // Controlador de arrastre táctil para rotar modelo en 3D
+  // Controlador de arrastre táctil y pinch-to-zoom para navegación 3D
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
+  const lastPinchDist = useRef<number | null>(null);
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (!Number.isFinite(e.clientX) || !Number.isFinite(e.clientY)) return;
     isDragging.current = true;
     lastMousePos.current = { x: e.clientX, y: e.clientY };
     autoRotateRef.current = false;
@@ -456,41 +505,92 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging.current) return;
-    const dx = e.clientX - lastMousePos.current.x;
-    const dy = e.clientY - lastMousePos.current.y;
+    if (!Number.isFinite(e.clientX) || !Number.isFinite(e.clientY)) return;
+
+    const lastX = Number.isFinite(lastMousePos.current.x) ? lastMousePos.current.x : e.clientX;
+    const lastY = Number.isFinite(lastMousePos.current.y) ? lastMousePos.current.y : e.clientY;
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
     lastMousePos.current = { x: e.clientX, y: e.clientY };
 
-    rotYRef.current = (rotYRef.current + dx * 0.008) % (Math.PI * 2);
-    rotXRef.current = Math.max(-1.2, Math.min(1.2, rotXRef.current + dy * 0.008));
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+
+    const currentRotY = Number.isFinite(rotYRef.current) ? rotYRef.current : 0;
+    const currentRotX = Number.isFinite(rotXRef.current) ? rotXRef.current : 0.3;
+
+    rotYRef.current = (currentRotY + dx * 0.008) % (Math.PI * 2);
+    rotXRef.current = Math.max(-1.2, Math.min(1.2, currentRotX + dy * 0.008));
   };
 
   const handleMouseUp = () => {
     isDragging.current = false;
   };
 
-  // Control táctil para dispositivos móviles / pantallas táctiles
+  // Control táctil unificado (Rotación 1 dedo + Pinch-to-Zoom 2 dedos)
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (!e.touches) return;
+    autoRotateRef.current = false;
+    setAutoRotate(false);
+
     if (e.touches.length === 1) {
-      isDragging.current = true;
-      lastMousePos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      autoRotateRef.current = false;
-      setAutoRotate(false);
+      const touch = e.touches[0];
+      if (Number.isFinite(touch.clientX) && Number.isFinite(touch.clientY)) {
+        isDragging.current = true;
+        lastMousePos.current = { x: touch.clientX, y: touch.clientY };
+        lastPinchDist.current = null;
+      }
+    } else if (e.touches.length === 2) {
+      isDragging.current = false;
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      if (Number.isFinite(t1.clientX) && Number.isFinite(t2.clientX)) {
+        lastPinchDist.current = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      }
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (!e.touches) return;
+
+    // Gestor de Pinch-to-Zoom con 2 dedos
+    if (e.touches.length === 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      if (Number.isFinite(t1.clientX) && Number.isFinite(t2.clientX)) {
+        const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        if (lastPinchDist.current !== null && lastPinchDist.current > 0 && currentDist > 0) {
+          const pinchFactor = currentDist / lastPinchDist.current;
+          const currentZoom = Number.isFinite(zoomRef.current) ? zoomRef.current : 1.0;
+          zoomRef.current = Math.max(0.4, Math.min(2.5, currentZoom * pinchFactor));
+        }
+        lastPinchDist.current = currentDist;
+      }
+      return;
+    }
+
+    // Gestor de Rotación con 1 dedo
     if (!isDragging.current || e.touches.length === 0) return;
     const touch = e.touches[0];
-    const dx = touch.clientX - lastMousePos.current.x;
-    const dy = touch.clientY - lastMousePos.current.y;
+    if (!touch || !Number.isFinite(touch.clientX) || !Number.isFinite(touch.clientY)) return;
+
+    const lastX = Number.isFinite(lastMousePos.current.x) ? lastMousePos.current.x : touch.clientX;
+    const lastY = Number.isFinite(lastMousePos.current.y) ? lastMousePos.current.y : touch.clientY;
+    const dx = touch.clientX - lastX;
+    const dy = touch.clientY - lastY;
     lastMousePos.current = { x: touch.clientX, y: touch.clientY };
 
-    rotYRef.current = (rotYRef.current + dx * 0.008) % (Math.PI * 2);
-    rotXRef.current = Math.max(-1.2, Math.min(1.2, rotXRef.current + dy * 0.008));
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+
+    const currentRotY = Number.isFinite(rotYRef.current) ? rotYRef.current : 0;
+    const currentRotX = Number.isFinite(rotXRef.current) ? rotXRef.current : 0.3;
+
+    rotYRef.current = (currentRotY + dx * 0.008) % (Math.PI * 2);
+    rotXRef.current = Math.max(-1.2, Math.min(1.2, currentRotX + dy * 0.008));
   };
 
   const handleTouchEnd = () => {
     isDragging.current = false;
+    lastPinchDist.current = null;
   };
 
   // Estimulación Sináptica Manual
