@@ -42,7 +42,7 @@ if (!newVersion || !/^\d+\.\d+\.\d+$/.test(newVersion)) {
 }
 
 const [newMajor, newMinor, newPatch] = newVersion.split('.').map(Number);
-const versionCode = newMajor * 1000 + newMinor * 10 + newPatch;
+const versionCode = newMajor * 1000 + newMinor * 100 + newPatch;
 const buildDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
 // ── Leer versión antigua desde SSOT ──────────────────────────────────────────
