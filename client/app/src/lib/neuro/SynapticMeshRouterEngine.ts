@@ -20,6 +20,24 @@
  *    para evitar ceguera topológica y descubrir nuevos nodos sin saturar el canal RF.
  */
 
+export interface RfSectorHistogram {
+  sectors: number[];                 // 16 sectores circulares con media móvil LQS [0, 100]
+  samples: number[];                 // Conteo de paquetes recibidos por sector
+  estimatedBearingDeg: number | null;// Rumbo estimado AoA del par respecto al Norte [0, 360)
+  confidence: number;                // Magnitud de concentración direccional de Rayleigh [0.0, 1.0]
+  totalSamples: number;
+}
+
+export interface RfPeerBearing {
+  peerId: string;
+  bearingDeg: number;
+  confidence: number;
+  samplesCount: number;
+  sectors: number[];
+  lqs: number;
+  lastSeenTs: number;
+}
+
 export interface SynapticLink {
   peerId: string;
   weight: number;                 // Conductancia sináptica normalizada: [0.01, 1.0]
@@ -31,6 +49,7 @@ export interface SynapticLink {
   lqs: number;                    // Link Quality Score [0, 100]
   isRichClubHub: boolean;
   isPruned: boolean;
+  rfHistogram?: RfSectorHistogram;
 }
 
 export interface SynapticMeshTelemetry {
@@ -129,16 +148,17 @@ export class SynapticMeshRouterEngine {
 
   /**
    * Registra o actualiza la existencia de un par en la matriz de sinapsis.
+   * Correlaciona la calidad de señal (LQS) con el rumbo azimutal actual para radiogoniometría.
    */
-  public touchPeer(peerId: string, initialLqs = 70): SynapticLink {
+  public touchPeer(peerId: string, initialLqs = 70, currentHeading?: number): SynapticLink {
     if (!peerId) {
       throw new Error('[SynapticMeshRouter] Invalid peerId');
     }
     const cleanId = peerId.trim().toLowerCase();
     let link = this.synapses.get(cleanId);
+    const safeLqs = Math.max(0, Math.min(100, isFinite(initialLqs) ? initialLqs : 70));
 
     if (!link) {
-      const safeLqs = Math.max(0, Math.min(100, isFinite(initialLqs) ? initialLqs : 70));
       const initialWeight = Math.min(
         SynapticMeshRouterEngine.MAX_WEIGHT,
         Math.max(SynapticMeshRouterEngine.MIN_WEIGHT, SynapticMeshRouterEngine.INITIAL_WEIGHT * (safeLqs / 100))
@@ -155,6 +175,13 @@ export class SynapticMeshRouterEngine {
         lqs: safeLqs,
         isRichClubHub: false,
         isPruned: initialWeight < SynapticMeshRouterEngine.PRUNE_THRESHOLD,
+        rfHistogram: {
+          sectors: new Array(16).fill(0),
+          samples: new Array(16).fill(0),
+          estimatedBearingDeg: null,
+          confidence: 0,
+          totalSamples: 0,
+        },
       };
 
       this.synapses.set(cleanId, link);
@@ -164,6 +191,15 @@ export class SynapticMeshRouterEngine {
       if (isFinite(initialLqs)) {
         link.lqs = Math.max(0, Math.min(100, initialLqs));
       }
+    }
+
+    // Actualización de Radiogoniometría Bio-Inercial
+    const heading = typeof currentHeading === 'number' && isFinite(currentHeading)
+      ? currentHeading
+      : this.getCurrentHeadingSafe();
+
+    if (heading !== null) {
+      this.updateRfHistogram(link, heading, safeLqs);
     }
 
     return link;
@@ -176,11 +212,12 @@ export class SynapticMeshRouterEngine {
     peerId: string,
     success: boolean,
     rttMs = 100,
-    measuredLqs?: number
+    measuredLqs?: number,
+    currentHeading?: number
   ): void {
     if (!peerId) return;
     const cleanId = peerId.trim().toLowerCase();
-    const link = this.touchPeer(cleanId, measuredLqs);
+    const link = this.touchPeer(cleanId, measuredLqs, currentHeading);
 
     const now = Date.now();
     const dt = Math.max(0, now - link.lastInteractionTs);
@@ -718,6 +755,171 @@ export class SynapticMeshRouterEngine {
   public isOptogeneticallySilenced(peerId: string): boolean {
     if (!peerId) return false;
     return this.optogeneticallySilencedPeers.has(peerId.trim().toLowerCase());
+  }
+
+  /**
+   * Actualiza el histograma circular del enlace e invoca decodificación de vector de población.
+   */
+  private updateRfHistogram(link: SynapticLink, headingDeg: number, lqs: number): void {
+    if (!link.rfHistogram) {
+      link.rfHistogram = {
+        sectors: new Array(16).fill(0),
+        samples: new Array(16).fill(0),
+        estimatedBearingDeg: null,
+        confidence: 0,
+        totalSamples: 0,
+      };
+    }
+
+    const normHeading = ((headingDeg % 360) + 360) % 360;
+    const sectorIdx = Math.floor(normHeading / 22.5) % 16;
+    const hist = link.rfHistogram;
+
+    if (hist.samples[sectorIdx] === 0) {
+      hist.sectors[sectorIdx] = lqs;
+    } else {
+      hist.sectors[sectorIdx] = Number((hist.sectors[sectorIdx] * 0.80 + lqs * 0.20).toFixed(2));
+    }
+    hist.samples[sectorIdx]++;
+    hist.totalSamples++;
+
+    const decoded = this.decodePopulationVector(hist.sectors, hist.samples);
+    hist.estimatedBearingDeg = decoded.bearingDeg;
+    hist.confidence = decoded.confidence;
+
+    // Si la confianza es notable y hay al menos 3 muestras, propagar al RingAttractor
+    if (decoded.bearingDeg !== null && decoded.confidence >= 0.20 && hist.totalSamples >= 3) {
+      try {
+        const { RingAttractorEngine } = require('./RingAttractorEngine');
+        RingAttractorEngine.getInstance().injectRfBearingCue(link.peerId, decoded.bearingDeg, decoded.confidence);
+      } catch {}
+    }
+  }
+
+  /**
+   * Decodificación geométrica de vector poblacional sobre los 16 sectores circulares.
+   * Utiliza la estadística direccional de Mardia & Jupp con sustracción de pedestal
+   * isotrópico (algoritmo Adcock/Watson-Watt) para decodificar Angle of Arrival (AoA).
+   */
+  public decodePopulationVector(
+    sectors: number[],
+    samples: number[]
+  ): { bearingDeg: number | null; confidence: number } {
+    let activeSectors = 0;
+    let minW = Infinity;
+    let maxW = -Infinity;
+
+    for (let k = 0; k < 16; k++) {
+      if (samples[k] > 0 && sectors[k] > 0) {
+        activeSectors++;
+        const w = sectors[k];
+        if (w < minW) minW = w;
+        if (w > maxW) maxW = w;
+      }
+    }
+
+    if (activeSectors < 2 || maxW <= 0 || !isFinite(minW)) {
+      return { bearingDeg: null, confidence: 0 };
+    }
+
+    // Si la señal es plana/isotrópica en todos los sectores, no existe anisotropía direccional
+    const dynamicRange = maxW - minW;
+    if (dynamicRange < 3.0) {
+      return { bearingDeg: null, confidence: 0 };
+    }
+
+    let sumX = 0;
+    let sumY = 0;
+    let sumDevWeights = 0;
+    const baseline = activeSectors >= 3 ? minW : 0;
+
+    for (let k = 0; k < 16; k++) {
+      if (samples[k] > 0 && sectors[k] > 0) {
+        const sectorCenterDeg = k * 22.5 + 11.25;
+        const rad = (sectorCenterDeg * Math.PI) / 180;
+        const wDev = sectors[k] - baseline;
+        sumX += wDev * Math.cos(rad);
+        sumY += wDev * Math.sin(rad);
+        sumDevWeights += wDev;
+      }
+    }
+
+    if (sumDevWeights <= 0.001) {
+      return { bearingDeg: null, confidence: 0 };
+    }
+
+    const angleRad = Math.atan2(sumY, sumX);
+    let deg = (angleRad * 180) / Math.PI;
+    while (deg < 0) deg += 360;
+    while (deg >= 360) deg -= 360;
+
+    // Magnitud de resultante de Rayleigh sobre la componente direccional aislada
+    const R = Math.sqrt(sumX * sumX + sumY * sumY) / sumDevWeights;
+    const coverageFactor = Math.min(1.0, Math.sqrt(activeSectors / 8));
+    const confidence = Number(Math.min(1.0, Math.max(0.0, R * coverageFactor)).toFixed(3));
+
+    return {
+      bearingDeg: Math.round(deg * 10) / 10,
+      confidence,
+    };
+  }
+
+  /**
+   * Obtiene de forma segura el rumbo actual desde RingAttractor sin acoplamiento circular.
+   */
+  private getCurrentHeadingSafe(): number | null {
+    try {
+      const { RingAttractorEngine } = require('./RingAttractorEngine');
+      return RingAttractorEngine.getInstance().getTelemetry().headingDeg;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Obtiene la estimación de marcación (bearing AoA) de radiofrecuencia de un par individual.
+   */
+  public getPeerRfBearing(peerId: string): RfPeerBearing | null {
+    if (!peerId) return null;
+    const link = this.synapses.get(peerId.trim().toLowerCase());
+    if (!link || !link.rfHistogram || link.rfHistogram.estimatedBearingDeg === null) {
+      return null;
+    }
+    return {
+      peerId: link.peerId,
+      bearingDeg: link.rfHistogram.estimatedBearingDeg,
+      confidence: link.rfHistogram.confidence,
+      samplesCount: link.rfHistogram.totalSamples,
+      sectors: [...link.rfHistogram.sectors],
+      lqs: link.lqs,
+      lastSeenTs: link.lastInteractionTs,
+    };
+  }
+
+  /**
+   * Retorna todas las marcaciones activas de la malla (pares con muestras en los últimos 15 min).
+   */
+  public getAllActiveBearings(): RfPeerBearing[] {
+    const list: RfPeerBearing[] = [];
+    const now = Date.now();
+    for (const link of this.synapses.values()) {
+      if (
+        now - link.lastInteractionTs <= 900_000 &&
+        link.rfHistogram &&
+        link.rfHistogram.estimatedBearingDeg !== null
+      ) {
+        list.push({
+          peerId: link.peerId,
+          bearingDeg: link.rfHistogram.estimatedBearingDeg,
+          confidence: link.rfHistogram.confidence,
+          samplesCount: link.rfHistogram.totalSamples,
+          sectors: [...link.rfHistogram.sectors],
+          lqs: link.lqs,
+          lastSeenTs: link.lastInteractionTs,
+        });
+      }
+    }
+    return list.sort((a, b) => b.confidence - a.confidence);
   }
 
   /**

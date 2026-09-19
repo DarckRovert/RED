@@ -14,6 +14,13 @@
  *   el atractor se aísla en memoria de trabajo inercial pura sosteniendo el rumbo con cero deriva abrupta.
  */
 
+export interface RfBearingCue {
+    peerId: string;
+    bearingDeg: number;
+    confidence: number;
+    timestamp: number;
+}
+
 export interface RingAttractorTelemetry {
     headingDeg: number;
     cardinal: string;
@@ -22,6 +29,7 @@ export interface RingAttractorTelemetry {
     isSensoryAnchored: boolean;
     angularVelocityDps: number;
     driftEstimateDpm: number;
+    rfBearings?: RfBearingCue[];
     timestamp: number;
 }
 
@@ -53,6 +61,9 @@ export class RingAttractorEngine {
     private listeners: Set<(t: RingAttractorTelemetry) => void> = new Set();
     private motionListener: ((e: DeviceMotionEvent) => void) | null = null;
     private orientationListener: ((e: DeviceOrientationEvent) => void) | null = null;
+
+    // Cues de Marcación de Radiofrecuencia (AoA Radiogoniometry de Synaptic Router)
+    private rfBearingCues: Map<string, RfBearingCue> = new Map();
 
     private constructor() {
         this.u = new Float64Array(this.numWedges);
@@ -288,8 +299,60 @@ export class RingAttractorEngine {
             isSensoryAnchored: this.isSensoryAnchored,
             angularVelocityDps: Math.round(this.angularVelocityDps * 10) / 10,
             driftEstimateDpm: this.isSensoryAnchored ? 0.0 : 0.45,
+            rfBearings: Array.from(this.rfBearingCues.values()),
             timestamp: Date.now()
         };
+    }
+
+    /**
+     * Inyecta una marcación de radiofrecuencia (Angle of Arrival) derivada del enrutador sináptico.
+     * Estimula suavemente las cuñas E-PG correspondientes a la dirección de la señal sin alterar drásticamente el rumbo.
+     */
+    public injectRfBearingCue(peerId: string, bearingDeg: number, confidence: number): void {
+        if (!peerId || !isFinite(bearingDeg) || !isFinite(confidence)) return;
+        const cleanId = peerId.trim().toLowerCase();
+        const normBearing = ((bearingDeg % 360) + 360) % 360;
+        const normConf = Math.max(0, Math.min(1.0, confidence));
+
+        const cue: RfBearingCue = {
+            peerId: cleanId,
+            bearingDeg: Math.round(normBearing * 10) / 10,
+            confidence: Math.round(normConf * 100) / 100,
+            timestamp: Date.now()
+        };
+
+        this.rfBearingCues.set(cleanId, cue);
+
+        // Limpiar cues con más de 10 minutos de antigüedad
+        const now = Date.now();
+        for (const [id, c] of this.rfBearingCues.entries()) {
+            if (now - c.timestamp > 600_000) {
+                this.rfBearingCues.delete(id);
+            }
+        }
+
+        // Estimulación suave sub-umbral en el anillo de cuñas E-PG (modulación sensorial multimodal)
+        // Solo si la confianza es notable (>= 0.35)
+        if (normConf >= 0.35) {
+            const cueRad = (normBearing * Math.PI) / 180 - Math.PI;
+            const cueGain = 0.06 * normConf; // Ganancia atenuada para no desplazar el rumbo inercial propio
+            for (let i = 0; i < this.numWedges; i++) {
+                let diff = this.thetaWedges[i] - cueRad;
+                while (diff > Math.PI) diff -= 2 * Math.PI;
+                while (diff < -Math.PI) diff += 2 * Math.PI;
+                const cueCurrent = Math.max(0, Math.cos(diff));
+                this.u[i] += cueGain * cueCurrent * 0.02;
+            }
+        }
+
+        this.notifyListeners();
+    }
+
+    /**
+     * Retorna la lista activa de marcaciones de RF inyectadas.
+     */
+    public getRfBearingCues(): RfBearingCue[] {
+        return Array.from(this.rfBearingCues.values());
     }
 
     public subscribe(cb: (t: RingAttractorTelemetry) => void): () => void {
@@ -334,6 +397,7 @@ export class RingAttractorEngine {
         if (this.instance) {
             this.instance.stop();
             this.instance.listeners.clear();
+            this.instance.rfBearingCues.clear();
             this.instance = null;
         }
     }

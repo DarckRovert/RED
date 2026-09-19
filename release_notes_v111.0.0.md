@@ -36,6 +36,7 @@ RED v111.0.0 introduce la integración profunda y exhaustiva de **5 marcos de tr
    - Asignación de valencia dopaminérgica (DAN PAM para recompensa/LTP; DAN PPL1 para aversión/SOS).
    - Potenciación a Largo Plazo (LTP Pinned): Inmortalización incondicional de paquetes SOS/CBRN/blockchain con 0% de pérdidas ante saturación de búfer DTN.
    - Depresión a Largo Plazo (LTD Eviction): Desalojo ordenado por valencia y antigüedad en `dtnStorage.ts` cuando la cola supera el 80% de capacidad.
+   - Engramas bio-inerciales de navegación y ruta (`recallRouteEngram`) para enrutamiento oportunista asistido por rumbo azimutal de último avistamiento.
    - Paridad anatómica con *The Fly's Table*: 682 neuronas de proyección (PN), 97 MBONs y 332 DANs.
 
 5. **Brújula Bio-Inercial de Atractor Continuo (`RingAttractorEngine.ts`):**
@@ -43,7 +44,12 @@ RED v111.0.0 introduce la integración profunda y exhaustiva de **5 marcos de tr
    - Neuronas P-EN de integración de velocidad angular desde giróscopo y halteres físicos.
    - Decodificación por vector poblacional circular ($\text{atan2}$ de momentos trigonométricos).
    - Aislamiento en memoria de trabajo inercial pura ante distorsiones ferromagnéticas o ataques de jamming/spoofing, eliminando la deriva angular abrupta.
-   - Integrado de forma nativa en `OffGridCompassModal.tsx` y `CelestialPdrModal.tsx`.
+   - Receptor sensorial multimodal de cues de radiofrecuencia (`injectRfBearingCue`) estimulando las cuñas E-PG con dirección de llegada RF.
+
+6. **Radiogoniometría Bio-Inercial AoA & Puente Neuro-Simbólico (`ConnectomeCortexBridge.ts`):**
+   - Decodificación de Angle of Arrival (AoA) mediante histograma circular de 16 sectores en `SynapticMeshRouterEngine` y formulación Adcock/Watson-Watt.
+   - Proyección de conos y lóbulos de radiogoniometría en vivo sobre la rosa náutica en `OffGridCompassModal.tsx` y el anillo CX en `MaleCnsConnectomeHUD.tsx`.
+   - Puente neuro-simbólico `ConnectomeCortexBridge` alimentando el contexto cognitivo del Copiloto IA (`AICopilotModal.tsx` y `localAiEngine.ts`).
 
 ---
 
@@ -52,14 +58,14 @@ RED v111.0.0 introduce la integración profunda y exhaustiva de **5 marcos de tr
 | Dispositivo | Serial / ID | Plataforma | Prueba | Resultado |
 |---|---|---|---|---|
 | Motorola Moto G22 | `ZT322B386P` | Android 12 (API 31) | Desinstalación limpia, instalación v111.0.0, carga JNI `red_mobile`, 0 crashes | ✅ 100% Operacional |
-| Tablet Lenovo TB305XU | `HA2CHKZ2` | Android 11 (API 30) | Desinstalación limpia, instalación v111.0.0, renderizado 3D a 60 FPS, orientación táctil | ✅ 100% Operacional |
+| Tablet Lenovo TB305XU | `HA2CHKZ2` | Android 15 (API 35) | Desinstalación limpia, instalación v111.0.0, renderizado 3D a 60 FPS, orientación táctil | ✅ 100% Operacional |
 | Web SPA Soberana | GitHub Pages / Localhost | Navegador / Next.js SSG | Compilación Turbopack limpia (4.3s), paridad SSOT en 12 archivos maestros | ✅ 100% Operacional |
 
 ---
 
 ## Criptografía & Certificación
 
-- **Hash SHA-256 APK Oficial:** `B237A16E3F4C34DC630E6A3B8637C62FBB04F21698EF22A5DB56A4053EB6D45A`
+- **Hash SHA-256 APK Oficial:** `68C1F1EEFEF1176545C0B82A6EA8C2C7F5B067B021F2A265B87C587E0E9316E7`
 - **Hash SHA-256 Desktop Node (`red-node.exe`):** `AF1207A0D10CCC9102EEC1AC31DB2E5CCE0B917AB02E1FD83D41572DD27E788D`
 - **Keystore de Firma:** RSA 4096-bit (`red-release.keystore`) con algoritmo de firma SHA256withRSA.
 - **Gobernanza SSOT:** 100% de paridad en los 22 archivos maestros de versión (`v111.0.0` / `111000`).

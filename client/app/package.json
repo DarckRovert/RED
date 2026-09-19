@@ -55,6 +55,7 @@
     "test:magnetic-compass": "node scripts/test-magnetic-compass-resilience.js",
     "test:ring-attractor": "node scripts/test-ring-attractor-resilience.js",
     "test:synaptic-router": "node scripts/test-synaptic-router-resilience.js",
+    "test:connectome-rf": "node scripts/test-connectome-rf-radiogoniometry.js",
     "test:giant-fiber": "node scripts/test-giant-fiber-reflex-resilience.js",
     "test:barometer": "node scripts/test-barometer-engine-resilience.js",
     "test:optical-morse": "node scripts/test-optical-morse-resilience.js",

@@ -59,6 +59,7 @@ export const AICopilotModal: React.FC = () => {
         { icon: "💧", label: t('copilot.preset_water') || "Purificar Agua", query: "¿Cómo potabilizar agua de río o estancada en situación de supervivencia extrema (filtrado, ebullición, cloro)?" },
         { icon: "📻", label: t('copilot.preset_morse') || "Morse SOS & Frecuencias", query: "Códigos Morse de auxilio SOS (... --- ...) y frecuencias de radio de emergencia internacional VHF/UHF." },
         { icon: "📡", label: t('copilot.preset_dtn') || "Diagnóstico Mesh P2P", query: "¿Cómo funciona el enrutamiento tolerante a retrasos DTN y los saltos Onion en la red RED?" },
+        { icon: "🧠", label: "Conectoma Drosophila & AoA", query: "Diagnostica el estado del conectoma Drosophila, brújula E-PG, hubs de club rico y marcaciones de radiogoniometría AoA." },
         { icon: "⚡", label: t('copilot.preset_blackout') || "Apagón Eléctrico", query: "Protocolo de supervivencia inmediata ante un colapso de infraestructura eléctrica y comunicaciones." },
         { icon: "🛡️", label: t('copilot.preset_crypto') || "Cifrado Noise XK", query: "¿Cómo protegen las llaves efímeras Curve25519 y ChaCha20-Poly1305 los mensajes contra intercepción?" }
     ];
@@ -420,7 +421,13 @@ export const AICopilotModal: React.FC = () => {
             if (includeTacticalContext || ragSnippet) {
                 const nodeCount = status?.peer_count ?? contacts.length;
                 const activeCh = effectiveChannels.find(c => c.id === activeConversationId)?.name || "General";
-                const baseCtx = `Malla con ${nodeCount} nodos detectados. Canal activo: #${activeCh}. Modo: 100% Offline`;
+                let connectomeCtx = "";
+                try {
+                    const { ConnectomeCortexBridge } = await import("../lib/ai/ConnectomeCortexBridge");
+                    connectomeCtx = "\n" + ConnectomeCortexBridge.getInstance().getFormattedContextForCopilot();
+                } catch {}
+
+                const baseCtx = `Malla con ${nodeCount} nodos detectados. Canal activo: #${activeCh}. Modo: 100% Offline${connectomeCtx}`;
                 contextStr = ragSnippet ? `${baseCtx}\n${ragSnippet}` : baseCtx;
             }
 

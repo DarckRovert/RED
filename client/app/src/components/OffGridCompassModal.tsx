@@ -17,6 +17,7 @@ import { meshRouter } from "../lib/mesh/meshRouter";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { TacIcon } from "./ui/TacIcon";
 import { ringAttractor, RingAttractorTelemetry } from "../lib/neuro/RingAttractorEngine";
+import { synapticMeshRouter, RfPeerBearing } from "../lib/neuro/SynapticMeshRouterEngine";
 
 export function OffGridCompassModal() {
     const { navigate, identity } = useRedStore();
@@ -132,6 +133,15 @@ export function OffGridCompassModal() {
             ringAttractor.injectExternalCue(heading, true);
         }
     }, [magTelemetry.isAnomalyDetected, heading]);
+
+    // Radiogoniometría Bio-Inercial AoA (Direction-Finding de Nodos Vecinos)
+    const [rfBearings, setRfBearings] = useState<RfPeerBearing[]>(() => synapticMeshRouter.getAllActiveBearings());
+    useEffect(() => {
+        const unsub = synapticMeshRouter.subscribe(() => {
+            setRfBearings(synapticMeshRouter.getAllActiveBearings());
+        });
+        return () => unsub();
+    }, []);
 
     const [solarAzimuth, setSolarAzimuth] = useState<{ azimuthDegrees: number; elevationDegrees: number; isNight: boolean }>({ azimuthDegrees: 0, elevationDegrees: 0, isNight: false });
 
@@ -622,6 +632,51 @@ export function OffGridCompassModal() {
             }
         });
 
+        // Draw RF Direction-Finding (AoA Radiogoniometry) Lobes from Drosophila Synaptic Router
+        rfBearings.forEach(bearing => {
+            if (bearing.confidence < 0.15) return;
+            const bRad = (bearing.bearingDeg * Math.PI) / 180;
+            const spreadRad = Math.max(0.12, (1 - bearing.confidence) * 0.40); // Apertura angular del lóbulo
+            const lobeRadius = radius - 20;
+
+            // Cono angular de dispersión translúcido
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, lobeRadius, bRad - Math.PI / 2 - spreadRad, bRad - Math.PI / 2 + spreadRad);
+            ctx.closePath();
+            ctx.fillStyle = `rgba(224, 64, 251, ${Math.min(0.20, bearing.confidence * 0.22)})`;
+            ctx.fill();
+
+            // Rayo central de marcación
+            const rx = Math.sin(bRad) * lobeRadius;
+            const ry = -Math.cos(bRad) * lobeRadius;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(rx, ry);
+            ctx.strokeStyle = "#E040FB";
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Marcador periférico
+            ctx.beginPath();
+            ctx.arc(rx, ry, 3.5, 0, Math.PI * 2);
+            ctx.fillStyle = "#E040FB";
+            ctx.shadowColor = "#E040FB";
+            ctx.shadowBlur = 8;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Etiqueta táctica de marcación AoA
+            ctx.fillStyle = "#E040FB";
+            ctx.font = "bold 8px monospace";
+            ctx.textAlign = "center";
+            ctx.fillText(`RF ${Math.round(bearing.bearingDeg)}°`, rx, ry - 7);
+            ctx.restore();
+        });
+
         ctx.restore();
 
         // Draw Center Crosshair
@@ -633,7 +688,7 @@ export function OffGridCompassModal() {
         ctx.moveTo(cx - 12, cy);
         ctx.lineTo(cx + 12, cy);
         ctx.stroke();
-    }, [heading, solarAzimuth, waypoints, activeCoords, radarMaxDist, landmark1, landmark2, target]);
+    }, [heading, solarAzimuth, waypoints, activeCoords, radarMaxDist, landmark1, landmark2, target, rfBearings]);
 
     // Leaflet Interactive Tactical Vector Map Effect
     useEffect(() => {

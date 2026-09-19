@@ -1140,6 +1140,16 @@ class LocalAIEngineClass {
      * Responde de forma directa, educada, precisa y técnica sin cadenas estáticas.
      */
     private async synthesizeConversationalAnswer(query: string, lowerQ: string, tokens: string[]): Promise<string> {
+        // Consultas sobre Conectoma de Drosophila, Brújula E-PG y Radiogoniometría Bio-Inercial
+        if (/conectoma|drosophila|mosca|ring.*attractor|atractor|sin[aá]ptico|radiogoniometr|bearing|aoa|l[oó]bulo rf|mushroom.*body|cuerpo fungiforme|giant.*fiber/i.test(lowerQ)) {
+            try {
+                const { ConnectomeCortexBridge } = await import('./ConnectomeCortexBridge');
+                return ConnectomeCortexBridge.getInstance().evaluateConnectomeTacticalQuery(query);
+            } catch (err) {
+                console.warn('[LocalAIEngine] ConnectomeCortexBridge error:', err);
+            }
+        }
+
         // Consultas sobre Criptografía y Bóveda de Identidad
         if (/criptogr|b[óo]veda criptogr|salud criptogr|balance.*RED/i.test(lowerQ)) {
             let balance = 0;

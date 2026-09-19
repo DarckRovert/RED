@@ -36,6 +36,11 @@ export interface AssociativeMemoryRecord {
   priorityScore: number;         // Prioridad normalizada [1, 10]
   packetSize: number;
   category: 'SOS' | 'CBRN' | 'BLOCKCHAIN' | 'IDENTITY' | 'DIRECT_MSG' | 'TELEMETRY' | 'MEDIA';
+  // Enlace Conectómico Bio-Inercial y Engrama de Ruta
+  headingDegAtIngress?: number;  // Rumbo de brújula E-PG en el momento de memorización
+  carrierPeerId?: string;        // Par emisor o próximo salto conocido
+  carrierRfBearingDeg?: number;  // Marcación de llegada de RF estimada
+  isRichClubRoute?: boolean;     // Si la ruta involucra un nodo de Club Rico
 }
 
 export interface MushroomBodyTelemetry {
@@ -223,6 +228,7 @@ export class DtnMushroomBodyEngine {
   /**
    * Registro y Condicionamiento Asociativo de un Paquete:
    * Aplica LTP si la valencia supera el umbral de supervivencia.
+   * Asocia el contexto bio-inercial de la brújula E-PG y el engrama de ruta del par emisor.
    */
   public memorizePacket(
     nonce: string,
@@ -230,7 +236,13 @@ export class DtnMushroomBodyEngine {
     priority: number,
     flags: number,
     payloadBytesOrHex: Uint8Array | string,
-    packetSize: number
+    packetSize: number,
+    routeMeta?: {
+      headingDeg?: number;
+      carrierPeerId?: string;
+      carrierRfBearingDeg?: number;
+      isRichClubRoute?: boolean;
+    }
   ): AssociativeMemoryRecord {
     const seed = typeof payloadBytesOrHex === 'string' 
       ? `${nonce}:${recipient}:${payloadBytesOrHex.slice(0, 64)}`
@@ -248,6 +260,12 @@ export class DtnMushroomBodyEngine {
     const now = Date.now();
     const existing = this.memoryTable.get(nonce);
 
+    // Obtención segura de rumbo bio-inercial si no fue provisto
+    let ingressHeading = routeMeta?.headingDeg;
+    if (ingressHeading === undefined) {
+      ingressHeading = this.getCurrentHeadingSafe() ?? undefined;
+    }
+
     if (existing) {
       // Refuerzo sináptico
       existing.reinforcementCount++;
@@ -256,6 +274,11 @@ export class DtnMushroomBodyEngine {
       if (existing.valence >= this.config.ltpValenceThreshold) {
         existing.isLtpPinned = true;
       }
+      if (routeMeta?.carrierPeerId) existing.carrierPeerId = routeMeta.carrierPeerId;
+      if (routeMeta?.carrierRfBearingDeg !== undefined) existing.carrierRfBearingDeg = routeMeta.carrierRfBearingDeg;
+      if (routeMeta?.isRichClubRoute !== undefined) existing.isRichClubRoute = routeMeta.isRichClubRoute;
+      if (ingressHeading !== undefined) existing.headingDegAtIngress = ingressHeading;
+
       this.persistState();
       this.notifyListeners();
       return existing;
@@ -272,6 +295,10 @@ export class DtnMushroomBodyEngine {
       priorityScore: priority,
       packetSize,
       category,
+      headingDegAtIngress: ingressHeading,
+      carrierPeerId: routeMeta?.carrierPeerId,
+      carrierRfBearingDeg: routeMeta?.carrierRfBearingDeg,
+      isRichClubRoute: routeMeta?.isRichClubRoute,
     };
 
     this.memoryTable.set(nonce, record);
@@ -387,6 +414,61 @@ export class DtnMushroomBodyEngine {
   }
 
   /**
+   * Recupera el engrama bio-inercial de ruta más reciente asociado a un par de destino.
+   * Proporciona contexto de rumbo azimutal de último contacto y vector de llegada RF.
+   */
+  public recallRouteEngram(targetPeer: string): {
+    lastKnownHeadingDeg: number | null;
+    carrierPeerId: string | null;
+    carrierRfBearingDeg: number | null;
+    isRichClubRoute: boolean;
+    valence: number;
+    reinforcementCount: number;
+    lastSeenTs: number;
+  } | null {
+    if (!targetPeer) return null;
+    const cleanTarget = targetPeer.trim().toLowerCase();
+
+    let bestMatch: AssociativeMemoryRecord | null = null;
+    let bestTimestamp = 0;
+
+    for (const record of this.memoryTable.values()) {
+      const match =
+        (record.carrierPeerId && record.carrierPeerId.toLowerCase() === cleanTarget) ||
+        record.nonce.toLowerCase().includes(cleanTarget);
+
+      if (match && record.lastReinforcedAt > bestTimestamp) {
+        bestMatch = record;
+        bestTimestamp = record.lastReinforcedAt;
+      }
+    }
+
+    if (!bestMatch) return null;
+
+    return {
+      lastKnownHeadingDeg: bestMatch.headingDegAtIngress ?? null,
+      carrierPeerId: bestMatch.carrierPeerId ?? null,
+      carrierRfBearingDeg: bestMatch.carrierRfBearingDeg ?? null,
+      isRichClubRoute: !!bestMatch.isRichClubRoute,
+      valence: bestMatch.valence,
+      reinforcementCount: bestMatch.reinforcementCount,
+      lastSeenTs: bestMatch.lastReinforcedAt,
+    };
+  }
+
+  /**
+   * Obtiene el rumbo actual desde RingAttractor de forma segura.
+   */
+  private getCurrentHeadingSafe(): number | null {
+    try {
+      const { RingAttractorEngine } = require('./RingAttractorEngine');
+      return RingAttractorEngine.getInstance().getTelemetry().headingDeg;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Obtiene la telemetría del sistema para inspección táctica y HUD.
    */
   public getTelemetry(currentQueueLength = 0, maxCapacity = 5000): MushroomBodyTelemetry {
@@ -445,6 +527,10 @@ export class DtnMushroomBodyEngine {
           isLtpPinned: v.isLtpPinned,
           category: v.category,
           priorityScore: v.priorityScore,
+          headingDegAtIngress: v.headingDegAtIngress,
+          carrierPeerId: v.carrierPeerId,
+          carrierRfBearingDeg: v.carrierRfBearingDeg,
+          isRichClubRoute: v.isRichClubRoute,
         };
         count++;
       }
@@ -475,6 +561,10 @@ export class DtnMushroomBodyEngine {
               priorityScore: v.priorityScore ?? 4,
               packetSize: 128,
               category: v.category ?? 'DIRECT_MSG',
+              headingDegAtIngress: v.headingDegAtIngress,
+              carrierPeerId: v.carrierPeerId,
+              carrierRfBearingDeg: v.carrierRfBearingDeg,
+              isRichClubRoute: v.isRichClubRoute,
             });
           }
         }

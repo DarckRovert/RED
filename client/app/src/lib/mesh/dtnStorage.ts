@@ -505,14 +505,17 @@ class DtnStorage {
       }
     }
 
-    // Registrar en el Cuerpo Fungiforme (Mushroom Body Associative Memory)
+    // Registrar en el Cuerpo Fungiforme (Mushroom Body Associative Memory) con engrama de ruta
     dtnMushroomBody.memorizePacket(
       nonce,
       packet.recipient,
       calculatedPriority,
       packet.flags,
       packet.payload,
-      packet.payload.byteLength
+      packet.payload.byteLength,
+      {
+        carrierPeerId: packet.sender,
+      }
     );
 
     items.push(item);

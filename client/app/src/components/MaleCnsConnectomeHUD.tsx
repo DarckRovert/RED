@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { ringAttractor, RingAttractorTelemetry } from "../lib/neuro/RingAttractorEngine";
-import { synapticMeshRouter, SynapticMeshTelemetry } from "../lib/neuro/SynapticMeshRouterEngine";
+import { synapticMeshRouter, SynapticMeshTelemetry, RfPeerBearing } from "../lib/neuro/SynapticMeshRouterEngine";
 import { giantFiberReflex, GiantFiberTelemetry } from "../lib/neuro/GiantFiberReflexEngine";
 import { dtnMushroomBody, MushroomBodyTelemetry } from "../lib/neuro/DtnMushroomBodyEngine";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
@@ -45,6 +45,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const [synapticTelemetry, setSynapticTelemetry] = useState<SynapticMeshTelemetry>(() => synapticMeshRouter.getTelemetry());
   const [gfsTelemetry, setGfsTelemetry] = useState<GiantFiberTelemetry>(() => giantFiberReflex.getTelemetry());
   const [mbTelemetry, setMbTelemetry] = useState<MushroomBodyTelemetry>(() => dtnMushroomBody.getTelemetry());
+  const [rfBearings, setRfBearings] = useState<RfPeerBearing[]>(() => synapticMeshRouter.getAllActiveBearings());
 
   // Filtros de visualización y control de cámara 3D
   const [filterSystem, setFilterSystem] = useState<"ALL" | "CX" | "MB" | "GFS">("ALL");
@@ -84,7 +85,10 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   // Suscripción a los 4 subsistemas neurobiológicos
   useEffect(() => {
     const unsubCx = ringAttractor.subscribe(setCxTelemetry);
-    const unsubSyn = synapticMeshRouter.subscribe(setSynapticTelemetry);
+    const unsubSyn = synapticMeshRouter.subscribe((st) => {
+      setSynapticTelemetry(st);
+      setRfBearings(synapticMeshRouter.getAllActiveBearings());
+    });
     const unsubGfs = giantFiberReflex.subscribe(setGfsTelemetry);
     const unsubMb = dtnMushroomBody.subscribe(setMbTelemetry);
 
@@ -110,14 +114,28 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       const z = Math.sin(angle) * cxRadius;
       const y = 30; // Posición dorsal media
 
+      // Detección de marcación RF correlacionada con esta cuña E-PG
+      const wedgeAngleDeg = (i * 22.5 + 11.25);
+      const matchedBearing = rfBearings.find(b => {
+        const diff = Math.abs(((b.bearingDeg - wedgeAngleDeg + 180) % 360) - 180);
+        return diff <= 15 && b.confidence >= 0.25;
+      });
+
+      const isRfStimulated = Boolean(matchedBearing);
+      const nodeColor = isRfStimulated
+        ? "#E040FB"
+        : (act > 0.6 ? "#00E5FF" : "rgba(0, 229, 255, 0.4)");
+
       nList.push({
         id: `CX_EPG_${i}`,
-        name: `E-PG Wedge ${i + 1} [#${10100 + i}]`,
+        name: isRfStimulated 
+          ? `E-PG Wedge ${i + 1} [📡 RF AoA: ${matchedBearing?.peerId.slice(0, 6)}]`
+          : `E-PG Wedge ${i + 1} [#${10100 + i}]`,
         system: "CX",
         pos: { x, y, z },
-        color: act > 0.6 ? "#00E5FF" : "rgba(0, 229, 255, 0.4)",
-        size: 3 + act * 4,
-        activity: act,
+        color: nodeColor,
+        size: isRfStimulated ? 4 + (matchedBearing?.confidence || 0.5) * 5 : 3 + act * 4,
+        activity: isRfStimulated ? Math.max(act, matchedBearing?.confidence || 0.6) : act,
       });
 
       // Conexiones sinápticas recurrentes circulares en anillo
@@ -125,7 +143,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       eList.push({
         from: `CX_EPG_${i}`,
         to: `CX_EPG_${nextIdx}`,
-        weight: 0.8,
+        weight: isRfStimulated ? 1.0 : 0.8,
         system: "CX",
       });
     }
@@ -968,6 +986,64 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
             <span style={{ color: "#94A3B8" }}>LTP Pinned:</span>
             <span style={{ color: "#00E676" }}>{mbTelemetry.ltpPinnedRecords} Paquetes SOS</span>
           </div>
+        </div>
+
+        {/* Card 5: Radiogoniometría Bio-Inercial AoA (Direction-Finding) */}
+        <div
+          style={{
+            gridColumn: "1 / -1",
+            padding: "10px",
+            borderRadius: "10px",
+            background: "rgba(224, 64, 251, 0.06)",
+            border: "1px solid rgba(224, 64, 251, 0.25)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+            <span style={{ fontSize: "0.65rem", color: "#E040FB", fontWeight: 900 }}>
+              📡 RADIOGONIOMETRÍA BIO-INERCIAL AoA (16 SECTORES)
+            </span>
+            <span style={{ fontSize: "0.62rem", color: "#94A3B8" }}>
+              {rfBearings.length} marcación(es) activa(s)
+            </span>
+          </div>
+
+          {rfBearings.length === 0 ? (
+            <div style={{ fontSize: "0.68rem", color: "#64748B", fontStyle: "italic", padding: "4px 0" }}>
+              Rotar el dispositivo en 360° para muestrear la modulación RF (LQS/RSSI) de los pares en radio.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" }}>
+              {rfBearings.slice(0, 3).map((b) => (
+                <div
+                  key={b.peerId}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "4px 8px",
+                    borderRadius: "6px",
+                    background: "rgba(0, 0, 0, 0.4)",
+                    fontSize: "0.68rem",
+                  }}
+                >
+                  <span style={{ color: "#FFFFFF", fontFamily: "monospace" }}>
+                    Nodo {b.peerId.slice(0, 8)}...
+                  </span>
+                  <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                    <span style={{ color: "#E040FB", fontWeight: 800 }}>
+                      🧭 {b.bearingDeg}°
+                    </span>
+                    <span style={{ color: "#00E676" }}>
+                      Conf: {(b.confidence * 100).toFixed(0)}%
+                    </span>
+                    <span style={{ color: "#94A3B8", fontSize: "0.62rem" }}>
+                      LQS {b.lqs}% ({b.samplesCount} pkts)
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
