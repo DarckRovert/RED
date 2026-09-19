@@ -32,6 +32,10 @@ import { fanShapedBody, FanShapedBodyTelemetry } from "../lib/neuro/FanShapedBod
 import { dtnMushroomBody, SwarmPheromone } from "../lib/neuro/DtnMushroomBodyEngine";
 import { PheromoneBroadcastModal } from "./tactical/PheromoneBroadcastModal";
 import { EyesFreeHapticModal } from "./tactical/EyesFreeHapticModal";
+import { CognitiveNavigationModal } from "./tactical/CognitiveNavigationModal";
+import { TcccMedicalTriageModal } from "./tactical/TcccMedicalTriageModal";
+import { EpistemicRadarModal } from "./tactical/EpistemicRadarModal";
+import { WorkingMemoryTaskRibbon } from "./tactical/WorkingMemoryTaskRibbon";
 
 function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
@@ -159,6 +163,9 @@ export default function NodeMap() {
     const [showHomeVector] = useState<boolean>(true);
     const [isPheromoneModalOpen, setIsPheromoneModalOpen] = useState<boolean>(false);
     const [isEyesFreeModalOpen, setIsEyesFreeModalOpen] = useState<boolean>(false);
+    const [isCognitiveNavOpen, setIsCognitiveNavOpen] = useState<boolean>(false);
+    const [isTcccModalOpen, setIsTcccModalOpen] = useState<boolean>(false);
+    const [isEpistemicRadarOpen, setIsEpistemicRadarOpen] = useState<boolean>(false);
 
     useEffect(() => {
         const unsubCx = ringAttractor.subscribe(setCxTelem);
@@ -1140,6 +1147,9 @@ export default function NodeMap() {
             display: "flex", flexDirection: "column",
             overflow: "hidden", position: "relative"
         }}>
+            {/* Cinta Ejecutiva Superior de Memoria de Trabajo DLPFC */}
+            <WorkingMemoryTaskRibbon />
+
             {/* Header Táctico Responsive */}
             <header style={{
                 padding: "10px 14px",
@@ -1219,6 +1229,33 @@ export default function NodeMap() {
                     >
                         <span>📳</span>
                         <span>HAPTIC</span>
+                    </button>
+                    <button
+                        onClick={() => setIsCognitiveNavOpen(true)}
+                        className={isCognitiveNavOpen ? "btn-tactical-primary" : "btn-tactical-secondary"}
+                        style={{ padding: "6px 8px", fontSize: "0.74rem", display: "flex", alignItems: "center", gap: "3px" }}
+                        title="Corteza Entorrinal (Navegación Hexagonal sin GNSS)"
+                    >
+                        <span>🗺️</span>
+                        <span>GRID</span>
+                    </button>
+                    <button
+                        onClick={() => setIsTcccModalOpen(true)}
+                        className={isTcccModalOpen ? "btn-tactical-primary" : "btn-tactical-secondary"}
+                        style={{ padding: "6px 8px", fontSize: "0.74rem", display: "flex", alignItems: "center", gap: "3px" }}
+                        title="Triage Médico MARCH & Desaceleración Vagal Box Breathing"
+                    >
+                        <span>🩸</span>
+                        <span>TCCC</span>
+                    </button>
+                    <button
+                        onClick={() => setIsEpistemicRadarOpen(true)}
+                        className={isEpistemicRadarOpen ? "btn-tactical-primary" : "btn-tactical-secondary"}
+                        style={{ padding: "6px 8px", fontSize: "0.74rem", display: "flex", alignItems: "center", gap: "3px" }}
+                        title="Teoría de la Mente (Radar Epistémico & Emboscadas)"
+                    >
+                        <span>🛡️</span>
+                        <span>ToM</span>
                     </button>
                     <button
                         onClick={() => setIsPheromoneModalOpen(true)}
@@ -2068,6 +2105,24 @@ export default function NodeMap() {
             <EyesFreeHapticModal
                 isOpen={isEyesFreeModalOpen}
                 onClose={() => setIsEyesFreeModalOpen(false)}
+            />
+
+            {/* Modal de Navegación Hexagonal Entorrinal */}
+            <CognitiveNavigationModal
+                isOpen={isCognitiveNavOpen}
+                onClose={() => setIsCognitiveNavOpen(false)}
+            />
+
+            {/* Modal de Triage TCCC e Ínsula Anterior */}
+            <TcccMedicalTriageModal
+                isOpen={isTcccModalOpen}
+                onClose={() => setIsTcccModalOpen(false)}
+            />
+
+            {/* Modal de Radar Epistémico ToM */}
+            <EpistemicRadarModal
+                isOpen={isEpistemicRadarOpen}
+                onClose={() => setIsEpistemicRadarOpen(false)}
             />
         </div>
     );

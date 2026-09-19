@@ -17,6 +17,10 @@ import { toast } from "./Toast";
 import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
 import { PheromoneBroadcastModal } from "./tactical/PheromoneBroadcastModal";
 import { EyesFreeHapticModal } from "./tactical/EyesFreeHapticModal";
+import { humanBrainOrchestrator, HumanBrainTelemetrySnapshot } from "../lib/neuro/human/HumanBrainOrchestrator";
+import { CognitiveNavigationModal } from "./tactical/CognitiveNavigationModal";
+import { TcccMedicalTriageModal } from "./tactical/TcccMedicalTriageModal";
+import { EpistemicRadarModal } from "./tactical/EpistemicRadarModal";
 
 interface Point3D {
   x: number;
@@ -78,6 +82,18 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const [isForcedTorpor, setIsForcedTorpor] = useState<boolean>(() => metabolicGovernor.isForcedTorpor());
   const [isPheromoneModalOpen, setIsPheromoneModalOpen] = useState<boolean>(false);
   const [isHapticModalOpen, setIsHapticModalOpen] = useState<boolean>(false);
+
+  // Modo de Arquitectura Neurobiológica: MaleCNS Drosophila vs Neocorteza Humana
+  const [architectureMode, setArchitectureMode] = useState<"SUBCORTICAL_MALE_CNS" | "HUMAN_NEOCORTEX">("SUBCORTICAL_MALE_CNS");
+  const [humanSnapshot, setHumanSnapshot] = useState<HumanBrainTelemetrySnapshot>(() => humanBrainOrchestrator.getSnapshot());
+  const [isCognitiveNavOpen, setIsCognitiveNavOpen] = useState<boolean>(false);
+  const [isTcccModalOpen, setIsTcccModalOpen] = useState<boolean>(false);
+  const [isEpistemicRadarOpen, setIsEpistemicRadarOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const unsub = humanBrainOrchestrator.subscribe(setHumanSnapshot);
+    return unsub;
+  }, []);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -936,8 +952,69 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
         </div>
       </div>
 
-      {/* Visor 3D Interactivo */}
+      {/* Selector de Sustrato Neurobiológico: Tronco Encefálico (MaleCNS) vs Neocorteza Humana (7 Núcleos) */}
       <div
+        style={{
+          display: "flex",
+          borderBottom: "1px solid rgba(0, 229, 255, 0.2)",
+          background: "rgba(4, 7, 17, 0.95)",
+        }}
+      >
+        <button
+          onClick={() => {
+            TacticalAudioEngine.playTap();
+            setArchitectureMode("SUBCORTICAL_MALE_CNS");
+          }}
+          style={{
+            flex: 1,
+            padding: "10px",
+            background: architectureMode === "SUBCORTICAL_MALE_CNS" ? "rgba(0, 229, 255, 0.15)" : "transparent",
+            border: "none",
+            borderBottom: architectureMode === "SUBCORTICAL_MALE_CNS" ? "2px solid #00E5FF" : "none",
+            color: architectureMode === "SUBCORTICAL_MALE_CNS" ? "#00E5FF" : "#64748B",
+            fontSize: "0.74rem",
+            fontWeight: 800,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "6px",
+          }}
+        >
+          <span>🦟</span>
+          <span>TRONCO ENCEFÁLICO (MaleCNS v1.0)</span>
+        </button>
+
+        <button
+          onClick={() => {
+            TacticalAudioEngine.playTap();
+            setArchitectureMode("HUMAN_NEOCORTEX");
+          }}
+          style={{
+            flex: 1,
+            padding: "10px",
+            background: architectureMode === "HUMAN_NEOCORTEX" ? "rgba(16, 185, 129, 0.15)" : "transparent",
+            border: "none",
+            borderBottom: architectureMode === "HUMAN_NEOCORTEX" ? "2px solid #10B981" : "none",
+            color: architectureMode === "HUMAN_NEOCORTEX" ? "#10B981" : "#64748B",
+            fontSize: "0.74rem",
+            fontWeight: 800,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "6px",
+          }}
+        >
+          <span>🧠</span>
+          <span>NEOCORTEZA HUMANA (7 NÚCLEOS COGNITIVOS)</span>
+        </button>
+      </div>
+
+      {architectureMode === "SUBCORTICAL_MALE_CNS" ? (
+        <>
+          {/* Visor 3D Interactivo */}
+          <div
         style={{
           position: "relative",
           width: "100%",
@@ -1728,6 +1805,195 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
         </div>
       )}
 
+        </>
+      ) : (
+        /* VISTA DE NEOCORTEZA HUMANA (7 NÚCLEOS COGNITIVOS) */
+        <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "16px", background: "#050811" }}>
+          {/* Banner de Estado Cortical Unificado */}
+          <div
+            style={{
+              padding: "12px 16px",
+              borderRadius: "8px",
+              background: humanSnapshot.alertLevel === "RED_CRITICAL" ? "rgba(239, 68, 68, 0.2)" : humanSnapshot.alertLevel === "AMBER_ATTENTION" ? "rgba(245, 158, 11, 0.2)" : "rgba(16, 185, 129, 0.15)",
+              border: `1px solid ${humanSnapshot.alertLevel === "RED_CRITICAL" ? "#EF4444" : humanSnapshot.alertLevel === "AMBER_ATTENTION" ? "#F59E0B" : "#10B981"}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              fontFamily: "monospace",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#FFFFFF" }}>
+                {humanSnapshot.synthesisSummary}
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "#94A3B8", marginTop: "2px" }}>
+                ARQUITECTURA BIO-CIBERNÉTICA INTEGRADA • CERO SIMULACIONES • SENSORES DIRECTOS
+              </div>
+            </div>
+            <span
+              style={{
+                padding: "4px 8px",
+                borderRadius: "4px",
+                fontSize: "0.68rem",
+                fontWeight: 900,
+                background: humanSnapshot.alertLevel === "RED_CRITICAL" ? "#EF4444" : humanSnapshot.alertLevel === "AMBER_ATTENTION" ? "#F59E0B" : "#10B981",
+                color: "#000000",
+              }}
+            >
+              {humanSnapshot.alertLevel}
+            </span>
+          </div>
+
+          {/* Grilla Táctica de los 7 Núcleos Neocorticales */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "12px", fontFamily: "monospace" }}>
+            
+            {/* 1. Corteza Entorrinal */}
+            <div style={{ background: "#090D16", border: "1px solid #1E293B", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#38BDF8" }}>🗺️ CORTEZA ENTORRINAL (MEC)</span>
+                <span style={{ fontSize: "0.65rem", color: "#94A3B8" }}>λ = [0.5, 2, 8, 32]m</span>
+              </div>
+              <div style={{ fontSize: "0.70rem", color: "#E2E8F0" }}>
+                Offset Local: [{humanSnapshot.entorhinal.currentCoordsLocal.xMeters.toFixed(1)}, {humanSnapshot.entorhinal.currentCoordsLocal.yMeters.toFixed(1)}, {humanSnapshot.entorhinal.currentCoordsLocal.zMeters.toFixed(1)}]m
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "#94A3B8" }}>
+                Actividad de Rejilla: {Math.round(humanSnapshot.entorhinal.compositeGridActivity * 100)}% • Hitos: {humanSnapshot.entorhinal.breadcrumbsCount}
+              </div>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  setIsCognitiveNavOpen(true);
+                }}
+                style={{ padding: "6px", background: "#0284C7", border: "none", borderRadius: "4px", color: "#FFF", fontSize: "0.70rem", fontWeight: 700, cursor: "pointer" }}
+              >
+                ABRIR NAVEGACIÓN ENTORRINAL
+              </button>
+            </div>
+
+            {/* 2. Hipocampo CA3/DG */}
+            <div style={{ background: "#090D16", border: "1px solid #1E293B", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#A855F7" }}>🧬 HIPOCAMPO (CA3/DG)</span>
+                <span style={{ fontSize: "0.65rem", color: "#10B981" }}>PATTERN COMPLETION</span>
+              </div>
+              <div style={{ fontSize: "0.70rem", color: "#E2E8F0" }}>
+                Tramas LoRa Reconstruidas: <span style={{ color: "#A855F7", fontWeight: 800 }}>{humanSnapshot.hippocampal.patternCompletionsCount}</span>
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "#94A3B8" }}>
+                Confianza de Recuerdo: {Math.round(humanSnapshot.hippocampal.meanRecallConfidence * 100)}% • Engramas CA3: {humanSnapshot.hippocampal.totalStoredEngrams}
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "#64748B" }}>
+                Reconstrucción instantánea de paquetes dañados sin retransmisión RF.
+              </div>
+            </div>
+
+            {/* 3. Corteza Predictiva */}
+            <div style={{ background: "#090D16", border: "1px solid #1E293B", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#10B981" }}>⚡ CORTEZA PREDICTIVA (FRISTON)</span>
+                <span style={{ fontSize: "0.65rem", color: humanSnapshot.predictive.isZeroBandwidthModeActive ? "#10B981" : "#EF4444" }}>
+                  {humanSnapshot.predictive.isZeroBandwidthModeActive ? "SILENCIO RF ACTIVO" : "NORMAL"}
+                </span>
+              </div>
+              <div style={{ fontSize: "0.70rem", color: "#E2E8F0" }}>
+                Reducción de Tráfico RF: <span style={{ color: "#10B981", fontWeight: 800 }}>{Math.round(humanSnapshot.predictive.overallBandwidthReductionPct)}%</span>
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "#94A3B8" }}>
+                Energía Libre (Sorpresa): {humanSnapshot.predictive.currentFreeEnergy.toFixed(3)} • Pares Seguidos: {humanSnapshot.predictive.trackedPeersCount}
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "#64748B" }}>
+                Emisión de radio suprimida (0 bytes) mientras el movimiento sea predecible.
+              </div>
+            </div>
+
+            {/* 4. Teoría de la Mente */}
+            <div style={{ background: "#090D16", border: "1px solid #1E293B", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#F59E0B" }}>🛡️ TEORÍA DE LA MENTE (mPFC/TPJ)</span>
+                <span style={{ fontSize: "0.65rem", color: humanSnapshot.theoryOfMind.activeAmbushAlertsCount > 0 ? "#EF4444" : "#10B981" }}>
+                  {humanSnapshot.theoryOfMind.activeAmbushAlertsCount > 0 ? "¡EMBOSCADA!" : "RED SEGURA"}
+                </span>
+              </div>
+              <div style={{ fontSize: "0.70rem", color: "#E2E8F0" }}>
+                Confianza Media de Malla: {Math.round(humanSnapshot.theoryOfMind.meanNetworkTrustScore * 100)}% ({humanSnapshot.theoryOfMind.totalPeersAudited} pares)
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "#94A3B8" }}>
+                Anomalías RF (Path Loss) & Cinemáticas: {humanSnapshot.theoryOfMind.suspiciousNodesCount}
+              </div>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  setIsEpistemicRadarOpen(true);
+                }}
+                style={{ padding: "6px", background: "#D97706", border: "none", borderRadius: "4px", color: "#FFF", fontSize: "0.70rem", fontWeight: 700, cursor: "pointer" }}
+              >
+                ABRIR RADAR EPISTÉMICO
+              </button>
+            </div>
+
+            {/* 5. Memoria de Trabajo DLPFC */}
+            <div style={{ background: "#090D16", border: "1px solid #1E293B", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#EC4899" }}>📋 MEMORIA EJECUTIVA (DLPFC 7±2)</span>
+                <span style={{ fontSize: "0.65rem", color: "#EC4899" }}>PROGRESO: {humanSnapshot.workingMemory.overallProgressPct}%</span>
+              </div>
+              <div style={{ fontSize: "0.70rem", color: "#E2E8F0", fontWeight: 700 }}>
+                Directiva Activa: {humanSnapshot.workingMemory.activeTask?.title || "Misión Cumplida"}
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "#94A3B8" }}>
+                Pila Ejecutiva: {humanSnapshot.workingMemory.completedTasksCount} / {humanSnapshot.workingMemory.totalTasks} tareas cumplidas
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "#64748B" }}>
+                Transición automática por sensores de proximidad inercial y canales de radio.
+              </div>
+            </div>
+
+            {/* 6. Ínsula Anterior & TCCC */}
+            <div style={{ background: "#090D16", border: "1px solid #1E293B", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#EF4444" }}>🩸 ÍNSULA ANTERIOR & TCCC</span>
+                <span style={{ fontSize: "0.65rem", color: humanSnapshot.insular.isBoxBreathingActive ? "#06B6D4" : "#94A3B8" }}>
+                  {humanSnapshot.insular.isBoxBreathingActive ? "BOX BREATHING" : "STANDBY"}
+                </span>
+              </div>
+              <div style={{ fontSize: "0.70rem", color: "#E2E8F0" }}>
+                Bajas MARCH: {humanSnapshot.insular.activeCasualtiesCount} • Torniquetes Activos: {humanSnapshot.insular.activeTourniquetsCount}
+              </div>
+              <div style={{ fontSize: "0.65rem", color: humanSnapshot.insular.criticalTourniquetWarning ? "#EF4444" : "#94A3B8", fontWeight: humanSnapshot.insular.criticalTourniquetWarning ? 800 : 400 }}>
+                {humanSnapshot.insular.criticalTourniquetWarning ? "⚠️ ¡ALERTA DE ISQUEMIA PROLONGADA (>90m)!" : "Cronómetros de isquemia nominales"}
+              </div>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  setIsTcccModalOpen(true);
+                }}
+                style={{ padding: "6px", background: "#DC2626", border: "none", borderRadius: "4px", color: "#FFF", fontSize: "0.70rem", fontWeight: 700, cursor: "pointer" }}
+              >
+                ABRIR PROTOCOLO TCCC MARCH
+              </button>
+            </div>
+
+            {/* 7. Corteza Orbitofrontal */}
+            <div style={{ background: "#090D16", border: "1px solid #1E293B", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#14B8A6" }}>⚖️ CORTEZA ORBITOFRONTAL (OFC)</span>
+                <span style={{ fontSize: "0.65rem", color: "#14B8A6" }}>ECONOMÍA DE ASIEDO</span>
+              </div>
+              <div style={{ fontSize: "0.70rem", color: "#E2E8F0" }}>
+                Autarquía Estimada: <span style={{ color: "#14B8A6", fontWeight: 800 }}>{humanSnapshot.orbitofrontal.autarkyDaysRemaining} días</span>
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "#94A3B8" }}>
+                Contratos Barter Activos: {humanSnapshot.orbitofrontal.activeContractsCount} • Paridades de Trueque Justo
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "#64748B" }}>
+                Valoración no-fiduciaria de agua, raciones, munición, antibióticos y baterías.
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* Modal de Difusión de Feromonas Swarm */}
       <PheromoneBroadcastModal
         isOpen={isPheromoneModalOpen}
@@ -1746,6 +2012,20 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       <EyesFreeHapticModal
         isOpen={isHapticModalOpen}
         onClose={() => setIsHapticModalOpen(false)}
+      />
+
+      {/* Modales de Neocorteza Humana */}
+      <CognitiveNavigationModal
+        isOpen={isCognitiveNavOpen}
+        onClose={() => setIsCognitiveNavOpen(false)}
+      />
+      <TcccMedicalTriageModal
+        isOpen={isTcccModalOpen}
+        onClose={() => setIsTcccModalOpen(false)}
+      />
+      <EpistemicRadarModal
+        isOpen={isEpistemicRadarOpen}
+        onClose={() => setIsEpistemicRadarOpen(false)}
       />
     </div>
   );

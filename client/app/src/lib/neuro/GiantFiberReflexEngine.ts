@@ -240,6 +240,13 @@ export class GiantFiberReflexEngine {
   }
 
   /**
+   * Disparo directo de salto de emergencia táctico
+   */
+  public triggerEmergencyJump(reason: string = 'MANUAL_TACTICAL_SCRAM'): GiantFiberReflexResult {
+    return this.triggerReflex('MANUAL_TACTICAL_SCRAM');
+  }
+
+  /**
    * Suscribe un listener a cambios en la telemetría del arco reflejo.
    */
   public subscribe(listener: (telemetry: GiantFiberTelemetry) => void): () => void {

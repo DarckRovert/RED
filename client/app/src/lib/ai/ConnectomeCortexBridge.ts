@@ -24,6 +24,7 @@ import { johnstonOrgan } from '../neuro/JohnstonOrganEngine';
 import { metabolicGovernor } from '../neuro/MetabolicNeuromorphicGovernor';
 import { opticLobe } from '../neuro/OpticLobeEngine';
 import { tacticalMotorActuator } from '../neuro/TacticalMotorActuatorEngine';
+import { humanBrainOrchestrator } from '../neuro/human/HumanBrainOrchestrator';
 
 export interface ConnectomeSnapshot {
   timestamp: number;
@@ -257,6 +258,17 @@ export class ConnectomeCortexBridge {
       ? `\nRadiogoniometría Bio-Inercial AoA:\n${bearingLines.join('\n')}`
       : '\nRadiogoniometría AoA: Sin marcaciones direccionales suficientes.';
 
+    const humanSnapshot = humanBrainOrchestrator.getSnapshot();
+    const humanSection = `\n\n[Neocorteza Bio-Cibernética Humana (7 Núcleos Cognitivos)]:\n` +
+      `• Alerta General: ${humanSnapshot.alertLevel} (${humanSnapshot.synthesisSummary})\n` +
+      `• Odometría Entorrinal MEC: [X=${humanSnapshot.entorhinal.currentCoordsLocal.xMeters.toFixed(1)}, Y=${humanSnapshot.entorhinal.currentCoordsLocal.yMeters.toFixed(1)}, Z=${humanSnapshot.entorhinal.currentCoordsLocal.zMeters.toFixed(1)}]m | Actividad: ${(humanSnapshot.entorhinal.compositeGridActivity * 100).toFixed(0)}%\n` +
+      `• Hipocampo CA3/DG: ${humanSnapshot.hippocampal.patternCompletionsCount} tramas mutiladas recuperadas por pattern completion\n` +
+      `• Inferencia Activa (Zero-Bandwidth): ${humanSnapshot.predictive.isZeroBandwidthModeActive ? 'ACTIVO' : 'NO'} | Ahorro RF: ${humanSnapshot.predictive.overallBandwidthReductionPct.toFixed(0)}% | Sorpresa: ${humanSnapshot.predictive.currentFreeEnergy.toFixed(2)}\n` +
+      `• Teoría de la Mente ToM: Confianza ${Math.round(humanSnapshot.theoryOfMind.meanNetworkTrustScore * 100)}% | Alertas Emboscada: ${humanSnapshot.theoryOfMind.activeAmbushAlertsCount}\n` +
+      `• Memoria Ejecutiva DLPFC: Objetivo "${humanSnapshot.workingMemory.activeTask?.title || 'Completado'}" | Progreso: ${humanSnapshot.workingMemory.overallProgressPct}%\n` +
+      `• Ínsula Anterior TCCC: Vagal ${humanSnapshot.insular.isBoxBreathingActive ? humanSnapshot.insular.boxBreathingPhase : 'STANDBY'} | Bajas: ${humanSnapshot.insular.activeCasualtiesCount} | Torniquetes: ${humanSnapshot.insular.activeTourniquetsCount}\n` +
+      `• Economía OFC: Autarquía: ${humanSnapshot.orbitofrontal.autarkyDaysRemaining} días | Contratos Barter: ${humanSnapshot.orbitofrontal.activeContractsCount}`;
+
     return `[Conectoma Bio-Cibernético Drosophila MaleCNS v1.0]:\n` +
       `• Rumbo E-PG: ${s.compass.headingDeg}° (${s.compass.cardinal}, Conf: ${(s.compass.confidence * 100).toFixed(0)}%, Anclaje: ${s.compass.isSensoryAnchored ? 'OK' : 'INERCIAL'})\n` +
       `• Navegación FB (Home Vector): ${s.fanShapedBody.homeDistanceMeters}m hacia ${s.fanShapedBody.homeBearingDeg}° (${s.fanShapedBody.homeCardinal}) | Recorrido: ${s.fanShapedBody.totalDistanceTraveledMeters}m\n` +
@@ -266,7 +278,7 @@ export class ConnectomeCortexBridge {
       `• Actuador Háptico DNa: Modo ${s.motorActuator.currentMode} (Error: ${s.motorActuator.steeringErrorDeg}°)\n` +
       `• Fibras Gigantes: ${s.giantFiber.state} (EMCON: ${s.giantFiber.isRadioSilenced ? 'ACTIVO' : 'NO'})\n` +
       `• Sensor JO: ${(s.johnstonOrgan.acousticEnergyLevel * 100).toFixed(0)}% energía acústica (${s.johnstonOrgan.vibrationFrequencyHz} Hz)\n` +
-      `• Metabolismo IPC/NPF: Régimen ${s.metabolicGovernor.regime} (Batería: ${s.metabolicGovernor.batteryPct}%, Autonomía: ${s.metabolicGovernor.estimatedStandbyHours}h)${bearingSection}`;
+      `• Metabolismo IPC/NPF: Régimen ${s.metabolicGovernor.regime} (Batería: ${s.metabolicGovernor.batteryPct}%, Autonomía: ${s.metabolicGovernor.estimatedStandbyHours}h)${bearingSection}${humanSection}`;
   }
 
   /**
@@ -275,6 +287,53 @@ export class ConnectomeCortexBridge {
   public evaluateConnectomeTacticalQuery(query: string): string {
     const s = this.getConnectomeSnapshot();
     const cleanQ = (query || '').toLowerCase();
+    const hs = humanBrainOrchestrator.getSnapshot();
+
+    // Consulta sobre Triage TCCC, Box Breathing o Trauma
+    if (/triage|march|trauma|torniquete|isquemia|vagal|respiraci[oó]n|box breathing/i.test(cleanQ)) {
+      return `🩸 **Ínsula Anterior & Protocolo TCCC MARCH**\n\n` +
+        `• **Estado Vagal (Box Breathing 4-4-4-4):** ${hs.insular.isBoxBreathingActive ? `ACTIVO • Fase: ${hs.insular.boxBreathingPhase} (${hs.insular.phaseSecondsRemaining}s)` : 'Standby / Pausado'}\n` +
+        `• **Bajas Registradas Bajo Fuego:** ${hs.insular.activeCasualtiesCount}\n` +
+        `• **Torniquetes Aplicados:** ${hs.insular.activeTourniquetsCount}\n` +
+        `• **Alerta de Isquemia:** ${hs.insular.criticalTourniquetWarning ? '🚨 ¡PELIGRO DE NECROSIS IRREVERSIBLE (>90 min)!' : '🟢 Sin riesgo de necrosis irreversible'}\n` +
+        `• **Acceso:** Puedes abrir el panel TCCC desde el Mapa Táctico con el botón [TCCC].`;
+    }
+
+    // Consulta sobre Teoría de la Mente, Decepción o Emboscada
+    if (/emboscada|decepci[oó]n|trampa|honey.*pot|teor[ií]a.*mente|tom|path loss/i.test(cleanQ)) {
+      return `🛡️ **Teoría de la Mente (mPFC / TPJ - Detección de Emboscadas)**\n\n` +
+        `• **Alerta de Emboscada Activa:** ${hs.theoryOfMind.activeAmbushAlertsCount > 0 ? `🚨 ¡ALERTA! ${hs.theoryOfMind.activeAmbushAlertsCount} anomalías críticas detectadas` : '🟢 Malla segura sin incongruencias físicas'}\n` +
+        `• **Confianza Media de la Red:** ${Math.round(hs.theoryOfMind.meanNetworkTrustScore * 100)}%\n` +
+        `• **Pares Auditados:** ${hs.theoryOfMind.totalPeersAudited} (Sospechosos: ${hs.theoryOfMind.suspiciousNodesCount})\n` +
+        `• **Física Verificada:** Cruce de Log-Distance Path Loss (distancia vs RSSI medido) y coherencia de velocidad cinemática (< 45 m/s).`;
+    }
+
+    // Consulta sobre Cueva, Túnel o Células de Rejilla (Entorrinal)
+    if (/cueva|t[uú]nel|subterr[aá]neo|entorrinal|grid.*cell|rejilla|miga/i.test(cleanQ)) {
+      return `🗺️ **Corteza Entorrinal Medial (MEC - Navegación Hexagonal Subterránea)**\n\n` +
+        `• **Offset Local 3D:** X=${hs.entorhinal.currentCoordsLocal.xMeters.toFixed(1)}m, Y=${hs.entorhinal.currentCoordsLocal.yMeters.toFixed(1)}m, Z=${hs.entorhinal.currentCoordsLocal.zMeters.toFixed(1)}m\n` +
+        `• **Densidad de Rejilla:** ${(hs.entorhinal.compositeGridActivity * 100).toFixed(0)}% (Interferencia en 4 módulos: λ=0.5m, 2m, 8m, 32m)\n` +
+        `• **Hitos Grabados (Breadcrumbs):** ${hs.entorhinal.breadcrumbsCount}\n` +
+        `• **Alerta de Bordes:** ${hs.entorhinal.borderProximityWarning ? '⚠️ Obstáculo o pared detectada por células de borde' : '🟢 Espacio despejado'}\n` +
+        `• **Función:** Permite desplazamiento y retorno a ciegas sin señal satelital GNSS.`;
+    }
+
+    // Consulta sobre Zero-Bandwidth o Inferencia Activa
+    if (/zero.*bandwidth|silencio.*rf|inferencia.*activa|friston|energ[ií]a.*libre|sorpresa/i.test(cleanQ)) {
+      return `⚡ **Corteza Predictiva Humana (Inferencia Activa de Friston)**\n\n` +
+        `• **Modo Zero-Bandwidth:** ${hs.predictive.isZeroBandwidthModeActive ? '🟢 ACTIVO (Emisión de 0 Bytes mientras el movimiento sea predecible)' : '🔴 Desactivado'}\n` +
+        `• **Reducción de Tráfico RF:** ${Math.round(hs.predictive.overallBandwidthReductionPct)}% de emisiones LoRa ahorradas\n` +
+        `• **Nivel Actual de Energía Libre (Sorpresa):** ${hs.predictive.currentFreeEnergy.toFixed(3)}\n` +
+        `• **Gemelos Cinemáticos:** ${hs.predictive.trackedPeersCount} nodos aliados en seguimiento predictivo descendente`;
+    }
+
+    // Consulta sobre Barter, Asedio o Autarquía Económica
+    if (/barter|trueque|asedio|autarqu[ií]a|suministro|precio|econom[ií]a/i.test(cleanQ)) {
+      return `⚖️ **Corteza Orbitofrontal (OFC - Valoración y Barter en Asedio)**\n\n` +
+        `• **Autarquía Estimada del Destacamento:** **${hs.orbitofrontal.autarkyDaysRemaining} días** antes del agotamiento del recurso más escaso\n` +
+        `• **Contratos de Trueque P2P:** ${hs.orbitofrontal.activeContractsCount} acuerdos evaluados\n` +
+        `• **Criterio de Valoración:** Ley de Gossen y utilidad marginal subjetiva. El agua y medicamentos multiplican su valor según la reserva física real.`;
+    }
 
     // Consulta sobre Visión, Lóbulos Ópticos o Detección Looming
     if (/optic|visi[oó]n|looming|amenaza.*visual|centinela|colisi[oó]n/i.test(cleanQ)) {
