@@ -17,7 +17,7 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 
 // Obtener versión objetivo de los argumentos o de client/app/src/lib/version.ts
 let targetVersion = process.argv[2];
-let releaseName = process.argv[3] || "Sovereign App Store & Hyper-Browser Edition";
+let releaseName = (process.argv[3] || "Bio-Neuromorphic Connectome OS").replace(/["'\\]+$/, '').trim();
 
 if (!targetVersion) {
     // Si no se especifica, leer de version.ts

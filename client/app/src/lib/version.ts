@@ -1,6 +1,6 @@
 /**
  * RED Sovereign Mesh — Single Source of Truth for System Version
- * Version: 111.0.0 RED Sovereign Mesh — \
+ * Version: 111.0.0 RED Sovereign Mesh — Bio-Neuromorphic Connectome OS
  */
 
 export const RED_VERSION = "111.0.0";
@@ -9,7 +9,7 @@ export const RED_VERSION_MINOR = 0;
 export const RED_VERSION_PATCH = 0;
 export const RED_VERSION_CODE = 111000;
 export const RED_BUILD_CODE = 111000;
-export const RED_VERSION_NAME = "RED v111.0.0 Sovereign Mesh — \";
+export const RED_VERSION_NAME = "RED v111.0.0 Sovereign Mesh — Bio-Neuromorphic Connectome OS";
 export const RED_BUILD_DATE = "2026-09-19";
 export const RED_PROTOCOL_VERSION = "RED/111.0-NOISE-PQC";
 export const RED_RELEASE_CHANNEL = "stable-p2p";
