@@ -13,12 +13,22 @@ export const UpdatesTab: React.FC = () => {
     const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
     const [downloading, setDownloading] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+    const [cachedApk, setCachedApk] = useState<{ exists: boolean; filePath?: string; size?: number } | null>(null);
     const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
 
-    useEffect(() => {
-        UpdateManager.checkInstallPermission().then(granted => {
+    const refreshStatus = async () => {
+        try {
+            const granted = await UpdateManager.checkInstallPermission();
             setPermissionNeeded(!granted);
-        });
+            const cached = await UpdateManager.getCachedApkInfo();
+            setCachedApk(cached);
+        } catch {}
+    };
+
+    useEffect(() => {
+        refreshStatus();
+        window.addEventListener("focus", refreshStatus);
+        return () => window.removeEventListener("focus", refreshStatus);
     }, []);
 
     const handleCheckUpdates = async () => {
@@ -27,6 +37,7 @@ export const UpdatesTab: React.FC = () => {
         try {
             const info = await UpdateManager.checkForUpdates(true);
             setUpdateInfo(info);
+            await refreshStatus();
             if (info.hasUpdate) {
                 toast.success(`🚀 ¡Nueva versión disponible: v${info.latestVersion}!`);
             } else if (!info.error) {
@@ -39,20 +50,34 @@ export const UpdatesTab: React.FC = () => {
         }
     };
 
-    const handleDownloadAndInstall = async () => {
-        if (!updateInfo?.apkUrl) return;
+    const handleInstallCached = async () => {
+        SettingsManager.triggerHaptic("heavy");
+        try {
+            toast.info("📦 Abriendo instalador con APK descargado...");
+            await UpdateManager.installCachedApk(cachedApk?.filePath);
+        } catch (e: any) {
+            toast.error(`Fallo al instalar paquete: ${e.message || e}`);
+        }
+    };
+
+    const handleDownloadAndInstall = async (overrideUrl?: string) => {
+        const targetUrl = overrideUrl || updateInfo?.apkUrl;
+        if (!targetUrl) {
+            toast.error("No se localizó URL de binario APK para descargar.");
+            return;
+        }
         SettingsManager.triggerHaptic("heavy");
         setDownloading(true);
         setDownloadProgress({
             progress: 0,
             receivedBytes: 0,
-            totalBytes: updateInfo.apkSize || 0,
+            totalBytes: updateInfo?.apkSize || 66699615,
             speedKbps: 0,
             done: false,
         });
 
         try {
-            await UpdateManager.downloadAndInstall(updateInfo.apkUrl, (prog) => {
+            await UpdateManager.downloadAndInstall(targetUrl, (prog) => {
                 setDownloadProgress(prog);
                 if (prog.error) {
                     toast.error(`Error: ${prog.error}`);
@@ -60,6 +85,7 @@ export const UpdatesTab: React.FC = () => {
                 } else if (prog.done) {
                     toast.success("📦 Descarga completada. Abriendo instalador nativo...");
                     setDownloading(false);
+                    refreshStatus();
                 }
             });
         } catch (e: any) {
@@ -165,9 +191,31 @@ export const UpdatesTab: React.FC = () => {
 
             {/* Botones de Actualización */}
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {cachedApk?.exists && (
+                    <button
+                        onClick={handleInstallCached}
+                        disabled={downloading}
+                        className="btn-tactical-primary"
+                        style={{
+                            padding: "14px",
+                            fontSize: "0.90rem",
+                            fontWeight: 900,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "8px",
+                            background: "linear-gradient(90deg, #00E676 0%, #00B0FF 100%)",
+                            color: "#040711"
+                        }}
+                    >
+                        <span>⚡</span>
+                        Instalar APK Descargado ({formatBytes(cachedApk.size || 0)})
+                    </button>
+                )}
+
                 {updateInfo?.hasUpdate ? (
                     <button
-                        onClick={handleDownloadAndInstall}
+                        onClick={() => handleDownloadAndInstall()}
                         disabled={downloading}
                         className="btn-tactical-primary"
                         style={{ padding: "14px", fontSize: "0.90rem", fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
@@ -176,14 +224,39 @@ export const UpdatesTab: React.FC = () => {
                         {downloading ? "Descargando Actualización..." : "Descargar e Instalar v" + updateInfo.latestVersion}
                     </button>
                 ) : (
-                    <button
-                        onClick={handleCheckUpdates}
-                        disabled={checkingUpdates || downloading}
-                        className="btn-tactical-secondary"
-                        style={{ padding: "12px", fontSize: "0.85rem", fontWeight: 800 }}
-                    >
-                        {checkingUpdates ? "Verificando Versión..." : "Buscar Actualizaciones"}
-                    </button>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                        <button
+                            onClick={handleCheckUpdates}
+                            disabled={checkingUpdates || downloading}
+                            className="btn-tactical-secondary"
+                            style={{ flex: 1, padding: "12px", fontSize: "0.82rem", fontWeight: 800 }}
+                        >
+                            <span>🔄</span>
+                            {checkingUpdates ? "Buscando..." : "Comprobar Actualizaciones"}
+                        </button>
+
+                        <button
+                            onClick={() => handleDownloadAndInstall()}
+                            disabled={downloading}
+                            className="btn-tactical-secondary"
+                            style={{
+                                flex: 1,
+                                padding: "12px",
+                                fontSize: "0.82rem",
+                                fontWeight: 800,
+                                border: "1px solid rgba(0, 229, 255, 0.4)",
+                                color: "#00E5FF",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "6px"
+                            }}
+                            title="Descargar y reinstalar el binario oficial de la versión actual"
+                        >
+                            <span>📥</span>
+                            {downloading ? "Descargando..." : `Reinstalar v${RED_VERSION}`}
+                        </button>
+                    </div>
                 )}
             </div>
 

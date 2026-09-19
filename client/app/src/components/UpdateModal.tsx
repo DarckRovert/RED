@@ -24,6 +24,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
     const [downloading, setDownloading] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
     const [permissionNeeded, setPermissionNeeded] = useState(false);
+    const [cachedApk, setCachedApk] = useState<{ exists: boolean; filePath?: string; size?: number } | null>(null);
 
     // Registro LIFO de retroceso físico / Esc
     useEffect(() => {
@@ -38,6 +39,21 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
         return unregister;
     }, [downloading, handleClose]);
 
+    const refreshStatus = async () => {
+        try {
+            const granted = await UpdateManager.checkInstallPermission();
+            setPermissionNeeded(!granted);
+            const cached = await UpdateManager.getCachedApkInfo();
+            setCachedApk(cached);
+        } catch {}
+    };
+
+    useEffect(() => {
+        refreshStatus();
+        window.addEventListener("focus", refreshStatus);
+        return () => window.removeEventListener("focus", refreshStatus);
+    }, []);
+
     const checkUpdates = async (force = true) => {
         TacticalAudioEngine.playTap();
         SettingsManager.triggerHaptic("light");
@@ -46,6 +62,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
         try {
             const info = await UpdateManager.checkForUpdates(force);
             setUpdateInfo(info);
+            await refreshStatus();
             if (info.hasUpdate) {
                 TacticalAudioEngine.playRogerBeep();
                 toast.success(`🚀 ¡Nueva versión disponible: v${info.latestVersion}!`);
@@ -62,26 +79,40 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
 
     useEffect(() => {
         checkUpdates(false);
-        UpdateManager.checkInstallPermission().then(granted => {
-            setPermissionNeeded(!granted);
-        });
     }, []);
 
-    const handleStartDownloadAndInstall = async () => {
-        if (!updateInfo?.apkUrl) return;
+    const handleInstallCached = async () => {
+        TacticalAudioEngine.playRogerBeep();
+        SettingsManager.triggerHaptic("heavy");
+        try {
+            toast.info("📦 Abriendo instalador con APK descargado...");
+            await UpdateManager.installCachedApk(cachedApk?.filePath);
+        } catch (e: any) {
+            TacticalAudioEngine.playWarning();
+            toast.error(`Fallo al instalar paquete: ${e.message || e}`);
+        }
+    };
+
+    const handleStartDownloadAndInstall = async (overrideUrl?: string) => {
+        const targetUrl = overrideUrl || updateInfo?.apkUrl;
+        if (!targetUrl) {
+            TacticalAudioEngine.playWarning();
+            toast.error("No se localizó URL de binario APK para descargar.");
+            return;
+        }
         TacticalAudioEngine.playTap();
         SettingsManager.triggerHaptic("medium");
         setDownloading(true);
         setDownloadProgress({
             progress: 0,
             receivedBytes: 0,
-            totalBytes: updateInfo.apkSize || 0,
+            totalBytes: updateInfo?.apkSize || 66699615,
             speedKbps: 0,
             done: false,
         });
 
         try {
-            await UpdateManager.downloadAndInstall(updateInfo.apkUrl, (prog) => {
+            await UpdateManager.downloadAndInstall(targetUrl, (prog) => {
                 setDownloadProgress(prog);
                 if (prog.error) {
                     TacticalAudioEngine.playWarning();
@@ -92,6 +123,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
                     SettingsManager.triggerHaptic("heavy");
                     toast.success("📦 Descarga completada. Abriendo instalador...");
                     setDownloading(false);
+                    refreshStatus();
                 }
             });
         } catch (e: any) {
@@ -284,9 +316,27 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
 
                 {/* Acciones de Instalación */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "auto", paddingTop: "12px" }}>
+                    {cachedApk?.exists && (
+                        <button
+                            onClick={handleInstallCached}
+                            disabled={downloading}
+                            className="btn-tactical-primary"
+                            style={{
+                                width: "100%", padding: "14px 20px", fontSize: "0.95rem", fontWeight: 900,
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+                                background: "linear-gradient(90deg, #00E676 0%, #00B0FF 100%)",
+                                color: "#040711",
+                                boxShadow: "0 6px 24px rgba(0,230,118,0.4)"
+                            }}
+                        >
+                            <span>⚡</span>
+                            Instalar APK Descargado ({formatBytes(cachedApk.size || 0)})
+                        </button>
+                    )}
+
                     {updateInfo?.hasUpdate ? (
                         <button
-                            onClick={handleStartDownloadAndInstall}
+                            onClick={() => handleStartDownloadAndInstall()}
                             disabled={downloading}
                             className="btn-tactical-primary"
                             style={{
@@ -299,14 +349,39 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
                             {downloading ? "Descargando Actualización..." : "Descargar e Instalar Ahora"}
                         </button>
                     ) : (
-                        <button
-                            onClick={() => { TacticalAudioEngine.playTap(); checkUpdates(true); }}
-                            disabled={loading || downloading}
-                            className="btn-tactical-secondary"
-                            style={{ width: "100%", padding: "12px 18px", fontSize: "0.88rem", fontWeight: 800 }}
-                        >
-                            {loading ? "Comprobando Versión..." : "Buscar Actualizaciones"}
-                        </button>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                            <button
+                                onClick={() => { TacticalAudioEngine.playTap(); checkUpdates(true); }}
+                                disabled={loading || downloading}
+                                className="btn-tactical-secondary"
+                                style={{ flex: 1, padding: "12px", fontSize: "0.84rem", fontWeight: 800 }}
+                            >
+                                <span>🔄</span>
+                                {loading ? "Buscando..." : "Comprobar"}
+                            </button>
+
+                            <button
+                                onClick={() => handleStartDownloadAndInstall()}
+                                disabled={downloading}
+                                className="btn-tactical-secondary"
+                                style={{
+                                    flex: 1,
+                                    padding: "12px",
+                                    fontSize: "0.84rem",
+                                    fontWeight: 800,
+                                    border: "1px solid rgba(0, 229, 255, 0.4)",
+                                    color: "#00E5FF",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: "6px"
+                                }}
+                                title="Descargar y reinstalar el paquete binario de la versión actual"
+                            >
+                                <span>📥</span>
+                                {downloading ? "Descargando..." : `Reinstalar v${RED_VERSION}`}
+                            </button>
+                        </div>
                     )}
 
                     <div style={{ textAlign: "center", fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>

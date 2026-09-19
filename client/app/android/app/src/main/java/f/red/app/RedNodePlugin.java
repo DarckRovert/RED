@@ -762,27 +762,40 @@ public class RedNodePlugin extends Plugin {
             HttpURLConnection conn = null;
             try {
                 URL url = new URL(urlString);
-                conn = (HttpURLConnection) url.openConnection();
-                conn.setInstanceFollowRedirects(true);
-                conn.setConnectTimeout(15000);
-                conn.setReadTimeout(30000);
-                conn.setRequestProperty("User-Agent", "RED-Mobile-Updater");
+                int redirects = 0;
+                int responseCode;
 
-                int responseCode = conn.getResponseCode();
-                // Manejo de redirecciones 301, 302, 307, 308 (GitHub Releases -> AWS S3 CDN)
-                if (responseCode == HttpURLConnection.HTTP_MOVED_PERM || responseCode == HttpURLConnection.HTTP_MOVED_TEMP || responseCode == 307 || responseCode == 308) {
-                    String newUrl = conn.getHeaderField("Location");
-                    conn.disconnect();
-                    url = new URL(newUrl);
+                // Bucle de redirecciones multinivel (GitHub Releases -> S3/Azure CDN)
+                while (true) {
                     conn = (HttpURLConnection) url.openConnection();
-                    conn.setConnectTimeout(15000);
+                    conn.setInstanceFollowRedirects(true);
+                    conn.setConnectTimeout(20000);
                     conn.setReadTimeout(30000);
                     conn.setRequestProperty("User-Agent", "RED-Mobile-Updater");
                     responseCode = conn.getResponseCode();
+
+                    if (responseCode == HttpURLConnection.HTTP_MOVED_PERM || 
+                        responseCode == HttpURLConnection.HTTP_MOVED_TEMP || 
+                        responseCode == 307 || 
+                        responseCode == 308) {
+
+                        redirects++;
+                        if (redirects > 5) {
+                            throw new Exception("Demasiadas redirecciones HTTP (" + redirects + ")");
+                        }
+                        String newUrl = conn.getHeaderField("Location");
+                        conn.disconnect();
+                        if (newUrl == null || newUrl.isEmpty()) {
+                            throw new Exception("Cabecera de redirección Location vacía");
+                        }
+                        url = new URL(newUrl);
+                        continue;
+                    }
+                    break;
                 }
 
                 if (responseCode != HttpURLConnection.HTTP_OK) {
-                    throw new Exception("HTTP server responded with status: " + responseCode);
+                    throw new Exception("Servidor HTTP respondió con código: " + responseCode);
                 }
 
                 long totalBytes = conn.getContentLengthLong();
@@ -906,7 +919,21 @@ public class RedNodePlugin extends Plugin {
             intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            getContext().startActivity(intent);
+
+            // Concesión explícita de URI para todas las actividades del instalador del sistema (Android 11/14/15)
+            try {
+                android.content.pm.PackageManager pm = getContext().getPackageManager();
+                java.util.List<android.content.pm.ResolveInfo> resInfoList = pm.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+                for (android.content.pm.ResolveInfo resolveInfo : resInfoList) {
+                    String packageName = resolveInfo.activityInfo.packageName;
+                    getContext().grantUriPermission(packageName, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                }
+            } catch (Throwable t) {
+                android.util.Log.w("RedNodePlugin", "grantUriPermission resolution warning: " + t.getMessage());
+            }
+
+            android.content.Context launchCtx = getActivity() != null ? getActivity() : getContext();
+            launchCtx.startActivity(intent);
 
             com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
             ret.put("success", true);
@@ -914,6 +941,49 @@ public class RedNodePlugin extends Plugin {
         } catch (Exception e) {
             android.util.Log.e("RedNodePlugin", "Failed to trigger APK install: " + e.getMessage(), e);
             call.reject("Failed to trigger installer: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Verifica si existe un APK descargado previamente en caché y retorna sus metadatos.
+     */
+    @PluginMethod
+    public void getCachedApkInfo(PluginCall call) {
+        try {
+            File cacheDir = getContext().getCacheDir();
+            File file = new File(cacheDir, "red_update.apk");
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            if (file.exists() && file.length() > 1024 * 1024) { // mayor a 1MB
+                ret.put("exists", true);
+                ret.put("filePath", file.getAbsolutePath());
+                ret.put("size", file.length());
+                ret.put("lastModified", file.lastModified());
+            } else {
+                ret.put("exists", false);
+            }
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Error al consultar caché de APK: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Elimina el APK en caché tras la instalación o descarte.
+     */
+    @PluginMethod
+    public void deleteCachedApk(PluginCall call) {
+        try {
+            File cacheDir = getContext().getCacheDir();
+            File file = new File(cacheDir, "red_update.apk");
+            boolean deleted = false;
+            if (file.exists()) {
+                deleted = file.delete();
+            }
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("deleted", deleted);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Error al eliminar APK en caché: " + e.getMessage());
         }
     }
 

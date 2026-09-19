@@ -68,27 +68,33 @@ export class UpdateManager {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 12000);
 
+            // Nota: Se omite User-Agent por ser cabecera restringida en la especificación W3C/WHATWG Fetch
             const res = await fetch(this.GITHUB_API_URL, {
                 headers: {
                     'Accept': 'application/vnd.github.v3+json',
-                    'User-Agent': 'RED-Sovereign-Updater',
                 },
                 signal: controller.signal,
             });
             clearTimeout(timeoutId);
 
             if (!res.ok) {
-                if (res.status === 404) {
-                    return {
+                // Fallback inteligente para rate limiting de GitHub (403) o releases no encontradas (404)
+                const fallbackApkUrl = `https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/${RED_APK_NAME}`;
+                if (res.status === 404 || res.status === 403) {
+                    const fallbackInfo: UpdateInfo = {
                         hasUpdate: false,
                         currentVersion: RED_VERSION,
                         latestVersion: RED_VERSION,
                         releaseName: `RED v${RED_VERSION}`,
-                        releaseNotes: 'Estás ejecutando la versión más reciente del sistema.',
+                        releaseNotes: res.status === 403
+                            ? 'Límite de peticiones de GitHub API alcanzado. Puedes reinstalar o actualizar manualmente.'
+                            : 'Estás ejecutando la versión canónica actual del sistema.',
                         publishedAt: new Date().toISOString(),
-                        apkUrl: '',
-                        apkSize: 0,
+                        apkUrl: fallbackApkUrl,
+                        apkSize: 66699615,
                     };
+                    this.cachedUpdateInfo = fallbackInfo;
+                    return fallbackInfo;
                 }
                 throw new Error(`GitHub API HTTP ${res.status}: ${res.statusText}`);
             }
@@ -114,15 +120,15 @@ export class UpdateManager {
             }
 
             if (!apkUrl) {
-                apkUrl = `https://github.com/DarckRovert/RED/releases/download/${rawTag}/${RED_APK_NAME}`;
+                apkUrl = `https://github.com/DarckRovert/RED/releases/download/${rawTag || ('v' + RED_VERSION)}/${RED_APK_NAME}`;
             }
 
             const updateInfo: UpdateInfo = {
                 hasUpdate: hasNewer,
                 currentVersion: RED_VERSION,
                 latestVersion: latestVer || RED_VERSION,
-                releaseName: release.name || `RED v${latestVer}`,
-                releaseNotes: release.body || 'Mejoras de rendimiento, cifrado y estabilidad de malla P2P.',
+                releaseName: release.name || `RED v${latestVer || RED_VERSION}`,
+                releaseNotes: release.body || 'Mejoras de rendimiento conectómico, cifrado y estabilidad de malla P2P.',
                 publishedAt: release.published_at || new Date().toISOString(),
                 apkUrl,
                 apkSize,
@@ -134,15 +140,16 @@ export class UpdateManager {
 
         } catch (e: any) {
             console.warn('[UpdateManager] Check failed:', e.message);
+            const fallbackApkUrl = `https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/${RED_APK_NAME}`;
             return {
                 hasUpdate: false,
                 currentVersion: RED_VERSION,
                 latestVersion: RED_VERSION,
                 releaseName: `RED v${RED_VERSION}`,
-                releaseNotes: 'No se pudo contactar con el servidor de actualizaciones o el nodo está operando 100% offline.',
+                releaseNotes: 'Operando en modo autónomo/offline. Puedes reinstalar el paquete local o verificar conectividad.',
                 publishedAt: new Date().toISOString(),
-                apkUrl: '',
-                apkSize: 0,
+                apkUrl: fallbackApkUrl,
+                apkSize: 66699615,
                 error: e.message || 'Error de conexión',
             };
         }
@@ -170,6 +177,51 @@ export class UpdateManager {
             await RedNode.openInstallPermissionSettings();
         } catch (e) {
             console.error('[UpdateManager] Failed to open install settings', e);
+        }
+    }
+
+    /**
+     * Comprueba si existe un APK ya descargado en caché listo para instalar.
+     */
+    public static async getCachedApkInfo(): Promise<{ exists: boolean; filePath?: string; size?: number; lastModified?: number }> {
+        if (!Capacitor.isNativePlatform()) return { exists: false };
+        try {
+            const res = await RedNode.getCachedApkInfo();
+            return {
+                exists: !!res?.exists,
+                filePath: res?.filePath,
+                size: res?.size,
+                lastModified: res?.lastModified,
+            };
+        } catch {
+            return { exists: false };
+        }
+    }
+
+    /**
+     * Dispara la instalación directa del APK existente en caché.
+     */
+    public static async installCachedApk(filePath?: string): Promise<boolean> {
+        if (!Capacitor.isNativePlatform()) return false;
+        try {
+            const res = await RedNode.installApk({ filePath });
+            return !!res?.success;
+        } catch (e) {
+            console.error('[UpdateManager] Fallo al instalar APK desde caché:', e);
+            throw e;
+        }
+    }
+
+    /**
+     * Elimina el archivo APK en caché.
+     */
+    public static async deleteCachedApk(): Promise<boolean> {
+        if (!Capacitor.isNativePlatform()) return false;
+        try {
+            const res = await RedNode.deleteCachedApk();
+            return !!res?.deleted;
+        } catch {
+            return false;
         }
     }
 
