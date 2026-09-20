@@ -297,92 +297,118 @@ export const PitchDeck: React.FC = () => {
             )
         },
 
-        // SLIDE 4: TECNOLOGÍA INVISIBLE
+        // SLIDE 4: TECNOLOGÍA INVISIBLE & BLUEPRINT
         {
             id: 4,
-            tag: "TECNOLOGÍA SUB-GHZ & PROTOCOLOS",
+            tag: "TECNOLOGÍA MULTI-RADIO & BLUEPRINT TÁCTICO",
             title: "¿Cómo Funciona sin Antenas Celulares?",
-            subtitle: "Tres capas de radio transparente que operan en paralelo para garantizar entrega de paquetes en cualquier condición física.",
+            subtitle: "Topología de 4 capas de radio y túneles celulares Zero-Rating asistidos por inteligencia bio-cibernética.",
             tagColor: "#B388FF",
             tagBorder: "rgba(179, 136, 255, 0.4)",
             tagBg: "rgba(179, 136, 255, 0.1)",
-            renderContent: () => (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "24px", width: "100%" }}>
+            renderContent: (base) => (
+                <div style={{ display: "flex", flexDirection: "column", gap: "18px", width: "100%" }}>
                     <div style={{
-                        padding: "24px", borderRadius: "20px",
-                        border: "1px solid rgba(179, 136, 255, 0.3)",
-                        background: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(16px)",
-                        display: "flex", flexDirection: "column", justifyContent: "space-between"
+                        position: "relative", borderRadius: "16px", overflow: "hidden",
+                        border: "1px solid rgba(179, 136, 255, 0.4)",
+                        boxShadow: "0 0 35px rgba(179, 136, 255, 0.15)",
+                        maxHeight: "200px", background: "#060913"
                     }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                            <div style={{
-                                width: "48px", height: "48px", borderRadius: "12px",
-                                background: "rgba(179, 136, 255, 0.15)", border: "1px solid rgba(179, 136, 255, 0.4)",
-                                display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px"
-                            }}>
-                                📡
-                            </div>
-                            <h3 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#FFFFFF", margin: 0 }}>
-                                1. LoRa TDMA (15–25 km)
-                            </h3>
-                            <p style={{ fontSize: "0.92rem", color: "#CBD5E1", lineHeight: 1.6, margin: 0 }}>
-                                Ondas de radio sub-GHz (915 MHz / 868 MHz) de penetración táctica. Atraviesan montañas, bosques y muros de hormigón. El planificador <strong>TDMA v99.0.0</strong> organiza 10 ranuras por segundo, erradicando colisiones.
-                            </p>
-                        </div>
-                        <div style={{ marginTop: "24px", paddingTop: "14px", borderTop: "1px solid rgba(179, 136, 255, 0.2)", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", color: "#B388FF" }}>
-                            Eficiencia espectral: &gt;70% sin colisiones en el aire.
+                        <img
+                            src={`${base}/assets/red_conceptual_architecture_v113.jpg`}
+                            alt="RED Blueprint v113.0.0"
+                            style={{ width: "100%", height: "200px", objectFit: "cover", objectPosition: "center 30%", display: "block" }}
+                        />
+                        <div style={{
+                            position: "absolute", top: "10px", left: "12px",
+                            background: "rgba(6, 9, 19, 0.85)", backdropFilter: "blur(8px)",
+                            padding: "4px 12px", borderRadius: "20px",
+                            border: "1px solid rgba(179, 136, 255, 0.5)",
+                            fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: "#B388FF", fontWeight: 800
+                        }}>
+                            BLUEPRINT v113.0.0 • CONECTOMA BIO-CIBERNÉTICO & CYBERTUNNEL
                         </div>
                     </div>
 
-                    <div style={{
-                        padding: "24px", borderRadius: "20px",
-                        border: "1px solid rgba(0, 229, 255, 0.3)",
-                        background: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(16px)",
-                        display: "flex", flexDirection: "column", justifyContent: "space-between"
-                    }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                            <div style={{
-                                width: "48px", height: "48px", borderRadius: "12px",
-                                background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.4)",
-                                display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px"
-                            }}>
-                                📶
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px", width: "100%" }}>
+                        <div style={{
+                            padding: "16px", borderRadius: "16px",
+                            border: "1px solid rgba(179, 136, 255, 0.3)",
+                            background: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(16px)",
+                            display: "flex", flexDirection: "column", justifyContent: "space-between"
+                        }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                <div style={{ fontSize: "20px" }}>📡</div>
+                                <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#FFFFFF", margin: 0 }}>
+                                    1. LoRa TDMA (15–25 km)
+                                </h3>
+                                <p style={{ fontSize: "0.82rem", color: "#CBD5E1", lineHeight: 1.45, margin: 0 }}>
+                                    Sub-GHz (915/868 MHz) de penetración táctica. El planificador <strong>TDMA v113.0.0</strong> organiza 10 ranuras deterministas por segundo, garantizando 0 colisiones por aire.
+                                </p>
                             </div>
-                            <h3 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#FFFFFF", margin: 0 }}>
-                                2. BLE & Wi-Fi Direct (100–300m)
-                            </h3>
-                            <p style={{ fontSize: "0.92rem", color: "#CBD5E1", lineHeight: 1.6, margin: 0 }}>
-                                Comunicación silenciosa entre teléfonos ordinarios sin accesorios externos. Ciclo táctico (20 ms de escucha cada segundo) que preserva la batería móvil, permitiendo <strong>más de 48 horas de operación continua</strong> en modo Doze.
-                            </p>
+                            <div style={{ marginTop: "12px", paddingTop: "8px", borderTop: "1px solid rgba(179, 136, 255, 0.2)", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: "#B388FF" }}>
+                                Cobertura orográfica de largo alcance.
+                            </div>
                         </div>
-                        <div style={{ marginTop: "24px", paddingTop: "14px", borderTop: "1px solid rgba(0, 229, 255, 0.2)", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", color: "#00E5FF" }}>
-                            Consumo de batería: &lt; 2% de drenaje diario en reposo.
-                        </div>
-                    </div>
 
-                    <div style={{
-                        padding: "24px", borderRadius: "20px",
-                        border: "1px solid rgba(0, 255, 136, 0.3)",
-                        background: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(16px)",
-                        display: "flex", flexDirection: "column", justifyContent: "space-between"
-                    }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                            <div style={{
-                                width: "48px", height: "48px", borderRadius: "12px",
-                                background: "rgba(0, 255, 136, 0.15)", border: "1px solid rgba(0, 255, 136, 0.4)",
-                                display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px"
-                            }}>
-                                🌍
+                        <div style={{
+                            padding: "16px", borderRadius: "16px",
+                            border: "1px solid rgba(0, 229, 255, 0.3)",
+                            background: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(16px)",
+                            display: "flex", flexDirection: "column", justifyContent: "space-between"
+                        }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                <div style={{ fontSize: "20px" }}>📶</div>
+                                <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#FFFFFF", margin: 0 }}>
+                                    2. BLE & Wi-Fi Direct
+                                </h3>
+                                <p style={{ fontSize: "0.82rem", color: "#CBD5E1", lineHeight: 1.45, margin: 0 }}>
+                                    Descubrimiento silencioso de proximidad (0–120m). Wi-Fi Direct a 54 Mbps para planos CAD y video sin router, y BLE en modo Doze (&lt;2% batería/día).
+                                </p>
                             </div>
-                            <h3 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#FFFFFF", margin: 0 }}>
-                                3. Poda Geohash & Mulas DTN
-                            </h3>
-                            <p style={{ fontSize: "0.92rem", color: "#CBD5E1", lineHeight: 1.6, margin: 0 }}>
-                                Si no hay conexión en línea recta, los mensajes se almacenan en el teléfono (Store-and-Forward) y viajan en vehículos, bicicletas o drones. El enrutamiento <strong>Geohash espacial</strong> asegura que solo los portadores adecuados lleven tu mensaje.
-                            </p>
+                            <div style={{ marginTop: "12px", paddingTop: "8px", borderTop: "1px solid rgba(0, 229, 255, 0.2)", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: "#00E5FF" }}>
+                                Autonomía móvil &gt;48 horas en reposo.
+                            </div>
                         </div>
-                        <div style={{ marginTop: "24px", paddingTop: "14px", borderTop: "1px solid rgba(0, 255, 136, 0.2)", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", color: "#00FF88" }}>
-                            Cero saturación intercontinental de satélites o transportes.
+
+                        <div style={{
+                            padding: "16px", borderRadius: "16px",
+                            border: "1px solid rgba(0, 255, 136, 0.3)",
+                            background: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(16px)",
+                            display: "flex", flexDirection: "column", justifyContent: "space-between"
+                        }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                <div style={{ fontSize: "20px" }}>🌍</div>
+                                <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#FFFFFF", margin: 0 }}>
+                                    3. Poda Geohash & DTN
+                                </h3>
+                                <p style={{ fontSize: "0.82rem", color: "#CBD5E1", lineHeight: 1.45, margin: 0 }}>
+                                    Almacenamiento Store-and-Forward para vehículos y mulas. Poda geoespacial que custodia solo tráfico alineado al vector de movimiento.
+                                </p>
+                            </div>
+                            <div style={{ marginTop: "12px", paddingTop: "8px", borderTop: "1px solid rgba(0, 255, 136, 0.2)", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: "#00FF88" }}>
+                                Cero saturación de satélites o canales.
+                            </div>
+                        </div>
+
+                        <div style={{
+                            padding: "16px", borderRadius: "16px",
+                            border: "1px solid rgba(255, 51, 85, 0.3)",
+                            background: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(16px)",
+                            display: "flex", flexDirection: "column", justifyContent: "space-between"
+                        }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                <div style={{ fontSize: "20px" }}>⚡</div>
+                                <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#FFFFFF", margin: 0 }}>
+                                    4. CyberTunnel Zero-Rating
+                                </h3>
+                                <p style={{ fontSize: "0.82rem", color: "#CBD5E1", lineHeight: 1.45, margin: 0 }}>
+                                    Socket proxy local 127.0.0.1:8088 con Anycast Egress (Cloudflare/Google) y DNS Stealth UDP 53 para penetrar firewalls móviles en saldo prepago 0.
+                                </p>
+                            </div>
+                            <div style={{ marginTop: "12px", paddingTop: "8px", borderTop: "1px solid rgba(255, 51, 85, 0.2)", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: "#FF3355" }}>
+                                Salida libre a internet sin saldo celular.
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -541,6 +567,32 @@ export const PitchDeck: React.FC = () => {
                         </div>
                         <p style={{ fontSize: "0.82rem", color: "#CBD5E1", lineHeight: 1.4, margin: 0 }}>
                             Descarga de ráfagas satelitales en cuadrantes específicos mediante telemetría orbital calculada localmente en el teléfono.
+                        </p>
+                    </div>
+
+                    <div style={{
+                        padding: "16px", borderRadius: "14px",
+                        border: "1px solid rgba(0, 229, 255, 0.25)",
+                        background: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(16px)"
+                    }}>
+                        <div style={{ color: "#00E5FF", fontWeight: 800, fontSize: "0.95rem", display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                            <span>🧠</span> Conectoma 3D & Hipocampo CA3
+                        </div>
+                        <p style={{ fontSize: "0.82rem", color: "#CBD5E1", lineHeight: 1.4, margin: 0 }}>
+                            Reconstrucción Hebbiana Hopfield de paquetes LoRa mutilados por EW y visualización bio-cibernética MaleCNS a 60 FPS.
+                        </p>
+                    </div>
+
+                    <div style={{
+                        padding: "16px", borderRadius: "14px",
+                        border: "1px solid rgba(255, 51, 85, 0.25)",
+                        background: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(16px)"
+                    }}>
+                        <div style={{ color: "#FF3355", fontWeight: 800, fontSize: "0.95rem", display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                            <span>⚡</span> CyberTunnel Zero-Rating
+                        </div>
+                        <p style={{ fontSize: "0.82rem", color: "#CBD5E1", lineHeight: 1.4, margin: 0 }}>
+                            Proxy soberano 127.0.0.1:8088 con Anycast Egress y DNS Stealth UDP 53 para salir a internet en saldo celular 0.
                         </p>
                     </div>
                 </div>

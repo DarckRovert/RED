@@ -24,9 +24,109 @@ export const LandingDeploymentArchitecture: React.FC<LandingDeploymentArchitectu
 }) => {
     const isGhPages = typeof window !== 'undefined' && window.location.pathname.includes('/RED');
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH || (isGhPages ? '/RED' : '');
-    const [activeTab, setActiveTab] = useState<string>('radio-layers');
+    const [activeTab, setActiveTab] = useState<string>('blueprint-v113');
 
     const deploymentTabs: DeploymentTab[] = [
+        {
+            id: 'blueprint-v113',
+            label: 'Blueprint & Conectoma v113.0.0',
+            icon: '🧠',
+            title: 'Blueprint Holístico & Conectoma Bio-Cibernético (v113.0.0)',
+            subtitle: 'Mapa conceptual de 6 dimensiones: Hardware multi-radio, Núcleo Rust PQC, CyberTunnel Zero-Rating celular y Red Neocortical Humana.',
+            diagram: (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+                    <div style={{
+                        position: 'relative',
+                        borderRadius: '16px',
+                        overflow: 'hidden',
+                        border: '1.5px solid rgba(0, 229, 255, 0.4)',
+                        boxShadow: '0 0 50px rgba(0, 229, 255, 0.15)',
+                        background: '#040711',
+                    }}>
+                        <img
+                            src={`${basePath}/assets/red_conceptual_architecture_v113.jpg`}
+                            alt="RED Sovereign Mesh OS v113.0.0 Conceptual Blueprint"
+                            style={{ width: '100%', height: 'auto', display: 'block', maxHeight: '560px', objectFit: 'contain' }}
+                        />
+                        <div style={{
+                            position: 'absolute',
+                            top: '12px',
+                            left: '12px',
+                            background: 'rgba(4, 7, 17, 0.85)',
+                            backdropFilter: 'blur(10px)',
+                            padding: '6px 14px',
+                            borderRadius: '20px',
+                            border: '1px solid rgba(0, 229, 255, 0.5)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            fontSize: '11px',
+                            fontFamily: 'JetBrains Mono, monospace',
+                            color: '#00E5FF',
+                            fontWeight: 800
+                        }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00E5FF', boxShadow: '0 0 8px #00E5FF' }} />
+                            BLUEPRINT OFICIAL RED v113.0.0 — INTERCONEXIÓN TOTAL
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+                        <div style={{ padding: '16px', borderRadius: '14px', background: 'rgba(0, 229, 255, 0.06)', border: '1px solid rgba(0, 229, 255, 0.25)' }}>
+                            <div style={{ color: '#00E5FF', fontSize: '12px', fontFamily: 'JetBrains Mono, monospace', fontWeight: 800 }}>
+                                ⚡ CYBERTUNNEL ZERO-RATING
+                            </div>
+                            <div style={{ color: '#FFF', fontSize: '14px', fontWeight: 800, marginTop: '4px' }}>
+                                Navegación Celular Sin Saldo
+                            </div>
+                            <div style={{ color: '#94A3B8', fontSize: '12px', marginTop: '4px', lineHeight: 1.5 }}>
+                                Proxy local en 127.0.0.1:8088 con Domain Fronting celular y enrutamiento hacia pasarelas Anycast (Cloudflare/Google/Fastly) + DNS Stealth UDP 53.
+                            </div>
+                        </div>
+
+                        <div style={{ padding: '16px', borderRadius: '14px', background: 'rgba(255, 51, 85, 0.06)', border: '1px solid rgba(255, 51, 85, 0.25)' }}>
+                            <div style={{ color: '#FF3355', fontSize: '12px', fontFamily: 'JetBrains Mono, monospace', fontWeight: 800 }}>
+                                🧠 HIPOCAMPO CA3 & HEBBIANO
+                            </div>
+                            <div style={{ color: '#FFF', fontSize: '14px', fontWeight: 800, marginTop: '4px' }}>
+                                Rescate de Paquetes Mutilados
+                            </div>
+                            <div style={{ color: '#94A3B8', fontSize: '12px', marginTop: '4px', lineHeight: 1.5 }}>
+                                Red recurrente autoasociativa Hopfield que reconstruye tramas LoRa dañadas por guerra electrónica mediante memoria de engramas.
+                            </div>
+                        </div>
+
+                        <div style={{ padding: '16px', borderRadius: '14px', background: 'rgba(0, 255, 136, 0.06)', border: '1px solid rgba(0, 255, 136, 0.25)' }}>
+                            <div style={{ color: '#00FF88', fontSize: '12px', fontFamily: 'JetBrains Mono, monospace', fontWeight: 800 }}>
+                                🧭 CÉLULAS DE RED ENTORRINAL
+                            </div>
+                            <div style={{ color: '#FFF', fontSize: '14px', fontWeight: 800, marginTop: '4px' }}>
+                                Navegación Subterránea Sin GNSS
+                            </div>
+                            <div style={{ color: '#94A3B8', fontSize: '12px', marginTop: '4px', lineHeight: 1.5 }}>
+                                Odometría inercial PDR con 4 módulos de Moser (0.5 a 32m) y simetría de 60° para túneles, minas y búnkeres sin señal de satélite.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ),
+            techDetails: [
+                {
+                    title: 'Evasión Celular Anycast & DNS Stealth',
+                    desc: 'El proxy multihilo desacoplado enruta paquetes a pasarelas Anycast de alta disponibilidad (104.16.132.229, 142.250.190.46) cuando no hay saldo en la tarjeta SIM, penetrando firewalls móviles.',
+                    badge: 'Zero-Rating Anycast'
+                },
+                {
+                    title: 'Inteligencia Bio-Cibernética Neocortical',
+                    desc: 'El conectoma MaleCNS de 62 núcleos integra el Giro Dentado CA3, la Teoría de la Mente para detección de nodos Sybil y la Inferencia Activa de Friston para suprimir balizas redundantes.',
+                    badge: 'MaleCNS Connectome'
+                },
+                {
+                    title: 'Criptografía Post-Cuántica Fail-Closed',
+                    desc: 'Cifrado blindado NIST FIPS 203 (ML-KEM-768 Kyber + ML-DSA Dilithium) con deduplicación por hash BLAKE3 y CSPRNG estricto de hardware sin fallbacks inseguros.',
+                    badge: 'NIST FIPS 203'
+                }
+            ]
+        },
         {
             id: 'radio-layers',
             label: 'Capas de Radio Multi-Frecuencia',
