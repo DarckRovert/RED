@@ -13,7 +13,7 @@
  * - Slot 9 (1800-2000ms): Ranura de Contención CSMA/CA & Acceso Rápido SOS de Emergencia.
  */
 
-import { LamportMeshClockEngine } from './LamportMeshClockEngine';
+import { LamportMeshClockEngine, ClockSyncQuality } from './LamportMeshClockEngine';
 
 export interface TdmaSlotInfo {
     currentFrameEpoch: number;
@@ -22,6 +22,9 @@ export interface TdmaSlotInfo {
     assignedSlotIndex: number;
     isMySlotActive: boolean;
     isEmergencySlotActive: boolean;
+    guardTimeMs: number;
+    syncQuality: 'HIGH' | 'DEGRADED' | 'DRIFTING';
+    driftPpm: number;
 }
 
 export interface TdmaQueueItem {
@@ -122,21 +125,47 @@ export class LoRaTdmaSchedulerEngine {
      * Retorna el estado actual de la sincronización de ranuras TDMA
      */
     public getCurrentSlotInfo(): TdmaSlotInfo {
-        const consensusTime = LamportMeshClockEngine.getInstance().getConsensusTime();
+        const clock = LamportMeshClockEngine.getInstance();
+        const consensusTime = clock.getConsensusTime();
+        const syncQuality = clock.getSyncQuality();
+        const guardTimeMs = syncQuality.recommendedGuardTimeMs;
+
         const frameEpoch = Math.floor(consensusTime / LoRaTdmaSchedulerEngine.FRAME_DURATION_MS);
         const timeInFrame = consensusTime % LoRaTdmaSchedulerEngine.FRAME_DURATION_MS;
         const currentSlotIndex = Math.floor(timeInFrame / LoRaTdmaSchedulerEngine.SLOT_DURATION_MS);
         const slotTimeRemainingMs = LoRaTdmaSchedulerEngine.SLOT_DURATION_MS - (timeInFrame % LoRaTdmaSchedulerEngine.SLOT_DURATION_MS);
         const assignedSlot = this.computeAssignedSlot(frameEpoch);
 
+        // La ranura propia solo se declara activa si el tiempo restante excede el tiempo de guarda
+        // adaptativo calculado por el PLL para evitar desbordar hacia la ranura del siguiente nodo
+        const isMySlotActive = (currentSlotIndex === assignedSlot) && (slotTimeRemainingMs > guardTimeMs);
+
         return {
             currentFrameEpoch: frameEpoch,
             currentSlotIndex,
             slotTimeRemainingMs,
             assignedSlotIndex: assignedSlot,
-            isMySlotActive: currentSlotIndex === assignedSlot,
+            isMySlotActive,
             isEmergencySlotActive: currentSlotIndex === 9,
+            guardTimeMs,
+            syncQuality: syncQuality.level,
+            driftPpm: syncQuality.estimatedDriftPpm,
         };
+    }
+
+    /**
+     * Generador seguro de identificadores con entropía criptográfica (CSPRNG)
+     */
+    private generateNonce(): string {
+        try {
+            if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+                const buf = new Uint8Array(4);
+                crypto.getRandomValues(buf);
+                return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+        } catch {}
+        const perf = typeof performance !== 'undefined' ? performance.now() : 0;
+        return ((Date.now() ^ (perf * 1000)) & 0xffffff).toString(16).padStart(6, '0');
     }
 
     /**
@@ -192,7 +221,7 @@ export class LoRaTdmaSchedulerEngine {
             const targetSlot = isEmergency ? 9 : slotInfo.assignedSlotIndex;
 
             const item: TdmaQueueItem = {
-                id: `TDMA-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                id: `TDMA-${Date.now()}-${this.generateNonce()}`,
                 payload,
                 priority,
                 isEmergency,
@@ -230,6 +259,12 @@ export class LoRaTdmaSchedulerEngine {
 
         const slotInfo = this.getCurrentSlotInfo();
         const currentSlot = slotInfo.currentSlotIndex;
+
+        // Si el tiempo restante de la ranura es menor o igual al tiempo de guarda dinámico
+        // y no es la ranura SOS de contención de emergencia, abortar el despacho para evitar colisiones
+        if (slotInfo.slotTimeRemainingMs <= slotInfo.guardTimeMs && currentSlot !== 9) {
+            return;
+        }
 
         // Buscar un paquete destinado a la ranura activa actual
         const itemIdx = this.queue.findIndex(it => it.targetSlot === currentSlot || (currentSlot === 9 && it.isEmergency));

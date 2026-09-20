@@ -245,6 +245,21 @@ updateFile('scripts/sync_release_apk.js', (content) => {
     return content.replace(/'\d+\.\d+\.\d+'/, `'${targetVersion}'`);
 }, 'Script de Sincronización APK');
 
+// 21. client/app/android/app/src/main/java/f/red/app/RedProxyServer.java
+updateFile('client/app/android/app/src/main/java/f/red/app/RedProxyServer.java', (content) => {
+    let updated = content.replace(/RedProxyServer — Servidor Proxy Local Soberano en Android \(v\d+\.\d+\.\d+\)/, `RedProxyServer — Servidor Proxy Local Soberano en Android (v${targetVersion})`);
+    updated = updated.replace(/X-RED-ZeroRating-Tunnel: v\d+\.\d+\.\d+/, `X-RED-ZeroRating-Tunnel: v${targetVersion}`);
+    return updated;
+}, 'RedProxyServer Java Header');
+
+// 22. client/app/scripts/test-cyber-tunnel-real-egress.js
+updateFile('client/app/scripts/test-cyber-tunnel-real-egress.js', (content) => {
+    let updated = content.replace(/RED v\d+\.\d+\.\d+ — Test Suite/g, `RED v${targetVersion} — Test Suite`);
+    updated = updated.replace(/SUITE: REAL EGRESS & ZERO-BALANCE CELLULAR TUNNEL ARCHITECTURE \(v\d+\.\d+\.\d+\)/g, `SUITE: REAL EGRESS & ZERO-BALANCE CELLULAR TUNNEL ARCHITECTURE (v${targetVersion})`);
+    updated = updated.replace(/X-RED-ZeroRating-Tunnel: v\d+\.\d+\.\d+/g, `X-RED-ZeroRating-Tunnel: v${targetVersion}`);
+    return updated;
+}, 'Test Suite CyberTunnel Egress');
+
 // Imprimir Reporte de Resultados
 console.log("📋 REPORTE DE ACTUALIZACIÓN DE ARCHIVOS:");
 let hasErrors = false;

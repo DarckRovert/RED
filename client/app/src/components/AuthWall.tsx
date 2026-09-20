@@ -227,21 +227,22 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
         const panicPin = await getSecurePin("panic_pin");
         const decoyPin = await getSecurePin("decoy_pin");
 
-        // 1. PANIC WIPE
+        // 1. PANIC WIPE WITH PLAUSIBLE DENIABILITY (DURESS COERCION PROTOCOL)
         if (panicPin && pwd === panicPin) {
-            TacticalAudioEngine.playEmergencyAlarm();
-            toast.error("🔥 BÓVEDA DESTRUIDA POR PROTOCOLO DE PÁNICO");
-            try {
-                const { duressWipe } = await import("../lib/security/DuressWipeEngine");
-                await duressWipe.executeZeroizeWipe();
-            } catch (e) {
-                console.error("Wipe failed", e);
-                if (typeof window !== "undefined") {
-                    localStorage.clear();
-                    sessionStorage.clear();
-                    window.location.reload();
-                }
-            }
+            // [PLAUSIBLE DENIABILITY]: Cero alarmas sonoras, cero toasts delatores.
+            // Conmuta inmediatamente a la Bóveda Señuelo Civil (Decoy Vault) para aparentar
+            // un desbloqueo exitoso ante un captor armado, mientras en segundo plano se purgan
+            // de forma silenciosa e irreversible todas las llaves reales e IndexedDB.
+            TacticalAudioEngine.playRogerBeep();
+            useRedStore.getState().enableDecoyVault();
+            setLoading(false);
+
+            // Destrucción criptográfica asíncrona de datos reales en segundo plano
+            import("../lib/security/DuressWipeEngine").then(({ duressWipe }) => {
+                duressWipe.executeZeroizeWipe({ silent: true, preserveDecoySession: true }).catch(err => {
+                    console.error("[AuthWall] Error en purga de coacción silenciosa:", err);
+                });
+            }).catch(() => {});
             return;
         }
 

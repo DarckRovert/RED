@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * RedProxyServer — Servidor Proxy Local Soberano en Android (v113.0.0)
+ * RedProxyServer — Servidor Proxy Local Soberano en Android (v114.0.0)
  *
  * Provee un proxy HTTP/HTTPS multi-hilo real en 127.0.0.1:8088.
  * Permite que el sistema Android (vía APN o proxy Wi-Fi) o navegadores locales
@@ -645,19 +645,34 @@ public class RedProxyServer {
             remoteOut.write(newFirstLine.getBytes());
             bytesUploaded.addAndGet(newFirstLine.length());
 
-            // Escribir cabeceras aplicando camuflaje SNI/Fronting si aplica
+            // Escribir cabeceras aplicando camuflaje SNI/Fronting y DPI Browser Mimicry
             boolean hostInjected = false;
+            boolean uaInjected = false;
+            boolean acceptInjected = false;
             for (String h : headers) {
                 String lower = h.toLowerCase();
                 if (lower.startsWith("proxy-connection:") || lower.startsWith("connection:")) {
                     continue;
+                }
+                if (lower.startsWith("user-agent:")) {
+                    uaInjected = true;
+                    // Si el User-Agent es genérico o de biblioteca Java/curl, reemplazar con Chrome Android legítimo
+                    if (lower.contains("java") || lower.contains("okhttp") || lower.contains("curl")) {
+                        String spoofUa = "User-Agent: Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.6613.88 Mobile Safari/537.36\r\n";
+                        remoteOut.write(spoofUa.getBytes());
+                        bytesUploaded.addAndGet(spoofUa.length());
+                        continue;
+                    }
+                }
+                if (lower.startsWith("accept:")) {
+                    acceptInjected = true;
                 }
                 if (lower.startsWith("host:") && zeroRatingEnabled.get() && activeSniHost != null && !activeSniHost.isEmpty()) {
                     // Domain Fronting: Inyectar host del operador y preservar destino original en X-Forwarded-Host
                     remoteOut.write(("Host: " + activeSniHost + "\r\n").getBytes());
                     remoteOut.write(("X-Forwarded-Host: " + host + "\r\n").getBytes());
                     remoteOut.write(("X-RED-Destination-URI: " + uri + "\r\n").getBytes());
-                    remoteOut.write(("X-RED-ZeroRating-Tunnel: v113.0.0\r\n").getBytes());
+                    remoteOut.write(("X-RED-ZeroRating-Tunnel: v114.0.0\r\n").getBytes());
                     bytesUploaded.addAndGet(("Host: " + activeSniHost + "\r\n").length());
                     hostInjected = true;
                     continue;
@@ -668,6 +683,22 @@ public class RedProxyServer {
             if (!hostInjected) {
                 remoteOut.write(("Host: " + host + "\r\n").getBytes());
             }
+            if (!uaInjected) {
+                String spoofUa = "User-Agent: Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.6613.88 Mobile Safari/537.36\r\n";
+                remoteOut.write(spoofUa.getBytes());
+                bytesUploaded.addAndGet(spoofUa.length());
+            }
+            if (!acceptInjected) {
+                String acceptHdr = "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\r\n";
+                remoteOut.write(acceptHdr.getBytes());
+                bytesUploaded.addAndGet(acceptHdr.length());
+            }
+            // Inyectar Client Hints para evadir middleboxes DPI telco
+            String secHeaders = "Sec-Ch-Ua: \"Chromium\";v=\"128\", \"Not;A=Brand\";v=\"24\", \"Google Chrome\";v=\"128\"\r\n" +
+                                "Sec-Ch-Ua-Mobile: ?1\r\n" +
+                                "Sec-Ch-Ua-Platform: \"Android\"\r\n";
+            remoteOut.write(secHeaders.getBytes());
+            bytesUploaded.addAndGet(secHeaders.length());
             remoteOut.write("Connection: close\r\n\r\n".getBytes());
             bytesUploaded.addAndGet("Connection: close\r\n\r\n".length());
 

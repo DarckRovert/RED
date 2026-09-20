@@ -53,9 +53,25 @@ export class DuressWipeEngine {
 
     /**
      * Ejecuta una purga completa y destructiva de todas las bóvedas criptográficas
+     * @param options Configuración de la purga (silent: sin logs ni recarga forzada, preserveDecoySession: conserva la identidad señuelo)
      */
-    public async executeZeroizeWipe(): Promise<void> {
-        console.warn('[DuressWipeEngine] EJECUTANDO PURGA DESTRUTIVA ZEROIZE...');
+    public async executeZeroizeWipe(options: { silent?: boolean; preserveDecoySession?: boolean } = {}): Promise<void> {
+        const isSilent = options.silent ?? false;
+        const preserveDecoy = options.preserveDecoySession ?? false;
+
+        if (!isSilent) {
+            console.warn('[DuressWipeEngine] EJECUTANDO PURGA DESTRUCTIVA ZEROIZE...');
+        }
+
+        // 0. Emisión de alerta silenciosa de coacción a la malla (SOS encubierto)
+        try {
+            const duressBeacon = JSON.stringify({
+                type: 'DURESS_SILENT_ALERT',
+                code: 'ZEROIZE_COERCION',
+                timestamp: Date.now()
+            });
+            await RedAPI.sendMessage('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', duressBeacon, { msg_type: 'emergency_alert' }).catch(() => {});
+        } catch {}
 
         try {
             forensicBlackBox.recordEvent(
@@ -69,15 +85,27 @@ export class DuressWipeEngine {
         if (typeof window !== 'undefined') {
             try {
                 const keys = Object.keys(localStorage);
+                const decoySeed = preserveDecoy ? localStorage.getItem('red_decoy_identity_seed') : null;
+
                 keys.forEach(k => {
+                    if (preserveDecoy && (k === 'red_decoy_identity_seed' || k === 'red_in_decoy_mode')) {
+                        return; // Conservar semilla de la identidad civil señuelo
+                    }
                     const noise = new Uint8Array(64);
                     if (window.crypto && window.crypto.getRandomValues) {
                         window.crypto.getRandomValues(noise);
                     }
                     localStorage.setItem(k, Array.from(noise, b => b.toString(16).padStart(2, '0')).join(''));
+                    localStorage.removeItem(k);
                 });
-                localStorage.clear();
-                sessionStorage.clear();
+
+                if (preserveDecoy && decoySeed) {
+                    localStorage.setItem('red_decoy_identity_seed', decoySeed);
+                    localStorage.setItem('red_in_decoy_mode', 'true');
+                } else if (!preserveDecoy) {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                }
             } catch {}
 
             // 2. Destrucción total de todas las bases de datos IndexedDB activas y de respaldo
@@ -90,7 +118,9 @@ export class DuressWipeEngine {
                     'red_slippy_tiles_vault_v1',
                     'red_dtn_store_forward_v1',
                     'red_offline_vault',
-                    'red_indexed_media_vault_v1'
+                    'red_indexed_media_vault_v1',
+                    'red_entorhinal_breadcrumbs_v1',
+                    'red_hippocampal_engrams_v1'
                 ];
                 activeAndLegacyDbs.forEach(dbName => {
                     try { window.indexedDB.deleteDatabase(dbName); } catch {}
@@ -113,10 +143,12 @@ export class DuressWipeEngine {
                 await RedAPI.panicWipe();
             } catch {}
 
-            // 5. Recarga o desconexión inmediata
-            try {
-                window.location.reload();
-            } catch {}
+            // 5. Recarga o mantenimiento en modo señuelo
+            if (!preserveDecoy) {
+                try {
+                    window.location.reload();
+                } catch {}
+            }
         }
     }
 

@@ -1,5 +1,5 @@
 /**
- * RED v113.0.0 — Test Suite: Real Egress & Zero-Balance Cellular Tunnel Verification
+ * RED v114.0.0 — Test Suite: Real Egress & Zero-Balance Cellular Tunnel Verification
  *
  * Verifies the empirical architectural overhaul for devices with active cellular data
  * but zero balance (prepago sin saldo) in isolated zones (zero mesh neighbors):
@@ -11,7 +11,7 @@
  * 2. RedProxyServer.java:
  *    - ANYCAST_EGRESS_GATEWAYS pool (Cloudflare, Google, Fastly)
  *    - Non-carrier internet traffic forwarding to Egress Gateways instead of carrier dead-end
- *    - Canonical v113.0.0 header synchronization
+ *    - Canonical header synchronization
  * 3. sniSpoofEngine.ts:
  *    - SniProbeResult.hasInternetEgress property
  *    - Differentiation between captive portal redirects (false positives) and real internet egress
@@ -33,7 +33,7 @@ const path = require('path');
 const fs = require('fs');
 
 console.log("================================================================================");
-console.log("⚡  SUITE: REAL EGRESS & ZERO-BALANCE CELLULAR TUNNEL ARCHITECTURE (v113.0.0)");
+console.log("⚡  SUITE: REAL EGRESS & ZERO-BALANCE CELLULAR TUNNEL ARCHITECTURE (v114.0.0)");
 console.log("================================================================================\n");
 
 let totalTests = 0;
@@ -86,7 +86,7 @@ runTest("3. RedProxyServer.java: Define grupo ANYCAST_EGRESS_GATEWAYS para salid
 runTest("4. RedProxyServer.java: Enruta tráfico no-carrier a pasarelas Anycast en lugar de servidores de recarga", () => {
     assert(proxyCode.includes("boolean isCarrierInternal"), "Debe discriminar si el destino es del operador");
     assert(proxyCode.includes("candidateIp = ANYCAST_EGRESS_GATEWAYS[0]"), "Debe usar gateway Anycast de salida");
-    assert(proxyCode.includes("X-RED-ZeroRating-Tunnel: v113.0.0"), "Debe sincronizar encabezado v113.0.0");
+    assert(proxyCode.includes("X-RED-ZeroRating-Tunnel: v114.0.0"), "Debe sincronizar encabezado canónico de versión");
 });
 
 // ── 3. Inspección de sniSpoofEngine.ts ─────────────────────────────────────────

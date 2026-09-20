@@ -1,6 +1,6 @@
 {
   "name": "red-app",
-  "version": "113.0.0",
+  "version": "114.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -31,6 +31,8 @@
     "test:vision": "node scripts/test-phase9-vision-engine.js",
     "test:cellular": "node scripts/test-cellular-dtn-failover.js",
     "test:tdma": "node scripts/test-lora-tdma-scheduler.js",
+    "test:tdma-pll": "node scripts/test-tdma-clock-skew-pll.js",
+    "test:duress": "node scripts/test-duress-plausible-deniability.js",
     "test:geohash": "node scripts/test-geohash-spatial-pruning.js",
     "test:ai": "node scripts/test-ai-orchestrator.js",
     "test:shield": "node scripts/test-sovereign-shield-heuristics.js",

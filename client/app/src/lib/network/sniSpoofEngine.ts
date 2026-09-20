@@ -117,8 +117,15 @@ export class SniSpoofEngine {
       headers: {
         "Host": target.sniHost,
         "X-RED-ZeroRating-Tunnel": `v${RED_VERSION}`,
-        "Content-Type": "application/x-red-noise-frame",
-        "User-Agent": "Mozilla/5.0 (Mobile; Android 14; RED Mesh Node)"
+        "User-Agent": "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.6613.88 Mobile Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "es-419,es;q=0.9,en;q=0.8",
+        "Sec-Ch-Ua": '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
+        "Sec-Ch-Ua-Mobile": "?1",
+        "Sec-Ch-Ua-Platform": '"Android"',
+        "Sec-Fetch-Site": "cross-site",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Dest": "document"
       },
       body: safeBody,
       sniHost: target.sniHost,

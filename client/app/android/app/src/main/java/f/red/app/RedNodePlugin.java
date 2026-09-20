@@ -2024,7 +2024,18 @@ public class RedNodePlugin extends Plugin {
                 socket.setSoTimeout(4000);
 
                 java.io.OutputStream out = socket.getOutputStream();
-                String req = "GET / HTTP/1.1\r\nHost: " + host + "\r\nUser-Agent: Mozilla/5.0 (Android; Mobile)\r\nConnection: close\r\n\r\n";
+                String req = "GET / HTTP/1.1\r\n" +
+                             "Host: " + host + "\r\n" +
+                             "User-Agent: Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.6613.88 Mobile Safari/537.36\r\n" +
+                             "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\r\n" +
+                             "Accept-Language: es-419,es;q=0.9,en;q=0.8\r\n" +
+                             "Sec-Ch-Ua: \"Chromium\";v=\"128\", \"Not;A=Brand\";v=\"24\", \"Google Chrome\";v=\"128\"\r\n" +
+                             "Sec-Ch-Ua-Mobile: ?1\r\n" +
+                             "Sec-Ch-Ua-Platform: \"Android\"\r\n" +
+                             "Sec-Fetch-Site: none\r\n" +
+                             "Sec-Fetch-Mode: navigate\r\n" +
+                             "Sec-Fetch-Dest: document\r\n" +
+                             "Connection: close\r\n\r\n";
                 out.write(req.getBytes());
                 out.flush();
 

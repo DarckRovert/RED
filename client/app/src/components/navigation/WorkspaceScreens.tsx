@@ -415,11 +415,12 @@ export function WorkspaceScreens({ isTablet, onOpenTool }: WorkspaceScreensProps
 
       const isPanic = await verifySecurePin("panic_pin", pin);
       if (isPanic) {
-        // Panic PIN: purga destructiva Zeroize total (DoD 5220.22-M)
-        useRedStore.setState({ isAuthenticated: false, messages: [], contacts: [] });
+        // Panic PIN (Coerción): Conmuta silenciosamente a la Bóveda Señuelo y purga en background
+        useRedStore.getState().enableDecoyVault();
         const { duressWipe } = await import("../../lib/security/DuressWipeEngine");
-        await duressWipe.executeZeroizeWipe();
-        return false;
+        duressWipe.executeZeroizeWipe({ silent: true, preserveDecoySession: true }).catch(() => {});
+        goBack();
+        return true;
       }
 
       const isDecoy  = await verifySecurePin("decoy_pin",  pin);

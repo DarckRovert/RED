@@ -118,6 +118,27 @@ export const MeshTab: React.FC = () => {
                     </div>
                 </div>
 
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", textAlign: "center", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px" }}>
+                    <div style={{ background: "rgba(0,0,0,0.2)", padding: "6px", borderRadius: "6px" }}>
+                        <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Calidad PLL</div>
+                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: slotInfo.syncQuality === 'HIGH' ? "#10b981" : slotInfo.syncQuality === 'DEGRADED' ? "#fbbf24" : "#f87171", fontFamily: "monospace" }}>
+                            {slotInfo.syncQuality}
+                        </div>
+                    </div>
+                    <div style={{ background: "rgba(0,0,0,0.2)", padding: "6px", borderRadius: "6px" }}>
+                        <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Deriva Cuarzo</div>
+                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#38bdf8", fontFamily: "monospace" }}>
+                            {slotInfo.driftPpm >= 0 ? `+${slotInfo.driftPpm}` : slotInfo.driftPpm} PPM
+                        </div>
+                    </div>
+                    <div style={{ background: "rgba(0,0,0,0.2)", padding: "6px", borderRadius: "6px" }}>
+                        <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Guarda Adaptativa</div>
+                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#a855f7", fontFamily: "monospace" }}>
+                            {slotInfo.guardTimeMs} ms
+                        </div>
+                    </div>
+                </div>
+
                 <div style={{ fontSize: "0.72rem", color: "#94a3b8", display: "flex", justifyContent: "space-between", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px" }}>
                     <span>Repetidores Autónomos Solares: <strong style={{ color: "#fff" }}>ESP32-S3 + SX1262</strong></span>
                     <span>Consumo en Reposo: <strong style={{ color: "#10b981" }}>&lt; 12 mA</strong></span>
