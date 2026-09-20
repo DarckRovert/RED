@@ -28,6 +28,8 @@ id_rsa
 id_rsa.pub
 *.keystore
 *.jks
+# Gradle properties con credenciales de keystore — NUNCA versionar
+client/app/android/gradle.properties
 
 # Databases & Crypto Storage
 *.db

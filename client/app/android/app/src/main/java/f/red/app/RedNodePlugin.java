@@ -874,6 +874,57 @@ public class RedNodePlugin extends Plugin {
     }
 
     /**
+     * Calcula el SHA-256 de un archivo en disco usando streaming de 64 KB.
+     * Evita cargar el APK completo (~65 MB) en heap — opera en O(1) de memoria.
+     *
+     * Parámetros de entrada: { filePath: string }
+     * Respuesta de éxito:    { sha256: "<64-char-lowercase-hex>" }
+     * Respuesta de error:    reject con mensaje descriptivo
+     *
+     * Requerido por updateManager.ts para verificar integridad del APK descargado
+     * antes de invocar installApk. Sin este método la verificación SHA-256 es inoperante.
+     */
+    @PluginMethod
+    public void computeFileSha256(PluginCall call) {
+        String filePath = call.getString("filePath");
+        if (filePath == null || filePath.isEmpty()) {
+            call.reject("SHA-256 verification failed: filePath is required");
+            return;
+        }
+
+        java.io.File file = new java.io.File(filePath);
+        if (!file.exists() || !file.isFile()) {
+            call.reject("SHA-256 verification failed: file not found at " + filePath);
+            return;
+        }
+
+        downloadExecutor.execute(() -> {
+            try {
+                java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+                try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
+                    byte[] buffer = new byte[65536]; // 64 KB streaming — O(1) memoria
+                    int bytesRead;
+                    while ((bytesRead = fis.read(buffer)) != -1) {
+                        digest.update(buffer, 0, bytesRead);
+                    }
+                }
+                byte[] hashBytes = digest.digest();
+                StringBuilder hexBuilder = new StringBuilder(64);
+                for (byte b : hashBytes) {
+                    hexBuilder.append(String.format("%02x", b));
+                }
+                com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+                result.put("sha256", hexBuilder.toString());
+                call.resolve(result);
+            } catch (java.security.NoSuchAlgorithmException e) {
+                call.reject("SHA-256 verification failed: SHA-256 algorithm not available on this device");
+            } catch (java.io.IOException e) {
+                call.reject("SHA-256 verification failed: I/O error reading file: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
      * Descarga de APK en streaming nativo de alta eficiencia directamente al almacenamiento caché.
      * Cero uso de Base64 ni saturación del heap de V8 JS.
      * Emite eventos 'apkDownloadProgress' con bytes recibidos, total, porcentaje y velocidad en KB/s.

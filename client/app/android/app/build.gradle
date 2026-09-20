@@ -26,15 +26,22 @@ android {
     signingConfigs {
         release {
             if (project.hasProperty('RED_RELEASE_STORE_FILE')) {
+                // Firma desde variables Gradle (CI/CD o gradle.properties local — NO en el repo)
                 storeFile file(RED_RELEASE_STORE_FILE)
                 storePassword RED_RELEASE_STORE_PASSWORD
                 keyAlias RED_RELEASE_KEY_ALIAS
                 keyPassword RED_RELEASE_KEY_PASSWORD
             } else if (file("../red-release.keystore").exists()) {
+                // Firma desde keystore local — credenciales DEBEN estar en gradle.properties (excluido del repo)
+                // Crear: client/app/android/gradle.properties con:
+                //   RED_RELEASE_STORE_FILE=../red-release.keystore
+                //   RED_RELEASE_STORE_PASSWORD=<tu_password>
+                //   RED_RELEASE_KEY_ALIAS=red-release-key
+                //   RED_RELEASE_KEY_PASSWORD=<tu_password>
                 storeFile file("../red-release.keystore")
-                storePassword "red_sovereign_release_2026"
-                keyAlias "red-release-key"
-                keyPassword "red_sovereign_release_2026"
+                storePassword project.findProperty('RED_RELEASE_STORE_PASSWORD') ?: System.getenv('RED_RELEASE_STORE_PASSWORD') ?: ''
+                keyAlias project.findProperty('RED_RELEASE_KEY_ALIAS') ?: System.getenv('RED_RELEASE_KEY_ALIAS') ?: 'red-release-key'
+                keyPassword project.findProperty('RED_RELEASE_KEY_PASSWORD') ?: System.getenv('RED_RELEASE_KEY_PASSWORD') ?: ''
             }
         }
     }

@@ -1,4 +1,4 @@
-﻿# Release Notes — RED v115.0.0
+# Release Notes — RED v115.0.0
 ## "Bug-Fix Arquitectónico: DMS Key, SSE Loopback, SHA-256, Dedup & Rutas API"
 **Fecha:** 2026-09-20
 
@@ -45,3 +45,44 @@ tacticalGhostGps, ghostGps, sovereignShield, shield, cyberTunnel, zeroRating añ
 - client/app/src/api/core.ts
 - client/app/src/api/client.ts
 - client/app/src/store/types.ts
+
+## Correcciones OTA Engine (Post-Release)
+
+### [C1] Asset selection canónica en updateManager
+El OTA tomaba el primer `.apk` del release sin verificar nombre. Ahora busca
+`red-latest.apk` por nombre exacto antes de caer en búsquedas genéricas.
+
+### [C2] Verificación SHA-256 post-descarga
+Sin verificación, un APK corrupto o de versión incorrecta se instalaba
+silenciosamente. Implementado `computeFileSha256` en `RedNodePlugin.java` 
+(MessageDigest SHA-256, streaming 64 KB, O(1) memoria) e invocado desde
+`updateManager.ts` antes de `installApk`.
+
+### [C3] Invalidación de caché post-instalación
+`UpdateManager.cachedUpdateInfo` no se limpiaba tras instalar. El próximo
+`checkForUpdates` devolvía datos stale. Ahora se invalida en cada install exitoso.
+TTL reducido de 60s a 30s.
+
+### [C4] Pipeline de APK documentado en gobernanza
+`build:apk` ejecuta solo `gradlew` — sin `next build` + `cap sync` previos
+el bundle JS de la versión anterior queda bakeado. Documentado como Nivel 5
+obligatorio en `.agents/rules/governance.md` y workflows.
+
+## Correcciones de Gobernanza y Seguridad
+
+### [S1] Contraseña de keystore eliminada del código fuente
+`build.gradle` tenía `storePassword "red_sovereign_release_2026"` hardcodeado.
+Migrado a `gradle.properties` local (excluido del repo via `.gitignore`).
+
+### [S2] `computeFileSha256` implementado en plugin nativo Java
+El método era invocado desde TypeScript pero no existía en `RedNodePlugin.java`.
+La verificación de integridad OTA era inoperante en hardware.
+
+### [G1] Workflows nuevos creados
+- `.agents/workflows/ota-update.md` — diagnóstico OTA completo
+- `.agents/workflows/rust-backend-deploy.md` — SOP Rust backend
+- `.agents/workflows/hotfix.md` — procedimiento hotfix urgente
+
+### [G2] Git LFS configurado para binarios
+`.gitattributes` actualizado con tracking LFS para `*.apk`, `*.aab`, `*.exe`, `*.so`.
+
