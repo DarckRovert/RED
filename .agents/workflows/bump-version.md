@@ -38,20 +38,43 @@ node client/app/scripts/bump_version.js <X.Y.Z>
 ### 3. Crear o Actualizar Notas de Versión:
 Crear el archivo canónico en la raíz: `release_notes_v<X.Y.Z>.md`. El guardian de integridad bloqueará cualquier release si este archivo no existe o está incompleto.
 
-### 4. Compilar Binarios y Sincronizar Criptográficamente SHA256SUMS:
-Tras compilar los artefactos (ej. `red-v<X.Y.Z>-release.apk` en `release-assets/`):
+### 4. Compilar APK Android y Sincronizar SHA256SUMS:
+
+> [!IMPORTANT]
+> El pipeline de APK requiere **3 pasos en orden estricto**. Omitir `npm run build`
+> hace que el bundle JS de la versión anterior quede bakeado en el APK nuevo.
+> Los dispositivos verán la versión vieja aunque el APK se instale.
+
 ```powershell
 cd client/app
+
+# PASO 1 — Compilar bundle Next.js (bake version.ts → JS)
+npm run build
+
+# PASO 2 — Sincronizar bundle a assets Android WebView
+npx cap sync android
+
+# PASO 3 — Compilar APK
+npm run build:apk
+
+# Copiar a las 3 ubicaciones requeridas por el integrity check
+$src = "android/app/build/outputs/apk/release/app-release.apk"
+$ver = (node -e "const v=require('./src/lib/version.ts' |& node -e 'process.stdin.resume();let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{eval(d.replace(/export /g,""));console.log(RED_VERSION)})'")
+Copy-Item $src "../../release-assets/red-v${ver}-release.apk" -Force
+Copy-Item $src "../../release-assets/red-latest.apk" -Force
+Copy-Item $src "../../red-latest.apk" -Force
+
+# Recalcular y sincronizar SHA-256 en todos los SSOT
 npm run sync:sha256
 ```
-*(Calcula automáticamente los hashes SHA-256 reales de los APKs y sincroniza `SHA256SUMS.txt` y `version.ts` sin edición manual).*
+*(Actualiza `SHA256SUMS.txt`, `version.ts RED_APK_SHA256` y `release-assets/RED-vX.Y.Z.apk.sha256` sin edición manual).*
 
 ### 5. Auditoría Total de Integridad Pre-Release:
 ```powershell
-cd client/app
-npm run audit:integrity -- --strict
+# Desde la raíz del proyecto
+node client/app/scripts/check_release_integrity.js
 ```
-*(Verifica 17 comprobaciones: SHA256SUMS vs archivos reales, paridad SSOT 100%, inexistencia de versiones hardcodeadas, existencia de release notes y limpieza git).*
+*(Verifica 27 comprobaciones: SHA256SUMS vs APKs reales, paridad SSOT 100%, inexistencia de versiones hardcodeadas, existencia de release notes y limpieza git. Debe arrojar `✅ 27 pasados | ❌ 0 errores`.)*
 
 ### 6. Capas de Protección Activas:
 - **Hook Git Local (`.git/hooks/pre-push`):** Intercepta cada `git push` y ejecuta `check_release_integrity.js --strict`, bloqueando cualquier push defectuoso antes de salir de tu máquina.

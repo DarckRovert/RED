@@ -32,9 +32,18 @@ Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNA
    - Derivación de claves con `HKDF-SHA256` y `Argon2id` (`m_cost >= 65536, t_cost >= 3, parallelism >= 4`).
    - Cifrado total en reposo para Sled DB (`CryptoEngine::encrypt()` / `CryptoEngine::decrypt()`).
 
+4. **Nivel 4 - Manejo de Errores, Observabilidad y Resiliencia**:
+   - **Cero Panic en Producción**: En código Rust de `node/` y `red_mobile/`, los errores recuperables DEBEN manejarse con `Result<T, E>`. El uso de `.unwrap()` o `.expect()` sin `// SAFETY:` comentado está prohibido en rutas de código productivo.
+   - **Logging Trazable**: Los errores de red, fallos JNI y errores de API deben loguearse con contexto suficiente: módulo, función, causa raíz. Usar `tracing::error!` en Rust y `console.error` (nunca `console.log`) en TypeScript.
+   - **Degradación Graceful**: Todo componente de UI que dependa de la API local (`127.0.0.1:7333`) DEBE tener un estado de error visible y recuperable. Prohibido dejar la UI en blanco (white screen of death).
+
 5. **Nivel 5 - Versionado Atómico & Pre-Build Hygiene (SSOT)**:
    - **Prohibición de Edición Manual Dispersa**: Queda estrictamente prohibido actualizar manualmente la versión en archivos aislados. Todo incremento o sincronización de versión DEBE ejecutarse mediante `node scripts/bump_version.js <X.Y.Z>`.
-   - **Pre-Flight Check Obligatorio**: Antes de compilar cualquier bundle (`next build`, `cap sync`, Gradle APK), ES OBLIGATORIO ejecutar `node scripts/pre_build_check.js` para purgar caché obsoleta y validar 100% de paridad en los 12 archivos SSOT.
+   - **Pre-Flight Check Obligatorio**: Antes de compilar cualquier bundle, ES OBLIGATORIO ejecutar `node scripts/pre_build_check.js`.
+   - **Pipeline de APK Obligatorio (3 pasos en orden)**: El script `build:apk` ejecuta SOLO `gradlew`. Omitir los pasos previos bake el bundle JS de la versión anterior en el APK, causando que los dispositivos muestren la versión vieja.
+     1. `npm run build` — bake version.ts en el bundle JS (Next.js static export)
+     2. `npx cap sync android` — copiar bundle a assets Android WebView
+     3. `npm run build:apk` — compilar APK con Gradle
 
 6. **Nivel 6 - Automatización CI/CD**:
    - Todos los cambios deben pasar sin excepción los pipelines de `.github/workflows/` (`lint.yml`, `security.yml`, `build.yml`, `test.yml`, `build-android.yml`, `release.yml`).
@@ -75,6 +84,13 @@ Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNA
     - **Coordinación Espectral Obligatoria**: Toda transmisión a través de radios LoRa sub-GHz (Semtech SX1262 / Meshtastic) DEBE canalizarse a través de `LoRaTdmaSchedulerEngine` para evitar la saturación del canal ALOHA en concentraciones masivas. Únicamente se permite bypass inmediato para ráfagas críticas SOS de salvamento de vida (prioridad >= 9).
     - **Poda Espacial en Enrutamiento DTN**: Queda prohibido el transporte ciego de paquetes transcontinentales en mulas de datos y satélites LEO. Todo paquete encolado para custodia a largo plazo debe indexarse mediante Geohash en `dtnStorage` (IndexedDB v2). Las mulas móviles y satélites deben aplicar poda espacial estricta (`GeohashSpatialRouting.shouldCarrierAcceptPacket`) descartando tráfico fuera de su vector geográfico de desplazamiento.
     - **Estándares de Firmware Embebido (`firmware/esp32-repeater/`)**: Todo firmware para repetidores autónomos ESP32/ESP32-S3 debe operar a frecuencia reducida (80 MHz) para garantizar un consumo en reposo centinela inferior a 12 mA. En placas Heltec WiFi LoRa 32 V3 es mandatorio inicializar explícitamente los pines de bus SPI dedicados (SCK=9, MISO=11, MOSI=10, NSS=8) y configurar el oscilador TCXO a 1.8V para prevenir fallas de detección de radio en arranque frío.
+
+15. **Nivel 15 - OTA Update Engine (Distribución Soberana In-App)**:
+    - **Pipeline Canónico por Nombre Exacto**: El `updateManager.ts` DEBE buscar el asset del APK en GitHub Release por nombre canónico exacto (`red-latest.apk`) antes de caer en búsquedas genéricas. Prohibido tomar el primer `.apk` disponible sin verificar nombre.
+    - **Verificación SHA-256 Pre-Instalación**: Todo APK descargado vía OTA DEBE verificarse contra `RED_APK_SHA256` de `version.ts` antes de pasar al `PackageInstaller`. Un APK cuyo hash no coincida DEBE rechazarse con error visible al usuario.
+    - **Invalidación de Caché Post-Instalación**: Tras instalar exitosamente, `UpdateManager.cachedUpdateInfo` DEBE ponerse a `null` para que el siguiente `checkForUpdates` refleje la versión recién instalada.
+    - **Sincronización de `release-assets/red-latest.apk`**: El archivo `release-assets/red-latest.apk` es el que verifica `check_release_integrity.js`. Debe actualizarse junto con `red-latest.apk` en la raíz en cada release.
+
 
 
 

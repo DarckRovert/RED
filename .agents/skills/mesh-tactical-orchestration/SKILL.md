@@ -5,7 +5,7 @@ description: Diagnóstico, calibración y orquestación de la red mesh táctica 
 
 # Skill: Orquestación Táctica de Malla RED (LoRa TDMA, Geohash & Solar Repeaters)
 
-Esta habilidad proporciona procedimientos operativos estandarizados (SOPs) y runbooks para auditar, calibrar y desplegar la pila de red mesh soberana de **RED v98.0.0**.
+Esta habilidad proporciona procedimientos operativos estandarizados (SOPs) y runbooks para auditar, calibrar y desplegar la pila de red mesh soberana de **RED v115.0.0**.
 
 ---
 

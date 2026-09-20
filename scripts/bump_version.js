@@ -245,6 +245,11 @@ updateFile('scripts/sync_release_apk.js', (content) => {
     return content.replace(/'\d+\.\d+\.\d+'/, `'${targetVersion}'`);
 }, 'Script de Sincronización APK');
 
+// 20b. .agents/skills/mesh-tactical-orchestration/SKILL.md
+updateFile('.agents/skills/mesh-tactical-orchestration/SKILL.md', (content) => {
+    return content.replace(/RED v\d+\.\d+\.\d+(?=\.)/, `RED v${targetVersion}`);
+}, 'Skill Mesh Tactical Orchestration');
+
 // 21. client/app/android/app/src/main/java/f/red/app/RedProxyServer.java
 updateFile('client/app/android/app/src/main/java/f/red/app/RedProxyServer.java', (content) => {
     let updated = content.replace(/RedProxyServer — Servidor Proxy Local Soberano en Android \(v\d+\.\d+\.\d+\)/, `RedProxyServer — Servidor Proxy Local Soberano en Android (v${targetVersion})`);

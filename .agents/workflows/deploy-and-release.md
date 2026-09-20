@@ -44,11 +44,34 @@ cd client/app
 npm run deploy:gh
 ```
 
-### 5. Compilación de APK Android (Opcional para Release Móvil)
-Para empaquetar la versión móvil en limpio:
+### 5. Compilación de APK Android (Release Móvil)
+
+> [!IMPORTANT]
+> El pipeline de APK tiene 3 pasos obligatorios y en orden estricto.
+> Omitir `next build` bake el bundle JS de la versión ANTERIOR dentro del APK,
+> haciendo que los dispositivos muestren la versión vieja aunque el APK instale correctamente.
+
 ```powershell
-npx cap sync android
-cd android
-./gradlew assembleRelease
+# PASO A — Compilar bundle JS con la versión actual bakeada
+cd client/app
+npm run build          # Next.js static export — bake version.ts en JS
+
+# PASO B — Sincronizar bundle JS a assets Android (WebView)
+npx cap sync android   # Copia .next/... → android/app/src/main/assets/public/
+
+# PASO C — Compilar APK
+npm run build:apk      # Equivale a: gradlew assembleRelease (desde android/)
 ```
-*Verificar que el APK resultante se firme adecuadamente y se ubique en `release-assets/` sin dejar binarios en la raíz del proyecto.*
+
+**Copiar y registrar APKs:**
+```powershell
+# Copiar a AMBAS ubicaciones (el integrity check verifica release-assets/red-latest.apk)
+$apk = "android/app/build/outputs/apk/release/app-release.apk"
+Copy-Item $apk "../../release-assets/red-v<VERSION>-release.apk" -Force
+Copy-Item $apk "../../release-assets/red-latest.apk" -Force  # ← obligatorio
+Copy-Item $apk "../../red-latest.apk" -Force                 # ← raíz para gh release
+
+# Recalcular SHA-256 en todos los SSOT
+npm run sync:sha256
+```
+*Verificar que el APK resultante se firme con `signingConfigs.release` (nunca `.debug`) y se ubique en `release-assets/`.*
