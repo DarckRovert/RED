@@ -5,7 +5,7 @@ import {
     GroupItem, MessageItem, DmsConfig, BlockItem, ValidatorItem, ConsensusStatus
 } from './types';
 import { fetchWithFallback, getStored, setStored, hashStringSha256, sha256Hex, STORAGE_KEYS, getSessionToken, invalidateSessionTokenCache } from './core';
-import { PeerItem, RustLogEntry, SystemHealthResponse } from './types';
+import { PeerItem, RustLogEntry, SystemHealthResponse, RfMetricsResponse, StegoCapsuleRecord, EmergencyBeaconRecord, TriageReportRecord } from './types';
 import { getP2PWallet, createP2PVoucher, redeemP2PVoucher } from './economy';
 import { getRfMetrics, triggerChannelHop, setRfFecMode, getProximityNodes } from './sensors';
 import { getStegoCapsules, saveStegoCapsule, deleteStegoCapsule } from './economy';
@@ -15,12 +15,12 @@ import { indexedMediaVault } from '../lib/storage/indexedMediaVault';
 
 export class RedAPIClient {
 
-    async getP2PWallet(): Promise<any> { return getP2PWallet(); }
-    async createP2PVoucher(amount: any): Promise<any> { return createP2PVoucher(amount); }
-    async redeemP2PVoucher(id: any): Promise<any> { return redeemP2PVoucher(id); }
-    async getRfMetrics(): Promise<any> { return getRfMetrics(); }
-    async triggerChannelHop(channel?: number): Promise<any> { return triggerChannelHop(channel); }
-    async setRfFecMode(mode: string): Promise<any> { return setRfFecMode(mode); }
+    async getP2PWallet(): Promise<unknown> { return getP2PWallet(); }
+    async createP2PVoucher(amount: number | { amount: number; recipient?: string; memo?: string }): Promise<unknown> { return createP2PVoucher(amount); }
+    async redeemP2PVoucher(id: string | Record<string, unknown>): Promise<unknown> { return redeemP2PVoucher(id as Parameters<typeof redeemP2PVoucher>[0]); }
+    async getRfMetrics(): Promise<RfMetricsResponse> { return getRfMetrics(); }
+    async triggerChannelHop(channel?: number): Promise<{ ok: boolean; channel: number }> { return triggerChannelHop(channel) as Promise<{ ok: boolean; channel: number }>; }
+    async setRfFecMode(mode: string): Promise<{ ok: boolean; fec_mode: string }> { return setRfFecMode(mode) as Promise<{ ok: boolean; fec_mode: string }>; }
     // FIX B1: was a permanent stub returning { ok: true } without calling the backend.
     // Now fetches real contact list and returns the matching contact data.
     async syncContactProfile(id: string): Promise<any> {
@@ -46,21 +46,24 @@ export class RedAPIClient {
             return { ok: false, synced_id: id };
         }
     }
-    async getStegoCapsules(): Promise<any> { return getStegoCapsules(); }
-    async saveStegoCapsule(c: any): Promise<any> { return saveStegoCapsule(c); }
-    async deleteStegoCapsule(id: string): Promise<any> { return deleteStegoCapsule(id); }
-    async getEmergencyBeacons(): Promise<any> { return getEmergencyBeacons(); }
-    async cancelEmergencyBeacon(id: string): Promise<any> { return cancelEmergencyBeacon(id); }
-    async broadcastEmergencyBeacon(b: any): Promise<any> { return broadcastEmergencyBeacon(b); }
-    async getTriageReports(): Promise<any> { return getTriageReports(); }
-    async saveTriageReport(r: any): Promise<any> { return saveTriageReport(r); }
-    async deleteTriageReport(id: string): Promise<any> { return deleteTriageReport(id); }
+    // NOTE: Callers pass partial objects that don't fully match these interfaces.
+    // Using Partial<T> input types to allow callers to pass subsets.
+    // TODO: fix callers in StegoVaultModal, SurvivalBeaconModal, VitalScanModal.
+    async getStegoCapsules(): Promise<StegoCapsuleRecord[]> { return getStegoCapsules(); }
+    async saveStegoCapsule(c: Partial<StegoCapsuleRecord>): Promise<StegoCapsuleRecord> { return saveStegoCapsule(c as StegoCapsuleRecord); }
+    async deleteStegoCapsule(id: string): Promise<{ ok: boolean; deleted: string }> { return deleteStegoCapsule(id); }
+    async getEmergencyBeacons(): Promise<EmergencyBeaconRecord[]> { return getEmergencyBeacons(); }
+    async cancelEmergencyBeacon(id: string): Promise<{ ok: boolean; cancelled: string }> { return cancelEmergencyBeacon(id); }
+    async broadcastEmergencyBeacon(b: Partial<EmergencyBeaconRecord>): Promise<EmergencyBeaconRecord> { return broadcastEmergencyBeacon(b as EmergencyBeaconRecord); }
+    async getTriageReports(): Promise<TriageReportRecord[]> { return getTriageReports(); }
+    async saveTriageReport(r: Partial<TriageReportRecord>): Promise<TriageReportRecord> { return saveTriageReport(r as TriageReportRecord); }
+    async deleteTriageReport(id: string): Promise<{ ok: boolean; deleted: string }> { return deleteTriageReport(id); }
 
     async getBlockchain(): Promise<any> { return fetchWithFallback('/api/blockchain/blocks', undefined, () => []); }
     async getConsensusStatus(): Promise<any> { return fetchWithFallback('/api/blockchain/consensus', undefined, () => ({ epoch: 1, current_slot: 1, total_stake: 100, active_validators: 1, chain_height: 1 })); }
-    async pingDmsActivity(): Promise<any> { return pingDmsActivity(); }
-    async panicWipe(): Promise<any> { return panicWipe(); }
-    async configureHardwareLoRa(config: any): Promise<any> { return fetchWithFallback('/api/network/lora/config', { method: 'POST', body: JSON.stringify(config) }, () => ({ ok: true, config })); }
+    async pingDmsActivity(): Promise<{ success: boolean; last_active_timestamp: number }> { return pingDmsActivity(); }
+    async panicWipe(): Promise<{ success: boolean; wiped: boolean }> { return panicWipe(); }
+    async configureHardwareLoRa(config: Record<string, unknown>): Promise<{ ok: boolean; config: Record<string, unknown> }> { return fetchWithFallback('/api/network/lora/config', { method: 'POST', body: JSON.stringify(config) }, () => ({ ok: true, config })); }
     async getNetworkIp(): Promise<{ ok: boolean; local_ip: string }> {
         return fetchWithFallback<{ ok: boolean; local_ip: string }>('/api/network/ip', undefined, () => ({ ok: true, local_ip: '127.0.0.1' }));
     }

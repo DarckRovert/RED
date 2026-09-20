@@ -118,7 +118,7 @@ export const ShakePairModal: React.FC = () => {
     useEffect(() => {
         const unsub = meshRouter.onShakePair((peer) => {
             if (!peer || !peer.identity_hash || peer.identity_hash === identity?.identity_hash) return;
-            console.log(`[ShakePairModal] Received P2P Shake Pulse from ${peer.display_name} (${peer.identity_hash.slice(0, 8)})`);
+            console.warn(`[ShakePairModal] Received P2P Shake Pulse from ${peer.display_name} (${peer.identity_hash.slice(0, 8)})`);
             
             if (typeof navigator !== "undefined" && navigator.vibrate) {
                 navigator.vibrate([150, 80, 150]);

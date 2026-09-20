@@ -170,7 +170,7 @@ export default function CallScreen() {
         channel.binaryType = "arraybuffer";
 
         channel.onopen = () => {
-            console.log("[WebRTC Call] DataChannel táctico abierto (red-tactical-comms)");
+            console.warn('[WebRTC Call] DataChannel táctico abierto (red-tactical-comms)');
             setIsDataChannelReady(true);
             try {
                 channel.send(JSON.stringify({
@@ -182,7 +182,7 @@ export default function CallScreen() {
         };
 
         channel.onclose = () => {
-            console.log("[WebRTC Call] DataChannel táctico cerrado");
+            console.warn('[WebRTC Call] DataChannel táctico cerrado');
             setIsDataChannelReady(false);
             dataChannelRef.current = null;
         };
@@ -638,7 +638,7 @@ export default function CallScreen() {
 
                 // ICE Connection State Handler
                 pc.oniceconnectionstatechange = () => {
-                    console.log("[WebRTC Call] ICE State:", pc.iceConnectionState);
+                    console.warn('[WebRTC Call] ICE State:', pc.iceConnectionState);
                     if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
                         setStatus("CONECTADO (E2E DTLS-SRTP)");
                         setCallActive(true);
@@ -651,7 +651,7 @@ export default function CallScreen() {
                 };
 
                 pc.onconnectionstatechange = () => {
-                    console.log("[WebRTC Call] Connection State:", pc.connectionState);
+                    console.warn('[WebRTC Call] Connection State:', pc.connectionState);
                     if (pc.connectionState === "connected") {
                         setStatus("CONECTADO (E2E DTLS-SRTP)");
                         setCallActive(true);
@@ -660,7 +660,7 @@ export default function CallScreen() {
 
                 // Remote Track Event Handler — Direct Stream Binding & Non-destructive Aggregation
                 pc.ontrack = (event) => {
-                    console.log("[WebRTC Call] Remote track received:", event.track.kind, event.track.id);
+                    console.warn('[WebRTC Call] Remote track received:', event.track.kind, event.track.id);
                     const incomingStream = (event.streams && event.streams[0]) ? event.streams[0] : null;
                     if (incomingStream) {
                         remoteStreamRef.current = incomingStream;
@@ -691,7 +691,7 @@ export default function CallScreen() {
                                 remoteVideoRef.current.play().catch(e => console.warn("[WebRTC Call] Remote video play deferred:", e));
                             }
                             event.track.onunmute = () => {
-                                console.log("[WebRTC Call] Remote video track unmuted:", event.track.id);
+                                console.warn('[WebRTC Call] Remote video track unmuted:', event.track.id);
                                 if (remoteVideoRef.current) {
                                     if (remoteVideoRef.current.srcObject !== streamToUse) {
                                         remoteVideoRef.current.srcObject = streamToUse;
@@ -710,7 +710,7 @@ export default function CallScreen() {
                                 remoteAudioRef.current.play().catch(e => console.warn("[WebRTC Call] Remote audio play deferred:", e));
                             }
                             event.track.onunmute = () => {
-                                console.log("[WebRTC Call] Remote audio track unmuted:", event.track.id);
+                                console.warn('[WebRTC Call] Remote audio track unmuted:', event.track.id);
                                 if (remoteAudioRef.current) {
                                     if (remoteAudioRef.current.srcObject !== streamToUse) {
                                         remoteAudioRef.current.srcObject = streamToUse;
@@ -884,7 +884,7 @@ export default function CallScreen() {
                             callStartTimeRef.current = signal.startedAt;
                         }
                         if (pc.signalingState === "have-local-offer") {
-                            console.log("[WebRTC Call] Applying remote SDP answer");
+                            console.warn('[WebRTC Call] Applying remote SDP answer');
                             await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
                             await drainPendingCandidates(pc);
                             setStatus("CONECTADO (E2E DTLS-SRTP)");

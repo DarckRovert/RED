@@ -30,7 +30,7 @@ export default function RootLayout({
           if ("serviceWorker" in navigator && window.location.protocol.startsWith("http")) {
             const swPath = `${basePath}/sw.js`;
             navigator.serviceWorker.register(swPath)
-              .then((reg) => console.log("[RED PWA] Service Worker registrado con éxito:", reg.scope))
+              .then((reg) => console.warn('[RED PWA] Service Worker registrado:', reg.scope))
               .catch((err) => console.warn("[RED PWA] Error al registrar Service Worker:", err));
           }
         }

@@ -736,7 +736,10 @@ export default function ChatWindow() {
     const handleSendPayment = async (amount: number, memo?: string) => {
         if (!peerHash) return;
         try {
-            const voucher = await RedAPI.createP2PVoucher({ amount, recipient: peerHash, memo });
+            const voucher = await RedAPI.createP2PVoucher({ amount, recipient: peerHash, memo }) as {
+                id?: string; amount?: number; memo?: string; signature?: string;
+                created_at?: string; qr_payload?: string;
+            };
             const payload = {
                 voucher_id: voucher.id,
                 amount: voucher.amount,
@@ -825,7 +828,7 @@ export default function ChatWindow() {
                     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 }
             } catch (mediaErr) {
-                console.log("[ChatWindow] getUserMedia error, checking native fallback:", mediaErr);
+                console.warn('[ChatWindow] getUserMedia error, checking native fallback:', mediaErr);
             }
 
             if (!stream) {
@@ -1067,7 +1070,7 @@ export default function ChatWindow() {
                 return;
             }
         } catch (err: any) {
-            console.log("[ChatWindow] Native Camera fallback:", err?.message || err);
+            console.error('[ChatWindow] Native Camera fallback error:', err?.message || err);
         }
 
         if (mediaInputRef.current) {

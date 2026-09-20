@@ -286,7 +286,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                 await doLogin(res.masterPin);
             } else {
                 // If cancelled or failed, keep keypad accessible without intrusive error
-                console.log("[AuthWall] Biometric check completed without match / dismissed.");
+                console.warn('[AuthWall] Biometric check completed without match / dismissed.');
             }
         } catch (e) {
             console.warn("[AuthWall] Biometric error:", e);
