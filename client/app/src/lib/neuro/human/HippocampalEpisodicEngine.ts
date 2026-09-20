@@ -24,7 +24,7 @@ export interface MutilatedPacket {
   payloadType?: string;
   geohashPrefix?: string;
   confidenceScore?: number;
-  rawFragment: string; // Cadena o hex parcial recibido
+  rawFragment: string | Uint8Array; // Cadena o bytes crudos parciales recibidos
   corruptedFields: string[];
 }
 
@@ -76,9 +76,17 @@ export class HippocampalEpisodicEngine {
   private failedCompletionsCount = 0;
   private lastReconstructedAt = 0;
   private listeners: Set<(telemetry: HippocampalTelemetry) => void> = new Set();
+  private isPersistDirty = false;
+  private persistTimer: any = null;
+  private onBeforeUnload = () => {
+    this.flushPersistence();
+  };
 
   private constructor() {
     this.hydrateFromStorage();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', this.onBeforeUnload);
+    }
   }
 
   private hydrateFromStorage(): void {
@@ -89,7 +97,19 @@ export class HippocampalEpisodicEngine {
         const list: any[] = JSON.parse(raw);
         if (Array.isArray(list)) {
           list.forEach(item => {
-            const vector = new Uint8Array(item.binaryFeatureVector || HippocampalEpisodicEngine.FEATURE_VECTOR_BYTES);
+            const vector = new Uint8Array(HippocampalEpisodicEngine.FEATURE_VECTOR_BYTES);
+            if (typeof item.binaryFeatureVector === 'string') {
+              const hex = item.binaryFeatureVector;
+              const byteLen = Math.min(vector.length, Math.floor(hex.length / 2));
+              for (let i = 0; i < byteLen; i++) {
+                vector[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16) || 0;
+              }
+            } else if (Array.isArray(item.binaryFeatureVector)) {
+              const byteLen = Math.min(vector.length, item.binaryFeatureVector.length);
+              for (let i = 0; i < byteLen; i++) {
+                vector[i] = item.binaryFeatureVector[i] || 0;
+              }
+            }
             this.engrams.set(item.id, {
               ...item,
               binaryFeatureVector: vector
@@ -100,13 +120,43 @@ export class HippocampalEpisodicEngine {
     } catch {}
   }
 
-  private persistToStorage(): void {
+  public schedulePersist(): void {
+    this.isPersistDirty = true;
+    if (this.persistTimer) return;
+    if (typeof window === 'undefined') return;
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      if (this.isPersistDirty) {
+        this.persistToStorage();
+        this.isPersistDirty = false;
+      }
+    }, 3000);
+  }
+
+  public flushPersistence(): void {
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    if (this.isPersistDirty) {
+      this.persistToStorage();
+      this.isPersistDirty = false;
+    }
+  }
+
+  public persistToStorage(): void {
     if (typeof window === 'undefined') return;
     try {
-      const serialized = Array.from(this.engrams.values()).slice(-200).map(e => ({
-        ...e,
-        binaryFeatureVector: Array.from(e.binaryFeatureVector)
-      }));
+      const serialized = Array.from(this.engrams.values()).slice(-200).map(e => {
+        let hex = '';
+        for (let i = 0; i < e.binaryFeatureVector.length; i++) {
+          hex += e.binaryFeatureVector[i].toString(16).padStart(2, '0');
+        }
+        return {
+          ...e,
+          binaryFeatureVector: hex
+        };
+      });
       localStorage.setItem(HippocampalEpisodicEngine.STORAGE_KEY, JSON.stringify(serialized));
     } catch {}
   }
@@ -123,15 +173,17 @@ export class HippocampalEpisodicEngine {
   }
 
   /**
-   * Giro Dentado (DG): Proyecta campos textuales/binarios a un vector disperso ortogonal de 1024 bits.
+   * Giro Dentado (DG): Proyecta campos textuales o binarios a un vector disperso ortogonal de 1024 bits.
    */
-  public generateSparseFeatureVector(input: string): Uint8Array {
+  public generateSparseFeatureVector(input: string | Uint8Array): Uint8Array {
     const vector = new Uint8Array(HippocampalEpisodicEngine.FEATURE_VECTOR_BYTES);
     if (!input) return vector;
 
+    const rawLen = typeof input === 'string' ? input.length : input.byteLength;
+    const len = Math.min(rawLen, 2048);
     // Función hash dispersa determinista (simulando conexiones perforantes de la corteza entorrinal)
-    for (let i = 0; i < input.length; i++) {
-      const code = input.charCodeAt(i);
+    for (let i = 0; i < len; i++) {
+      const code = typeof input === 'string' ? input.charCodeAt(i) : input[i];
       const byteIdx1 = (code * 31 + i * 17) % HippocampalEpisodicEngine.FEATURE_VECTOR_BYTES;
       const byteIdx2 = (code * 97 + i * 43) % HippocampalEpisodicEngine.FEATURE_VECTOR_BYTES;
       const bit1 = code % 8;
@@ -185,7 +237,7 @@ export class HippocampalEpisodicEngine {
     }
 
     this.engrams.set(packet.id, engram);
-    this.persistToStorage();
+    this.schedulePersist();
     this.notifyListeners();
     return engram;
   }
@@ -248,6 +300,10 @@ export class HippocampalEpisodicEngine {
     this.failedCompletionsCount++;
     this.notifyListeners();
 
+    const summary = typeof mutilated.rawFragment === 'string'
+      ? `Fragmento no recuperable: ${mutilated.rawFragment.slice(0, 32)}...`
+      : `Fragmento binario no recuperable (${mutilated.rawFragment.byteLength}B)`;
+
     return {
       isSuccessfullyReconstructed: false,
       restoredPacket: {
@@ -256,7 +312,7 @@ export class HippocampalEpisodicEngine {
         channel: mutilated.channel || '#general',
         payloadType: mutilated.payloadType || 'FRAGMENT',
         geohashPrefix: mutilated.geohashPrefix || '',
-        decodedSummary: `Fragmento no recuperable: ${mutilated.rawFragment.slice(0, 32)}...`,
+        decodedSummary: summary,
       },
       reconstructionConfidence: Math.round(maxSimilarity * 100) / 100,
       associatedEngramId: 'NONE',
@@ -302,11 +358,16 @@ export class HippocampalEpisodicEngine {
     this.engrams.clear();
     this.patternCompletionsCount = 0;
     this.failedCompletionsCount = 0;
+    this.flushPersistence();
     this.persistToStorage();
     this.notifyListeners();
   }
 
   public destroy(): void {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', this.onBeforeUnload);
+    }
+    this.flushPersistence();
     this.engrams.clear();
     this.listeners.clear();
     HippocampalEpisodicEngine.instance = null;

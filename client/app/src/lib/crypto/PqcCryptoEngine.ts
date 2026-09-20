@@ -411,7 +411,7 @@ function getRandomBytes(length: number): Uint8Array {
             const nodeCrypto = require('crypto');
             nodeCrypto.randomFillSync(bytes);
         } catch {
-            for (let i = 0; i < length; i++) bytes[i] = Math.floor(Math.random() * 256);
+            throw new Error("FATAL: Cryptographically secure random number generator (CSPRNG) unavailable in this runtime environment.");
         }
     }
     return bytes;

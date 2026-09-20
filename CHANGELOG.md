@@ -1,5 +1,29 @@
 # Changelog
 
+## [113.0.0-cybertunnel-zero-rating-y-bio-cybernetic-real-egress] - 2026-09-20
+
+### ⚡ CyberTunnel Zero-Rating & Bio-Cybernetic Real Egress (Release Oficial v113.0.0)
+
+- **Reingeniería Integral del Túnel Celular Zero-Rating (`RedCyberTunnelEngine.ts`):**
+  - Despacho preferente vía plugin nativo Java en Android para evadir las restricciones W3C Fetch de la cabecera prohibida `Host`.
+  - Integración del modo `DNS_STEALTH` (SlowDNS sobre UDP 53) para penetración de firewalls móviles en SIMs prepago sin saldo.
+  - Supresión de falsos positivos en el sondeo de permeabilidad mediante detección de bucles de redirección cautiva (301/302/307 a recargas).
+- **Puente Nativo de Ejecución y DNS Sigiloso (`RedNodePlugin.java`):**
+  - Implementación de `@PluginMethod public void executeTunneledRequest(PluginCall call)` con socket proxy local `127.0.0.1:8088`, auto-inicio de servicio y seguimiento automático de redirecciones HTTP ➔ HTTPS.
+  - Implementación de `@PluginMethod public void queryDnsStealth(PluginCall call)` mediante `DatagramSocket` crudo sobre UDP 53.
+  - Inyección de `HostnameVerifier` permisivo para túneles HTTPS sobre pasarelas Anycast.
+- **Pasarelas Anycast de Salida a Internet (`RedProxyServer.java`):**
+  - Pool `ANYCAST_EGRESS_GATEWAYS` (Cloudflare, Google, Fastly) para permitir que el tráfico de internet libre no choque contra los servidores web de recargas del operador.
+  - Discriminación universal `isCarrierDestination` y balanceo por hash.
+  - Sincronización del encabezado canónico a `v113.0.0`.
+- **Interfaz Táctica del Túnel Soberano (`RedCyberTunnelModal.tsx`):**
+  - Selector de modo de transporte entre `ZERO_RATING_SNI`, `DNS_STEALTH` y `MESH_GATEWAY`.
+  - Telemetría en vivo con estado de `EGRESO A INTERNET` y `MODO DE ENRUTAMIENTO`.
+- **Blindaje de Resiliencia de Motores Bio-Cibernéticos:**
+  - Persistencia asíncrona diferida en `HippocampalEpisodicEngine.ts` y `TheoryOfMindEpistemicEngine.ts`.
+  - Fail-closed CSPRNG en `PqcCryptoEngine.ts` (erradicación de `Math.random()`).
+  - Desacoplamiento de Canvas 3D a 60 FPS en `MaleCnsConnectomeHUD.tsx` y gestión compartida de `AudioContext` en `ChatHeader.tsx` y `CallScreen.tsx`.
+
 ## [112.0.0-arquitectura-bio-cibernetica-neocortical-humana-memoria-hebbiana-ca3-y-mercado-barter-ofc] - 2026-09-19
 
 ### 🧠 Arquitectura Bio-Cibernética Neocortical Humana, Memoria Hebbiana CA3 y Mercado Barter OFC (Release Oficial v112.0.0)

@@ -36,6 +36,7 @@ export interface SniSpoofStats {
 export interface SniProbeResult {
   success: boolean;            // true SOLO si un nodo o pasarela RED remota valida la recepción
   isCaptivePermeable: boolean; // true si la red celular permite tráfico hacia portales cautivos sin saldo
+  hasInternetEgress?: boolean; // true si el tráfico sale a internet libre sin intercepción de portal
   latencyMs: number;
   provider: string;
   reason?: string;
@@ -176,12 +177,22 @@ export class SniSpoofEngine {
             this.stats.lastSuccessfulRegion = target.region;
             this.stats.bypassSuccessRate = 100.0;
             const latencyMs = nativeRes.latencyMs || Math.round(performance.now() - startTime);
+
+            const isRedirect = nativeRes.statusCode === 301 || nativeRes.statusCode === 302 || nativeRes.statusCode === 307;
+            const loc = (nativeRes.location || '').toLowerCase();
+            const isCaptiveIntercepted = isRedirect || loc.includes('recarga') || loc.includes('portal') || loc.includes('saldo');
+            const hasInternetEgress = (nativeRes.statusCode === 200 || nativeRes.statusCode === 204) && !isCaptiveIntercepted;
+
             return {
               success: true,
               isCaptivePermeable: true,
+              hasInternetEgress,
               latencyMs,
               provider: this.stats.currentHostFront,
               statusCode: nativeRes.statusCode || 200,
+              reason: hasInternetEgress 
+                ? 'Conexión a internet directa disponible'
+                : 'Portal cautivo de operador detectado (Sin saldo - Requiere Túnel SNI o DNS Stealth)',
             };
           } else if (nativeRes && nativeRes.error) {
             errorsCollected.push(`${target.provider}: ${nativeRes.error}`);
@@ -206,7 +217,15 @@ export class SniSpoofEngine {
         this.stats.activeProvider = target.provider;
         this.stats.lastSuccessfulRegion = target.region;
         this.stats.bypassSuccessRate = 80.0;
-        return { success: true, isCaptivePermeable: true, latencyMs, provider: this.stats.currentHostFront, statusCode: response.status || 200 };
+        return { 
+          success: true, 
+          isCaptivePermeable: true, 
+          hasInternetEgress: false,
+          latencyMs, 
+          provider: this.stats.currentHostFront, 
+          statusCode: response.status || 200,
+          reason: 'Portal cautivo alcanzable (Web Fallback)',
+        };
       } catch (err: any) {
         const errMsg = err instanceof Error ? err.message : String(err);
         errorsCollected.push(`${target.provider}: ${errMsg}`);

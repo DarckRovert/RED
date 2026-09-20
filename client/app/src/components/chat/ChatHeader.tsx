@@ -3,6 +3,7 @@ import { useRedStore } from "../../store/useRedStore";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
 import { TacIcon } from "../ui/TacIcon";
+import { AudioContextManager } from "../../lib/audio/AudioContextManager";
 
 
 interface ChatHeaderProps {
@@ -102,10 +103,10 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             return;
         }
         try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (AudioContextClass) {
-                const ctx = new AudioContextClass();
-                if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+            AudioContextManager.setupUserGestureUnlock();
+            const sharedCtx = AudioContextManager.getSharedContext();
+            if (sharedCtx && sharedCtx.state === 'suspended') {
+                sharedCtx.resume().catch(() => {});
             }
         } catch {}
         const target = fullPeerHash || peerHash;
@@ -130,10 +131,10 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             return;
         }
         try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (AudioContextClass) {
-                const ctx = new AudioContextClass();
-                if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+            AudioContextManager.setupUserGestureUnlock();
+            const sharedCtx = AudioContextManager.getSharedContext();
+            if (sharedCtx && sharedCtx.state === 'suspended') {
+                sharedCtx.resume().catch(() => {});
             }
         } catch {}
         const target = fullPeerHash || peerHash;

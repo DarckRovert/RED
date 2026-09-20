@@ -537,7 +537,29 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     return { nodes: nList, edges: eList };
   }, [cxTelemetry, gfsTelemetry, mbTelemetry]);
 
-  // Bucle de Renderizado 3D en Canvas (Desacoplado de re-renders de React para 60 FPS puros)
+  // Referencias mutables para desacoplar el bucle de renderizado 3D de las re-renderizaciones de React
+  const nodesRef = useRef<ConnectomeNode[]>(nodes);
+  const edgesRef = useRef<ConnectomeEdge[]>(edges);
+  const filterSystemRef = useRef<"ALL" | "CX" | "MB" | "GFS" | "FB">(filterSystem);
+  const gfsTelemetryRef = useRef<GiantFiberTelemetry>(gfsTelemetry);
+
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+
+  useEffect(() => {
+    filterSystemRef.current = filterSystem;
+  }, [filterSystem]);
+
+  useEffect(() => {
+    gfsTelemetryRef.current = gfsTelemetry;
+  }, [gfsTelemetry]);
+
+  // Bucle de Renderizado 3D en Canvas (60 FPS puros desacoplados de React)
   useEffect(() => {
     let animationId: number;
     let pulseT = 0;
@@ -547,6 +569,11 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
+
+      const currentEdges = edgesRef.current;
+      const currentNodes = nodesRef.current;
+      const filterSystem = filterSystemRef.current;
+      const currentGfs = gfsTelemetryRef.current;
 
       // Sincronizar buffer del canvas con la resolución física del display (Retina / 4K)
       const rect = canvas.getBoundingClientRect();
@@ -628,11 +655,11 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
         };
 
         // 1. Dibujar Aristas Sinápticas (Axones)
-        edges.forEach((edge) => {
+        currentEdges.forEach((edge) => {
           if (filterSystem !== "ALL" && edge.system !== filterSystem) return;
 
-          const srcNode = nodes.find((n) => n.id === edge.from);
-          const dstNode = nodes.find((n) => n.id === edge.to);
+          const srcNode = currentNodes.find((n) => n.id === edge.from);
+          const dstNode = currentNodes.find((n) => n.id === edge.to);
           if (!srcNode || !dstNode) return;
 
           const p1 = project(srcNode.pos);
@@ -643,19 +670,19 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           let strokeColor = "rgba(0, 229, 255, 0.2)";
           if (edge.system === "FB") strokeColor = "rgba(255, 214, 0, 0.3)";
           if (edge.system === "MB") strokeColor = "rgba(179, 136, 255, 0.25)";
-          if (edge.system === "GFS") strokeColor = gfsTelemetry.emconLockActive ? "rgba(255, 51, 85, 0.6)" : "rgba(255, 145, 0, 0.35)";
+          if (edge.system === "GFS") strokeColor = currentGfs.emconLockActive ? "rgba(255, 51, 85, 0.6)" : "rgba(255, 145, 0, 0.35)";
 
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
           ctx.strokeStyle = strokeColor;
-          ctx.lineWidth = Math.max(0.5, (edge.weight || 1) * 1.5 * dpr);
+          ctx.lineWidth = Math.max(0.5, (edge.weight || 0.5) * 1.5 * dpr);
           ctx.stroke();
 
-          // Pulso de potencial de acción viajando
-          const pulseRatio = Math.max(0, Math.min(1, (Math.sin(pulseT + (p1.x % 5)) + 1) / 2));
-          const px = p1.x + (p2.x - p1.x) * pulseRatio;
-          const py = p1.y + (p2.y - p1.y) * pulseRatio;
+          // Pulso de potencial de acción dinámico a lo largo del axón
+          const pulseOffset = (pulseT + (edge.from.length + edge.to.length) * 0.3) % 1;
+          const px = p1.x + (p2.x - p1.x) * pulseOffset;
+          const py = p1.y + (p2.y - p1.y) * pulseOffset;
 
           if (Number.isFinite(px) && Number.isFinite(py)) {
             ctx.beginPath();
@@ -666,7 +693,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
         });
 
         // 2. Dibujar Nodos Neuronales (Somas y Glomérulos)
-        const sortedNodes = [...nodes]
+        const sortedNodes = [...currentNodes]
           .filter((n) => filterSystem === "ALL" || n.system === filterSystem)
           .map((n) => ({ node: n, proj: project(n.pos) }))
           .filter((item) => item.proj.visible)
@@ -717,7 +744,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     return () => {
       cancelAnimationFrame(animationId);
     };
-  }, [nodes, edges, filterSystem, gfsTelemetry]);
+  }, []);
 
   // Controlador de arrastre táctil y pinch-to-zoom para navegación 3D
   const isDragging = useRef(false);

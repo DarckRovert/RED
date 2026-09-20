@@ -1424,9 +1424,15 @@ class MeshRouter {
       try {
         const { HippocampalEpisodicEngine } = require('../neuro/human/HippocampalEpisodicEngine');
         const hippocampal = HippocampalEpisodicEngine.getInstance();
-        const rawString = new TextDecoder().decode(raw);
+        let fragmentInput: string | Uint8Array = raw;
+        try {
+          fragmentInput = new TextDecoder('utf-8', { fatal: true }).decode(raw);
+        } catch {
+          fragmentInput = raw;
+        }
+
         const reconstructed = hippocampal.attemptPatternCompletion({
-          rawFragment: rawString,
+          rawFragment: fragmentInput,
           corruptedFields: ['payload']
         });
         if (reconstructed.isSuccessfullyReconstructed && reconstructed.reconstructionConfidence >= 0.70) {
@@ -1464,7 +1470,12 @@ class MeshRouter {
     try {
       const { HippocampalEpisodicEngine } = require('../neuro/human/HippocampalEpisodicEngine');
       const hippocampal = HippocampalEpisodicEngine.getInstance();
-      const preview = new TextDecoder().decode(packet.payload.slice(0, 100));
+      let preview = '';
+      try {
+        preview = new TextDecoder('utf-8', { fatal: true }).decode(packet.payload.slice(0, 100));
+      } catch {
+        preview = Array.from(packet.payload.slice(0, 32)).map(b => b.toString(16).padStart(2, '0')).join('');
+      }
       hippocampal.memorizePacket({
         id: packet.nonce,
         senderPeerId: packet.sender,

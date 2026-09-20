@@ -2080,4 +2080,193 @@ public class RedNodePlugin extends Plugin {
             }
         }, "CaptiveProbeThread").start();
     }
+
+    /**
+     * Ejecuta una petición HTTP/HTTPS a través del túnel o proxy local nativo 127.0.0.1:8088
+     * Permite al navegador interno de RED navegar libremente eludiendo las restricciones de CORS
+     * y las cabeceras prohibidas (Host) del WebView de Android.
+     */
+    @PluginMethod
+    public void executeTunneledRequest(PluginCall call) {
+        String targetUrl = call.getString("url");
+        if (targetUrl == null || targetUrl.trim().isEmpty()) {
+            call.reject("URL de destino requerida");
+            return;
+        }
+
+        String method = call.getString("method", "GET").toUpperCase();
+        int timeoutMs = call.getInt("timeoutMs", 15000);
+        com.getcapacitor.JSObject headersObj = call.getObject("headers");
+        String body = call.getString("body", null);
+        String mode = call.getString("mode", "ZERO_RATING_SNI");
+
+        new Thread(() -> {
+            try {
+                if (RedNodeService.getProxyServer() == null || !RedNodeService.getProxyServer().isRunning()) {
+                    RedNodeService.startProxyServer(8088);
+                }
+                int proxyPort = RedNodeService.getProxyServer() != null ? RedNodeService.getProxyServer().getBoundPort() : 8088;
+                java.net.Proxy proxy = new java.net.Proxy(java.net.Proxy.Type.HTTP, new java.net.InetSocketAddress("127.0.0.1", proxyPort));
+
+                java.net.URL url = new java.net.URL(targetUrl);
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection(proxy);
+                conn.setRequestMethod(method);
+                conn.setConnectTimeout(timeoutMs);
+                conn.setReadTimeout(timeoutMs);
+                conn.setInstanceFollowRedirects(true);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Mobile; Android 14; RED Sovereign Browser)");
+                conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain,*/*;q=0.8");
+                conn.setRequestProperty("Accept-Language", "es-ES,es;q=0.9,en;q=0.8");
+
+                if (conn instanceof javax.net.ssl.HttpsURLConnection) {
+                    ((javax.net.ssl.HttpsURLConnection) conn).setHostnameVerifier((hostname, session) -> true);
+                }
+
+                if (headersObj != null) {
+                    java.util.Iterator<String> keys = headersObj.keys();
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        conn.setRequestProperty(key, headersObj.getString(key));
+                    }
+                }
+
+                if (body != null && !body.isEmpty() && ("POST".equals(method) || "PUT".equals(method))) {
+                    conn.setDoOutput(true);
+                    try (java.io.OutputStream os = conn.getOutputStream()) {
+                        os.write(body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        os.flush();
+                    }
+                }
+
+                int statusCode = conn.getResponseCode();
+                String statusMessage = conn.getResponseMessage();
+
+                // Manejo de redirecciones entre protocolos (HTTP -> HTTPS) hasta 3 saltos
+                int redirects = 0;
+                while (redirects < 3 && (statusCode == 301 || statusCode == 302 || statusCode == 303 || statusCode == 307 || statusCode == 308)) {
+                    String redirectUrl = conn.getHeaderField("Location");
+                    if (redirectUrl == null || redirectUrl.trim().isEmpty()) break;
+                    if (!redirectUrl.startsWith("http://") && !redirectUrl.startsWith("https://")) {
+                        redirectUrl = new java.net.URL(url, redirectUrl).toString();
+                    }
+                    url = new java.net.URL(redirectUrl);
+                    conn = (java.net.HttpURLConnection) url.openConnection(proxy);
+                    conn.setRequestMethod("GET");
+                    conn.setConnectTimeout(timeoutMs);
+                    conn.setReadTimeout(timeoutMs);
+                    conn.setInstanceFollowRedirects(true);
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Mobile; Android 14; RED Sovereign Browser)");
+                    conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain,*/*;q=0.8");
+                    conn.setRequestProperty("Accept-Language", "es-ES,es;q=0.9,en;q=0.8");
+                    if (conn instanceof javax.net.ssl.HttpsURLConnection) {
+                        ((javax.net.ssl.HttpsURLConnection) conn).setHostnameVerifier((hostname, session) -> true);
+                    }
+                    statusCode = conn.getResponseCode();
+                    statusMessage = conn.getResponseMessage();
+                    redirects++;
+                }
+
+                java.io.InputStream inStream = (statusCode >= 200 && statusCode < 400)
+                        ? conn.getInputStream()
+                        : conn.getErrorStream();
+
+                String responseBody = "";
+                if (inStream != null) {
+                    try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(inStream, java.nio.charset.StandardCharsets.UTF_8))) {
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            sb.append(line).append("\n");
+                            if (sb.length() > 2000000) break; // Cota de seguridad de 2MB
+                        }
+                        responseBody = sb.toString();
+                    }
+                }
+
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("success", true);
+                ret.put("ok", statusCode >= 200 && statusCode < 400);
+                ret.put("status", statusCode);
+                ret.put("statusText", statusMessage != null ? statusMessage : "");
+                ret.put("body", responseBody);
+                ret.put("fromProxy", true);
+                ret.put("carrierHost", RedNodeService.getProxyServer() != null ? RedNodeService.getProxyServer().getActiveSniHost() : "127.0.0.1");
+                call.resolve(ret);
+
+            } catch (Exception e) {
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("success", false);
+                ret.put("ok", false);
+                ret.put("status", 502);
+                ret.put("statusText", "Error en túnel soberano: " + e.getMessage());
+                ret.put("body", "<html><body><h3>Fallo en Túnel Zero-Rating</h3><p>" + e.getMessage() + "</p></body></html>");
+                ret.put("fromProxy", true);
+                ret.put("error", e.getMessage());
+                call.resolve(ret);
+            }
+        }, "TunneledRequestThread").start();
+    }
+
+    /**
+     * Consulta DNS Sigilosa sobre UDP 53 (Modo DNS_STEALTH / SlowDNS)
+     * Permite penetrar firewalls celulares que bloquean puertos TCP 80/443 sin saldo.
+     */
+    @PluginMethod
+    public void queryDnsStealth(PluginCall call) {
+        String host = call.getString("host", "connectivitycheck.gstatic.com");
+        String server = call.getString("server", "1.1.1.1");
+        int port = call.getInt("port", 53);
+        long startTime = System.currentTimeMillis();
+
+        new Thread(() -> {
+            java.net.DatagramSocket udpSocket = null;
+            try {
+                udpSocket = new java.net.DatagramSocket();
+                udpSocket.setSoTimeout(4000);
+
+                // Paquete DNS estándar tipo A
+                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                baos.write(new byte[]{0x1a, 0x2b, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
+                for (String part : host.split("\\.")) {
+                    if (part.isEmpty()) continue;
+                    byte[] b = part.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    baos.write((byte) b.length);
+                    baos.write(b);
+                }
+                baos.write(0x00);
+                baos.write(new byte[]{0x00, 0x01, 0x00, 0x01}); // QTYPE A (1), QCLASS IN (1)
+
+                byte[] queryData = baos.toByteArray();
+                java.net.InetAddress serverAddr = java.net.InetAddress.getByName(server);
+                java.net.DatagramPacket queryPacket = new java.net.DatagramPacket(queryData, queryData.length, serverAddr, port);
+                udpSocket.send(queryPacket);
+
+                byte[] buffer = new byte[512];
+                java.net.DatagramPacket respPacket = new java.net.DatagramPacket(buffer, buffer.length);
+                udpSocket.receive(respPacket);
+
+                long latencyMs = System.currentTimeMillis() - startTime;
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("success", true);
+                ret.put("latencyMs", latencyMs);
+                ret.put("bytesReceived", respPacket.getLength());
+                ret.put("server", server);
+                ret.put("host", host);
+                call.resolve(ret);
+
+            } catch (Exception e) {
+                long latencyMs = System.currentTimeMillis() - startTime;
+                com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                ret.put("success", false);
+                ret.put("latencyMs", latencyMs);
+                ret.put("error", e.getMessage());
+                call.resolve(ret);
+            } finally {
+                if (udpSocket != null && !udpSocket.isClosed()) {
+                    udpSocket.close();
+                }
+            }
+        }, "DnsStealthThread").start();
+    }
 }

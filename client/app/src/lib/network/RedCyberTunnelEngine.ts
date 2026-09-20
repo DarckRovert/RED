@@ -46,6 +46,7 @@ export interface CyberTunnelStats {
     currentSpeedKbps: number;
     latencyMs: number;
     isPermeable: boolean;
+    hasInternetEgress?: boolean;
     lastTestedTimestamp: number;
     localProxyHost: string;
     localProxyPort: number;
@@ -121,6 +122,7 @@ export class RedCyberTunnelEngine {
             currentSpeedKbps: 0,
             latencyMs: 0,
             isPermeable: false,
+            hasInternetEgress: false,
             lastTestedTimestamp: 0,
             localProxyHost: '127.0.0.1',
             localProxyPort: 8088,
@@ -340,6 +342,7 @@ export class RedCyberTunnelEngine {
         );
 
         this.stats.isPermeable = probe.isCaptivePermeable;
+        this.stats.hasInternetEgress = probe.hasInternetEgress || false;
         this.stats.latencyMs = probe.latencyMs;
         this.stats.lastTestedTimestamp = Date.now();
 
@@ -370,19 +373,50 @@ export class RedCyberTunnelEngine {
 
         // Modo A: Zero-Rating SNI Fronting
         if (this.stats.mode === 'ZERO_RATING_SNI') {
+            // 1. En entorno nativo Android, canalizar directamente por el plugin RedNode (Proxy 127.0.0.1:8088)
+            if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
+                try {
+                    const RedNodePlugin = (window as any).Capacitor.Plugins?.RedNode || (window as any).RedNode;
+                    const res = await RedNodePlugin.executeTunneledRequest({
+                        url,
+                        method: options?.method || 'GET',
+                        headers: options?.headers instanceof Headers ? Object.fromEntries((options.headers as any).entries()) : (options?.headers as any),
+                        body: options?.body ? String(options.body) : undefined,
+                        mode: 'ZERO_RATING_SNI',
+                    });
+                    if (res && res.success && res.ok) {
+                        const bodyStr = res.body || '';
+                        this.recordBytes(options?.body ? String(options.body).length : 256, bodyStr.length);
+                        this.stats.latencyMs = Math.round(performance.now() - startTime);
+                        this.notifyListeners();
+                        return {
+                            ok: true,
+                            status: res.status || 200,
+                            statusText: res.statusText || 'OK (Tunneled)',
+                            body: bodyStr,
+                            fromGateway: false,
+                            carrierHost: res.carrierHost || this.stats.activeSniHost,
+                        };
+                    }
+                } catch (nativeErr) {
+                    console.warn('[RedCyberTunnelEngine] Error en executeTunneledRequest nativo:', nativeErr);
+                }
+            }
+
+            // 2. Fallback Web/PWA: Evasión mediante cabeceras no-prohibidas (W3C compliant)
             const frontReq = SniSpoofEngine.createSpoofedFrontRequest(
                 options?.body ? String(options.body) : '',
                 this.stats.selectedTargetIndex
             );
 
-            // Agregar encabezados camuflados de portal cautivo
             const headers = new Headers(options?.headers || {});
-            headers.set('Host', frontReq.sniHost);
+            let targetHost = '';
+            try { targetHost = new URL(url).host; } catch {}
+            if (targetHost) headers.set('X-Forwarded-Host', targetHost);
             headers.set('X-RED-Forward-URL', url);
             headers.set('X-RED-ZeroRating-Tunnel', `v${RED_VERSION}`);
 
             try {
-                // Intento a través del puente de salida camuflado
                 const response = await fetch(url, {
                     ...options,
                     headers,
@@ -403,13 +437,13 @@ export class RedCyberTunnelEngine {
                     carrierHost: frontReq.sniHost,
                 };
             } catch (err: any) {
-                // Fallback automático al Mesh ClearNet Gateway
+                // Fallback de malla si hay nodos vecinos
                 const fallback = await meshGatewayEngine.fetchUrl(url, 'did:red:cybertunnel');
                 this.recordBytes(256, fallback.html.length);
                 return {
                     ok: fallback.status >= 200 && fallback.status < 400,
                     status: fallback.status,
-                    statusText: fallback.fromGateway ? 'OK (Mesh Gateway)' : 'Error',
+                    statusText: fallback.fromGateway ? 'OK (Mesh Gateway)' : 'Error de Conexión',
                     body: fallback.html,
                     fromGateway: true,
                     carrierHost: 'Mesh Relay Node',
@@ -417,7 +451,54 @@ export class RedCyberTunnelEngine {
             }
         }
 
-        // Modo B: Mesh Gateway DTN
+        // Modo B: DNS Stealth (SlowDNS sobre UDP 53 para penetración de firewalls sin saldo)
+        if (this.stats.mode === 'DNS_STEALTH') {
+            if (typeof window !== 'undefined' && (window as any).Capacitor?.isPluginAvailable('RedNode')) {
+                try {
+                    const RedNodePlugin = (window as any).Capacitor.Plugins?.RedNode || (window as any).RedNode;
+                    let targetHost = '';
+                    try { targetHost = new URL(url).hostname; } catch {}
+                    if (targetHost) {
+                        await RedNodePlugin.queryDnsStealth({ host: targetHost });
+                    }
+
+                    const res = await RedNodePlugin.executeTunneledRequest({
+                        url,
+                        method: options?.method || 'GET',
+                        mode: 'DNS_STEALTH',
+                    });
+
+                    if (res && res.success && res.ok) {
+                        const bodyStr = res.body || '';
+                        this.recordBytes(128, bodyStr.length);
+                        this.stats.latencyMs = Math.round(performance.now() - startTime);
+                        this.notifyListeners();
+                        return {
+                            ok: true,
+                            status: res.status || 200,
+                            statusText: 'OK (DNS Stealth)',
+                            body: bodyStr,
+                            fromGateway: false,
+                            carrierHost: 'DNS Tunnel (UDP 53)',
+                        };
+                    }
+                } catch (dnsErr) {
+                    console.warn('[RedCyberTunnelEngine] Error en modo DNS Stealth:', dnsErr);
+                }
+            }
+            // Fallback a pasarela de malla si falla DNS Stealth
+            const fallback = await meshGatewayEngine.fetchUrl(url, 'did:red:cybertunnel');
+            return {
+                ok: fallback.status >= 200 && fallback.status < 400,
+                status: fallback.status,
+                statusText: fallback.fromGateway ? 'OK (Mesh Gateway)' : 'Error DNS Stealth',
+                body: fallback.html,
+                fromGateway: true,
+                carrierHost: 'DNS Stealth Fallback',
+            };
+        }
+
+        // Modo C: Mesh Gateway DTN
         if (this.stats.mode === 'MESH_GATEWAY') {
             const result = await meshGatewayEngine.fetchUrl(url, 'did:red:cybertunnel');
             this.recordBytes(256, result.html.length);

@@ -86,8 +86,10 @@ export function RedCyberTunnelModal() {
         setIsTesting(true);
         try {
             const res = await redCyberTunnel.testPermeability();
-            if (res.isCaptivePermeable) {
-                toast.success(`✅ Permeabilidad exitosa: ${res.provider} (RTT: ${res.latencyMs}ms)`);
+            if (res.hasInternetEgress) {
+                toast.success(`✅ Egreso a Internet Verificado: ${res.provider} (RTT: ${res.latencyMs}ms)`);
+            } else if (res.isCaptivePermeable) {
+                toast.warning(`⚠️ Portal cautivo permeable pero interceptado. Enrutando tráfico vía Anycast Egress Relays.`);
             } else {
                 toast.warning(`⚠️ Operador filtrando o sin respuesta: ${res.reason || "Sin respuesta"}`);
             }
@@ -309,6 +311,26 @@ export function RedCyberTunnelModal() {
                     </div>
 
                     <div style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", letterSpacing: "0.5px" }}>MODO DE ENRUTAMIENTO</div>
+                        <div style={{ fontSize: "17px", fontWeight: "bold", color: stats.mode === 'ZERO_RATING_SNI' ? "#38bdf8" : stats.mode === 'DNS_STEALTH' ? "#c084fc" : "#4ade80", marginTop: "4px" }}>
+                            {stats.mode === 'ZERO_RATING_SNI' ? 'SNI SPOOF' : stats.mode === 'DNS_STEALTH' ? 'DNS STEALTH' : 'MESH P2P'}
+                        </div>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "2px" }}>
+                            {stats.mode === 'ZERO_RATING_SNI' ? 'Evasión TLS Portales' : stats.mode === 'DNS_STEALTH' ? 'UDP 53 (Sin Saldo)' : 'Gateway ClearNet DTN'}
+                        </div>
+                    </div>
+
+                    <div style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", letterSpacing: "0.5px" }}>EGRESO A INTERNET</div>
+                        <div style={{ fontSize: "17px", fontWeight: "bold", color: stats.hasInternetEgress ? "#4ade80" : stats.isActive ? "#facc15" : "#94a3b8", marginTop: "4px" }}>
+                            {stats.hasInternetEgress ? 'VERIFICADO' : stats.isActive ? 'RELAY ANYCAST' : 'DESCONECTADO'}
+                        </div>
+                        <div style={{ fontSize: "10px", color: stats.hasInternetEgress ? "#4ade80" : stats.isActive ? "#facc15" : "#64748b", marginTop: "2px" }}>
+                            {stats.hasInternetEgress ? '● Salida limpia confirmada' : stats.isActive ? '▲ Tráfico vía Egress Relays' : '○ Sin conexión activa'}
+                        </div>
+                    </div>
+
+                    <div style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", padding: "14px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
                         <div style={{ fontSize: "10px", color: "#94a3b8", letterSpacing: "0.5px" }}>CONEXIONES / REQS</div>
                         <div style={{ fontSize: "19px", fontWeight: "bold", color: "#facc15", marginTop: "4px" }}>
                             {stats.activeConnections} / {stats.totalRequests}
@@ -320,6 +342,83 @@ export function RedCyberTunnelModal() {
                         <div style={{ fontSize: "19px", fontWeight: "bold", color: "#fb923c", marginTop: "4px" }}>
                             {stats.latencyMs > 0 ? `${stats.latencyMs} ms` : "---"}
                         </div>
+                    </div>
+                </div>
+
+                {/* Selector de Modo de Transporte y Evasión */}
+                <div style={{
+                    backgroundColor: "rgba(15, 23, 42, 0.65)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    borderRadius: "12px",
+                    padding: "16px 20px",
+                }}>
+                    <div style={{ fontSize: "14px", fontWeight: "bold", color: "#38bdf8", marginBottom: "4px" }}>
+                        MODO DE TRANSPORTE Y EVASIÓN DE FIREWALL:
+                    </div>
+                    <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "14px" }}>
+                        Selecciona la estrategia de penetración según el estado de tu red móvil o aislamiento.
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "10px" }}>
+                        <button
+                            onClick={() => handleSetMode('ZERO_RATING_SNI')}
+                            style={{
+                                padding: "12px 14px",
+                                borderRadius: "8px",
+                                border: stats.mode === 'ZERO_RATING_SNI' ? "2px solid #38bdf8" : "1px solid rgba(255, 255, 255, 0.1)",
+                                backgroundColor: stats.mode === 'ZERO_RATING_SNI' ? "rgba(56, 189, 248, 0.18)" : "rgba(0, 0, 0, 0.3)",
+                                color: "#e2e8f0",
+                                textAlign: "left",
+                                cursor: "pointer",
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "bold", fontSize: "13px", color: stats.mode === 'ZERO_RATING_SNI' ? "#38bdf8" : "#f1f5f9" }}>
+                                <span>⚡</span> CAMUFLAJE SNI (ZERO-RATING)
+                            </div>
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px", lineHeight: "1.4" }}>
+                                Alta velocidad. Camufla paquetes TLS/HTTP usando portales exentos de cobro del operador.
+                            </div>
+                        </button>
+
+                        <button
+                            onClick={() => handleSetMode('DNS_STEALTH')}
+                            style={{
+                                padding: "12px 14px",
+                                borderRadius: "8px",
+                                border: stats.mode === 'DNS_STEALTH' ? "2px solid #a855f7" : "1px solid rgba(255, 255, 255, 0.1)",
+                                backgroundColor: stats.mode === 'DNS_STEALTH' ? "rgba(168, 85, 247, 0.18)" : "rgba(0, 0, 0, 0.3)",
+                                color: "#e2e8f0",
+                                textAlign: "left",
+                                cursor: "pointer",
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "bold", fontSize: "13px", color: stats.mode === 'DNS_STEALTH' ? "#c084fc" : "#f1f5f9" }}>
+                                <span>🛰️</span> DNS STEALTH (UDP 53 / SIN SALDO)
+                            </div>
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px", lineHeight: "1.4" }}>
+                                Penetración de emergencia. Rutea sobre UDP 53 cuando TCP 80/443 está bloqueado por falta de saldo.
+                            </div>
+                        </button>
+
+                        <button
+                            onClick={() => handleSetMode('MESH_GATEWAY')}
+                            style={{
+                                padding: "12px 14px",
+                                borderRadius: "8px",
+                                border: stats.mode === 'MESH_GATEWAY' ? "2px solid #22c55e" : "1px solid rgba(255, 255, 255, 0.1)",
+                                backgroundColor: stats.mode === 'MESH_GATEWAY' ? "rgba(34, 197, 94, 0.18)" : "rgba(0, 0, 0, 0.3)",
+                                color: "#e2e8f0",
+                                textAlign: "left",
+                                cursor: "pointer",
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "bold", fontSize: "13px", color: stats.mode === 'MESH_GATEWAY' ? "#4ade80" : "#f1f5f9" }}>
+                                <span>🌐</span> GATEWAY MALLA P2P (DTN)
+                            </div>
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px", lineHeight: "1.4" }}>
+                                Egress distribuido. Salta vía LoRa/BLE hacia nodos vecinos con ClearNet satelital o fibra activa.
+                            </div>
+                        </button>
                     </div>
                 </div>
 

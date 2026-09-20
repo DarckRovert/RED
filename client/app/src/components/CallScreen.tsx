@@ -227,6 +227,20 @@ export default function CallScreen() {
     const animFrameRef = useRef<number | null>(null);
     const [vadLevel, setVadLevel] = useState<number>(0);
 
+    // Cleanup de AudioContext y AnimationFrame al desmontar CallScreen
+    useEffect(() => {
+        return () => {
+            if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+                try { audioCtxRef.current.close().catch(() => {}); } catch {}
+                audioCtxRef.current = null;
+            }
+            if (animFrameRef.current) {
+                cancelAnimationFrame(animFrameRef.current);
+                animFrameRef.current = null;
+            }
+        };
+    }, []);
+
     // Call Duration Timer (Clock synchronization based on absolute session start timestamp)
     useEffect(() => {
         let timer: any = null;

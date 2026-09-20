@@ -157,6 +157,11 @@ export class HumanBrainOrchestrator {
     if (!this.isRunning) return;
     this.isRunning = false;
 
+    if (this.notifyThrottleTimer) {
+      clearTimeout(this.notifyThrottleTimer);
+      this.notifyThrottleTimer = null;
+    }
+
     this.entorhinal.stop();
     this.predictive.stop();
     try {
@@ -231,7 +236,34 @@ export class HumanBrainOrchestrator {
     };
   }
 
+  public static readonly UI_THROTTLE_MS = 100; // Máximo 10 Hz para suscriptores React
+  private lastNotifyTime = 0;
+  private notifyThrottleTimer: any = null;
+
   private notifyListeners(): void {
+    if (!this.isRunning) return;
+    const now = Date.now();
+    const elapsed = now - this.lastNotifyTime;
+
+    if (elapsed >= HumanBrainOrchestrator.UI_THROTTLE_MS) {
+      if (this.notifyThrottleTimer) {
+        clearTimeout(this.notifyThrottleTimer);
+        this.notifyThrottleTimer = null;
+      }
+      this.lastNotifyTime = now;
+      this.dispatchSnapshot();
+    } else if (!this.notifyThrottleTimer) {
+      this.notifyThrottleTimer = setTimeout(() => {
+        this.notifyThrottleTimer = null;
+        if (!this.isRunning) return;
+        this.lastNotifyTime = Date.now();
+        this.dispatchSnapshot();
+      }, HumanBrainOrchestrator.UI_THROTTLE_MS - elapsed);
+    }
+  }
+
+  private dispatchSnapshot(): void {
+    if (!this.isRunning) return;
     const snapshot = this.getSnapshot();
     for (const listener of this.listeners) {
       try {

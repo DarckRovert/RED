@@ -46,13 +46,23 @@ export class TheoryOfMindEpistemicEngine {
   public static readonly PATH_LOSS_EXPONENT = 2.4; // Exponente en entorno táctico urbano/campo
   public static readonly MAX_CREDIBLE_GROUND_SPEED_MPS = 45.0; // ~160 km/h máximo verosímil
 
+  public static readonly MAX_ASSESSED_PEERS = 200;
+
   private peerAssessments: Map<string, EpistemicAssessment> = new Map();
   private peerHistory: Map<string, { lat: number; lon: number; timestamp: number; rssi: number }[]> = new Map();
   private listeners: Set<(telemetry: TheoryOfMindTelemetry) => void> = new Set();
   private static readonly STORAGE_KEY = 'red_tom_assessments_v1';
+  private isPersistDirty = false;
+  private persistTimer: any = null;
+  private onBeforeUnload = () => {
+    this.flushPersistence();
+  };
 
   private constructor() {
     this.hydrateFromStorage();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', this.onBeforeUnload);
+    }
   }
 
   private hydrateFromStorage(): void {
@@ -62,16 +72,40 @@ export class TheoryOfMindEpistemicEngine {
       if (raw) {
         const list: EpistemicAssessment[] = JSON.parse(raw);
         if (Array.isArray(list)) {
-          list.forEach(a => this.peerAssessments.set(a.peerId, a));
+          list.slice(-TheoryOfMindEpistemicEngine.MAX_ASSESSED_PEERS).forEach(a => this.peerAssessments.set(a.peerId, a));
         }
       }
     } catch {}
   }
 
-  private persistToStorage(): void {
+  public schedulePersist(): void {
+    this.isPersistDirty = true;
+    if (this.persistTimer) return;
+    if (typeof window === 'undefined') return;
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      if (this.isPersistDirty) {
+        this.persistToStorage();
+        this.isPersistDirty = false;
+      }
+    }, 3000);
+  }
+
+  public flushPersistence(): void {
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    if (this.isPersistDirty) {
+      this.persistToStorage();
+      this.isPersistDirty = false;
+    }
+  }
+
+  public persistToStorage(): void {
     if (typeof window === 'undefined') return;
     try {
-      const list = Array.from(this.peerAssessments.values());
+      const list = Array.from(this.peerAssessments.values()).slice(-TheoryOfMindEpistemicEngine.MAX_ASSESSED_PEERS);
       localStorage.setItem(TheoryOfMindEpistemicEngine.STORAGE_KEY, JSON.stringify(list));
     } catch {}
   }
@@ -185,8 +219,24 @@ export class TheoryOfMindEpistemicEngine {
       lastAssessedAt: now,
     };
 
+    // LRU eviction si superamos MAX_ASSESSED_PEERS
+    if (this.peerAssessments.size >= TheoryOfMindEpistemicEngine.MAX_ASSESSED_PEERS && !this.peerAssessments.has(report.peerId)) {
+      let oldestKey: string | null = null;
+      let oldestTime = Infinity;
+      for (const [key, val] of this.peerAssessments.entries()) {
+        if (val.lastAssessedAt < oldestTime) {
+          oldestTime = val.lastAssessedAt;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey) {
+        this.peerAssessments.delete(oldestKey);
+        this.peerHistory.delete(oldestKey);
+      }
+    }
+
     this.peerAssessments.set(report.peerId, assessment);
-    this.persistToStorage();
+    this.schedulePersist();
     this.notifyListeners();
     return assessment;
   }
@@ -246,6 +296,10 @@ export class TheoryOfMindEpistemicEngine {
   }
 
   public destroy(): void {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', this.onBeforeUnload);
+    }
+    this.flushPersistence();
     this.peerAssessments.clear();
     this.peerHistory.clear();
     this.listeners.clear();

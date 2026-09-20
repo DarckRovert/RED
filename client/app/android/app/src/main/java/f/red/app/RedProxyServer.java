@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * RedProxyServer — Servidor Proxy Local Soberano en Android (v110.0.0)
+ * RedProxyServer — Servidor Proxy Local Soberano en Android (v113.0.0)
  *
  * Provee un proxy HTTP/HTTPS multi-hilo real en 127.0.0.1:8088.
  * Permite que el sistema Android (vía APN o proxy Wi-Fi) o navegadores locales
@@ -56,12 +56,20 @@ public class RedProxyServer {
     private final AtomicInteger activeConnections = new AtomicInteger(0);
     private final AtomicLong totalRequests = new AtomicLong(0);
 
-    // Configuración dinámica Zero-Rating y upstream
     private volatile String activeSniHost = "www.claro.com.pe";
     private volatile String activeIpTarget = "179.6.232.18";
     private volatile String activeProvider = "Claro PE";
     private final AtomicBoolean zeroRatingEnabled = new AtomicBoolean(true);
-    private volatile String tunnelMode = "ZERO_RATING_SNI"; // "ZERO_RATING_SNI", "MESH_GATEWAY", "DIRECT"
+    private volatile String tunnelMode = "ZERO_RATING_SNI"; // "ZERO_RATING_SNI", "MESH_GATEWAY", "DNS_STEALTH", "DIRECT"
+
+    // Pasarelas Anycast de Salida hacia Internet (Egress Relays) para evadir el bloqueo de operadoras
+    public static final String[] ANYCAST_EGRESS_GATEWAYS = new String[]{
+        "104.16.132.229", // Cloudflare Edge Anycast
+        "142.250.190.46",  // Google Anycast Fronting
+        "151.101.1.57",    // Fastly CDN Edge
+        "1.1.1.1",         // Cloudflare Resolver Anycast
+        "8.8.8.8"          // Google DNS Anycast
+    };
 
     // Rastreo de sockets activos para cierre limpio
     private final ConcurrentHashMap<Long, Socket> activeSockets = new ConcurrentHashMap<>();
@@ -397,18 +405,50 @@ public class RedProxyServer {
                 }
             }
 
-            // Estrategia 2: Si conexión directa falló y Zero-Rating está activo, tunelizar por IP de portal cautivo
-            if (remoteSocket == null && zeroRatingEnabled.get() && activeIpTarget != null && !activeIpTarget.isEmpty()) {
-                Log.i(TAG, "⚡ Enrutando CONNECT " + host + ":" + port + " vía túnel Zero-Rating [" + activeProvider + " -> " + activeIpTarget + "]");
-                try {
-                    remoteSocket = new Socket();
-                    remoteSocket.connect(new InetSocketAddress(InetAddress.getByName(activeIpTarget), port), 6000);
-                    remoteSocket.setKeepAlive(true);
-                    remoteSocket.setSoTimeout(60000);
-                } catch (Exception zrErr) {
-                    Log.d(TAG, "Túnel Zero-Rating falló hacia " + activeIpTarget + ":" + port + ": " + zrErr.getMessage());
-                    closeQuietly(remoteSocket);
-                    remoteSocket = null;
+            // Estrategia 2: Si conexión directa falló y Zero-Rating está activo
+            if (remoteSocket == null && zeroRatingEnabled.get()) {
+                String candidateIp = activeIpTarget;
+                boolean isCarrierInternal = activeIpTarget != null && (activeIpTarget.startsWith("179.") || activeIpTarget.startsWith("200."));
+                boolean isCarrierDestination = host.equalsIgnoreCase(activeSniHost) || host.endsWith("." + activeSniHost)
+                        || host.contains("claro.com") || host.contains("movistar.com") || host.contains("entel.pe") || host.contains("bitel.com");
+
+                // Si es un host externo de internet y no es del operador,
+                // usar la pasarela Anycast de salida para no chocar con el rechazo TLS del servidor de Claro
+                if ((isCarrierInternal || !isCarrierDestination) && !host.equalsIgnoreCase(activeSniHost)) {
+                    int gwHash = Math.abs(host.hashCode()) % ANYCAST_EGRESS_GATEWAYS.length;
+                    candidateIp = ANYCAST_EGRESS_GATEWAYS[0];
+                    if (gwHash > 0 && gwHash < ANYCAST_EGRESS_GATEWAYS.length) {
+                        candidateIp = ANYCAST_EGRESS_GATEWAYS[gwHash];
+                    }
+                }
+
+                if (candidateIp != null && !candidateIp.isEmpty()) {
+                    Log.i(TAG, "⚡ Enrutando CONNECT " + host + ":" + port + " vía Egress Gateway [" + candidateIp + "] con SNI [" + activeSniHost + "]");
+                    try {
+                        remoteSocket = new Socket();
+                        remoteSocket.connect(new InetSocketAddress(InetAddress.getByName(candidateIp), port), 6000);
+                        remoteSocket.setKeepAlive(true);
+                        remoteSocket.setSoTimeout(60000);
+                    } catch (Exception zrErr) {
+                        Log.d(TAG, "Túnel Zero-Rating falló hacia " + candidateIp + ":" + port + ": " + zrErr.getMessage());
+                        closeQuietly(remoteSocket);
+                        remoteSocket = null;
+
+                        // Fallback a pasarelas Anycast alternativas
+                        for (String altGateway : ANYCAST_EGRESS_GATEWAYS) {
+                            if (altGateway.equals(candidateIp)) continue;
+                            try {
+                                remoteSocket = new Socket();
+                                remoteSocket.connect(new InetSocketAddress(InetAddress.getByName(altGateway), port), 4000);
+                                remoteSocket.setKeepAlive(true);
+                                remoteSocket.setSoTimeout(60000);
+                                break;
+                            } catch (Exception ignored) {
+                                closeQuietly(remoteSocket);
+                                remoteSocket = null;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -551,16 +591,45 @@ public class RedProxyServer {
                 }
             }
 
-            // Estrategia 2: Failover a Zero-Rating Target IP
-            if (remoteSocket == null && zeroRatingEnabled.get() && activeIpTarget != null && !activeIpTarget.isEmpty()) {
-                try {
-                    remoteSocket = new Socket();
-                    remoteSocket.connect(new InetSocketAddress(InetAddress.getByName(activeIpTarget), port), 6000);
-                    remoteSocket.setSoTimeout(25000);
-                    Log.i(TAG, "⚡ HTTP " + method + " " + host + path + " fronted vía [" + activeIpTarget + "]");
-                } catch (Exception ignored) {
-                    closeQuietly(remoteSocket);
-                    remoteSocket = null;
+            // Estrategia 2: Failover a Zero-Rating Target IP / Anycast Egress Gateway
+            if (remoteSocket == null && zeroRatingEnabled.get()) {
+                String candidateIp = activeIpTarget;
+                boolean isCarrierInternal = activeIpTarget != null && (activeIpTarget.startsWith("179.") || activeIpTarget.startsWith("200."));
+                boolean isCarrierDestination = host.equalsIgnoreCase(activeSniHost) || host.endsWith("." + activeSniHost)
+                        || host.contains("claro.com") || host.contains("movistar.com") || host.contains("entel.pe") || host.contains("bitel.com");
+
+                if ((isCarrierInternal || !isCarrierDestination) && !host.equalsIgnoreCase(activeSniHost)) {
+                    int gwHash = Math.abs(host.hashCode()) % ANYCAST_EGRESS_GATEWAYS.length;
+                    candidateIp = ANYCAST_EGRESS_GATEWAYS[0];
+                    if (gwHash > 0 && gwHash < ANYCAST_EGRESS_GATEWAYS.length) {
+                        candidateIp = ANYCAST_EGRESS_GATEWAYS[gwHash];
+                    }
+                }
+
+                if (candidateIp != null && !candidateIp.isEmpty()) {
+                    try {
+                        remoteSocket = new Socket();
+                        remoteSocket.connect(new InetSocketAddress(InetAddress.getByName(candidateIp), port), 6000);
+                        remoteSocket.setSoTimeout(25000);
+                        Log.i(TAG, "⚡ HTTP " + method + " " + host + path + " fronted vía [" + candidateIp + "]");
+                    } catch (Exception ignored) {
+                        closeQuietly(remoteSocket);
+                        remoteSocket = null;
+
+                        // Fallback a pasarelas Anycast secundarias
+                        for (String altGateway : ANYCAST_EGRESS_GATEWAYS) {
+                            if (altGateway.equals(candidateIp)) continue;
+                            try {
+                                remoteSocket = new Socket();
+                                remoteSocket.connect(new InetSocketAddress(InetAddress.getByName(altGateway), port), 4000);
+                                remoteSocket.setSoTimeout(25000);
+                                break;
+                            } catch (Exception e2) {
+                                closeQuietly(remoteSocket);
+                                remoteSocket = null;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -587,7 +656,8 @@ public class RedProxyServer {
                     // Domain Fronting: Inyectar host del operador y preservar destino original en X-Forwarded-Host
                     remoteOut.write(("Host: " + activeSniHost + "\r\n").getBytes());
                     remoteOut.write(("X-Forwarded-Host: " + host + "\r\n").getBytes());
-                    remoteOut.write(("X-RED-ZeroRating-Tunnel: v110.0.0\r\n").getBytes());
+                    remoteOut.write(("X-RED-Destination-URI: " + uri + "\r\n").getBytes());
+                    remoteOut.write(("X-RED-ZeroRating-Tunnel: v113.0.0\r\n").getBytes());
                     bytesUploaded.addAndGet(("Host: " + activeSniHost + "\r\n").length());
                     hostInjected = true;
                     continue;
