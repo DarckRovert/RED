@@ -1,5 +1,26 @@
 # Changelog
 
+## [114.0.0-anti-forensic-duress-y-tdma-clock-skew-pll] - 2026-09-20
+
+### 🛡️ Anti-Forensic Duress & TDMA Clock Skew PLL (Release Oficial v114.0.0)
+
+- **Negación Plausible Anti-Forense (`DuressWipeEngine.ts`, `AuthWall.tsx`, `WorkspaceScreens.tsx`):**
+  - Soporte para `executeZeroizeWipe({ silent: true, preserveDecoySession: true })`.
+  - Radiación previa de baliza de auxilio encubierta `DURESS_SILENT_ALERT` a la dirección broadcast de la malla.
+  - Trituración criptográfica irreversible con ruido CSPRNG de claves maestras, identidades Noise, engramas hipocampales (`red_hippocampal_engrams_v1`) y migas de pan espaciales (`red_entorhinal_breadcrumbs_v1`).
+  - Preservación exclusiva de la semilla de identidad civil (`red_decoy_identity_seed`) y marcador de sesión (`red_in_decoy_mode`), suprimiendo recargas forzadas de ventana.
+  - Erradicación de `playEmergencyAlarm()` y toasts delatores: el ingreso de PIN de pánico desbloquea de forma transparente la Bóveda Señuelo civil con chats simulados mientras ejecuta la purga en segundo plano.
+- **Compensación PLL de Deriva de Reloj de Cuarzo y Guardas TDMA Adaptativas (`LamportMeshClockEngine.ts`, `LoRaTdmaSchedulerEngine.ts`):**
+  - Seguimiento de fase/frecuencia PLL con cálculo de sesgo relativo $\text{skew}_{\text{ppm}} = (\Delta \text{offset} / \Delta t) \times 10^6$ acotado a $\pm 200\text{ ppm}$.
+  - Compensación continua de deriva de osciladores de cristal en `getConsensusTime()` para blackouts prolongados sin GNSS/NTP.
+  - Clasificación de calidad de sincronización (`ClockSyncQuality`: `HIGH`, `DEGRADED`, `DRIFTING`) y escalado dinámico de tiempos de guarda: 15 ms, 25 ms y 35 ms.
+  - Protección de borde de ranura en el planificador LoRa TDMA: la ranura solo se activa si `slotTimeRemainingMs > guardTimeMs` para evitar desbordamiento hacia la ranura del siguiente nodo.
+  - Erradicación total de `Math.random()` en identificadores de paquetes TDMA sustituido por nonces criptográficos CSPRNG.
+  - Telemetría en tiempo real de Calidad PLL, Deriva Cuarzo y Guarda Adaptativa en `MeshTab.tsx`.
+- **Mimetización de Navegador y Evasión DPI en CyberTunnel (`RedProxyServer.java`, `RedNodePlugin.java`, `sniSpoofEngine.ts`):**
+  - Sustitución de agentes de usuario reveladores por identidades legítimas de Google Chrome sobre Android 14.
+  - Inyección de Client Hints (`Sec-Ch-Ua`, `Sec-Ch-Ua-Mobile`, `Sec-Ch-Ua-Platform`) y metadatos de obtención (`Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`) para eludir el filtrado por inspección profunda de paquetes (DPI) de operadoras móviles.
+
 ## [113.0.0-cybertunnel-zero-rating-y-bio-cybernetic-real-egress] - 2026-09-20
 
 ### ⚡ CyberTunnel Zero-Rating & Bio-Cybernetic Real Egress (Release Oficial v113.0.0)

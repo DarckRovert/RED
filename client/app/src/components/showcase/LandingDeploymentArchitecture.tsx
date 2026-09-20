@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { RED_VERSION } from '../../lib/version';
 
 interface DeploymentTab {
     id: string;
@@ -24,14 +25,14 @@ export const LandingDeploymentArchitecture: React.FC<LandingDeploymentArchitectu
 }) => {
     const isGhPages = typeof window !== 'undefined' && window.location.pathname.includes('/RED');
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH || (isGhPages ? '/RED' : '');
-    const [activeTab, setActiveTab] = useState<string>('blueprint-v113');
+    const [activeTab, setActiveTab] = useState<string>(`blueprint-v${RED_VERSION}`);
 
     const deploymentTabs: DeploymentTab[] = [
         {
-            id: 'blueprint-v113',
-            label: 'Blueprint & Conectoma v113.0.0',
+            id: `blueprint-v${RED_VERSION}`,
+            label: `Blueprint & Conectoma v${RED_VERSION}`,
             icon: '🧠',
-            title: 'Blueprint Holístico & Conectoma Bio-Cibernético (v113.0.0)',
+            title: `Blueprint Holístico & Conectoma Bio-Cibernético (v${RED_VERSION})`,
             subtitle: 'Mapa conceptual de 6 dimensiones: Hardware multi-radio, Núcleo Rust PQC, CyberTunnel Zero-Rating celular y Red Neocortical Humana.',
             diagram: (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
@@ -44,8 +45,11 @@ export const LandingDeploymentArchitecture: React.FC<LandingDeploymentArchitectu
                         background: '#040711',
                     }}>
                         <img
-                            src={`${basePath}/assets/red_conceptual_architecture_v113.jpg`}
-                            alt="RED Sovereign Mesh OS v113.0.0 Conceptual Blueprint"
+                            src={`${basePath}/assets/red_conceptual_architecture_v114.jpg`}
+                            onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = `${basePath}/assets/red_conceptual_architecture_v113.jpg`;
+                            }}
+                            alt={`RED Sovereign Mesh OS v${RED_VERSION} Conceptual Blueprint`}
                             style={{ width: '100%', height: 'auto', display: 'block', maxHeight: '560px', objectFit: 'contain' }}
                         />
                         <div style={{
@@ -66,7 +70,7 @@ export const LandingDeploymentArchitecture: React.FC<LandingDeploymentArchitectu
                             fontWeight: 800
                         }}>
                             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00E5FF', boxShadow: '0 0 8px #00E5FF' }} />
-                            BLUEPRINT OFICIAL RED v113.0.0 — INTERCONEXIÓN TOTAL
+                            BLUEPRINT OFICIAL RED v{RED_VERSION} — INTERCONEXIÓN TOTAL
                         </div>
                     </div>
 

@@ -315,8 +315,11 @@ export const PitchDeck: React.FC = () => {
                         maxHeight: "200px", background: "#060913"
                     }}>
                         <img
-                            src={`${base}/assets/red_conceptual_architecture_v113.jpg`}
-                            alt="RED Blueprint v113.0.0"
+                            src={`${base}/assets/red_conceptual_architecture_v114.jpg`}
+                            onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = `${base}/assets/red_conceptual_architecture_v113.jpg`;
+                            }}
+                            alt={`RED Blueprint v${RED_VERSION}`}
                             style={{ width: "100%", height: "200px", objectFit: "cover", objectPosition: "center 30%", display: "block" }}
                         />
                         <div style={{
@@ -326,7 +329,7 @@ export const PitchDeck: React.FC = () => {
                             border: "1px solid rgba(179, 136, 255, 0.5)",
                             fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: "#B388FF", fontWeight: 800
                         }}>
-                            BLUEPRINT v113.0.0 • CONECTOMA BIO-CIBERNÉTICO & CYBERTUNNEL
+                            BLUEPRINT v{RED_VERSION} • CONECTOMA BIO-CIBERNÉTICO & CYBERTUNNEL
                         </div>
                     </div>
 
@@ -343,7 +346,7 @@ export const PitchDeck: React.FC = () => {
                                     1. LoRa TDMA (15–25 km)
                                 </h3>
                                 <p style={{ fontSize: "0.82rem", color: "#CBD5E1", lineHeight: 1.45, margin: 0 }}>
-                                    Sub-GHz (915/868 MHz) de penetración táctica. El planificador <strong>TDMA v113.0.0</strong> organiza 10 ranuras deterministas por segundo, garantizando 0 colisiones por aire.
+                                    Sub-GHz (915/868 MHz) de penetración táctica. El planificador <strong>TDMA v{RED_VERSION}</strong> organiza 10 ranuras deterministas por segundo con PLL de deriva de cuarzo y guardas adaptativas.
                                 </p>
                             </div>
                             <div style={{ marginTop: "12px", paddingTop: "8px", borderTop: "1px solid rgba(179, 136, 255, 0.2)", fontSize: "10px", fontFamily: "JetBrains Mono, monospace", color: "#B388FF" }}>

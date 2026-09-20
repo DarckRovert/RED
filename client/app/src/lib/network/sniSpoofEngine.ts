@@ -8,7 +8,7 @@ const getRedNode = () => {
 };
 
 /**
- * RED v101.0.0 — Global SNI Domain Fronting & Zero-Rating Bypass Engine
+ * RED Sovereign Mesh OS — Global SNI Domain Fronting & Zero-Rating Bypass Engine
  * 
  * Permite tunelizar tráfico de datos cifrados simulando el encabezado TLS SNI (Server Name Indication)
  * de portales cautivos y CDN exentos de cobro de datos (Zero-Rating Sites) a nivel mundial.
