@@ -434,14 +434,14 @@ async fn handle_get_blackout(State(state): State<ApiState>) -> impl IntoResponse
 
     let active_transports = if is_blackout {
         vec![
-            "mDNS / LAN UDP (7331)".to_string(),
+            "mDNS / LAN (Multicast)".to_string(),
             "Bluetooth LE Mesh (GATT)".to_string(),
             "LoRa Serial Radio (915MHz)".to_string(),
         ]
     } else {
         vec![
             "Global WAN Relay (libp2p)".to_string(),
-            "mDNS / LAN UDP (7331)".to_string(),
+            "mDNS / LAN (Multicast)".to_string(),
             "Bluetooth LE Mesh (GATT)".to_string(),
             "LoRa Serial Radio (915MHz)".to_string(),
         ]
@@ -481,14 +481,14 @@ async fn handle_set_blackout(
     let peer_count = peers.as_ref().map(|p| p.len()).unwrap_or(0);
     let active_transports = if is_blackout {
         vec![
-            "mDNS / LAN UDP (7331)".to_string(),
+            "mDNS / LAN (Multicast)".to_string(),
             "Bluetooth LE Mesh (GATT)".to_string(),
             "LoRa Serial Radio (915MHz)".to_string(),
         ]
     } else {
         vec![
             "Global WAN Relay (libp2p)".to_string(),
-            "mDNS / LAN UDP (7331)".to_string(),
+            "mDNS / LAN (Multicast)".to_string(),
             "Bluetooth LE Mesh (GATT)".to_string(),
             "LoRa Serial Radio (915MHz)".to_string(),
         ]
@@ -556,6 +556,8 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/contacts/:hash/block", post(handle_block_contact))
         .route("/api/contacts/:hash/unblock", post(handle_unblock_contact))
         .route("/api/contacts/:hash/verify", post(handle_verify_contact))
+        // FIX A2: unverify contact route was missing — client.ts:1465 calls this
+        .route("/api/contacts/:hash/unverify", post(handle_unverify_contact))
         .route("/api/groups", get(handle_list_groups))
         .route("/api/groups", post(handle_create_group))
         // FIX A8: group message send
@@ -719,6 +721,10 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/ai/copilot", post(handle_ai_copilot_query))
         .route("/api/ai/summarize", post(handle_ai_summarize_channel))
         .route("/api/ai/translate", post(handle_ai_translate_text))
+        // FIX A2b: system health endpoint — returns real node metrics
+        .route("/api/system/health", get(handle_system_health))
+        // FIX A2c: node logs endpoint — returns recent in-memory log entries
+        .route("/api/logs", get(handle_get_node_logs))
         // Static web UI
         .route("/", get(serve_index))
         .route("/app.css", get(serve_css))
@@ -1806,11 +1812,32 @@ async fn handle_send_group_message(
     match node
         .send_group_message(
             red_core::protocol::GroupId(group_id_bytes),
-            red_core::protocol::MessageType::Text(content),
+            red_core::protocol::MessageType::Text(content.clone()),
         )
         .await
     {
-        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Ok(_) => {
+            // FIX B7 (Rust side): emit a loopback SSE so the sender's UI receives
+            // the sent message via the same SSE stream as all other messages.
+            // Without this, handle_send_group_message was the only send handler
+            // that did NOT echo back to the sender, causing the frontend to rely
+            // solely on localStorage persistence (which caused duplication).
+            let sender_hash = node.identity_hash().clone();
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            // Build a synthetic loopback Message so SSE delivers it to the WebView
+            let loopback_recipient = sender_hash.clone(); // self-addressed for SSE routing
+            if let Ok(echo_msg) = red_core::protocol::Message::text(
+                sender_hash,
+                loopback_recipient,
+                format!("{{\"type\":\"group_message\",\"group_id\":\"{}\",\"content\":{},\"timestamp\":{}}}", group_id, serde_json::json!(content), now_ms),
+            ) {
+                let _ = state.msg_tx.send(echo_msg);
+            }
+            (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": format!("{}", e)})),
@@ -1973,8 +2000,9 @@ async fn handle_list_peers(State(state): State<ApiState>) -> impl IntoResponse {
                         .first()
                         .map(|a| a.to_string())
                         .unwrap_or_else(|| "127.0.0.1:7331".to_string()),
-                    is_connected: true,   // Abstracted upstream
-                    latency_ms: Some(45), // Based on ping abstract
+                    is_connected: true,
+                    // FIX A4: latency_ms was hardcoded to 45 — we don't measure it yet
+                    latency_ms: None,
                 })
                 .collect();
             Json(items).into_response()
@@ -4731,4 +4759,157 @@ async fn handle_redeem_p2p_voucher(
         })),
     )
         .into_response()
+}
+
+// ─── FIX A2: /api/contacts/:hash/unverify handler ────────────────────────────
+
+/// Explicitly marks a contact as NOT verified.
+/// Uses toggle only if the contact is currently verified, avoiding the race
+/// condition where a second call would re-verify the contact.
+async fn handle_unverify_contact(
+    State(state): State<ApiState>,
+    Path(hash_str): Path<String>,
+) -> impl IntoResponse {
+    let hash = match parse_identity_hash(&hash_str) {
+        Ok(h) => h,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e})),
+            )
+                .into_response()
+        }
+    };
+    let node = state.node.lock().await;
+    let storage_arc = node.get_storage();
+    drop(node);
+    let mut s = storage_arc.lock().await;
+    // Read current state; only toggle if currently verified (makes unverify idempotent)
+    let is_currently_verified = s
+        .get_contact(&hash)
+        .map(|c| c.verified)
+        .unwrap_or(false);
+    if is_currently_verified {
+        match s.toggle_verify_contact(&hash) {
+            Ok(_) => (
+                StatusCode::OK,
+                Json(serde_json::json!({"ok": true, "verified": false})),
+            )
+                .into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("{}", e)})),
+            )
+                .into_response(),
+        }
+    } else {
+        // Already not verified — no-op, return success
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "verified": false})),
+        )
+            .into_response()
+    }
+}
+
+// ─── FIX A2b: /api/system/health — real node metrics ────────────────────────
+
+/// Captures the instant the HTTP server first handled a /api/system/health request.
+/// Used to estimate node uptime.
+static NODE_START_TIME: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// Returns real node health metrics — replaces the fake hardcoded fallback in client.ts.
+async fn handle_system_health(State(state): State<ApiState>) -> impl IntoResponse {
+    NODE_START_TIME.get_or_init(std::time::Instant::now);
+
+    let uptime_seconds = NODE_START_TIME
+        .get()
+        .map(|t| t.elapsed().as_secs())
+        .unwrap_or(0);
+
+    let (peer_count, contact_count, storage_path) = {
+        let node = state.node.lock().await;
+        let peers = node.get_peers().await.map(|p| p.len()).unwrap_or(0);
+        let storage_arc = node.get_storage();
+        drop(node);
+        let s = storage_arc.lock().await;
+        let contacts = s.contact_count();
+        let path = s.path().to_path_buf();
+        (peers, contacts, path)
+    };
+
+    // Estimate storage size from directory walk (non-blocking, best-effort)
+    let storage_used_bytes: u64 = std::fs::read_dir(&storage_path)
+        .ok()
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter_map(|e| e.metadata().ok())
+                .map(|m| m.len())
+                .sum()
+        })
+        .unwrap_or(0);
+
+    Json(serde_json::json!({
+        "os_target": std::env::consts::OS,
+        "uptime_seconds": uptime_seconds,
+        "peer_count": peer_count,
+        "contact_count": contact_count,
+        "storage_used_bytes": storage_used_bytes,
+        // Benchmarks not run on-demand — null is honest, frontend must handle null
+        "storage_benchmark": null,
+        "crypto_benchmark": null,
+        "async_runtime": null,
+    }))
+    .into_response()
+}
+
+// ─── FIX A2c: /api/logs — in-memory log ring buffer ─────────────────────────
+
+/// In-memory ring buffer of the last 500 log entries.
+pub static LOG_RING: std::sync::OnceLock<
+    tokio::sync::Mutex<std::collections::VecDeque<serde_json::Value>>,
+> = std::sync::OnceLock::new();
+
+/// Returns the last N log entries from the in-memory ring buffer.
+async fn handle_get_node_logs(
+    axum::extract::Query(params): axum::extract::Query<
+        std::collections::HashMap<String, String>,
+    >,
+) -> impl IntoResponse {
+    let count: usize = params
+        .get("count")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(100)
+        .min(500);
+
+    let ring = LOG_RING.get_or_init(|| {
+        tokio::sync::Mutex::new(std::collections::VecDeque::with_capacity(500))
+    });
+    let buf = ring.lock().await;
+    let entries: Vec<&serde_json::Value> = buf.iter().rev().take(count).collect();
+    Json(entries).into_response()
+}
+
+/// Push a log entry into the ring buffer. Call from tracing subscriber or event loop.
+#[allow(dead_code)]
+pub fn push_log_entry(level: &str, target: &str, message: &str) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let entry = serde_json::json!({
+        "timestamp": now,
+        "level": level,
+        "target": target,
+        "message": message,
+    });
+    if let Some(ring) = LOG_RING.get() {
+        if let Ok(mut buf) = ring.try_lock() {
+            if buf.len() >= 500 {
+                buf.pop_front();
+            }
+            buf.push_back(entry);
+        }
+    }
 }

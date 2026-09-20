@@ -1,6 +1,6 @@
 {
   "name": "red-signaling",
-  "version": "114.0.0",
+  "version": "115.0.0",
   "description": "RED WebRTC Signaling Server — routes SDP and ICE without seeing message content",
   "main": "server.js",
   "scripts": {

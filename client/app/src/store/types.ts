@@ -245,6 +245,11 @@ export const OVERLAY_SCREENS = new Set<ScreenView>([
     'tcccBallistics', 'c4isrEmpDrill', 'airGapStego', 'celestialPdr', 'acousticWarfare',
     'vitalResources', 'sonarSeismic', 'tacticalFoxhunt', 'atmosphericSafety',
     'loraTransceiver', 'extremeSurvival', 'survivalHud', 'dms', 'ecoMesh', 'vitalScan',
-    'survivalBeacon', 'rfSpectrum', 'stegoVault', 'maleCnsConnectome', 'connectome'
+    'survivalBeacon', 'rfSpectrum', 'stegoVault', 'maleCnsConnectome', 'connectome',
+    // FIX B8: aliases present in ScreenView type but missing from the Set
+    // Missing aliases caused navigate() to incorrectly clear activeConversationId
+    'tacticalGhostGps', 'ghostGps',
+    'sovereignShield', 'shield',
+    'cyberTunnel', 'zeroRating',
 ]);
 

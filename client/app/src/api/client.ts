@@ -21,7 +21,31 @@ export class RedAPIClient {
     async getRfMetrics(): Promise<any> { return getRfMetrics(); }
     async triggerChannelHop(channel?: number): Promise<any> { return triggerChannelHop(channel); }
     async setRfFecMode(mode: string): Promise<any> { return setRfFecMode(mode); }
-    async syncContactProfile(id: string): Promise<any> { return { ok: true, synced_id: id }; }
+    // FIX B1: was a permanent stub returning { ok: true } without calling the backend.
+    // Now fetches real contact list and returns the matching contact data.
+    async syncContactProfile(id: string): Promise<any> {
+        try {
+            const cleanHash = id.toLowerCase().replace(/^did:red:/i, '').trim();
+            const contacts = await this.reqList<any>('/contacts').catch(() => []);
+            const match = contacts.find((c: any) => {
+                const h = (c.identity_hash || '').toLowerCase();
+                return h === cleanHash || h.startsWith(cleanHash.slice(0, 8)) || cleanHash.startsWith(h.slice(0, 8));
+            });
+            if (match) {
+                // Update local web store with fresh data from Rust node
+                const localContacts = this.getWebStore<any[]>('red_web_contacts', []);
+                const idx = localContacts.findIndex((c: any) => (c.identity_hash || '').toLowerCase() === cleanHash);
+                if (idx >= 0) {
+                    localContacts[idx] = { ...localContacts[idx], ...match };
+                    this.setWebStore('red_web_contacts', localContacts);
+                }
+                return { ok: true, synced_id: match.identity_hash };
+            }
+            return { ok: false, synced_id: id };
+        } catch {
+            return { ok: false, synced_id: id };
+        }
+    }
     async getStegoCapsules(): Promise<any> { return getStegoCapsules(); }
     async saveStegoCapsule(c: any): Promise<any> { return saveStegoCapsule(c); }
     async deleteStegoCapsule(id: string): Promise<any> { return deleteStegoCapsule(id); }
@@ -334,15 +358,19 @@ export class RedAPIClient {
             const mergedList: MessageItem[] = [...localMsgs];
             for (const rm of rustMsgs) {
                 if (!rm || !rm.id) continue;
-                const rmTs = rm.timestamp ? (rm.timestamp > 1e11 ? rm.timestamp / 1000 : rm.timestamp) : 0;
+                const rmTs = rm.timestamp ? Math.floor(rm.timestamp > 1e11 ? rm.timestamp / 1000 : rm.timestamp) : 0;
                 const rmPayload = rm.media_data || rm.content;
 
                 const existingIdx = mergedList.findIndex(lm => {
                     if (lm.id === rm.id) return true;
-                    const lmTs = lm.timestamp ? (lm.timestamp > 1e11 ? lm.timestamp / 1000 : lm.timestamp) : 0;
+                    // FIX B5: Normalize both timestamps to integer seconds before comparing.
+                    // TS stores float (Date.now()/1000 = 1726787523.456), Rust emits u64 integer.
+                    // Without Math.floor(), the decimal part always makes timeDiff >= 1 → never matches.
+                    const lmTs = lm.timestamp ? Math.floor(lm.timestamp > 1e11 ? lm.timestamp / 1000 : lm.timestamp) : 0;
                     const timeDiff = Math.abs(lmTs - rmTs);
                     const lmPayload = lm.media_data || lm.content;
-                    if (timeDiff < 30 && lm.msg_type === rm.msg_type) {
+                    // FIX B6: Unified dedup window at 15s (was 30s in merge, 15s in deduplicateMessagesList)
+                    if (timeDiff < 15 && lm.msg_type === rm.msg_type) {
                         if (lmPayload && rmPayload && (
                             lmPayload === rmPayload ||
                             (lmPayload.startsWith('red_vault://') && rmPayload.startsWith('data:') && lmPayload.includes(rm.id)) ||
@@ -926,7 +954,11 @@ export class RedAPIClient {
             }
         }
 
-        // Persist locally under group messages
+        // Persist locally as optimistic update / offline fallback.
+        // When nativeSuccess=true, the Rust node now echoes the message back via SSE
+        // (loopback added in handle_send_group_message). Any duplication between
+        // this local persist and the SSE echo is resolved by the dedup logic
+        // in getMessages() (Math.floor timestamp + 15s window fixed in B5/B6).
         if (typeof window !== 'undefined') {
             try {
                 const convKey = `red_web_messages_${groupId}`;

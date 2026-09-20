@@ -352,7 +352,7 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             if is_active {
                 let last_activity = {
                     let s = storage_dms.lock().await;
-                    s.get_config("last_activity_timestamp")
+                    s.get_config("dms_last_active")
                         .unwrap_or_else(|| "0".to_string())
                         .parse::<u64>()
                         .unwrap_or(0)
