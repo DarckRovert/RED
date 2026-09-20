@@ -37,10 +37,14 @@ function runTest(name, fn) {
 const clockPath = path.join(__dirname, '..', 'src', 'lib', 'mesh', 'LamportMeshClockEngine.ts');
 const tdmaPath = path.join(__dirname, '..', 'src', 'lib', 'mesh', 'LoRaTdmaSchedulerEngine.ts');
 const meshTabPath = path.join(__dirname, '..', 'src', 'components', 'settings', 'MeshTab.tsx');
+const protocolPath = path.join(__dirname, '..', 'src', 'lib', 'mesh', 'meshProtocol.ts');
+const routerPath = path.join(__dirname, '..', 'src', 'lib', 'mesh', 'meshRouter.ts');
 
 const clockCode = fs.readFileSync(clockPath, 'utf8');
 const tdmaCode = fs.readFileSync(tdmaPath, 'utf8');
 const meshTabCode = fs.readFileSync(meshTabPath, 'utf8');
+const protocolCode = fs.readFileSync(protocolPath, 'utf8');
+const routerCode = fs.readFileSync(routerPath, 'utf8');
 
 runTest("1. LamportMeshClockEngine: Declara interfaces ClockSyncQuality y PeerTimeSample", () => {
     assert(clockCode.includes("export interface PeerTimeSample"), "Debe declarar PeerTimeSample");
@@ -89,9 +93,24 @@ runTest("8. MeshTab.tsx: Telemetría visual de Calidad PLL, Deriva Cuarzo y Guar
     assert(meshTabCode.includes("Guarda Adaptativa"), "Debe mostrar Guarda Adaptativa en UI");
 });
 
+runTest("9. LoRaTdmaSchedulerEngine: Bloquea transmisiones de datos en ranuras ajenas en cambios de época", () => {
+    assert(tdmaCode.includes("if (currentSlot !== 9 && !slotInfo.isMySlotActive)"), "onSlotBoundary debe verificar isMySlotActive para evitar colisiones entre épocas");
+    assert(tdmaCode.includes("this.queue.findIndex(it => it.isEmergency)"), "Debe reservar slot 9 para SOS y despachar prioridad en slot asignado");
+});
+
+runTest("10. meshProtocol.ts: createPacket utiliza marca de tiempo consensuada de Lamport", () => {
+    assert(protocolCode.includes("LamportMeshClockEngine"), "Debe importar LamportMeshClockEngine");
+    assert(protocolCode.includes("LamportMeshClockEngine.getInstance().getConsensusTime()"), "createPacket debe obtener getConsensusTime");
+});
+
+runTest("11. meshRouter.ts: Ingesta de paquetes alimenta continuamente el seguidor PLL de deriva", () => {
+    assert(routerCode.includes("LamportMeshClockEngine"), "Debe importar LamportMeshClockEngine");
+    assert(routerCode.includes("LamportMeshClockEngine.getInstance().recordPeerTime(packet.sender, packet.timestamp)"), "meshRouter debe registrar marcas de tiempo remotas en PLL");
+});
+
 // ── 2. Algorithmic PLL & Drift Simulation ──────────────────────────────────────
 
-runTest("9. Simulación Algorítmica: Cálculo de Frequency Skew y Deriva Integrada", () => {
+runTest("12. Simulación Algorítmica: Cálculo de Frequency Skew y Deriva Integrada", () => {
     // Simular muestras de reloj de un par:
     // t0 = 0 ms, offset = 100 ms
     // t1 = 10,000 ms (10 seg), offset = 100.2 ms (+200 µs de deriva en 10s = +20 PPM)
@@ -117,7 +136,7 @@ runTest("9. Simulación Algorítmica: Cálculo de Frequency Skew y Deriva Integr
     assert.strictEqual(drift24hMs, 1728, "En 24 horas a +20 PPM la deriva física acumulada es de ~1.73 segundos");
 });
 
-runTest("10. Simulación Algorítmica: Supresión de transmisión en frontera de guarda", () => {
+runTest("13. Simulación Algorítmica: Supresión de transmisión en frontera de guarda", () => {
     const slotDurationMs = 200;
     const guardTimeMs = 25; // Nivel DEGRADED
 

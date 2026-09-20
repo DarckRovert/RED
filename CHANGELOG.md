@@ -14,7 +14,9 @@
   - Seguimiento de fase/frecuencia PLL con cálculo de sesgo relativo $\text{skew}_{\text{ppm}} = (\Delta \text{offset} / \Delta t) \times 10^6$ acotado a $\pm 200\text{ ppm}$.
   - Compensación continua de deriva de osciladores de cristal en `getConsensusTime()` para blackouts prolongados sin GNSS/NTP.
   - Clasificación de calidad de sincronización (`ClockSyncQuality`: `HIGH`, `DEGRADED`, `DRIFTING`) y escalado dinámico de tiempos de guarda: 15 ms, 25 ms y 35 ms.
-  - Protección de borde de ranura en el planificador LoRa TDMA: la ranura solo se activa si `slotTimeRemainingMs > guardTimeMs` para evitar desbordamiento hacia la ranura del siguiente nodo.
+  - Protección de borde de ranura y propiedad estricta en el planificador LoRa TDMA: la ranura solo se activa si `slotTimeRemainingMs > guardTimeMs` y `isMySlotActive` es verificado en tiempo de ejecución, erradicando colisiones de paquetes encolados durante transiciones entre épocas de superframe.
+  - Lazo cerrado de sincronización PLL en malla (`meshRouter.ts`, `meshProtocol.ts`): ingesta continua de marcas de tiempo de paquetes entrantes hacia `recordPeerTime()` y generación de paquetes salientes sellados con `getConsensusTime()`, garantizando coherencia temporal monótona en entornos GNSS-denied.
+  - Auto-arranque coordinado del ecosistema bio-cibernético del Conectoma (`authSlice.ts`, `ConnectomeEcosystemOrchestrator.ts`).
   - Erradicación total de `Math.random()` en identificadores de paquetes TDMA sustituido por nonces criptográficos CSPRNG.
   - Telemetría en tiempo real de Calidad PLL, Deriva Cuarzo y Guarda Adaptativa en `MeshTab.tsx`.
 - **Mimetización de Navegador y Evasión DPI en CyberTunnel (`RedProxyServer.java`, `RedNodePlugin.java`, `sniSpoofEngine.ts`):**

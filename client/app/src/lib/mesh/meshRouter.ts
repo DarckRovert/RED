@@ -44,6 +44,7 @@ import { SoundMeshEngine } from '../audio/SoundMeshEngine';
 import { globalShield } from '../network/GlobalShieldEngine';
 import { multipathBonding, MultipathBondingEngine } from './MultipathBondingEngine';
 import { loraTdmaScheduler } from './LoRaTdmaSchedulerEngine';
+import { LamportMeshClockEngine } from './LamportMeshClockEngine';
 import { broadcastStormGuardEngine } from './BroadcastStormGuardEngine';
 import { tacticalMicroBurst } from './TacticalMicroBurstEngine';
 import { synapticMeshRouter } from '../neuro/SynapticMeshRouterEngine';
@@ -1465,6 +1466,13 @@ class MeshRouter {
     }
     this.markSeen(packet.nonce);
     slottedGossip.recordHeardFromPeer(packet.nonce);
+
+    // 0.0 ALINEACIÓN TEMPORAL DE MALLA (Lamport Clock Skew PLL)
+    if (packet.sender && packet.timestamp) {
+      try {
+        LamportMeshClockEngine.getInstance().recordPeerTime(packet.sender, packet.timestamp);
+      } catch {}
+    }
 
     // Memorización episódica bio-cibernética en CA3
     try {

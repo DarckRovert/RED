@@ -266,9 +266,20 @@ export class LoRaTdmaSchedulerEngine {
             return;
         }
 
-        // Buscar un paquete destinado a la ranura activa actual
-        const itemIdx = this.queue.findIndex(it => it.targetSlot === currentSlot || (currentSlot === 9 && it.isEmergency));
-        if (itemIdx === -1) return;
+        // En TDMA estricto: ranuras de datos (1..8) SOLO transmiten si están activamente asignadas a este nodo.
+        // La ranura 0 está reservada para sincronización/beacon. La ranura 9 es contención para emergencias.
+        if (currentSlot !== 9 && !slotInfo.isMySlotActive) {
+            return;
+        }
+
+        // Seleccionar paquete para la ranura activa:
+        // - En Slot 9: Exclusivamente paquetes de emergencia (isEmergency === true)
+        // - En Ranura de datos asignada (1..8): El paquete con mayor prioridad en la cola (la cola se mantiene ordenada)
+        const itemIdx = currentSlot === 9
+            ? this.queue.findIndex(it => it.isEmergency)
+            : 0;
+
+        if (itemIdx === -1 || itemIdx >= this.queue.length) return;
 
         const item = this.queue.splice(itemIdx, 1)[0];
         this.metrics.activeQueueLength = this.queue.length;

@@ -43,6 +43,8 @@ export interface SwarmPheromoneEnvelope {
 /** JSON packet type for out-of-band PQC key announcements broadcast over the mesh */
 export const PQC_TYPE_KEY_ANNOUNCE = 'PQC_KEY_ANNOUNCEMENT';
 
+import { LamportMeshClockEngine } from './LamportMeshClockEngine';
+
 export interface MeshPacket {
   /** 32-byte recipient identity hash (hex) */
   recipient: string;
@@ -182,14 +184,23 @@ export function createPacket(
   sender: string,
   recipient: string,
   payload: Uint8Array,
-  opts?: { ttl?: number; flags?: number }
+  opts?: { ttl?: number; flags?: number; timestamp?: number }
 ): MeshPacket {
+  let packetTimestamp = opts?.timestamp;
+  if (!packetTimestamp) {
+    try {
+      packetTimestamp = LamportMeshClockEngine.getInstance().getConsensusTime();
+    } catch {
+      packetTimestamp = Date.now();
+    }
+  }
+
   return {
     sender,
     recipient,
     ttl: opts?.ttl ?? MAX_HOPS,
     flags: opts?.flags ?? 0x01, // encrypted by default
-    timestamp: Date.now(),
+    timestamp: packetTimestamp,
     nonce: generateNonce(),
     payload,
   };

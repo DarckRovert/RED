@@ -587,6 +587,8 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     try {
                         const { humanBrainOrchestrator } = await import('../../lib/neuro/human/HumanBrainOrchestrator');
                         humanBrainOrchestrator.start();
+                        const { connectomeOrchestrator } = await import('../../lib/neuro/ConnectomeEcosystemOrchestrator');
+                        connectomeOrchestrator.start();
                     } catch (e) {
                         console.warn('[RED] Failed to auto-start Human Neocortex & Connectome CNS:', e);
                     }
