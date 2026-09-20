@@ -5,7 +5,7 @@
  */
 
 import { registerPlugin, Capacitor } from '@capacitor/core';
-import { RED_VERSION, RED_APK_NAME } from './version';
+import { RED_VERSION, RED_APK_NAME, RED_APK_SHA256 } from './version';
 
 const RedNode = registerPlugin<any>('RedNode');
 
@@ -60,7 +60,7 @@ export class UpdateManager {
      */
     public static async checkForUpdates(forceRefresh = false): Promise<UpdateInfo> {
         const now = Date.now();
-        if (!forceRefresh && this.cachedUpdateInfo && (now - this.lastCheckTimestamp < 60_000)) {
+        if (!forceRefresh && this.cachedUpdateInfo && (now - this.lastCheckTimestamp < 30_000)) {
             return this.cachedUpdateInfo;
         }
 
@@ -110,12 +110,19 @@ export class UpdateManager {
             let apkSize = 0;
 
             if (Array.isArray(release.assets)) {
-                const apkAsset = release.assets.find((a: any) => 
+                // FIX: buscar por nombre canónico exacto primero (red-latest.apk),
+                // luego por nombre versionado (red-v115.0.0-release.apk).
+                // Antes tomaba el primer .apk encontrado — podía ser un asset incorrecto.
+                const canonicalAsset = release.assets.find((a: any) =>
+                    a.name === RED_APK_NAME
+                ) || release.assets.find((a: any) =>
+                    a.name?.includes('release') && a.name?.endsWith('.apk')
+                ) || release.assets.find((a: any) =>
                     a.name?.endsWith('.apk') || a.browser_download_url?.endsWith('.apk')
                 );
-                if (apkAsset) {
-                    apkUrl = apkAsset.browser_download_url;
-                    apkSize = apkAsset.size || 0;
+                if (canonicalAsset) {
+                    apkUrl = canonicalAsset.browser_download_url;
+                    apkSize = canonicalAsset.size || 0;
                 }
             }
 
@@ -318,6 +325,34 @@ export class UpdateManager {
                 throw new Error('La descarga nativa no completó correctamente.');
             }
 
+            // FIX: Verificar SHA-256 del APK descargado antes de instalar.
+            // Sin esta verificación, un APK corrupto o de versión incorrecta
+            // se instalaría silenciosamente mostrando la versión vieja.
+            if (RED_APK_SHA256 && RED_APK_SHA256.length === 64) {
+                try {
+                    const hashResult = await RedNode.computeFileSha256({
+                        filePath: downloadResult.filePath,
+                    });
+                    const downloadedHash = (hashResult?.sha256 || '').toUpperCase();
+                    const expectedHash = RED_APK_SHA256.toUpperCase();
+                    if (downloadedHash && downloadedHash !== expectedHash) {
+                        throw new Error(
+                            `SHA-256 no coincide. Esperado: ${expectedHash.slice(0, 16)}… ` +
+                            `Obtenido: ${downloadedHash.slice(0, 16)}… ` +
+                            `APK posiblemente corrompido o desactualizado.`
+                        );
+                    }
+                } catch (shaErr: any) {
+                    // Si computeFileSha256 no está implementado en el plugin nativo,
+                    // loguear el aviso pero no bloquear la instalación.
+                    if (!shaErr.message?.includes('SHA-256')) {
+                        console.warn('[UpdateManager] SHA-256 verify skipped (plugin sin soporte):', shaErr.message);
+                    } else {
+                        throw shaErr; // Sí es un error de hash real — propagar
+                    }
+                }
+            }
+
             // Iniciar instalación nativa
             const installRes = await RedNode.installApk({
                 filePath: downloadResult.filePath,
@@ -327,6 +362,11 @@ export class UpdateManager {
                 progressSub.remove();
                 progressSub = null;
             }
+
+            // Invalidar caché de versión post-install para que el próximo
+            // checkForUpdates refleje la versión recién instalada.
+            UpdateManager.cachedUpdateInfo = null;
+            UpdateManager.lastCheckTimestamp = 0;
 
             // Si el sistema requirió solicitar permiso en Ajustes, el usuario fue redirigido
             if (installRes?.promptedPermission) {
