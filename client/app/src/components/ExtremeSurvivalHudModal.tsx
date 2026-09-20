@@ -126,7 +126,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                 const mine = list.find((b: any) => b.is_mine && b.active);
                 if (mine) {
                     setIsSosActive(true);
-                    setRustBeaconId(mine.beacon_id);
+                    setRustBeaconId(mine.beacon_id || mine.id || null);
                 }
             }
         }).catch(() => {});

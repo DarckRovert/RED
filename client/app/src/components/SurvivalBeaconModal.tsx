@@ -109,7 +109,7 @@ export function SurvivalBeaconModal() {
                 const mine = list.find(b => b.is_mine && b.active);
                 if (mine) {
                     setMeshSosActive(true);
-                    setMyBeaconId(mine.beacon_id);
+                    setMyBeaconId(mine.beacon_id || mine.id || null);
                 }
             }
         } catch {}
@@ -970,8 +970,8 @@ export function SurvivalBeaconModal() {
                                                                 try {
                                                                     const target = {
                                                                         name: b.is_mine ? "Tu Baliza SOS" : `SOS: ${b.sender_hash?.slice(0, 8) || "Víctima"}`,
-                                                                        lat: b.latitude,
-                                                                        lon: b.longitude,
+                                                                        lat: b.latitude ?? b.lat ?? 0,
+                                                                        lon: b.longitude ?? b.lon ?? 0,
                                                                         createdAt: Date.now(),
                                                                     };
                                                                     useRedStore.getState().setTacticalTarget(target, 'SurvivalBeacon');

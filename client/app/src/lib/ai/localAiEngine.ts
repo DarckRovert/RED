@@ -76,12 +76,12 @@ class LocalAIEngineClass {
 
     public pauseHeavyWorkloads(): void {
         this.heavyWorkloadsPaused = true;
-        console.log('[LocalAIEngine] ⚡ Heavy AI workloads paused by Metabolic Governor (TORPOR)');
+        console.warn('[LocalAIEngine] ⚡ Heavy AI workloads paused by Metabolic Governor (TORPOR)');
     }
 
     public resumeWorkloads(): void {
         this.heavyWorkloadsPaused = false;
-        console.log('[LocalAIEngine] ⚡ Heavy AI workloads resumed (Metabolic Recovery)');
+        console.warn('[LocalAIEngine] ⚡ Heavy AI workloads resumed (Metabolic Recovery)');
     }
 
     public isHeavyWorkloadsPaused(): boolean {
@@ -117,7 +117,7 @@ class LocalAIEngineClass {
                 this.pendingWorkerRequests.clear();
                 this.worker = null; // Se recreará en la próxima operación
             };
-            console.log('[LocalAIEngine] 📦 Web Worker ONNX iniciado — inferencia pesada fuera del hilo principal');
+            console.warn('[LocalAIEngine] 📦 Web Worker ONNX iniciado — inferencia pesada fuera del hilo principal');
             return this.worker;
         } catch (err) {
             console.warn('[LocalAIEngine] Web Worker no disponible, usando hilo principal:', err);
@@ -201,7 +201,7 @@ class LocalAIEngineClass {
         if (typeof window !== 'undefined' && (window as any).gc) {
             try { (window as any).gc(); } catch {}
         }
-        console.log('[LocalAIEngine] 🧹 Pipelines de IA y Worker ONNX liberados de memoria.');
+        console.warn('[LocalAIEngine] 🧹 Pipelines de IA y Worker ONNX liberados de memoria.');
     }
 
     /** Utility to bound any async AI operation with a strict timeout */
@@ -428,7 +428,7 @@ class LocalAIEngineClass {
                     quantized: true,
                 });
                 this.currentLoadedGeneratorId = activeId;
-                console.log(`[LocalAIEngine] ✅ Pipeline de inferencia cargado para: ${activeModel?.name || candidate}`);
+                console.warn(`[LocalAIEngine] ✅ Pipeline de inferencia cargado para: ${activeModel?.name || candidate}`);
                 break;
             } catch (err) {
                 console.warn(`[LocalAIEngine] No se pudo inicializar pipeline para ${candidate}:`, err);

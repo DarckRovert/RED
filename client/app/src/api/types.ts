@@ -51,7 +51,7 @@ export interface ContactItem {
 export interface GroupMemberItem {
     identity_hash: string;
     display_name?: string;
-    role?: 'Admin' | 'Moderator' | 'Member';
+    role?: 'Admin' | 'Moderator' | 'Member' | 'ReadOnly';
     joined_at?: number;
     muted?: boolean;
     [key: string]: any;
@@ -259,10 +259,16 @@ export interface P2PVoucher {
 export interface StegoCapsule {
     id: string;
     carrier_image_b64: string;
+    image_data?: string;
+    image_data_url?: string;
+    title?: string;
     extracted_payload?: string;
     payload_type: 'text' | 'location' | 'crypto_seed';
     timestamp: number;
     is_decrypted?: boolean;
+    has_password?: boolean;
+    author?: string;
+    notes?: string;
     [key: string]: any;
 }
 
@@ -270,29 +276,69 @@ export type StegoCapsuleRecord = StegoCapsule;
 
 export interface EmergencyBeaconRecord {
     id: string;
+    beacon_id?: string;
     beacon_type: 'medical' | 'disaster' | 'search_rescue' | 'general_sos';
+    distress_type?: string;
     lat: number;
+    latitude?: number;
     lon: number;
+    longitude?: number;
+    altitude?: number;
     message: string;
+    custom_note?: string;
     battery_pct: number;
     timestamp: number;
     is_active: boolean;
+    active?: boolean;
+    sender_did?: string;
     [key: string]: any;
 }
 
 export interface TriageReport {
     id: string;
+    report_id?: string;
     patient_tag: 'RED' | 'YELLOW' | 'GREEN' | 'BLACK';
-    vitals_heart_rate: number;
-    vitals_spo2: number;
-    vitals_respiratory: number;
-    injuries_summary: string;
-    reporter_did: string;
+    category?: string;
+    victim_label?: string;
+    bpm?: number;
+    spo2?: number;
+    can_walk?: boolean;
+    is_breathing?: boolean;
+    resp_rate?: number;
+    cap_refill_sec?: number;
+    can_follow_commands?: boolean;
+    notes?: string;
+    latitude?: number;
+    longitude?: number;
+    vitals_heart_rate?: number;
+    vitals_spo2?: number;
+    vitals_respiratory?: number;
+    injuries_summary?: string;
+    reporter_did?: string;
     timestamp: number;
     [key: string]: any;
 }
 
 export type TriageReportRecord = TriageReport;
+
+export interface UserProfileResponse {
+    display_name?: string;
+    status?: string;
+    avatar?: string | null;
+    error?: string;
+    [key: string]: any;
+}
+
+export interface SSEEventData {
+    type?: string;
+    event?: string;
+    event_type?: string;
+    content?: any;
+    data?: any;
+    peer?: string;
+    message?: any;
+    [key: string]: any;
+}
 
 export interface SocialPost {
     id: string;

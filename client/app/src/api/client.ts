@@ -2,7 +2,7 @@
 
 import {
     IdentityResponse, StatusResponse, ConversationItem, ContactItem,
-    GroupItem, MessageItem, DmsConfig, BlockItem, ValidatorItem, ConsensusStatus
+    GroupItem, GroupMemberItem, MessageItem, DmsConfig, BlockItem, ValidatorItem, ConsensusStatus, ProximityNode, UserProfileResponse, SSEEventData
 } from './types';
 import { fetchWithFallback, getStored, setStored, hashStringSha256, sha256Hex, STORAGE_KEYS, getSessionToken, invalidateSessionTokenCache } from './core';
 import { PeerItem, RustLogEntry, SystemHealthResponse, RfMetricsResponse, StegoCapsuleRecord, EmergencyBeaconRecord, TriageReportRecord } from './types';
@@ -23,18 +23,18 @@ export class RedAPIClient {
     async setRfFecMode(mode: string): Promise<{ ok: boolean; fec_mode: string }> { return setRfFecMode(mode) as Promise<{ ok: boolean; fec_mode: string }>; }
     // FIX B1: was a permanent stub returning { ok: true } without calling the backend.
     // Now fetches real contact list and returns the matching contact data.
-    async syncContactProfile(id: string): Promise<any> {
+    async syncContactProfile(id: string): Promise<{ ok: boolean; synced_id: string }> {
         try {
             const cleanHash = id.toLowerCase().replace(/^did:red:/i, '').trim();
-            const contacts = await this.reqList<any>('/contacts').catch(() => []);
-            const match = contacts.find((c: any) => {
+            const contacts = await this.reqList<ContactItem>('/contacts').catch(() => [] as ContactItem[]);
+            const match = contacts.find((c: ContactItem) => {
                 const h = (c.identity_hash || '').toLowerCase();
                 return h === cleanHash || h.startsWith(cleanHash.slice(0, 8)) || cleanHash.startsWith(h.slice(0, 8));
             });
             if (match) {
                 // Update local web store with fresh data from Rust node
-                const localContacts = this.getWebStore<any[]>('red_web_contacts', []);
-                const idx = localContacts.findIndex((c: any) => (c.identity_hash || '').toLowerCase() === cleanHash);
+                const localContacts = this.getWebStore<ContactItem[]>('red_web_contacts', []);
+                const idx = localContacts.findIndex((c: ContactItem) => (c.identity_hash || '').toLowerCase() === cleanHash);
                 if (idx >= 0) {
                     localContacts[idx] = { ...localContacts[idx], ...match };
                     this.setWebStore('red_web_contacts', localContacts);
@@ -46,28 +46,25 @@ export class RedAPIClient {
             return { ok: false, synced_id: id };
         }
     }
-    // NOTE: Callers pass partial objects that don't fully match these interfaces.
-    // Using Partial<T> input types to allow callers to pass subsets.
-    // TODO: fix callers in StegoVaultModal, SurvivalBeaconModal, VitalScanModal.
     async getStegoCapsules(): Promise<StegoCapsuleRecord[]> { return getStegoCapsules(); }
-    async saveStegoCapsule(c: Partial<StegoCapsuleRecord>): Promise<StegoCapsuleRecord> { return saveStegoCapsule(c as StegoCapsuleRecord); }
+    async saveStegoCapsule(c: Partial<StegoCapsuleRecord> & Record<string, unknown>): Promise<StegoCapsuleRecord> { return saveStegoCapsule(c as StegoCapsuleRecord); }
     async deleteStegoCapsule(id: string): Promise<{ ok: boolean; deleted: string }> { return deleteStegoCapsule(id); }
     async getEmergencyBeacons(): Promise<EmergencyBeaconRecord[]> { return getEmergencyBeacons(); }
     async cancelEmergencyBeacon(id: string): Promise<{ ok: boolean; cancelled: string }> { return cancelEmergencyBeacon(id); }
-    async broadcastEmergencyBeacon(b: Partial<EmergencyBeaconRecord>): Promise<EmergencyBeaconRecord> { return broadcastEmergencyBeacon(b as EmergencyBeaconRecord); }
+    async broadcastEmergencyBeacon(b: Partial<EmergencyBeaconRecord> & Record<string, unknown>): Promise<EmergencyBeaconRecord> { return broadcastEmergencyBeacon(b as EmergencyBeaconRecord); }
     async getTriageReports(): Promise<TriageReportRecord[]> { return getTriageReports(); }
-    async saveTriageReport(r: Partial<TriageReportRecord>): Promise<TriageReportRecord> { return saveTriageReport(r as TriageReportRecord); }
+    async saveTriageReport(r: Partial<TriageReportRecord> & Record<string, unknown>): Promise<TriageReportRecord> { return saveTriageReport(r as TriageReportRecord); }
     async deleteTriageReport(id: string): Promise<{ ok: boolean; deleted: string }> { return deleteTriageReport(id); }
 
-    async getBlockchain(): Promise<any> { return fetchWithFallback('/api/blockchain/blocks', undefined, () => []); }
-    async getConsensusStatus(): Promise<any> { return fetchWithFallback('/api/blockchain/consensus', undefined, () => ({ epoch: 1, current_slot: 1, total_stake: 100, active_validators: 1, chain_height: 1 })); }
+    async getBlockchain(): Promise<BlockItem[]> { return fetchWithFallback('/api/blockchain/blocks', undefined, () => []); }
+    async getConsensusStatus(): Promise<ConsensusStatus> { return fetchWithFallback('/api/blockchain/consensus', undefined, () => ({ epoch: 1, current_slot: 1, total_stake: 100, active_validators: 1, chain_height: 1 })); }
     async pingDmsActivity(): Promise<{ success: boolean; last_active_timestamp: number }> { return pingDmsActivity(); }
     async panicWipe(): Promise<{ success: boolean; wiped: boolean }> { return panicWipe(); }
     async configureHardwareLoRa(config: Record<string, unknown>): Promise<{ ok: boolean; config: Record<string, unknown> }> { return fetchWithFallback('/api/network/lora/config', { method: 'POST', body: JSON.stringify(config) }, () => ({ ok: true, config })); }
     async getNetworkIp(): Promise<{ ok: boolean; local_ip: string }> {
         return fetchWithFallback<{ ok: boolean; local_ip: string }>('/api/network/ip', undefined, () => ({ ok: true, local_ip: '127.0.0.1' }));
     }
-    async getProximityNodes(): Promise<any[]> {
+    async getProximityNodes(): Promise<ProximityNode[]> {
         return getProximityNodes();
     }
     private readonly baseURL = 'http://127.0.0.1:7333/api';
@@ -87,7 +84,7 @@ export class RedAPIClient {
                 return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
             }
             try {
-                const cap = (window as any).Capacitor;
+                const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
                 if (cap?.isNativePlatform?.() || window.location.protocol === 'capacitor:') {
                     return this.baseURL;
                 }
@@ -137,9 +134,9 @@ export class RedAPIClient {
      * Handles both plain arrays and { "value": [...] } envelopes.
      */
     public async reqList<T>(path: string): Promise<T[]> {
-        const raw: any = await this.req<any>(path);
-        if (raw && typeof raw === 'object' && Array.isArray(raw.value)) {
-            return raw.value as T[];
+        const raw = await this.req<unknown>(path);
+        if (raw && typeof raw === 'object' && 'value' in raw && Array.isArray((raw as { value: unknown }).value)) {
+            return (raw as { value: T[] }).value;
         }
         if (Array.isArray(raw)) return raw as T[];
         return [];
@@ -227,9 +224,9 @@ export class RedAPIClient {
         }
     }
 
-    async getContacts(): Promise<any[]> {
+    async getContacts(): Promise<ContactItem[]> {
         // Always read local cache first — P2P handshake contacts land here before Rust stores them.
-        const localConts = this.getWebStore<any[]>('red_web_contacts', []);
+        const localConts = this.getWebStore<ContactItem[]>('red_web_contacts', []);
         const isGenericName = (name?: string) => !name || 
             name.startsWith('Operador ') || 
             name.startsWith('Nodo ') || 
@@ -240,9 +237,9 @@ export class RedAPIClient {
             name === 'Contacto P2P';
 
         try {
-            const rustConts = await this.reqList<any>('/contacts');
+            const rustConts = await this.reqList<ContactItem>('/contacts');
             // Bidirectional merge keyed by first 16 chars of identity_hash.
-            const mergedMap = new Map<string, any>();
+            const mergedMap = new Map<string, ContactItem>();
             for (const lc of localConts) {
                 const key = ((lc.identity_hash || '').toLowerCase()).slice(0, 16);
                 if (key) mergedMap.set(key, lc);
@@ -399,7 +396,7 @@ export class RedAPIClient {
                     mergedList.push(rm);
                 }
             }
-            const groups = this.getWebStore<any[]>('red_web_groups', []);
+            const groups = this.getWebStore<GroupItem[]>('red_web_groups', []);
             const isGroupConv = groups.some(g => g.id === cleanId || g.group_id === cleanId);
 
             const filteredList = mergedList.filter(m => {
@@ -440,7 +437,7 @@ export class RedAPIClient {
                 return tsA - tsB;
             });
         } catch {
-            const groups = this.getWebStore<any[]>('red_web_groups', []);
+            const groups = this.getWebStore<GroupItem[]>('red_web_groups', []);
             const isGroupConv = groups.some(g => g.id === cleanId || g.group_id === cleanId);
             const filtered = localMsgs.filter(m => {
                 if (!m) return false;
@@ -688,7 +685,7 @@ export class RedAPIClient {
      * Announce a new live stream to a list of contacts.
      * Uses content field to carry the stream_id.
      */
-    async sendLiveAnnounce(contacts: any[], streamId: string): Promise<void> {
+    async sendLiveAnnounce(contacts: ContactItem[], streamId: string): Promise<void> {
         const recipients = new Set<string>(contacts.map(c => c.identity_hash));
         recipients.add('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
         for (const recipientHash of recipients) {
@@ -705,7 +702,7 @@ export class RedAPIClient {
      * media_data: base64 JPEG string.
      * duration_ms is reused to carry the frame sequence number (no backend change needed).
      */
-    async sendLiveFrame(_contacts: any[], streamId: string, frameB64: string, seq: number): Promise<void> {
+    async sendLiveFrame(_contacts: ContactItem[], streamId: string, frameB64: string, seq: number): Promise<void> {
         try {
             await this.sendMessage('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', '', {
                 msg_type: 'live_frame',
@@ -719,7 +716,7 @@ export class RedAPIClient {
     /**
      * Signal the end of a live stream to all contacts & P2P broadcast wildcard.
      */
-    async sendLiveEnd(contacts: any[], streamId: string): Promise<void> {
+    async sendLiveEnd(contacts: ContactItem[], streamId: string): Promise<void> {
         const recipients = new Set<string>(contacts.map(c => c.identity_hash));
         recipients.add('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
         for (const recipientHash of recipients) {
@@ -734,17 +731,19 @@ export class RedAPIClient {
     /**
      * Retrieve all groups from local vault and Rust backend
      */
-    async getGroups(): Promise<any[]> {
-        let localGroups = this.getWebStore<any[]>('red_web_groups', []);
+    async getGroups(): Promise<GroupItem[]> {
+        let localGroups = this.getWebStore<GroupItem[]>('red_web_groups', []);
         try {
-            const rustGroups = await this.reqList<any>('/groups');
+            const rustGroups = await this.reqList<GroupItem>('/groups');
             if (rustGroups && Array.isArray(rustGroups) && rustGroups.length > 0) {
-                const mergedMap = new Map<string, any>();
+                const mergedMap = new Map<string, GroupItem>();
                 for (const g of localGroups) {
-                    if (g && (g.id || g.group_id)) mergedMap.set(g.id || g.group_id, g);
+                    const gid = g?.id || g?.group_id;
+                    if (g && gid) mergedMap.set(gid, g);
                 }
                 for (const rg of rustGroups) {
-                    if (rg && (rg.id || rg.group_id)) mergedMap.set(rg.id || rg.group_id, { ...mergedMap.get(rg.id || rg.group_id), ...rg });
+                    const rgid = rg?.id || rg?.group_id;
+                    if (rg && rgid) mergedMap.set(rgid, { ...mergedMap.get(rgid), ...rg });
                 }
                 localGroups = Array.from(mergedMap.values());
                 this.setWebStore('red_web_groups', localGroups);
@@ -796,12 +795,12 @@ export class RedAPIClient {
         }
 
         const groupId = result.id;
-        const allMembers = [
+        const allMembers: GroupMemberItem[] = [
             { identity_hash: myHash, role: 'Admin', joined_at: Math.floor(Date.now() / 1000) },
-            ...memberHashes.filter(m => m !== myHash).map(m => ({ identity_hash: m, role: 'Member', joined_at: Math.floor(Date.now() / 1000) }))
+            ...memberHashes.filter(m => m !== myHash).map(m => ({ identity_hash: m, role: 'Member' as const, joined_at: Math.floor(Date.now() / 1000) }))
         ];
 
-        const groupObj = {
+        const groupObj: GroupItem = {
             id: groupId,
             name: name,
             members: allMembers,
@@ -810,7 +809,7 @@ export class RedAPIClient {
         };
 
         // Persist in Web store
-        const existingGroups = this.getWebStore<any[]>('red_web_groups', []);
+        const existingGroups = this.getWebStore<GroupItem[]>('red_web_groups', []);
         if (!existingGroups.some(g => g.id === groupId)) {
             existingGroups.push(groupObj);
             this.setWebStore('red_web_groups', existingGroups);
@@ -820,13 +819,13 @@ export class RedAPIClient {
         try {
             const { useRedStore } = await import('../store/useRedStore');
             const curGroups = useRedStore.getState().groups || [];
-            if (!curGroups.some((g: any) => g.id === groupId)) {
+            if (!curGroups.some((g: GroupItem) => g.id === groupId)) {
                 useRedStore.setState({ groups: [...curGroups, groupObj] });
             }
         } catch {}
 
         // Create initial conversation entry for group
-        const existingConvs = this.getWebStore<any[]>('red_web_conversations', []);
+        const existingConvs = this.getWebStore<ConversationItem[]>('red_web_conversations', []);
         if (!existingConvs.some(c => c.id === groupId || c.peer === groupId)) {
             existingConvs.unshift({
                 id: groupId,
@@ -871,18 +870,18 @@ export class RedAPIClient {
      * Send a message to a P2P group.
      * Fans out across MeshRouter to all members and persists under group conversation vault.
      */
-    async sendGroupMessage(groupId: string, content: string, options?: Record<string, any>): Promise<void> {
+    async sendGroupMessage(groupId: string, content: string, options?: Record<string, unknown>): Promise<void> {
         let nativeSuccess = false;
         try {
             const body = { recipient: groupId, content, ...options };
-            const res: any = await this.req(`/groups/${groupId}/send`, { method: 'POST', body: JSON.stringify(body) });
+            const res = await this.req<{ status?: number; ok?: boolean; id?: string }>(`/groups/${groupId}/send`, { method: 'POST', body: JSON.stringify(body) });
             if (res && (res.status === 200 || res.ok || res.id)) {
                 nativeSuccess = true;
             }
         } catch {}
 
         // Web / Mesh Fan-Out over meshRouter (only if native backend did not already broadcast):
-        const localGroups = this.getWebStore<any[]>('red_web_groups', []);
+        const localGroups = this.getWebStore<GroupItem[]>('red_web_groups', []);
         let myHash = '';
         try {
             if (typeof window !== 'undefined') {
@@ -895,7 +894,7 @@ export class RedAPIClient {
             }
         } catch {}
 
-        let storeGroups: any[] = [];
+        let storeGroups: GroupItem[] = [];
         try {
             const { useRedStore } = await import('../store/useRedStore');
             const state = useRedStore.getState();
@@ -909,9 +908,10 @@ export class RedAPIClient {
         const group = allGroups.find(g => g && (g.id === groupId || g.group_id === groupId));
 
         // Extract member hashes robustly: handles string[], {identity_hash}[], or mixed arrays
-        let members: string[] = (group?.members || []).map((m: any) => {
+        let members: string[] = (group?.members || []).map((m: unknown) => {
             if (typeof m === 'string') return m;
-            return m?.identity_hash || m?.peer || m?.id || '';
+            const obj = m as Record<string, unknown> | null;
+            return (obj?.identity_hash as string) || (obj?.peer as string) || (obj?.id as string) || '';
         }).filter((h: string) => h && h.length >= 8);
 
         // Safety guard: only fan-out to all contacts when NO group record is found at all.
@@ -926,7 +926,7 @@ export class RedAPIClient {
         const randGrp = typeof crypto !== 'undefined' && crypto.getRandomValues
             ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
             : Date.now().toString(36);
-        const msgId = options?.id || `grp_${Date.now()}_${randGrp}`;
+        const msgId = (typeof options?.id === 'string' ? options.id : undefined) || `grp_${Date.now()}_${randGrp}`;
         const normTs = Date.now() / 1000;
 
         const groupMsgPayload = JSON.stringify({
@@ -968,9 +968,10 @@ export class RedAPIClient {
                 const raw = localStorage.getItem(convKey);
                 const list = raw ? JSON.parse(raw) : [];
 
-                const rawMedia = options?.media_data || (content?.startsWith('data:') ? content : undefined);
+                const rawMedia = (typeof options?.media_data === 'string' ? options.media_data : undefined) || (content?.startsWith('data:') ? content : undefined);
+                const mimeType = typeof options?.mime_type === 'string' ? options.mime_type : undefined;
                 if (rawMedia && rawMedia.length > 512) {
-                    indexedMediaVault.saveMedia(msgId, rawMedia, options?.mime_type).catch(() => {});
+                    indexedMediaVault.saveMedia(msgId, rawMedia, mimeType).catch(() => {});
                 }
 
                 const lightMsg = {
@@ -983,7 +984,7 @@ export class RedAPIClient {
                     is_mine: true,
                     status: 'Sent',
                     conversation_id: groupId,
-                    msg_type: options?.msg_type || (content?.startsWith('data:image') ? 'image' : content?.startsWith('data:audio') ? 'voice' : content?.startsWith('data:video') ? 'video' : 'text'),
+                    msg_type: (typeof options?.msg_type === 'string' ? options.msg_type : undefined) || (content?.startsWith('data:image') ? 'image' : content?.startsWith('data:audio') ? 'voice' : content?.startsWith('data:video') ? 'video' : 'text'),
                     ...(options || {})
                 };
                 if (rawMedia && rawMedia.length > 512) {
@@ -994,7 +995,7 @@ export class RedAPIClient {
                 localStorage.setItem(convKey, JSON.stringify(list));
 
                 // Keep conversation list entry up to date
-                const convs = this.getWebStore<any[]>('red_web_conversations', []);
+                const convs = this.getWebStore<ConversationItem[]>('red_web_conversations', []);
                 const convIdx = convs.findIndex(c => c.id === groupId || c.peer === groupId);
                 const snippet = options?.msg_type === 'image' ? '📷 Foto' :
                                 options?.msg_type === 'voice' ? '🎤 Nota de voz' :
@@ -1034,11 +1035,11 @@ export class RedAPIClient {
         } catch { /* Offline / Web fallback — update local store */ }
 
         // 2. Update local web store
-        const groups = this.getWebStore<any[]>('red_web_groups', []);
-        const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+        const groups = this.getWebStore<GroupItem[]>('red_web_groups', []);
+        const g = groups.find((g: GroupItem) => g.id === groupId || g.group_id === groupId);
         if (g) {
-            const members: any[] = Array.isArray(g.members) ? g.members : [];
-            if (!members.some((m: any) => (typeof m === 'string' ? m : m.identity_hash) === memberHash)) {
+            const members: GroupMemberItem[] = Array.isArray(g.members) ? g.members : [];
+            if (!members.some((m: unknown) => (typeof m === 'string' ? m : (m as GroupMemberItem)?.identity_hash) === memberHash)) {
                 members.push({ identity_hash: memberHash, role: 'Member', joined_at: Math.floor(Date.now() / 1000) });
                 g.members = members;
                 this.setWebStore('red_web_groups', groups);
@@ -1049,7 +1050,7 @@ export class RedAPIClient {
         let myHash = '';
         try { myHash = localStorage.getItem('red_identity_hash') || ''; } catch {}
         const groupName = g?.name || 'Grupo RED';
-        const allMemberHashes: string[] = (g?.members || []).map((m: any) => typeof m === 'string' ? m : m.identity_hash).filter(Boolean);
+        const allMemberHashes: string[] = (g?.members || []).map((m: unknown) => typeof m === 'string' ? m : (m as GroupMemberItem)?.identity_hash).filter(Boolean) as string[];
         const invitePayload = JSON.stringify({
             type: 'group_invite',
             group_id: groupId,
@@ -1071,7 +1072,7 @@ export class RedAPIClient {
         // 4. Sync Zustand store
         try {
             const { useRedStore } = await import('../store/useRedStore');
-            const updatedGroups = this.getWebStore<any[]>('red_web_groups', []);
+            const updatedGroups = this.getWebStore<GroupItem[]>('red_web_groups', []);
             useRedStore.setState({ groups: updatedGroups });
         } catch {}
     }
@@ -1084,11 +1085,11 @@ export class RedAPIClient {
         } catch { /* Offline / Web fallback */ }
 
         // 2. Update local web store
-        const groups = this.getWebStore<any[]>('red_web_groups', []);
-        const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+        const groups = this.getWebStore<GroupItem[]>('red_web_groups', []);
+        const g = groups.find((g: GroupItem) => g.id === groupId || g.group_id === groupId);
         if (g && Array.isArray(g.members)) {
-            g.members = g.members.filter((m: any) =>
-                (typeof m === 'string' ? m : m.identity_hash) !== memberHash
+            g.members = g.members.filter((m: unknown) =>
+                (typeof m === 'string' ? m : (m as GroupMemberItem)?.identity_hash) !== memberHash
             );
             this.setWebStore('red_web_groups', groups);
         }
@@ -1111,7 +1112,7 @@ export class RedAPIClient {
         // 4. Sync Zustand store
         try {
             const { useRedStore } = await import('../store/useRedStore');
-            const updatedGroups = this.getWebStore<any[]>('red_web_groups', []);
+            const updatedGroups = this.getWebStore<GroupItem[]>('red_web_groups', []);
             useRedStore.setState({ groups: updatedGroups });
         } catch {}
     }
@@ -1127,18 +1128,18 @@ export class RedAPIClient {
         } catch { /* Offline / Web fallback */ }
 
         // 2. Update local web store
-        const groups = this.getWebStore<any[]>('red_web_groups', []);
-        const group = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
-        const updatedGroups = groups.filter((g: any) => g.id !== groupId && g.group_id !== groupId);
+        const groups = this.getWebStore<GroupItem[]>('red_web_groups', []);
+        const group = groups.find((g: GroupItem) => g.id === groupId || g.group_id === groupId);
+        const updatedGroups = groups.filter((g: GroupItem) => g.id !== groupId && g.group_id !== groupId);
         this.setWebStore('red_web_groups', updatedGroups);
 
         // 3. Remove conversation from local list
-        const convs = this.getWebStore<any[]>('red_web_conversations', []);
-        const updatedConvs = convs.filter((c: any) => c.id !== groupId && c.peer !== groupId);
+        const convs = this.getWebStore<ConversationItem[]>('red_web_conversations', []);
+        const updatedConvs = convs.filter((c: ConversationItem) => c.id !== groupId && c.peer !== groupId);
         this.setWebStore('red_web_conversations', updatedConvs);
 
         // 4. Send group_leave signal to other members
-        const members: string[] = (group?.members || []).map((m: any) => typeof m === 'string' ? m : m.identity_hash).filter((h: string) => h && h !== myHash && h !== 'me');
+        const members: string[] = (group?.members || []).map((m: unknown) => typeof m === 'string' ? m : (m as GroupMemberItem)?.identity_hash).filter((h: unknown): h is string => typeof h === 'string' && h.length > 0 && h !== myHash && h !== 'me');
         const payload = JSON.stringify({
             type: 'group_leave',
             group_id: groupId,
@@ -1174,19 +1175,19 @@ export class RedAPIClient {
         } catch { /* Fallback */ }
 
         // Update locally
-        const groups = this.getWebStore<any[]>('red_web_groups', []);
-        const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+        const groups = this.getWebStore<GroupItem[]>('red_web_groups', []);
+        const g = groups.find((g: GroupItem) => g.id === groupId || g.group_id === groupId);
         if (g && g.members) {
-            const m = g.members.find((m: any) =>
-                (typeof m === 'string' ? m : m.identity_hash) === memberHash
+            const m = g.members.find((m: unknown) =>
+                (typeof m === 'string' ? m : (m as GroupMemberItem)?.identity_hash) === memberHash
             );
-            if (m && typeof m === 'object') { m.role = role; this.setWebStore('red_web_groups', groups); }
+            if (m && typeof m === 'object') { (m as GroupMemberItem).role = role; this.setWebStore('red_web_groups', groups); }
         }
 
         // Broadcast group_admin update across mesh
         let myHash = '';
         try { myHash = localStorage.getItem('red_identity_hash') || ''; } catch {}
-        const members: string[] = (g?.members || []).map((m: any) => typeof m === 'string' ? m : m.identity_hash).filter((h: string) => h && h !== myHash && h !== 'me');
+        const members: string[] = (g?.members || []).map((m: unknown) => typeof m === 'string' ? m : (m as GroupMemberItem)?.identity_hash).filter((h: unknown): h is string => typeof h === 'string' && h.length > 0 && h !== myHash && h !== 'me');
         const adminPayload = JSON.stringify({
             type: 'group_admin',
             action: 'set_role',
@@ -1203,7 +1204,7 @@ export class RedAPIClient {
         // Sync Zustand store
         try {
             const { useRedStore } = await import('../store/useRedStore');
-            useRedStore.setState({ groups: this.getWebStore<any[]>('red_web_groups', []) });
+            useRedStore.setState({ groups: this.getWebStore<GroupItem[]>('red_web_groups', []) });
         } catch {}
     }
 
@@ -1216,19 +1217,19 @@ export class RedAPIClient {
             });
         } catch { /* Fallback */ }
 
-        const groups = this.getWebStore<any[]>('red_web_groups', []);
-        const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+        const groups = this.getWebStore<GroupItem[]>('red_web_groups', []);
+        const g = groups.find((g: GroupItem) => g.id === groupId || g.group_id === groupId);
         if (g && g.members) {
-            const m = g.members.find((m: any) =>
-                (typeof m === 'string' ? m : m.identity_hash) === memberHash
+            const m = g.members.find((m: unknown) =>
+                (typeof m === 'string' ? m : (m as GroupMemberItem)?.identity_hash) === memberHash
             );
-            if (m && typeof m === 'object') { m.muted = muted; this.setWebStore('red_web_groups', groups); }
+            if (m && typeof m === 'object') { (m as GroupMemberItem).muted = muted; this.setWebStore('red_web_groups', groups); }
         }
 
         // Broadcast mute update across mesh
         let myHash = '';
         try { myHash = localStorage.getItem('red_identity_hash') || ''; } catch {}
-        const members: string[] = (g?.members || []).map((m: any) => typeof m === 'string' ? m : m.identity_hash).filter((h: string) => h && h !== myHash && h !== 'me');
+        const members: string[] = (g?.members || []).map((m: unknown) => typeof m === 'string' ? m : (m as GroupMemberItem)?.identity_hash).filter((h: unknown): h is string => typeof h === 'string' && h.length > 0 && h !== myHash && h !== 'me');
         const mutePayload = JSON.stringify({
             type: 'group_admin',
             action: 'mute',
@@ -1244,7 +1245,7 @@ export class RedAPIClient {
 
         try {
             const { useRedStore } = await import('../store/useRedStore');
-            useRedStore.setState({ groups: this.getWebStore<any[]>('red_web_groups', []) });
+            useRedStore.setState({ groups: this.getWebStore<GroupItem[]>('red_web_groups', []) });
         } catch {}
     }
 
@@ -1257,14 +1258,14 @@ export class RedAPIClient {
             });
         } catch { /* Fallback */ }
 
-        const groups = this.getWebStore<any[]>('red_web_groups', []);
-        const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+        const groups = this.getWebStore<GroupItem[]>('red_web_groups', []);
+        const g = groups.find((g: GroupItem) => g.id === groupId || g.group_id === groupId);
         if (g) { g.broadcast_only = broadcastOnly; this.setWebStore('red_web_groups', groups); }
 
         // Broadcast channel mode update across mesh
         let myHash = '';
         try { myHash = localStorage.getItem('red_identity_hash') || ''; } catch {}
-        const members: string[] = (g?.members || []).map((m: any) => typeof m === 'string' ? m : m.identity_hash).filter((h: string) => h && h !== myHash && h !== 'me');
+        const members: string[] = (g?.members || []).map((m: unknown) => typeof m === 'string' ? m : (m as GroupMemberItem)?.identity_hash).filter((h: unknown): h is string => typeof h === 'string' && h.length > 0 && h !== myHash && h !== 'me');
         const bcastPayload = JSON.stringify({
             type: 'group_admin',
             action: 'broadcast_mode',
@@ -1279,7 +1280,7 @@ export class RedAPIClient {
 
         try {
             const { useRedStore } = await import('../store/useRedStore');
-            useRedStore.setState({ groups: this.getWebStore<any[]>('red_web_groups', []) });
+            useRedStore.setState({ groups: this.getWebStore<GroupItem[]>('red_web_groups', []) });
         } catch {}
     }
 
@@ -1311,8 +1312,8 @@ export class RedAPIClient {
      * Join or import an existing squad from a QR code or tactical invite string.
      * Supports both JSON format (type: 'group_invite') and tactical URI (red://squad/...).
      */
-    async joinGroupFromInvite(inviteInput: string | Record<string, any>): Promise<{ id: string; name: string }> {
-        let parsed: any = null;
+    async joinGroupFromInvite(inviteInput: string | Record<string, unknown>): Promise<{ id: string; name: string }> {
+        let parsed: { group_id?: string; groupId?: string; id?: string; name?: string; group_name?: string; creator?: string; members?: unknown[]; created_at?: number } | null = null;
         if (typeof inviteInput === 'string') {
             const trimmed = inviteInput.trim();
             if (trimmed.startsWith('red://squad/') || trimmed.startsWith('red://group/')) {
@@ -1344,13 +1345,13 @@ export class RedAPIClient {
                 }
             }
         } else {
-            parsed = inviteInput;
+            parsed = inviteInput as unknown as typeof parsed;
         }
 
         const groupId: string = parsed?.group_id || parsed?.groupId || parsed?.id || '';
         const groupName: string = parsed?.name || parsed?.group_name || 'Escuadrón Malla';
         const creator: string = parsed?.creator || '';
-        const rawMembers: any[] = Array.isArray(parsed?.members) ? parsed.members : [];
+        const rawMembers: unknown[] = Array.isArray(parsed?.members) ? parsed.members : [];
 
         if (!groupId || groupId.length < 8) {
             throw new Error("ID de escuadrón no válido en la invitación");
@@ -1359,28 +1360,35 @@ export class RedAPIClient {
         let myHash = '';
         try { myHash = localStorage.getItem('red_identity_hash') || ''; } catch {}
 
-        const members = [
-            ...rawMembers.map((m: any) =>
-                typeof m === 'string'
-                    ? { identity_hash: m, role: m === creator ? 'Admin' : 'Member', joined_at: Math.floor(Date.now() / 1000) }
-                    : { role: 'Member', joined_at: Math.floor(Date.now() / 1000), ...m }
-            )
+        const members: GroupMemberItem[] = [
+            ...rawMembers.map((m: unknown) => {
+                if (typeof m === 'string') {
+                    return { identity_hash: m, role: (m === creator ? 'Admin' : 'Member') as 'Admin' | 'Member', joined_at: Math.floor(Date.now() / 1000) };
+                }
+                const obj = (m || {}) as Record<string, unknown>;
+                return {
+                    identity_hash: (obj.identity_hash as string) || '',
+                    role: ((obj.role as string) || 'Member') as 'Admin' | 'Moderator' | 'Member' | 'ReadOnly',
+                    joined_at: (obj.joined_at as number) || Math.floor(Date.now() / 1000),
+                    ...obj
+                };
+            })
         ];
         if (myHash && !members.some(m => m.identity_hash === myHash)) {
             members.push({ identity_hash: myHash, role: 'Member', joined_at: Math.floor(Date.now() / 1000) });
         }
 
-        const groupObj = {
+        const groupObj: GroupItem = {
             id: groupId,
             name: groupName,
             members,
-            creator,
+            creator_hash: creator,
             created_at: parsed?.created_at ? Math.floor(parsed.created_at / 1000) : Math.floor(Date.now() / 1000),
             last_activity: Math.floor(Date.now() / 1000)
         };
 
         // 1. Update web store
-        const existingGroups = this.getWebStore<any[]>('red_web_groups', []);
+        const existingGroups = this.getWebStore<GroupItem[]>('red_web_groups', []);
         const gIdx = existingGroups.findIndex(g => g.id === groupId || g.group_id === groupId);
         if (gIdx >= 0) {
             existingGroups[gIdx] = { ...existingGroups[gIdx], ...groupObj };
@@ -1390,7 +1398,7 @@ export class RedAPIClient {
         this.setWebStore('red_web_groups', existingGroups);
 
         // 2. Add conversation entry
-        const convs = this.getWebStore<any[]>('red_web_conversations', []);
+        const convs = this.getWebStore<ConversationItem[]>('red_web_conversations', []);
         if (!convs.some(c => c.id === groupId || c.peer === groupId)) {
             convs.unshift({
                 id: groupId,
@@ -1426,9 +1434,9 @@ export class RedAPIClient {
         cleanHash = cleanHash.toLowerCase();
 
         // 1. Save in Web local storage
-        const contacts = this.getWebStore<any[]>('red_web_contacts', []);
+        const contacts = this.getWebStore<ContactItem[]>('red_web_contacts', []);
         const existingIdx = contacts.findIndex(c => c.identity_hash === cleanHash);
-        const newContact = { identity_hash: cleanHash, display_name, public_key: public_key || null, online: true };
+        const newContact: ContactItem = { identity_hash: cleanHash, display_name, public_key: public_key || null, online: true };
         if (existingIdx >= 0) {
             contacts[existingIdx] = { ...contacts[existingIdx], ...newContact };
         } else {
@@ -1452,7 +1460,7 @@ export class RedAPIClient {
         }
 
         // 1. Remove from Web local storage
-        const contacts = this.getWebStore<any[]>('red_web_contacts', []);
+        const contacts = this.getWebStore<ContactItem[]>('red_web_contacts', []);
         const filtered = contacts.filter(c => {
             const cHash = (c.identity_hash || '').toLowerCase();
             return cHash !== cleanHash && !cHash.startsWith(cleanHash.slice(0, 8)) && !cleanHash.startsWith(cHash.slice(0, 8));
@@ -1476,7 +1484,7 @@ export class RedAPIClient {
     async verifyContact(identity_hash: string): Promise<void> {
         let cleanHash = identity_hash.trim().toLowerCase();
         if (cleanHash.startsWith('did:red:')) cleanHash = cleanHash.replace(/^did:red:/i, '');
-        const contacts = this.getWebStore<any[]>('red_web_contacts', []);
+        const contacts = this.getWebStore<ContactItem[]>('red_web_contacts', []);
         const idx = contacts.findIndex(c => c.identity_hash === cleanHash || c.identity_hash?.startsWith(cleanHash.slice(0, 8)));
         if (idx >= 0) {
             contacts[idx] = { ...contacts[idx], is_verified: true, verified_at: Date.now() };
@@ -1490,7 +1498,7 @@ export class RedAPIClient {
     async unverifyContact(identity_hash: string): Promise<void> {
         let cleanHash = identity_hash.trim().toLowerCase();
         if (cleanHash.startsWith('did:red:')) cleanHash = cleanHash.replace(/^did:red:/i, '');
-        const contacts = this.getWebStore<any[]>('red_web_contacts', []);
+        const contacts = this.getWebStore<ContactItem[]>('red_web_contacts', []);
         const idx = contacts.findIndex(c => c.identity_hash === cleanHash || c.identity_hash?.startsWith(cleanHash.slice(0, 8)));
         if (idx >= 0) {
             contacts[idx] = { ...contacts[idx], is_verified: false, verified_at: null };
@@ -1528,8 +1536,8 @@ export class RedAPIClient {
                 for (const key of keysToClean) {
                     const raw = localStorage.getItem(key);
                     if (raw) {
-                        const msgs: any[] = JSON.parse(raw);
-                        const filtered = msgs.filter((m: any) => m && m.id !== messageId);
+                        const msgs: MessageItem[] = JSON.parse(raw);
+                        const filtered = msgs.filter((m: MessageItem) => m && m.id !== messageId);
                         if (filtered.length !== msgs.length) {
                             localStorage.setItem(key, JSON.stringify(filtered));
                         }
@@ -1585,7 +1593,7 @@ export class RedAPIClient {
                 for (const key of keysToClean) {
                     const raw = localStorage.getItem(key);
                     if (raw) {
-                        const msgs: any[] = JSON.parse(raw);
+                        const msgs: MessageItem[] = JSON.parse(raw);
                         for (const m of msgs) {
                             if (m?.id) msgIdsToDelete.push(m.id);
                         }
@@ -1611,8 +1619,8 @@ export class RedAPIClient {
 
 
 
-    async getProfile(): Promise<any> {
-        return this.req<any>('/profile').catch(() => null);
+    async getProfile(): Promise<UserProfileResponse | null> {
+        return this.req<UserProfileResponse>('/profile').catch(() => null);
     }
 
     async setProfile(nickname: string, bio?: string): Promise<void> {
@@ -1715,10 +1723,10 @@ export class RedAPIClient {
         await this.req('/settings/burner', { method: 'POST', body: JSON.stringify({ enabled }) }).catch(() => {});
     }
 
-    async getDmsConfig(): Promise<any> {
+    async getDmsConfig(): Promise<DmsConfig & { seconds_remaining?: number }> {
         return fetchWithFallback('/api/settings/dms', undefined, async () => {
             const now = Math.floor(Date.now() / 1000);
-            const cfg = getStored<any>(STORAGE_KEYS.DMS_CONFIG, {
+            const cfg = getStored<DmsConfig>(STORAGE_KEYS.DMS_CONFIG, {
                 enabled: false,
                 trigger_hours: 72,
                 wipe_messages: true,
@@ -1742,14 +1750,14 @@ export class RedAPIClient {
         });
     }
 
-    async saveDmsConfig(config: any): Promise<void> {
+    async saveDmsConfig(config: Partial<DmsConfig>): Promise<void> {
         return fetchWithFallback('/api/settings/dms', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config),
         }, async () => {
             const now = Math.floor(Date.now() / 1000);
-            const existing = getStored<any>(STORAGE_KEYS.DMS_CONFIG, {});
+            const existing = getStored<Partial<DmsConfig>>(STORAGE_KEYS.DMS_CONFIG, {});
             const updated = {
                 ...existing,
                 ...config,
@@ -1816,13 +1824,13 @@ export class RedAPIClient {
 
     // ── SSE / Real-time ───────────────────────────────────────────────────────
 
-    subscribeToEvents(onMessage: (data: any) => void): EventSource | null {
+    subscribeToEvents(onMessage: (data: SSEEventData) => void): EventSource | null {
         if (typeof window === 'undefined') return null;
         
         let currentEs: EventSource | null = null;
         let isClosed = false;
         let reconnectDelay = 1000;
-        let reconnectTimer: any = null;
+        let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
         const eventTypes = [
             'new_message', 'message', 'conv_update', 'contact_update', 'typing',
@@ -1839,7 +1847,7 @@ export class RedAPIClient {
             }
         };
 
-        const customListeners = new Map<string, Set<{ listener: any; options?: any }>>();
+        const customListeners = new Map<string, Set<{ listener: EventListenerOrEventListenerObject; options?: boolean | AddEventListenerOptions }>>();
 
         const connect = () => {
             if (isClosed) return;
@@ -1901,14 +1909,14 @@ export class RedAPIClient {
                     currentEs = null;
                 }
             },
-            addEventListener: (type: string, listener: any, options?: any) => {
+            addEventListener: (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => {
                 if (!customListeners.has(type)) {
                     customListeners.set(type, new Set());
                 }
                 customListeners.get(type)!.add({ listener, options });
                 if (currentEs) currentEs.addEventListener(type, listener, options);
             },
-            removeEventListener: (type: string, listener: any, options?: any) => {
+            removeEventListener: (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions) => {
                 const set = customListeners.get(type);
                 if (set) {
                     for (const entry of set) {
@@ -1923,7 +1931,7 @@ export class RedAPIClient {
             dispatchEvent: (event: Event) => {
                 return currentEs ? currentEs.dispatchEvent(event) : false;
             },
-            set onerror(handler: ((this: EventSource, ev: Event) => any) | null) {
+            set onerror(handler: ((this: EventSource, ev: Event) => unknown) | null) {
                 // Conservar compatibilidad sin suprimir la reconexión interna
             }
         } as unknown as EventSource;
