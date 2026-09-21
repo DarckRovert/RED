@@ -54,7 +54,7 @@ npm run deploy:gh
 ```powershell
 # PASO A — Compilar bundle JS con la versión actual bakeada
 cd client/app
-npm run build          # Next.js static export — bake version.ts en JS
+npm run build:mobile   # Next.js static export limpio sin basePath — bake version.ts en JS
 
 # PASO B — Sincronizar bundle JS a assets Android (WebView)
 npx cap sync android   # Copia .next/... → android/app/src/main/assets/public/

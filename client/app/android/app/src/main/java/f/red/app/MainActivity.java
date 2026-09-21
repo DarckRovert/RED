@@ -28,9 +28,8 @@ public class MainActivity extends BridgeActivity {
         // Critical: Force WebView to use proper device-width scaling for CSS media queries
         android.webkit.WebView webView = this.bridge.getWebView();
         if (webView != null) {
-            // Enable Chrome DevTools remote debugging on debug builds.
-            // Allows inspecting JS console, network calls and SSE from chrome://inspect.
-            android.webkit.WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
+            // Enable Chrome DevTools remote debugging and console forwarding to Logcat
+            android.webkit.WebView.setWebContentsDebuggingEnabled(true);
 
             android.webkit.WebSettings settings = webView.getSettings();
             settings.setUseWideViewPort(true);
@@ -45,6 +44,13 @@ public class MainActivity extends BridgeActivity {
                     runOnUiThread(() -> {
                         request.grant(request.getResources());
                     });
+                }
+
+                @Override
+                public boolean onConsoleMessage(android.webkit.ConsoleMessage consoleMessage) {
+                    android.util.Log.i("RED_JS_CONSOLE", "[" + consoleMessage.messageLevel() + "] " 
+                        + consoleMessage.message() + " (" + consoleMessage.sourceId() + ":" + consoleMessage.lineNumber() + ")");
+                    return super.onConsoleMessage(consoleMessage);
                 }
             });
         }
