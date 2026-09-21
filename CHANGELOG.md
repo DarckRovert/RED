@@ -1,4 +1,32 @@
-﻿# Changelog
+# Changelog
+
+## [116.0.0-arquitectura-bio-cibernetica-unificada] - 2026-09-21
+
+### 🧠 Arquitectura Bio-Cibernética Unificada: MaleCNS + Neocórtex + GNWT + Kuramoto (Release Oficial v116.0.0)
+
+- **Espacio de Trabajo Neuronal Global (GNWT) (`GlobalWorkspaceConsciousnessBus.ts`):**
+  - Implementación del bus singleton de ignición consciente con inhibición lateral ($\theta = 0.60$).
+  - Evaluación en tiempo real de 8 flujos sensoriales/tácticos: Isquemia Crítica, Evasión EMCON, Emboscada RF, Choque Balístico, Colisión Looming, Sorpresa Cinemática, Feromonas de Alarma y Consenso Kuramoto.
+  - Estimación en tiempo real de Información Integrada de Tononi ($\Phi$) y Energía Libre Variacional de Friston ($F$).
+  - Actuación sobre corteza prefrontal dorsolateral (DLPFC) para síntesis autónoma de directivas MEDEVAC/EMCON.
+  - Throttling reactivo a 10 Hz (`UI_THROTTLE_MS = 100`) garantizando 60 FPS estables.
+- **Sincronización de Enjambre Kuramoto P2P (`RingAttractorEngine.ts`, `meshProtocol.ts`, `meshRouter.ts`):**
+  - Ecuación diferencial de acoplamiento de fase: $\Delta\theta = K \cdot e^{-\Delta t/\tau} \cdot \sin(\theta_{\text{remote}} - \theta_{\text{local}})$.
+  - Cálculo continuo del Parámetro de Orden de Kuramoto $R = \left|\frac{1}{N}\sum e^{i\theta_j}\right|$ para coherencia de fase del enjambre.
+  - Discretización compacta a 1 byte ($[0,360) \to [0,255]$) sobre ranura Slot-8 LoRa TDMA.
+  - Asignación de bit de protocolo `FLAG_KURAMOTO_SYNC = 0x40` (Bit 6) y broadcast reactivo en malla.
+- **HUD Táctico y Conectoma (`MaleCnsConnectomeHUD.tsx`, `ConnectomeCortexBridge.ts`):**
+  - Nueva pestaña `CONSCIOUS_SWARM_BUS` con medidor de ignición GNWT, monitores de $\Phi$ y $F$, visualizador circular de fase Kuramoto con vector $R$ y monitor estigmérgico de feromonas.
+  - Corrección de renderizado en React 19 eliminando lectura de `ref.current` durante render y transicionando a estado `isDraggingUI`.
+  - Inyección de instantánea consciente en el contexto de inferencia del copiloto LLM.
+- **Correcciones Críticas de Estabilidad, Memoria y Radio (`messageDispatcher.ts`, `authSlice.ts`, `MeshSosBeaconEngine.ts`, `NodeMap.tsx`):**
+  - Early-exit gates para `P2P_VOICE_BURST` y beacons `SOS_BEACON_V1` en `messageDispatcher.ts` para eliminar desbordamientos de memoria (OOM).
+  - Intercepción limpia de balizas SOS antes de degradación a texto plano y mapeo explícito de tipos en `authSlice.ts`.
+  - Supresión del bucle destructivo del watcher GNSS en `NodeMap.tsx` al desvincular dependencia inestable `[realGPS]`.
+  - Deadband cinemático (5 m / 8 s) e integración unificada de pares BLE y mesh para visualización cartográfica sin saturación de bus.
+- **Telemetría Nativa y Exportación Limpia en Android (`MainActivity.java`, `deploy-and-release.md`):**
+  - `WebView.setWebContentsDebuggingEnabled(true)` y reexpedición de consola a Logcat bajo etiqueta `RED_JS_CONSOLE`.
+  - Estandarización de `npm run build:mobile` en el pipeline de release para prevenir contaminación de rutas `/RED/` en el APK de producción.
 
 ## [115.0.0-bug-fix-arquitectonico-dms-sse-loopback-sha256-dedup-rutas-api] - 2026-09-20
 
