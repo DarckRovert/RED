@@ -34,6 +34,7 @@ import {
   encode,
   relay,
   PQC_TYPE_KEY_ANNOUNCE,
+  FLAG_KURAMOTO_SYNC,
 } from './meshProtocol';
 
 import { RedAPI } from '../api';
@@ -570,6 +571,34 @@ class MeshRouter {
       await this.broadcast(encode(packet));
     } catch (e) {
       console.warn('[MeshRouter] Failed to broadcast shake pair:', e);
+    }
+  }
+
+  /**
+   * Transmite un pulso compacto de sincronización de fase de Kuramoto (1 byte)
+   * sobre la malla táctica para acoplamiento de atractores de anillo y relojes TDMA.
+   */
+  async broadcastKuramotoPhase(): Promise<void> {
+    try {
+      if (!this.myIdentityHash) return;
+      const { ringAttractor } = require('../neuro/RingAttractorEngine');
+      const phaseByte = ringAttractor.getKuramotoPhaseByte();
+      const payloadObj = {
+        type: 'KURAMOTO_PHASE_SYNC',
+        phaseByte,
+        confidence: 0.90,
+        timestamp: Date.now()
+      };
+      const raw = new TextEncoder().encode(JSON.stringify(payloadObj));
+      const packet = createPacket(
+        this.myIdentityHash,
+        'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+        raw
+      );
+      packet.flags |= FLAG_KURAMOTO_SYNC;
+      await this.broadcast(encode(packet));
+    } catch (e) {
+      console.warn('[MeshRouter] Failed to broadcast Kuramoto phase sync:', e);
     }
   }
 
@@ -1198,45 +1227,62 @@ class MeshRouter {
       return p;
     });
 
+    // Enqueue original unified packet in persistent DTN store-and-forward queue
+    const originalPacket = createPacket(this.myIdentityHash, canonicalRecipient, payload);
+    dtnStorage.enqueue(originalPacket, 5);
+
     const blePeers = Array.from(this.peers.entries()).filter(([_, p]) => p.transport === 'ble');
     const wifiActive = this.wifi && (this.wifi.onlinePeers.size > 0 || blindRelay.isConnected || this.hasInternetAccess);
+    let anyShardSent = false;
 
     // Shards 0 & 1: High-bandwidth WAN / Sovereign Blind Relay
     if (wifiActive) {
       this.wifi?.send(canonicalRecipient, encode(shardPackets[0])).catch(() => {});
       this.wifi?.send(canonicalRecipient, encode(shardPackets[1])).catch(() => {});
+      anyShardSent = true;
     } else if (blePeers.length > 0) {
       bluetoothTransport.send(blePeers[0][0], encode(shardPackets[0])).catch(() => {});
       bluetoothTransport.send(blePeers[0][0], encode(shardPackets[1])).catch(() => {});
+      anyShardSent = true;
     }
 
     // Shard 2: Direct WebRTC DataChannel if connected, otherwise WAN or BLE
     if (this.wifi?.onlinePeers.has(canonicalRecipient)) {
       this.wifi.send(canonicalRecipient, encode(shardPackets[2])).catch(() => {});
+      anyShardSent = true;
     } else if (wifiActive) {
       this.wifi?.send(canonicalRecipient, encode(shardPackets[2])).catch(() => {});
+      anyShardSent = true;
     } else if (blePeers.length > 0) {
       bluetoothTransport.send(blePeers[0][0], encode(shardPackets[2])).catch(() => {});
+      anyShardSent = true;
     }
 
     // Shard 3: Local BLE Mesh Neighbor
     if (blePeers.length > 0) {
       bluetoothTransport.send(blePeers[0][0], encode(shardPackets[3])).catch(() => {});
+      anyShardSent = true;
     } else if (wifiActive) {
       this.wifi?.send(canonicalRecipient, encode(shardPackets[3])).catch(() => {});
+      anyShardSent = true;
     }
 
     // Shard 4: LoRa RF or secondary BLE neighbor / fallback
     if (loraBridge.isConnected) {
       loraBridge.sendPacket(encode(shardPackets[4])).catch(() => {});
+      anyShardSent = true;
     } else if (blePeers.length > 1) {
       bluetoothTransport.send(blePeers[1][0], encode(shardPackets[4])).catch(() => {});
+      anyShardSent = true;
     } else if (wifiActive) {
       this.wifi?.send(canonicalRecipient, encode(shardPackets[4])).catch(() => {});
+      anyShardSent = true;
     }
 
-    console.log(`[MeshRouter] 🚀 Multipath Bonding: Dispatched 5 shards (3 data + 2 parity) for ${canonicalRecipient.slice(0, 8)} across available bearers`);
-    return 'sent';
+    dtnStorage.markAttempt(originalPacket.nonce, false);
+
+    console.log(`[MeshRouter] 🚀 Multipath Bonding: Dispatched 5 shards (3 data + 2 parity) for ${canonicalRecipient.slice(0, 8)} across available bearers (sent=${anyShardSent})`);
+    return anyShardSent ? 'sent' : 'queued';
   }
 
   /**
@@ -1587,6 +1633,22 @@ class MeshRouter {
             if (ph.type === 'ALARM') {
               synapticMeshRouter.reinforceAversion(packet.sender, 0.4);
             }
+          }
+        } catch {}
+      }
+
+      // 0.1 KURAMOTO PHASE SYNCHRONIZATION (Consenso de Fase en Malla LoRa TDMA / Atractor de Anillo)
+      if ((packet.flags & FLAG_KURAMOTO_SYNC) || (payloadStr.startsWith('{') && payloadStr.includes('KURAMOTO_PHASE_SYNC'))) {
+        try {
+          const parsed = JSON.parse(payloadStr);
+          if (parsed.type === 'KURAMOTO_PHASE_SYNC' && typeof parsed.phaseByte === 'number') {
+            const { ringAttractor } = require('../neuro/RingAttractorEngine');
+            ringAttractor.injectRemoteKuramotoPhase(
+              packet.sender,
+              parsed.phaseByte,
+              packet.timestamp || Date.now(),
+              parsed.confidence ?? 0.85
+            );
           }
         } catch {}
       }
@@ -2185,15 +2247,23 @@ class MeshRouter {
       }
     }
 
-    if (!anySent) {
-      // Enqueue in persistent DTN store-and-forward storage
-      dtnStorage.enqueue(packet);
+    // Enqueue in persistent DTN store-and-forward storage for all unicast data packets
+    let isProtocol = false;
+    try {
+      const previewStr = new TextDecoder().decode(packet.payload.slice(0, 100));
+      if (previewStr.includes('DELIVERY_ACK') || previewStr.includes('IDENTITY_ANNOUNCE') || previewStr.includes('IDENTITY_RESPONSE') || previewStr.includes('PQC_KEY') || previewStr.includes('KURAMOTO') || previewStr.includes('SWARM_PHEROMONE')) {
+        isProtocol = true;
+      }
+    } catch {}
+
+    if (!isBroadcast && !isProtocol) {
+      dtnStorage.enqueue(packet, (packet.flags & 0x01) !== 0 ? 9 : 4);
       dtnStorage.markAttempt(packet.nonce, false);
+    }
+
+    if (!anySent) {
       console.log(`[MeshRouter] No reachable route — saved in persistent DTN queue for ${packet.recipient.slice(0, 8)}`);
       return 'queued';
-    } else {
-      // Record attempt for unacknowledged retransmission
-      dtnStorage.markAttempt(packet.nonce, false);
     }
 
     return 'sent';
@@ -2273,14 +2343,14 @@ class MeshRouter {
       const res = await this.forwardPacket(packet, null);
       if (res === 'sent') {
         flushed++;
-        // [BUG-06 FIX] Marcar como entregado para eliminar del DTN queue sin esperar DELIVERY_ACK.
-        // En redes sin ACK explícito (modo web, pruebas), el queue crecía indefinidamente.
-        dtnStorage.markAttempt(packet.nonce, true);
+        // forwardPacket already recorded the transmission attempt and exponential backoff
+        // via dtnStorage.markAttempt(packet.nonce, false).
+        // The packet remains safely in DTN storage until DELIVERY_ACK arrives or MAX_DTN_RETRIES is met.
       }
     }
 
     if (flushed > 0) {
-      console.log(`[MeshRouter] 🔄 Retransmitted ${flushed}/${items.length} DTN packets — removed from queue`);
+      console.log(`[MeshRouter] 🔄 Retransmitted ${flushed}/${items.length} DTN packets (awaiting DELIVERY_ACK or next backoff)`);
     }
 
     // Periodically purge dead expired packets (>30 days)
@@ -2437,6 +2507,13 @@ class MeshRouter {
             conts[cIdx].kyber_public_key = kyberPublicKey;
             if (x25519PublicKey) conts[cIdx].x25519_public_key = x25519PublicKey;
             localStorage.setItem('red_web_contacts', JSON.stringify(conts));
+            window.dispatchEvent(new CustomEvent('red:contact_pqc_updated', {
+              detail: {
+                identity_hash: resolvedCanonical,
+                kyber_public_key: kyberPublicKey,
+                x25519_public_key: x25519PublicKey
+              }
+            }));
           }
         }
       } catch {}

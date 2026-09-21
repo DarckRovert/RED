@@ -11,6 +11,29 @@ import { WebCompanionPairConfirmationModal } from "./WebCompanionPairConfirmatio
 import { toast } from "./Toast";
 import { TacIcon } from "./ui/TacIcon";
 
+import { TacticalLocationEngine, TacticalLocation } from "../lib/sensors/TacticalLocationEngine";
+
+function calculateGreatCircleBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const phi1 = (lat1 * Math.PI) / 180;
+    const phi2 = (lat2 * Math.PI) / 180;
+    const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+    const y = Math.sin(deltaLambda) * Math.cos(phi2);
+    const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+    const theta = Math.atan2(y, x);
+    return Math.round((((theta * 180) / Math.PI) + 360) % 360);
+}
+
+function calculateHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371000;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c);
+}
+
 type RadarTab = "radar" | "qr" | "manual";
 
 export default function RadarWindow() {
@@ -21,6 +44,28 @@ export default function RadarWindow() {
     const [nearbyPeers, setNearbyPeers] = useState<any[]>([]);
     const [selectedPeer, setSelectedPeer] = useState<any | null>(null);
     const [webPairingCode, setWebPairingCode] = useState<string | null>(null);
+    const [myCoords, setMyCoords] = useState<{ lat: number; lon: number } | null>(null);
+    const [isGhostActive, setIsGhostActive] = useState<boolean>(false);
+
+    // Sincronización continua de posición táctica GNSS / Modo Señuelo
+    useEffect(() => {
+        const last = TacticalLocationEngine.getLastKnownLocation();
+        if (last && TacticalLocationEngine.isValidCoordinates(last.lat, last.lon)) {
+            setMyCoords({ lat: last.lat!, lon: last.lon! });
+        }
+        setIsGhostActive(TacticalLocationEngine.isGhostActive());
+
+        const unsubGps = TacticalLocationEngine.watchLocation((loc: TacticalLocation) => {
+            if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                setMyCoords({ lat: loc.lat!, lon: loc.lon! });
+            }
+            setIsGhostActive(!!loc.isGhost);
+        });
+
+        return () => {
+            unsubGps();
+        };
+    }, []);
 
     // Intercepción LIFO de hardware Android y tecla Escape
     useEffect(() => {
@@ -87,7 +132,9 @@ export default function RadarWindow() {
                         rssi: typeof node.rssi === "number" ? node.rssi : -70,
                         address: node.address || id,
                         transport: node.transport || "mesh",
-                        distance: node.distance
+                        distance: node.distance,
+                        latitude: (node as any).latitude ?? (node as any).lat,
+                        longitude: (node as any).longitude ?? (node as any).lon ?? (node as any).lng
                     });
                 }
                 for (const peer of blePeers) {
@@ -99,7 +146,9 @@ export default function RadarWindow() {
                         ...peer,
                         id,
                         name: peer.name || existing?.name || `Nodo ${id.substring(0, 6)}`,
-                        rssi: typeof peer.rssi === "number" ? peer.rssi : (existing?.rssi ?? -70)
+                        rssi: typeof peer.rssi === "number" ? peer.rssi : (existing?.rssi ?? -70),
+                        latitude: (peer as any).latitude ?? (peer as any).lat ?? existing?.latitude,
+                        longitude: (peer as any).longitude ?? (peer as any).lon ?? (peer as any).lng ?? existing?.longitude
                     });
                 }
                 setNearbyPeers(Array.from(peerMap.values()));
@@ -533,20 +582,31 @@ export default function RadarWindow() {
 
     const myDid = identity?.identity_hash ? `did:red:${identity.identity_hash}` : "did:red:local_node";
 
-    // Calcular posición polar para cada nodo detectado
+    // Calcular posición polar para cada nodo detectado con acimut real y alineación con Norte
     const polarPeers = useMemo(() => {
         return nearbyPeers.map((p, idx) => {
-            // Pseudo-angle from hash
-            const hash = p.id || p.address || `${idx}`;
-            let sum = 0;
-            for (let i = 0; i < hash.length; i++) sum += hash.charCodeAt(i);
-            const angleDeg = (sum * 47) % 360;
-            const angleRad = (angleDeg * Math.PI) / 180;
+            const hasGps = !!(myCoords && TacticalLocationEngine.isValidCoordinates(p.latitude, p.longitude));
+            let bearingDeg = 0;
+            let estimatedMeters = 0;
 
-            // Distance ratio based on RSSI (-30 dBm closest ~ 15%, -100 dBm farthest ~ 90%)
             const rssi = typeof p.rssi === "number" ? p.rssi : -70;
             const normRssi = Math.max(-100, Math.min(-30, rssi));
-            const radiusPercent = 15 + ((100 + normRssi) / 70) * 75; // 15% to 90%
+
+            if (hasGps && myCoords) {
+                bearingDeg = calculateGreatCircleBearing(myCoords.lat, myCoords.lon, p.latitude, p.longitude);
+                estimatedMeters = calculateHaversineDistanceMeters(myCoords.lat, myCoords.lon, p.latitude, p.longitude);
+            } else {
+                // Acimut pseudo-determinista si no hay coordenadas GNSS en ambos extremos
+                const hash = p.id || p.address || `${idx}`;
+                let sum = 0;
+                for (let i = 0; i < hash.length; i++) sum += hash.charCodeAt(i);
+                bearingDeg = (sum * 47) % 360;
+                estimatedMeters = Math.round(Math.pow(10, (-40 - rssi) / (10 * 2.2)));
+            }
+
+            // Proyección sobre retícula polar con 0° en Norte (-Y) y 90° en Este (+X)
+            const angleRad = ((bearingDeg - 90) * Math.PI) / 180;
+            const radiusPercent = 15 + ((100 + normRssi) / 70) * 75; // 15% a 90%
 
             const x = 50 + (radiusPercent / 2) * Math.cos(angleRad);
             const y = 50 + (radiusPercent / 2) * Math.sin(angleRad);
@@ -555,11 +615,13 @@ export default function RadarWindow() {
                 ...p,
                 x,
                 y,
-                angleDeg,
-                estimatedMeters: Math.round(Math.pow(10, (-40 - rssi) / (10 * 2.2)))
+                angleDeg: bearingDeg,
+                bearingDeg,
+                estimatedMeters,
+                hasGps
             };
         });
-    }, [nearbyPeers]);
+    }, [nearbyPeers, myCoords]);
 
     if (scanning) {
         return (
@@ -854,6 +916,32 @@ export default function RadarWindow() {
                             display: "flex", flexDirection: "column", gap: "16px",
                             boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 230, 118, 0.15)"
                         }}>
+                            {/* Barra de Estado Táctico GNSS y Coordenadas Locales */}
+                            <div style={{
+                                display: "flex", justifyContent: "space-between", alignItems: "center",
+                                fontSize: "0.68rem", fontWeight: 800, color: "var(--text-secondary)",
+                                padding: "6px 12px", background: "rgba(0,0,0,0.45)", borderRadius: "10px",
+                                border: "1px solid rgba(255,255,255,0.08)"
+                            }}>
+                                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <span style={{
+                                        width: 7, height: 7, borderRadius: "50%",
+                                        background: isGhostActive ? "#FFB300" : (myCoords ? "#00E676" : "#FF3355"),
+                                        boxShadow: `0 0 8px ${isGhostActive ? "#FFB300" : (myCoords ? "#00E676" : "#FF3355")}`
+                                    }} />
+                                    <span style={{ color: isGhostActive ? "#FFB300" : (myCoords ? "#00E676" : "rgba(255,255,255,0.7)") }}>
+                                        {isGhostActive ? "SEÑUELO GHOST ACTIVO" : (myCoords ? "GNSS TÁCTICO FIJADO" : "GNSS BLOQUEADO (RSSI)")}
+                                    </span>
+                                </span>
+                                {myCoords ? (
+                                    <span className="tabular-telemetry" style={{ color: "#00E5FF", fontSize: "0.62rem", fontFamily: "JetBrains Mono, monospace" }}>
+                                        {myCoords.lat.toFixed(4)}°, {myCoords.lon.toFixed(4)}°
+                                    </span>
+                                ) : (
+                                    <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.62rem" }}>SIN FIX SATELITAL</span>
+                                )}
+                            </div>
+
                             {/* Visual Polar Scope (Canvas Simulator) */}
                             <div style={{
                                 position: "relative", width: "260px", height: "260px", margin: "0 auto",
@@ -951,7 +1039,7 @@ export default function RadarWindow() {
                                             </div>
                                             <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#FFFFFF" }}>{selectedPeer.name}</div>
                                             <div className="tabular-telemetry" style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                ID: {selectedPeer.id} · RSSI: {selectedPeer.rssi} dBm · ~{selectedPeer.estimatedMeters || 50}m
+                                                ID: {selectedPeer.id.substring(0, 16)}… · RSSI: {selectedPeer.rssi} dBm · {selectedPeer.hasGps ? `${selectedPeer.estimatedMeters}m (GPS)` : `~${selectedPeer.estimatedMeters || 50}m (RSSI)`}{selectedPeer.bearingDeg !== undefined ? ` · RUMBO: ${String(selectedPeer.bearingDeg).padStart(3, '0')}°` : ''}
                                             </div>
                                         </div>
                                         <button
@@ -1043,7 +1131,7 @@ export default function RadarWindow() {
                                             <div>
                                                 <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#FFFFFF" }}>{p.name}</div>
                                                 <div className="tabular-telemetry" style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                    DID: {p.id.substring(0, 16)}… · ~{p.estimatedMeters}m
+                                                    DID: {p.id.substring(0, 16)}… · {p.hasGps ? `${p.estimatedMeters}m (GPS)` : `~${p.estimatedMeters}m`}{p.bearingDeg !== undefined ? ` · ${String(p.bearingDeg).padStart(3, '0')}°` : ''}
                                                 </div>
                                             </div>
 

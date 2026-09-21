@@ -30,6 +30,8 @@ export interface RingAttractorTelemetry {
     angularVelocityDps: number;
     driftEstimateDpm: number;
     rfBearings?: RfBearingCue[];
+    kuramotoOrderParameterR?: number;
+    swarmPhaseDeg?: number;
     timestamp: number;
 }
 
@@ -64,6 +66,11 @@ export class RingAttractorEngine {
 
     // Cues de Marcación de Radiofrecuencia (AoA Radiogoniometry de Synaptic Router)
     private rfBearingCues: Map<string, RfBearingCue> = new Map();
+
+    // Sincronización de Fase de Kuramoto (Colmena P2P)
+    private remoteKuramotoPhases: Map<string, { phaseRad: number; timestamp: number; confidence: number }> = new Map();
+    private kuramotoOrderParameterR: number = 1.0;
+    private swarmPhaseDeg: number = 0.0;
 
     private constructor() {
         this.u = new Float64Array(this.numWedges);
@@ -219,6 +226,52 @@ export class RingAttractorEngine {
         const omegaRad = (this.angularVelocityDps * Math.PI) / 180; // rad/s
         const du = new Float64Array(N);
 
+        // 0. Sincronización de Fase de Kuramoto: dθ_i/dt = ω_i + (K/N) * sum_j sin(θ_j - θ_i)
+        let kuramotoTorque = 0;
+        const now = Date.now();
+        const localPhaseRad = (this.currentHeadingDeg * Math.PI) / 180 - Math.PI;
+
+        if (this.remoteKuramotoPhases.size > 0) {
+            let sumSin = Math.sin(localPhaseRad);
+            let sumCos = Math.cos(localPhaseRad);
+            let totalWeight = 1.0;
+
+            this.remoteKuramotoPhases.forEach((p, peerId) => {
+                const ageMs = now - p.timestamp;
+                if (ageMs > 30000) {
+                    this.remoteKuramotoPhases.delete(peerId);
+                    return;
+                }
+                const decay = Math.exp(-ageMs / 8000);
+                const weight = p.confidence * decay;
+                const phaseDiff = p.phaseRad - localPhaseRad;
+                kuramotoTorque += weight * Math.sin(phaseDiff);
+
+                sumSin += Math.sin(p.phaseRad) * weight;
+                sumCos += Math.cos(p.phaseRad) * weight;
+                totalWeight += weight;
+            });
+
+            if (totalWeight > 0.001) {
+                // Parámetro de Orden de Kuramoto: R = |sum e^(i*theta_j)| / N_total
+                this.kuramotoOrderParameterR = Math.min(1.0, Math.max(0.0, Math.sqrt(sumSin * sumSin + sumCos * sumCos) / totalWeight));
+                const swarmRad = Math.atan2(sumSin, sumCos);
+                let sDeg = ((swarmRad + Math.PI) * 180) / Math.PI;
+                while (sDeg < 0) sDeg += 360;
+                while (sDeg >= 360) sDeg -= 360;
+                this.swarmPhaseDeg = Math.round(sDeg * 10) / 10;
+            }
+
+            // Ganancia de acoplamiento K_kuramoto
+            const kCoupling = 0.40;
+            kuramotoTorque = (kCoupling * kuramotoTorque) / Math.max(1, this.remoteKuramotoPhases.size);
+        } else {
+            this.kuramotoOrderParameterR = 1.0;
+            this.swarmPhaseDeg = this.currentHeadingDeg;
+        }
+
+        const effectiveOmega = omegaRad + kuramotoTorque;
+
         // 1. Evaluación de derivadas du_i/dt
         for (let i = 0; i < N; i++) {
             // Retroalimentación sináptica recurrente sum_j (W_ij * f(u_j))
@@ -228,10 +281,10 @@ export class RingAttractorEngine {
                 recurrentInput += this.synMatrix[i * N + j] * r_j;
             }
 
-            // Desplazamiento asimétrico conducido por velocidad angular (P-EN shift)
+            // Desplazamiento asimétrico conducido por velocidad angular y acoplamiento Kuramoto (P-EN shift)
             const prevIdx = (i - 1 + N) % N;
             const nextIdx = (i + 1) % N;
-            const shiftInput = this.betaShift * omegaRad * (this.u[prevIdx] - this.u[nextIdx]);
+            const shiftInput = this.betaShift * effectiveOmega * (this.u[prevIdx] - this.u[nextIdx]);
 
             // Decaimiento natural y ecuación diferencial
             du[i] = (-this.u[i] + recurrentInput + shiftInput) / this.tau;
@@ -300,6 +353,8 @@ export class RingAttractorEngine {
             angularVelocityDps: Math.round(this.angularVelocityDps * 10) / 10,
             driftEstimateDpm: this.isSensoryAnchored ? 0.0 : 0.45,
             rfBearings: Array.from(this.rfBearingCues.values()),
+            kuramotoOrderParameterR: Math.round(this.kuramotoOrderParameterR * 100) / 100,
+            swarmPhaseDeg: Math.round(this.swarmPhaseDeg * 10) / 10,
             timestamp: Date.now()
         };
     }
@@ -355,6 +410,48 @@ export class RingAttractorEngine {
         return Array.from(this.rfBearingCues.values());
     }
 
+    /**
+     * Inyecta la fase de un par remoto recibida vía LoRa TDMA o BLE en la red de osciladores de Kuramoto.
+     */
+    public injectRemoteKuramotoPhase(
+        peerId: string,
+        remotePhaseByte: number,
+        timestamp: number = Date.now(),
+        confidence: number = 0.85
+    ): void {
+        if (!peerId || typeof remotePhaseByte !== 'number') return;
+        const phaseDeg = (remotePhaseByte / 256) * 360;
+        const phaseRad = (phaseDeg * Math.PI) / 180 - Math.PI;
+        this.remoteKuramotoPhases.set(peerId.toLowerCase().trim(), {
+            phaseRad,
+            timestamp,
+            confidence: Math.max(0.1, Math.min(1.0, confidence))
+        });
+        // Si el motor no está en bucle continuo, forzar integración
+        this.stepSimulation(0.05);
+    }
+
+    /**
+     * Exporta la fase actual del atractor discretizada en 1 byte [0, 255]
+     * correspondiente a [0, 360) grados para transmisión en slot 8 LoRa TDMA o beacons BLE.
+     */
+    public getKuramotoPhaseByte(): number {
+        const normDeg = ((this.currentHeadingDeg % 360) + 360) % 360;
+        return Math.floor((normDeg / 360) * 256) % 256;
+    }
+
+    public getKuramotoOrderParameter(): number {
+        return this.kuramotoOrderParameterR;
+    }
+
+    public getSwarmPhaseDeg(): number {
+        return this.swarmPhaseDeg;
+    }
+
+    public getRemoteKuramotoPhasesCount(): number {
+        return this.remoteKuramotoPhases.size;
+    }
+
     public subscribe(cb: (t: RingAttractorTelemetry) => void): () => void {
         this.listeners.add(cb);
         if (this.listeners.size === 1) {
@@ -398,6 +495,9 @@ export class RingAttractorEngine {
             this.instance.stop();
             this.instance.listeners.clear();
             this.instance.rfBearingCues.clear();
+            this.instance.remoteKuramotoPhases.clear();
+            this.instance.kuramotoOrderParameterR = 1.0;
+            this.instance.swarmPhaseDeg = 0.0;
             this.instance = null;
         }
     }

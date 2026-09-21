@@ -29,6 +29,7 @@ export const FLAG_ACK_REQUESTED = 0x02; // Receiver should emit cryptographic DE
 export const FLAG_IS_RELAY = 0x04;      // Packet has been relayed by intermediate node
 export const FLAG_PHEROMONE = 0x10;     // Bit 4: Packet carries Swarm Pheromone envelope in payload/header
 export const FLAG_PQC_ENCRYPTED = 0x20; // NIST FIPS 203 ML-KEM-768 + X25519 hybrid post-quantum encapsulation
+export const FLAG_KURAMOTO_SYNC = 0x40; // Bit 6: Sincronización de Fase de Kuramoto para TDMA y Atractor
 
 /** Envelope de Feromona de Enjambre (Swarm Pheromone) para propagación estigmérgica en malla */
 export interface SwarmPheromoneEnvelope {
@@ -38,6 +39,15 @@ export interface SwarmPheromoneEnvelope {
   originPeerId: string;
   timestamp: number;
   notes?: string;
+}
+
+/** Payload de sincronización de fase de Kuramoto (1 byte de fase + metadatos) */
+export interface KuramotoSyncPayload {
+  type: 'KURAMOTO_PHASE_SYNC';
+  phaseByte: number; // [0, 255] correspondiente a [0, 360) grados
+  frequencyHz?: number;
+  confidence: number;
+  timestamp: number;
 }
 
 /** JSON packet type for out-of-band PQC key announcements broadcast over the mesh */

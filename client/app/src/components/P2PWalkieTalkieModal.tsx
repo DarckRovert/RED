@@ -245,6 +245,26 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                         ctx.lineTo(width, height / 2);
                         ctx.stroke();
                         ctx.shadowBlur = 0;
+                    } else if (isRecording) {
+                        // Modo nativo Android (Capacitor VoiceRecorder): Modulación sintética RF en tiempo real
+                        const now = Date.now() / 150;
+                        const syntheticVad = Math.round(45 + 35 * Math.sin(now * 1.8) * Math.cos(now * 0.9));
+                        setVadLevel(Math.max(15, syntheticVad));
+
+                        ctx.lineWidth = 2;
+                        ctx.strokeStyle = "#FF3355";
+                        ctx.shadowBlur = 8;
+                        ctx.shadowColor = "#FF3355";
+                        ctx.beginPath();
+                        for (let x = 0; x < width; x += 4) {
+                            const wave1 = Math.sin((x * 0.05) + now * 2) * (height * 0.22);
+                            const wave2 = Math.cos((x * 0.12) - now * 3) * (height * 0.12);
+                            const y = height / 2 + wave1 + wave2;
+                            if (x === 0) ctx.moveTo(x, y);
+                            else ctx.lineTo(x, y);
+                        }
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
                     } else {
                         // Línea base continua (Carrier sense en reposo)
                         ctx.lineWidth = 1.5;
@@ -345,14 +365,21 @@ export const P2PWalkieTalkieModal: React.FC = () => {
             let base64Audio = "";
             let duration = recordingTime || 1;
             let rawBytesCount = 0;
+            let arrayBuffer: ArrayBuffer | null = null;
 
             const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
                 const result = await NativeAudio.stop();
-                if (result) {
+                if (result && result.base64) {
                     base64Audio = result.base64;
                     duration = Math.round(result.durationMs / 1000) || recordingTime || 1;
                     rawBytesCount = Math.round(base64Audio.length * 0.75);
+                    try {
+                        const binary = atob(result.base64);
+                        const bytes = new Uint8Array(binary.length);
+                        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                        arrayBuffer = bytes.buffer;
+                    } catch {}
                 }
             } else if (mediaRecorderRef.current) {
                 const rec = mediaRecorderRef.current;
@@ -370,41 +397,41 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                 const blob = new Blob(recordedChunksRef.current, { type: rec.mimeType || 'audio/webm' });
                 if (blob.size > 0) {
                     rawBytesCount = blob.size;
-                    const arrayBuffer = await blob.arrayBuffer();
-
-                    // Aplicar compresión con LowBitrateVocoder si está habilitado
-                    if (useTacticalVocoder) {
-                        try {
-                            const audioCtx = AudioContextManager.getSharedContext();
-                            if (audioCtx) {
-                                const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-                                const vocoderResult = vocoderMode === "lpc"
-                                    ? LowBitrateVocoder.compressForLora(decodedBuffer)
-                                    : LowBitrateVocoder.compressAudioBuffer(decodedBuffer);
-
-                                base64Audio = vocoderResult.base64;
-                                duration = Math.max(1, Math.round(decodedBuffer.duration));
-                                setCompressionTelemetry({
-                                    bytes: vocoderResult.compressedSizeBytes,
-                                    reduction: vocoderResult.compressionRatioPercent,
-                                    bitrateKbps: Math.round((vocoderResult.compressedSizeBytes * 8) / (duration * 1000) * 10) / 10
-                                });
-                            }
-                        } catch (compErr) {
-                            console.warn("[Vocoder Encoding Fallback]", compErr);
-                        }
-                    }
-
-                    // Fallback a base64 de WebM estándar si vocoder no corrió
-                    if (!base64Audio) {
-                        const bytes = new Uint8Array(arrayBuffer);
-                        let binary = '';
-                        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-                        base64Audio = btoa(binary);
-                        duration = recordingTime || 1;
-                    }
+                    arrayBuffer = await blob.arrayBuffer();
                 }
                 mediaRecorderRef.current = null;
+            }
+
+            // Aplicar compresión con LowBitrateVocoder si está habilitado (unificado Web + Android)
+            if (arrayBuffer && useTacticalVocoder) {
+                try {
+                    const audioCtx = AudioContextManager.getSharedContext();
+                    if (audioCtx) {
+                        const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+                        const vocoderResult = vocoderMode === "lpc"
+                            ? LowBitrateVocoder.compressForLora(decodedBuffer)
+                            : LowBitrateVocoder.compressAudioBuffer(decodedBuffer);
+
+                        base64Audio = vocoderResult.base64;
+                        duration = Math.max(1, Math.round(decodedBuffer.duration));
+                        setCompressionTelemetry({
+                            bytes: vocoderResult.compressedSizeBytes,
+                            reduction: vocoderResult.compressionRatioPercent,
+                            bitrateKbps: Math.round((vocoderResult.compressedSizeBytes * 8) / (duration * 1000) * 10) / 10
+                        });
+                    }
+                } catch (compErr) {
+                    console.warn("[Vocoder Encoding Fallback]", compErr);
+                }
+            }
+
+            // Fallback a base64 si vocoder no corrió y no teníamos base64
+            if (!base64Audio && arrayBuffer) {
+                const bytes = new Uint8Array(arrayBuffer);
+                let binary = '';
+                for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+                base64Audio = btoa(binary);
+                duration = recordingTime || 1;
             }
 
             if (base64Audio) {
@@ -520,8 +547,20 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                 activeSourceNodeRef.current = source;
                 setPlayingBurstId(burst.id);
             } else {
-                // Reproducción estándar de contenedor WebM / Opus / AAC
-                const audio = new Audio(`data:audio/webm;base64,${burst.audio_opus_b64}`);
+                // Reproducción estándar con detección de contenedor (WebM / Opus / Ogg / WAV / AAC / MP4)
+                let mimeType = 'audio/webm';
+                if (rawBytes.length >= 4) {
+                    if (rawBytes[0] === 0x1A && rawBytes[1] === 0x45 && rawBytes[2] === 0xDF && rawBytes[3] === 0xA3) {
+                        mimeType = 'audio/webm';
+                    } else if (rawBytes[0] === 0x4F && rawBytes[1] === 0x67 && rawBytes[2] === 0x67 && rawBytes[3] === 0x53) {
+                        mimeType = 'audio/ogg';
+                    } else if (rawBytes[0] === 0x52 && rawBytes[1] === 0x49 && rawBytes[2] === 0x46 && rawBytes[3] === 0x46) {
+                        mimeType = 'audio/wav';
+                    } else if ((rawBytes[0] === 0x00 && rawBytes[1] === 0x00 && rawBytes[2] === 0x00) || (rawBytes[0] === 0xFF && (rawBytes[1] & 0xF6) === 0xF0)) {
+                        mimeType = 'audio/mp4';
+                    }
+                }
+                const audio = new Audio(`data:${mimeType};base64,${burst.audio_opus_b64}`);
                 audio.onended = () => {
                     setPlayingBurstId(null);
                     TacticalAudioEngine.playSquelchTail();

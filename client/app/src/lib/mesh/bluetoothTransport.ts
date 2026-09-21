@@ -429,13 +429,18 @@ class BluetoothTransport {
             // Request adaptive MTU (512 bytes for maximum throughput)
             try {
                 if (typeof (BleClient as any).requestMtu === 'function') {
-                    await (BleClient as any).requestMtu(targetId, 512);
-                    this.negotiatedMtu.set(targetId, 500);
+                    const mtu = await (BleClient as any).requestMtu(targetId, 512);
+                    if (mtu && mtu > 23) {
+                        this.negotiatedMtu.set(targetId, Math.max(20, mtu - 3));
+                    } else {
+                        this.negotiatedMtu.set(targetId, 20);
+                    }
                 } else {
-                    this.negotiatedMtu.set(targetId, 480);
+                    this.negotiatedMtu.set(targetId, 20);
                 }
             } catch {
-                this.negotiatedMtu.set(targetId, 240); // Safe fallback
+                // Strict Bluetooth SIG default ATT MTU (23 - 3 = 20 safe payload bytes for MediaTek Helio G37 / Moto G22)
+                this.negotiatedMtu.set(targetId, 20);
             }
 
             try {
@@ -552,7 +557,11 @@ class BluetoothTransport {
                     try {
                         await BleClient.write(targetId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
                         writeOk = true;
-                    } catch (writeWithRespErr) {
+                    } catch (writeWithRespErr: any) {
+                        const errStr = String(writeWithRespErr?.message || writeWithRespErr || '');
+                        if (errStr.includes('ATTRIBUTE_LENGTH') || errStr.includes('invalid length') || CHUNK_SIZE > 20) {
+                            this.negotiatedMtu.set(targetId, 20);
+                        }
                         console.warn('[BLE] Write retry failed:', writeWithRespErr);
                     }
                 }
@@ -661,43 +670,48 @@ class BluetoothTransport {
             const view = new DataView(entry.buffer.buffer, entry.buffer.byteOffset, entry.buffer.byteLength);
 
             if (entry.expectedLen === 0) {
-                // 1. Raw RED MeshPacket (Magic 0x52454401 at offset 0)
+                // Descartar bytes nulos, saltos de línea o espacios iniciales de padding
+                while (entry.buffer.length > 0 && (entry.buffer[0] === 0x00 || entry.buffer[0] === 0x20 || entry.buffer[0] === 0x0A || entry.buffer[0] === 0x0D)) {
+                    entry.buffer = entry.buffer.slice(1);
+                }
+                if (entry.buffer.length < 4) break;
+
+                // 1. Cabecera binaria canónica RED MeshPacket (Magic 0x52454401)
                 if (view.getUint32(0, false) === 0x52454401) {
                     if (entry.buffer.length >= 96) {
                         const payloadLen = view.getUint16(70, true);
                         entry.expectedLen = 96 + payloadLen;
                     } else {
-                        break; // Wait for full 96-byte RED header
+                        break; // Esperar cabecera completa de 96 bytes
                     }
-                } else {
-                    // 2. Direct JSON envelope detection (e.g. handshakes, P2P announcements)
+                } else if (entry.buffer[0] === 0x7B /* '{' */ || entry.buffer[0] === 0x5B /* '[' */) {
+                    // 2. Trama JSON directa (handshakes, anuncios PQC, señalización WebRTC)
                     const jsonLen = this.findCompleteJsonLength(entry.buffer);
                     if (jsonLen > 0) {
                         entry.expectedLen = jsonLen;
-                    } else if (entry.buffer[0] === 0x7B || entry.buffer[0] === 0x5B) {
-                        // Incomplete JSON object/array — wait for more chunks
-                        break;
                     } else {
-                        // 3. Scan for magic 0x52454401 to resynchronize buffer
-                        let syncIdx = -1;
-                        for (let i = 1; i <= entry.buffer.length - 4; i++) {
-                            if (view.getUint32(i, false) === 0x52454401) {
-                                syncIdx = i;
-                                break;
-                            }
+                        break; // JSON incompleto, esperar siguientes fragmentos
+                    }
+                } else {
+                    // 3. Resincronización: buscar el primer delimitador válido (0x52454401, '{' o '[')
+                    let syncIdx = -1;
+                    for (let i = 1; i < entry.buffer.length; i++) {
+                        if (entry.buffer[i] === 0x7B || entry.buffer[i] === 0x5B) {
+                            syncIdx = i;
+                            break;
                         }
-                        if (syncIdx > 0) {
-                            entry.buffer = entry.buffer.slice(syncIdx);
-                            continue;
-                        } else {
-                            // 4. Fallback: check 4-byte big-endian length prefix for custom payloads
-                            const totalLen = view.getUint32(0, false);
-                            if (totalLen > 0 && totalLen <= 10 * 1024 * 1024) {
-                                entry.expectedLen = 4 + totalLen;
-                            } else {
-                                break;
-                            }
+                        if (i <= entry.buffer.length - 4 && view.getUint32(i, false) === 0x52454401) {
+                            syncIdx = i;
+                            break;
                         }
+                    }
+                    if (syncIdx > 0) {
+                        entry.buffer = entry.buffer.slice(syncIdx);
+                        continue;
+                    } else {
+                        // Sin delimitadores reconocibles en todo el buffer: descartar ruido para evitar bloqueo
+                        entry.buffer = new Uint8Array(0);
+                        break;
                     }
                 }
             }

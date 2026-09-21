@@ -35,6 +35,8 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
         hash: string;
         pk?: string;
         name: string;
+        kyberPk?: string;
+        x25519Pk?: string;
         alreadyContact: boolean;
     } | null>(null);
     const [isWebCamActive, setIsWebCamActive] = useState(false);
@@ -56,12 +58,16 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
     // Generate my QR code data URL
     useEffect(() => {
         if (!isOpen || !identity?.identity_hash) return;
+        const kyberKey = typeof window !== 'undefined' ? (localStorage.getItem('red_pqc_kyber_public_key') || '') : '';
+        const x25519Key = typeof window !== 'undefined' ? (localStorage.getItem('red_pqc_x25519_public_key') || '') : '';
         const payload = JSON.stringify({
             type: "identity",
             did: `did:red:${identity.identity_hash}`,
             hash: identity.identity_hash,
             name: identity.nickname || "Familiar RED",
-            pk: identity.public_key || ""
+            pk: identity.public_key || "",
+            kyber_public_key: kyberKey || undefined,
+            x25519_public_key: x25519Key || undefined
         });
 
         OfflineQrEngine.generateDataUrl(payload, {
@@ -164,6 +170,8 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
             let targetHash = "";
             let targetName = "";
             let targetPk = "";
+            let targetKyber = "";
+            let targetX25519 = "";
 
             const trimmed = rawCode.trim();
 
@@ -174,6 +182,8 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                     targetHash = parsed.hash || parsed.peerHash || (parsed.did ? parsed.did.replace(/^did:red:/i, "") : "");
                     targetName = parsed.name || parsed.nickname || "";
                     targetPk = parsed.pk || parsed.publicKey || "";
+                    targetKyber = parsed.kyber_public_key || parsed.kyberPublicKeyHex || "";
+                    targetX25519 = parsed.x25519_public_key || parsed.x25519PublicKeyHex || "";
                 } catch {}
             }
 
@@ -202,6 +212,8 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                     targetHash = (decoded.did || "").replace(/^did:red:/i, "").trim();
                     if (decoded.pk && !targetPk) targetPk = decoded.pk;
                     if (decoded.name && !targetName) targetName = decoded.name;
+                    if (decoded.kyber_public_key && !targetKyber) targetKyber = decoded.kyber_public_key;
+                    if (decoded.x25519_public_key && !targetX25519) targetX25519 = decoded.x25519_public_key;
                 } catch {}
             }
 
@@ -236,6 +248,8 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                 hash: targetHash,
                 pk: targetPk,
                 name: finalName,
+                kyberPk: targetKyber || undefined,
+                x25519Pk: targetX25519 || undefined,
                 alreadyContact: isAlready
             });
         } catch (err: any) {
@@ -251,11 +265,13 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
         if (!detectedContact) return;
         setIsProcessingCode(true);
         try {
-            const { hash, name, pk } = detectedContact;
-            await addContact(hash, name, pk || undefined);
+            const { hash, name, pk, kyberPk, x25519Pk } = detectedContact;
+            await addContact(hash, name, pk || undefined, false, kyberPk || undefined, x25519Pk || undefined);
 
             try {
                 const reqId = `creq_${Date.now()}_${identity?.identity_hash?.slice(0, 8) || 'node'}`;
+                const localKyber = typeof window !== 'undefined' ? (localStorage.getItem('red_pqc_kyber_public_key') || '') : '';
+                const localX25519 = typeof window !== 'undefined' ? (localStorage.getItem('red_pqc_x25519_public_key') || '') : '';
                 const payload = new TextEncoder().encode(JSON.stringify({
                     id: reqId,
                     type: "contact_request",
@@ -264,6 +280,8 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                     sender_hash: identity?.identity_hash,
                     sender_name: identity?.nickname || "Familiar",
                     sender_pk: identity?.public_key,
+                    sender_kyber_pk: localKyber || undefined,
+                    sender_x25519_pk: localX25519 || undefined,
                     recipient: hash,
                     target_hash: hash,
                     channel: "QR",

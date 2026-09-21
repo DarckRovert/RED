@@ -245,6 +245,32 @@ export class MeshSosBeaconEngine {
                     `Alerta SOS remota recibida: ${beacon.id} (${beacon.issuerName}) [${beacon.distressType}/${beacon.triageColor}] hop=${beacon.hopCount}`
                 );
             }
+
+            // Sincronización reactiva inmediata con el RedStore (activa SOSEmergencyBanner global)
+            try {
+                import('../../store/useRedStore').then(({ useRedStore }) => {
+                    if (beacon.active) {
+                        useRedStore.getState().addSosBeacon({
+                            id: beacon.id,
+                            beacon_id: beacon.id,
+                            sender_did: beacon.issuerDid,
+                            sender_name: beacon.issuerName,
+                            lat: beacon.coords?.lat,
+                            lon: beacon.coords?.lon,
+                            altitude: beacon.coords?.alt,
+                            timestamp: beacon.timestamp,
+                            battery_level: beacon.batteryLevel,
+                            note: beacon.note || `Emergencia ${beacon.distressType}`,
+                            is_active: beacon.active,
+                            distress_type: beacon.distressType
+                        });
+                    } else {
+                        useRedStore.getState().resolveSosBeacon(beacon.id);
+                    }
+                }).catch(() => {});
+            } catch (err) {
+                console.warn('[MeshSosBeaconEngine] Failed to sync with RedStore:', err);
+            }
         }
     }
 

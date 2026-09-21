@@ -40,6 +40,8 @@ export interface ContactItem {
     identity_hash: string;
     display_name: string;
     public_key?: string | null;
+    kyber_public_key?: string | null;
+    x25519_public_key?: string | null;
     avatar_url?: string;
     online?: boolean;
     last_seen?: number;

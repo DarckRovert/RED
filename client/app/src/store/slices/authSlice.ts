@@ -18,6 +18,9 @@ let _identityResolvedUnsub: (() => void) | null = null;
 // [RIESGO-01 FIX] Guardar el unsubscriber de onLocalDelivery para cancerlarlo antes de re-registrar.
 // Sin esto, múltiples login/logout acumulan handlers huérfanos en localDeliveryHandlers Set.
 let _meshLocalDeliveryUnsub: (() => void) | null = null;
+let _connectMainSSERef: (() => void) | null = null;
+let _connectOutboundSSERef: (() => void) | null = null;
+let _visibilityListenerRegistered = false;
 
 function registerMeshLocalDeliveryListener(get: () => RedStore) {
     if (_meshLocalDeliveryUnsub) {
@@ -26,12 +29,38 @@ function registerMeshLocalDeliveryListener(get: () => RedStore) {
     }
     _meshLocalDeliveryUnsub = meshRouter.onLocalDelivery((packet) => {
         try {
-            const payloadStr = new TextDecoder().decode(packet.payload);
+            let payloadStr: string;
+            try {
+                payloadStr = new TextDecoder('utf-8', { fatal: true }).decode(packet.payload);
+            } catch {
+                // Buffer binario no-UTF8 (tramas de radio cifradas o fragmentos raw) — ignorar para la UI de chat
+                return;
+            }
+
+            // Intercepción directa de balizas SOS de radio para no degradarlas a texto de chat
+            if (payloadStr.startsWith('SOS_BEACON_V1:')) {
+                try {
+                    const jsonStr = payloadStr.substring(14);
+                    const beacon = JSON.parse(jsonStr);
+                    if (beacon && beacon.id) {
+                        import('../../lib/emergency/MeshSosBeaconEngine').then(({ meshSosBeacon }) => {
+                            meshSosBeacon.processIncomingSosBeacon(beacon);
+                        });
+                    }
+                } catch {}
+                return;
+            }
+
             let parsed: any;
             const normTs = packet.timestamp ? (packet.timestamp > 1e11 ? packet.timestamp / 1000 : packet.timestamp) : Date.now() / 1000;
             try {
                 parsed = JSON.parse(payloadStr);
             } catch {
+                // Validar que el texto sea legible y no ruido binario o caracteres de control
+                const isPrintable = /^[\x20-\x7E\s\u00A0-\uFFFF]*$/.test(payloadStr) && payloadStr.trim().length > 0;
+                if (!isPrintable) {
+                    return;
+                }
                 parsed = {
                     id: packet.nonce || `msg_${packet.sender.slice(0, 8)}_${Math.floor(normTs)}`,
                     content: payloadStr,
@@ -53,8 +82,14 @@ function registerMeshLocalDeliveryListener(get: () => RedStore) {
                 }
                 if (!parsed.id) parsed.id = packet.nonce || `mesh_${packet.sender.slice(0, 8)}_${Date.now()}`;
                 if (!parsed.sender) parsed.sender = packet.sender;
-                if (!parsed.msg_type && (parsed.type === 'contact_request' || parsed.type === 'contact_response')) {
-                    parsed.msg_type = parsed.type;
+                if (!parsed.msg_type && (
+                    parsed.type === 'contact_request' || 
+                    parsed.type === 'contact_response' ||
+                    parsed.type === 'P2P_VOICE_BURST' ||
+                    parsed.type === 'SOS_BEACON' ||
+                    parsed.type === 'SOS_RESOLVE'
+                )) {
+                    parsed.msg_type = parsed.type === 'P2P_VOICE_BURST' ? 'p2p_voice_burst' : parsed.type.toLowerCase();
                 }
                 if (parsed.timestamp && parsed.timestamp > 1e11) parsed.timestamp = parsed.timestamp / 1000;
                 if (!parsed.timestamp) parsed.timestamp = normTs;
@@ -765,6 +800,7 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                         };
                     }
                 };
+                _connectMainSSERef = connectSSE;
                 connectSSE();
 
                 if (_fetchInterval) clearInterval(_fetchInterval);
@@ -773,30 +809,82 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     else { if (_fetchInterval) { clearInterval(_fetchInterval); _fetchInterval = null; } }
                 }, 30000);
 
+                let outboundRetryDelay = 3000;
+                let outboundRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
                 const connectOutboundSSE = () => {
+                    if (outboundRetryTimer) { clearTimeout(outboundRetryTimer); outboundRetryTimer = null; }
                     if (_outboundSSE) { _outboundSSE.close(); _outboundSSE = null; }
-                    const es = new EventSource(`${RedAPI.getBaseURL()}/network/outbound`);
-                    _outboundSSE = es;
-                    es.addEventListener('mesh_payload', (e: any) => {
-                        try {
-                            const data = JSON.parse(e.data);
-                            if (data && data.payload_hex) {
-                                const hex = data.payload_hex;
+                    if (!get().nodeOnline && typeof window !== 'undefined' && !window.location.protocol.startsWith('capacitor')) {
+                        return;
+                    }
+                    try {
+                        const es = new EventSource(`${RedAPI.getBaseURL()}/network/outbound`);
+                        _outboundSSE = es;
+                        es.onopen = () => {
+                            outboundRetryDelay = 3000;
+                        };
+                        es.addEventListener('mesh_payload', (e: any) => {
+                            try {
+                                const data = JSON.parse(e.data);
+                                if (!data || !data.payload_hex) return;
+
+                                const hex: string = data.payload_hex;
+
+                                // 1. Caso confirmación de envío nativo (red_mobile: 32 hex chars MessageId + recipient)
+                                if (hex.length === 32 && data.recipient) {
+                                    set((s: any) => ({
+                                        messages: s.messages.map((m: any) =>
+                                            m.id === hex || m.id?.includes(hex.slice(0, 8)) ? { ...m, status: 'Sent' } : m
+                                        )
+                                    }));
+                                    return;
+                                }
+
+                                // 2. Caso paquete de radio legítimo (node/src/api.rs)
                                 const buf = new Uint8Array(hex.match(/.{1,2}/g)?.map((byte: string) => parseInt(byte, 16)) || []);
-                                meshRouter.broadcast(buf).catch(() => {});
+                                if (buf.length >= 4) {
+                                    try {
+                                        const text = new TextDecoder('utf-8', { fatal: true }).decode(buf);
+                                        if (text.trim().startsWith('{')) {
+                                            meshRouter.broadcast(buf).catch(() => {});
+                                        }
+                                    } catch {}
+                                }
+                            } catch (err) {
+                                console.error('[MeshRouter] Failed to parse outbound SSE payload', err);
                             }
-                        } catch (err) {
-                            console.error('[MeshRouter] Failed to parse outbound SSE payload', err);
+                        });
+                        es.onerror = () => {
+                            es.close();
+                            _outboundSSE = null;
+                            if (outboundRetryTimer) clearTimeout(outboundRetryTimer);
+                            outboundRetryTimer = setTimeout(connectOutboundSSE, outboundRetryDelay);
+                            outboundRetryDelay = Math.min(outboundRetryDelay * 1.5, 30000);
+                        };
+                    } catch {
+                        if (outboundRetryTimer) clearTimeout(outboundRetryTimer);
+                        outboundRetryTimer = setTimeout(connectOutboundSSE, outboundRetryDelay);
+                        outboundRetryDelay = Math.min(outboundRetryDelay * 1.5, 30000);
+                    }
+                };
+                _connectOutboundSSERef = connectOutboundSSE;
+                connectOutboundSSE();
+
+                if (!_visibilityListenerRegistered && typeof document !== 'undefined') {
+                    _visibilityListenerRegistered = true;
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.visibilityState === 'visible') {
+                            if (!_mainSSE || _mainSSE.readyState === EventSource.CLOSED) {
+                                _connectMainSSERef?.();
+                            }
+                            if (!_outboundSSE || _outboundSSE.readyState === EventSource.CLOSED) {
+                                _connectOutboundSSERef?.();
+                            }
+                            get().fetchData().catch(() => {});
                         }
                     });
-                    es.onerror = () => {
-                        console.warn('[RED] Outbound Radio SSE lost — reconnecting in 3s...');
-                        es.close();
-                        _outboundSSE = null;
-                        setTimeout(connectOutboundSSE, 3000);
-                    };
-                };
-                connectOutboundSSE();
+                }
 
                 localTransport.init(identity.identity_hash).then(() => {
                     registerMeshLocalDeliveryListener(get);

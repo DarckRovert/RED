@@ -24,6 +24,8 @@ import { EpistemicRadarModal } from "./tactical/EpistemicRadarModal";
 import { OfcBarterMarketModal } from "./tactical/OfcBarterMarketModal";
 import { HippocampalMemoryModal } from "./tactical/HippocampalMemoryModal";
 import { predictiveCortex } from "../lib/neuro/human/PredictiveCortexEngine";
+import { globalWorkspaceConsciousnessBus, ConsciousnessSnapshot } from "../lib/neuro/GlobalWorkspaceConsciousnessBus";
+import { meshRouter } from "../lib/mesh/meshRouter";
 
 interface Point3D {
   x: number;
@@ -86,9 +88,11 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const [isPheromoneModalOpen, setIsPheromoneModalOpen] = useState<boolean>(false);
   const [isHapticModalOpen, setIsHapticModalOpen] = useState<boolean>(false);
 
-  // Modo de Arquitectura Neurobiológica: MaleCNS Drosophila vs Neocorteza Humana
-  const [architectureMode, setArchitectureMode] = useState<"SUBCORTICAL_MALE_CNS" | "HUMAN_NEOCORTEX">("SUBCORTICAL_MALE_CNS");
+  // Modo de Arquitectura Neurobiológica: MaleCNS Drosophila vs Neocorteza Humana vs Espacio Global
+  const [architectureMode, setArchitectureMode] = useState<"SUBCORTICAL_MALE_CNS" | "HUMAN_NEOCORTEX" | "CONSCIOUS_SWARM_BUS">("SUBCORTICAL_MALE_CNS");
   const [humanSnapshot, setHumanSnapshot] = useState<HumanBrainTelemetrySnapshot>(() => humanBrainOrchestrator.getSnapshot());
+  const [consciousnessTelemetry, setConsciousnessTelemetry] = useState<ConsciousnessSnapshot>(() => globalWorkspaceConsciousnessBus.getSnapshot());
+  const [isDraggingUI, setIsDraggingUI] = useState<boolean>(false);
   const [isCognitiveNavOpen, setIsCognitiveNavOpen] = useState<boolean>(false);
   const [isTcccModalOpen, setIsTcccModalOpen] = useState<boolean>(false);
   const [isEpistemicRadarOpen, setIsEpistemicRadarOpen] = useState<boolean>(false);
@@ -246,6 +250,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     const unsubMet = metabolicGovernor.subscribe(setMetTelemetry);
     const unsubOptic = opticLobe.subscribe(setOpticTelemetry);
     const unsubMotor = tacticalMotorActuator.subscribe(setMotorTelemetry);
+    const unsubConsciousness = globalWorkspaceConsciousnessBus.subscribe(setConsciousnessTelemetry);
 
     return () => {
       unsubCx();
@@ -257,6 +262,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       unsubMet();
       unsubOptic();
       unsubMotor();
+      unsubConsciousness();
     };
   }, []);
 
@@ -754,6 +760,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!Number.isFinite(e.clientX) || !Number.isFinite(e.clientY)) return;
     isDragging.current = true;
+    setIsDraggingUI(true);
     lastMousePos.current = { x: e.clientX, y: e.clientY };
     autoRotateRef.current = false;
     setAutoRotate(false);
@@ -780,6 +787,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
 
   const handleMouseUp = () => {
     isDragging.current = false;
+    setIsDraggingUI(false);
   };
 
   // Control táctil unificado (Rotación 1 dedo + Pinch-to-Zoom 2 dedos)
@@ -792,11 +800,13 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       const touch = e.touches[0];
       if (Number.isFinite(touch.clientX) && Number.isFinite(touch.clientY)) {
         isDragging.current = true;
+        setIsDraggingUI(true);
         lastMousePos.current = { x: touch.clientX, y: touch.clientY };
         lastPinchDist.current = null;
       }
     } else if (e.touches.length === 2) {
       isDragging.current = false;
+      setIsDraggingUI(false);
       const t1 = e.touches[0];
       const t2 = e.touches[1];
       if (Number.isFinite(t1.clientX) && Number.isFinite(t2.clientX)) {
@@ -846,6 +856,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
 
   const handleTouchEnd = () => {
     isDragging.current = false;
+    setIsDraggingUI(false);
     lastPinchDist.current = null;
   };
 
@@ -1039,7 +1050,32 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           }}
         >
           <span>🧠</span>
-          <span>NEOCORTEZA HUMANA (7 NÚCLEOS COGNITIVOS)</span>
+          <span>NEOCORTEZA HUMANA</span>
+        </button>
+
+        <button
+          onClick={() => {
+            TacticalAudioEngine.playTap();
+            setArchitectureMode("CONSCIOUS_SWARM_BUS");
+          }}
+          style={{
+            flex: 1,
+            padding: "10px",
+            background: architectureMode === "CONSCIOUS_SWARM_BUS" ? "rgba(245, 158, 11, 0.15)" : "transparent",
+            border: "none",
+            borderBottom: architectureMode === "CONSCIOUS_SWARM_BUS" ? "2px solid #F59E0B" : "none",
+            color: architectureMode === "CONSCIOUS_SWARM_BUS" ? "#F59E0B" : "#64748B",
+            fontSize: "0.74rem",
+            fontWeight: 800,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "6px",
+          }}
+        >
+          <span>🌐</span>
+          <span>ESPACIO GLOBAL GNWT</span>
         </button>
       </div>
 
@@ -1052,7 +1088,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           width: "100%",
           height: "320px",
           background: "#040711",
-          cursor: isDragging.current ? "grabbing" : "grab",
+          cursor: isDraggingUI ? "grabbing" : "grab",
           touchAction: "none",
         }}
         onMouseDown={handleMouseDown}
@@ -1838,7 +1874,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       )}
 
         </>
-      ) : (
+      ) : architectureMode === "HUMAN_NEOCORTEX" ? (
         /* VISTA DE NEOCORTEZA HUMANA (7 NÚCLEOS COGNITIVOS) */
         <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "16px", background: "#050811" }}>
           {/* Banner de Estado Cortical Unificado */}
@@ -2060,6 +2096,205 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
               </button>
             </div>
 
+          </div>
+        </div>
+      ) : (
+        /* VISTA DE ESPACIO DE TRABAJO GLOBAL & ENJAMBRE BIO-CIBERNÉTICO (GNWT) */
+        <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "16px", background: "#050811", fontFamily: "monospace" }}>
+          {/* Banner de Ignición Atencional GNWT */}
+          <div
+            style={{
+              padding: "14px 18px",
+              borderRadius: "8px",
+              background: consciousnessTelemetry.isIgnited ? "rgba(239, 68, 68, 0.2)" : "rgba(16, 185, 129, 0.15)",
+              border: `1px solid ${consciousnessTelemetry.isIgnited ? "#EF4444" : "#10B981"}`,
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ fontSize: "0.85rem", fontWeight: 900, color: consciousnessTelemetry.isIgnited ? "#FCA5A5" : "#6EE7B7" }}>
+                {consciousnessTelemetry.isIgnited ? "🔥 ESPACIO DE TRABAJO GLOBAL EN IGNICIÓN ATENCIONAL" : "🟢 ESPACIO DE TRABAJO GLOBAL EN VIGILIA NOMINAL"}
+              </div>
+              <div style={{ fontSize: "0.72rem", background: consciousnessTelemetry.isIgnited ? "rgba(239, 68, 68, 0.4)" : "rgba(16, 185, 129, 0.3)", padding: "2px 8px", borderRadius: "4px", color: "#FFF" }}>
+                FOCO: {consciousnessTelemetry.consciousFocus}
+              </div>
+            </div>
+            <div style={{ fontSize: "0.75rem", color: "#FFFFFF", fontWeight: 700 }}>
+              {consciousnessTelemetry.synthesisDirective}
+            </div>
+            {/* Barra de Intensidad de Ignición vs Umbral */}
+            <div style={{ marginTop: "4px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", color: "#94A3B8", marginBottom: "3px" }}>
+                <span>Intensidad de Activación: {(consciousnessTelemetry.ignitionIntensity * 100).toFixed(0)}%</span>
+                <span>Umbral de Ignición (θ_inhib): {(consciousnessTelemetry.inhibitoryThreshold * 100).toFixed(0)}%</span>
+              </div>
+              <div style={{ position: "relative", width: "100%", height: "8px", background: "#1E293B", borderRadius: "4px", overflow: "hidden" }}>
+                <div
+                  style={{
+                    width: `${Math.min(100, consciousnessTelemetry.ignitionIntensity * 100)}%`,
+                    height: "100%",
+                    background: consciousnessTelemetry.isIgnited ? "linear-gradient(90deg, #F59E0B, #EF4444)" : "#10B981",
+                    transition: "width 0.2s ease",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${consciousnessTelemetry.inhibitoryThreshold * 100}%`,
+                    top: 0,
+                    bottom: 0,
+                    width: "2px",
+                    background: "#F59E0B",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Tablero de Métricas Bio-Cibernéticas Holísticas */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px" }}>
+            <div style={{ padding: "10px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: "8px" }}>
+              <div style={{ fontSize: "0.65rem", color: "#F59E0B", fontWeight: 800 }}>INTEGRACIÓN Φ (IIT TONONI)</div>
+              <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#FFFFFF", marginTop: "4px" }}>
+                {(consciousnessTelemetry.phiApprox * 10).toFixed(1)} <span style={{ fontSize: "0.70rem", color: "#94A3B8" }}>/ 10</span>
+              </div>
+              <div style={{ fontSize: "0.60rem", color: "#64748B", marginTop: "2px" }}>Sinergia cruzada MaleCNS + 7 Núcleos Neocorticales</div>
+            </div>
+
+            <div style={{ padding: "10px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "8px" }}>
+              <div style={{ fontSize: "0.65rem", color: "#00E5FF", fontWeight: 800 }}>ENERGÍA LIBRE (FRISTON F)</div>
+              <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#FFFFFF", marginTop: "4px" }}>
+                {consciousnessTelemetry.variationalFreeEnergy.toFixed(3)}
+              </div>
+              <div style={{ fontSize: "0.60rem", color: "#64748B", marginTop: "2px" }}>Divergencia sensorial / Minimización activa</div>
+            </div>
+
+            <div style={{ padding: "10px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "8px" }}>
+              <div style={{ fontSize: "0.65rem", color: "#10B981", fontWeight: 800 }}>COHERENCIA KURAMOTO (R)</div>
+              <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#FFFFFF", marginTop: "4px" }}>
+                {(consciousnessTelemetry.kuramotoOrderR * 100).toFixed(1)}%
+              </div>
+              <div style={{ fontSize: "0.60rem", color: "#64748B", marginTop: "2px" }}>Consenso de fase de colmena en malla LoRa</div>
+            </div>
+          </div>
+
+          {/* Sincronizador de Fase Kuramoto (Colmena P2P) */}
+          <div style={{ padding: "12px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(0, 229, 255, 0.25)", borderRadius: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "#00E5FF" }}>
+                🧭 ACOPLAMIENTO DE OSCILADORES DE KURAMOTO (TDMA & ATRACTOR)
+              </div>
+              <button
+                onClick={async () => {
+                  TacticalAudioEngine.playRogerBeep();
+                  await meshRouter.broadcastKuramotoPhase();
+                  toast.success("Pulso Kuramoto emitido en slot 8 LoRa (1 byte de fase)");
+                }}
+                style={{
+                  padding: "4px 10px",
+                  background: "rgba(0, 229, 255, 0.15)",
+                  border: "1px solid #00E5FF",
+                  borderRadius: "4px",
+                  color: "#00E5FF",
+                  fontSize: "0.68rem",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                EMITIR PULSO KURAMOTO
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: "16px", alignItems: "center", fontSize: "0.70rem", color: "#CBD5E1" }}>
+              <div>Rumbo Local E-PG: <span style={{ color: "#00E5FF", fontWeight: 800 }}>{cxTelemetry.headingDeg}° ({cxTelemetry.cardinal})</span></div>
+              <div>Rumbo Colectivo Enjambre: <span style={{ color: "#10B981", fontWeight: 800 }}>{cxTelemetry.swarmPhaseDeg ?? cxTelemetry.headingDeg}°</span></div>
+              <div>Pares en Memoria: <span style={{ color: "#F59E0B", fontWeight: 800 }}>{ringAttractor.getRemoteKuramotoPhasesCount()} nodos</span></div>
+            </div>
+            <div style={{ fontSize: "0.62rem", color: "#64748B" }}>
+              Ecuación diferencial: dθ_i/dt = ω_i + (K/N) ∑ sin(θ_j - θ_i). Mantiene ventanas TDMA y rumbos de escuadra alineados sin servidores de tiempo centralizados.
+            </div>
+          </div>
+
+          {/* Manto Estigmérgico de Feromonas de Enjambre */}
+          <div style={{ padding: "12px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(245, 158, 11, 0.25)", borderRadius: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "#F59E0B" }}>
+                🍄 MANTO ESTIGMÉRGICO DE FEROMONAS (DTN MUSHROOM BODY)
+              </div>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  setIsPheromoneModalOpen(true);
+                }}
+                style={{
+                  padding: "4px 10px",
+                  background: "rgba(245, 158, 11, 0.15)",
+                  border: "1px solid #F59E0B",
+                  borderRadius: "4px",
+                  color: "#F59E0B",
+                  fontSize: "0.68rem",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                DEPOSITAR FEROMONA
+              </button>
+            </div>
+            {dtnMushroomBody.getActivePheromones().length === 0 ? (
+              <div style={{ fontSize: "0.70rem", color: "#64748B", fontStyle: "italic" }}>
+                Cero feromonas activas en el cuadrante sensorial. El espectro local se encuentra limpio.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {dtnMushroomBody.getActivePheromones().map((ph) => (
+                  <div key={ph.id} style={{ padding: "6px 10px", background: "rgba(0, 0, 0, 0.4)", borderRadius: "4px", borderLeft: `3px solid ${ph.type === 'ALARM' ? '#EF4444' : ph.type === 'TRAIL' ? '#10B981' : '#F59E0B'}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <span style={{ fontWeight: 800, color: ph.type === 'ALARM' ? '#EF4444' : ph.type === 'TRAIL' ? '#10B981' : '#F59E0B', marginRight: "8px" }}>[{ph.type}]</span>
+                      <span style={{ fontSize: "0.68rem", color: "#CBD5E1" }}>{ph.notes || 'Rastro estigmérgico en cuadrante'}</span>
+                    </div>
+                    <div style={{ fontSize: "0.65rem", color: "#94A3B8" }}>
+                      Intensidad: {(ph.intensity * 100).toFixed(0)}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Competencia Atencional y Desglose de Candidatos GNWT */}
+          <div style={{ padding: "12px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(100, 116, 139, 0.3)", borderRadius: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "#E2E8F0" }}>
+              ⚔️ COMPETENCIA NO-LINEAL DE CANDIDATOS ATENCIONALES (INHIBICIÓN LATERAL)
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {consciousnessTelemetry.activeCandidates.map((c, idx) => (
+                <div
+                  key={`${c.source}_${idx}`}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "6px",
+                    background: idx === 0 ? "rgba(0, 229, 255, 0.10)" : "rgba(15, 23, 42, 0.4)",
+                    border: idx === 0 ? "1px solid rgba(0, 229, 255, 0.35)" : "1px solid rgba(51, 65, 85, 0.4)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      {idx === 0 && <span style={{ fontSize: "0.60rem", background: "#00E5FF", color: "#000", fontWeight: 900, padding: "1px 4px", borderRadius: "3px" }}>GANADOR</span>}
+                      <span style={{ fontSize: "0.72rem", fontWeight: 800, color: idx === 0 ? "#00E5FF" : "#94A3B8" }}>{c.source}</span>
+                      <span style={{ fontSize: "0.65rem", color: "#64748B" }}>({c.focus})</span>
+                    </div>
+                    <div style={{ fontSize: "0.68rem", color: "#CBD5E1" }}>{c.rationale}</div>
+                  </div>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 900, color: c.activation >= 0.60 ? "#EF4444" : "#10B981" }}>
+                    {(c.activation * 100).toFixed(0)}%
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

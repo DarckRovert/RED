@@ -38,6 +38,8 @@ const DB_VERSION = 2;
 const STORAGE_KEY_FALLBACK = 'red_dtn_pending_queue_v1';
 const DEFAULT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days retention for sovereign mesh DTN
 const MAX_QUEUE_SIZE = 5000;
+export const MAX_DTN_RETRIES_NORMAL = 8;
+export const MAX_DTN_RETRIES_EMERGENCY = 15;
 
 class DtnStorage {
   private cache: DtnQueueItem[] | null = null;
@@ -577,9 +579,12 @@ class DtnStorage {
   public getItemsToRetry(forceAll = false, maxBatch = 30): DtnQueueItem[] {
     const now = Date.now();
     const items = this.getItems();
-    // Filter active items whose retry timer has elapsed (or all if forceAll is true), sorted by Priority DESC then createdAt ASC
+    // Filter active items whose retry timer has elapsed (or all if forceAll is true) and within retry limits
     const candidates = items
-      .filter(it => it.expiresAt > now && (forceAll || it.nextRetryAfter <= now))
+      .filter(it => {
+        const maxRetries = it.priority >= 9 ? MAX_DTN_RETRIES_EMERGENCY : MAX_DTN_RETRIES_NORMAL;
+        return it.expiresAt > now && it.attempts < maxRetries && (forceAll || it.nextRetryAfter <= now);
+      })
       .sort((a, b) => {
         if (b.priority !== a.priority) return b.priority - a.priority;
         return a.createdAt - b.createdAt;
@@ -608,6 +613,10 @@ class DtnStorage {
       const item = items[idx];
       item.attempts += 1;
       item.lastAttempt = Date.now();
+      const maxRetries = item.priority >= 9 ? MAX_DTN_RETRIES_EMERGENCY : MAX_DTN_RETRIES_NORMAL;
+      if (item.attempts >= maxRetries) {
+        console.warn(`[DtnStorage] ⚠️ Packet ${nonce.slice(0, 8)} reached maximum retry attempts (${item.attempts}/${maxRetries}) — retiring from active flushes`);
+      }
       const baseBackoffSec = Math.min(300, Math.pow(2, Math.min(item.attempts, 8)) * 2);
       const jitterFactor = 0.8 + Math.random() * 0.4; // 80% to 120% spread
       const backoffSec = Math.max(2, baseBackoffSec * jitterFactor);

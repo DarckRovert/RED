@@ -1017,54 +1017,78 @@ class LocalAIEngineClass {
             if (sovereignResp) {
                 finalAnswer = sovereignResp;
             } else if (isModelDownloaded) {
+                // 2a. Despacho prioritario al Web Worker (off-thread) para mantener la UI fluida a 60 FPS
                 try {
-                    const generator = await this.getGenerator();
-                    if (generator) {
-                    const genOutput = await this.withTimeout(
-                        generator(formattedPrompt, {
-                            max_new_tokens: 160,
-                            temperature: 0.35,
-                            top_p: 0.9,
-                            do_sample: false,
-                            repetition_penalty: 1.12,
-                        }),
-                        40000,
-                        'Neural Generation'
+                    const workerRes = await this.dispatchToWorker<any>(
+                        'GENERATE_COPILOT',
+                        { prompt: formattedPrompt, modelId },
+                        'GENERATE_COPILOT_RESULT',
+                        45000
                     );
-
-                    let rawGenerated = '';
-                    if (Array.isArray(genOutput) && genOutput.length > 0) {
-                        rawGenerated = (genOutput[0] as any)?.generated_text || '';
-                    } else if (genOutput && typeof genOutput === 'object' && (genOutput as any).generated_text) {
-                        rawGenerated = (genOutput as any).generated_text;
+                    if (workerRes?.data?.answer && workerRes.data.answer.trim().length > 0) {
+                        finalAnswer = workerRes.data.answer.trim();
+                        thoughtSteps.push({
+                            phase: 'Inferencia Off-Thread',
+                            title: '4. Generación Neuronal en Web Worker',
+                            description: `Inferencia ejecutada en worker aislado (${workerRes.data.modelInfo || 'ONNX WASM'})`,
+                            status: 'completed'
+                        });
                     }
+                } catch {
+                    // Fallback al path inline si el worker no está disponible
+                }
 
-                    if (rawGenerated) {
-                        // Extraer texto generado omitiendo los encabezados del prompt
-                        if (rawGenerated.startsWith(formattedPrompt)) {
-                            rawGenerated = rawGenerated.slice(formattedPrompt.length);
-                        } else if (rawGenerated.includes('<|im_start|>assistant\n')) {
-                            rawGenerated = rawGenerated.split('<|im_start|>assistant\n').pop() || '';
-                        } else if (rawGenerated.includes('<|start_header_id|>assistant<|end_header_id|>\n\n')) {
-                            rawGenerated = rawGenerated.split('<|start_header_id|>assistant<|end_header_id|>\n\n').pop() || '';
-                        } else if (rawGenerated.includes('<|assistant|>\n')) {
-                            rawGenerated = rawGenerated.split('<|assistant|>\n').pop() || '';
+                // 2b. Fallback secundario inline si el worker no estuvo disponible
+                if (!finalAnswer) {
+                    try {
+                        const generator = await this.getGenerator();
+                        if (generator) {
+                            const genOutput = await this.withTimeout(
+                                generator(formattedPrompt, {
+                                    max_new_tokens: 160,
+                                    temperature: 0.35,
+                                    top_p: 0.9,
+                                    do_sample: false,
+                                    repetition_penalty: 1.12,
+                                }),
+                                40000,
+                                'Neural Generation'
+                            );
+
+                            let rawGenerated = '';
+                            if (Array.isArray(genOutput) && genOutput.length > 0) {
+                                rawGenerated = (genOutput[0] as any)?.generated_text || '';
+                            } else if (genOutput && typeof genOutput === 'object' && (genOutput as any).generated_text) {
+                                rawGenerated = (genOutput as any).generated_text;
+                            }
+
+                            if (rawGenerated) {
+                                // Extraer texto generado omitiendo los encabezados del prompt
+                                if (rawGenerated.startsWith(formattedPrompt)) {
+                                    rawGenerated = rawGenerated.slice(formattedPrompt.length);
+                                } else if (rawGenerated.includes('<|im_start|>assistant\n')) {
+                                    rawGenerated = rawGenerated.split('<|im_start|>assistant\n').pop() || '';
+                                } else if (rawGenerated.includes('<|start_header_id|>assistant<|end_header_id|>\n\n')) {
+                                    rawGenerated = rawGenerated.split('<|start_header_id|>assistant<|end_header_id|>\n\n').pop() || '';
+                                } else if (rawGenerated.includes('<|assistant|>\n')) {
+                                    rawGenerated = rawGenerated.split('<|assistant|>\n').pop() || '';
+                                }
+
+                                // Limpiar tokens de control
+                                finalAnswer = rawGenerated
+                                    .replace(/<\|im_end\|>/g, '')
+                                    .replace(/<\|eot_id\|>/g, '')
+                                    .replace(/<\|end\|>/g, '')
+                                    .replace(/<\|endoftext\|>/g, '')
+                                    .replace(/<\/s>/g, '')
+                                    .trim();
+                            }
                         }
-
-                        // Limpiar tokens de control
-                        finalAnswer = rawGenerated
-                            .replace(/<\|im_end\|>/g, '')
-                            .replace(/<\|eot_id\|>/g, '')
-                            .replace(/<\|end\|>/g, '')
-                            .replace(/<\|endoftext\|>/g, '')
-                            .replace(/<\/s>/g, '')
-                            .trim();
+                    } catch (genErr) {
+                        console.warn('[LocalAIEngine] Inferencia neuronal WASM fallback:', genErr);
                     }
                 }
-            } catch (genErr) {
-                console.warn('[LocalAIEngine] Inferencia neuronal WASM fallback:', genErr);
             }
-        }
 
             // Fallback dinámico inteligente si la inferencia en memoria no generó texto
             if (!finalAnswer) {

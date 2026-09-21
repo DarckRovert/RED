@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 
 console.log("================================================================================");
-console.log("⏱️  SUITE: LORA TDMA CLOCK SKEW PLL & ADAPTIVE GUARD TIMES (v115.0.0)");
+console.log("⏱️  SUITE: LORA TDMA CLOCK SKEW PLL & ADAPTIVE GUARD TIMES (v116.0.0)");
 console.log("================================================================================\n");
 
 let totalTests = 0;

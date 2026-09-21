@@ -568,6 +568,10 @@ export class RedAPIClient {
             const existingMsgs = this.getWebStore<MessageItem[]>(convKey, []);
             if (!existingMsgs.some(m => m.id === msgId)) {
                 existingMsgs.push(lightMsgItem);
+                const MAX_STORED_MSGS = 100;
+                if (existingMsgs.length > MAX_STORED_MSGS) {
+                    existingMsgs.splice(0, existingMsgs.length - MAX_STORED_MSGS);
+                }
                 this.setWebStore(convKey, existingMsgs);
             }
 
@@ -647,20 +651,72 @@ export class RedAPIClient {
         // 3. Dispatch concurrently via MeshRouter (BLE, WebRTC DataChannel, WAN MQTT Blind Relay)
         try {
             const { meshRouter } = await import('../lib/mesh/meshRouter');
-            const payloadStr = JSON.stringify({
-                id: msgId,
-                content,
-                sender: myDid,
-                sender_name: options?.sender_name ?? myNickname,
-                sender_pk: options?.sender_pk ?? myPk,
-                avatar_url: options?.avatar_url !== undefined ? options.avatar_url : myAvatar,
-                recipient: cleanRecipient,
-                msg_type: options?.msg_type || 'text',
-                timestamp: Date.now() / 1000,
-                ...options
-            });
-            const payloadBytes = new TextEncoder().encode(payloadStr);
-            await meshRouter.send(cleanRecipient, payloadBytes);
+            const { mediaChunker, MediaChunker } = await import('../lib/mesh/mediaChunker');
+
+            // Sanitize options to avoid duplicating multi-megabyte base64 strings in JSON heap
+            const sanitizedOptions = { ...(options || {}) };
+            if (sanitizedOptions.media_data && sanitizedOptions.media_data === content) {
+                delete sanitizedOptions.media_data;
+            }
+
+            const rawMedia = (options?.media_data && typeof options.media_data === 'string')
+                ? options.media_data
+                : (content?.startsWith('data:') ? content : undefined);
+
+            const isHeavyMedia = Boolean(rawMedia && rawMedia.length > 512);
+
+            if (isHeavyMedia && rawMedia) {
+                const peer = meshRouter.getPeerByAnyId(cleanRecipient);
+                const optimalChunkSize = peer?.transport
+                    ? MediaChunker.getOptimalChunkSize(peer.transport)
+                    : 480; // Safe default MTU for BLE mesh
+
+                const mimeType = options?.mime_type || (rawMedia.startsWith('data:') ? rawMedia.substring(5, rawMedia.indexOf(';')) : 'application/octet-stream');
+                const chunks = mediaChunker.fragment(rawMedia, mimeType, optimalChunkSize);
+
+                for (const chunk of chunks) {
+                    chunk.originalMsgId = msgId;
+                    const chunkPacket = {
+                        id: `${msgId}_ck${chunk.chunkIndex}`,
+                        sender: myDid,
+                        sender_name: options?.sender_name ?? myNickname,
+                        sender_pk: options?.sender_pk ?? myPk,
+                        avatar_url: options?.avatar_url !== undefined ? options.avatar_url : myAvatar,
+                        recipient: cleanRecipient,
+                        msg_type: 'media_chunk',
+                        timestamp: Date.now() / 1000,
+                        chunk_metadata: {
+                            ...chunk,
+                            originalMsgId: msgId,
+                            caption: options?.caption,
+                            file_name: options?.file_name,
+                            duration_ms: options?.duration_ms,
+                            waveform: options?.waveform
+                        },
+                        caption: options?.caption,
+                        file_name: options?.file_name,
+                        duration_ms: options?.duration_ms,
+                        waveform: options?.waveform
+                    };
+                    const chunkBytes = new TextEncoder().encode(JSON.stringify(chunkPacket));
+                    meshRouter.send(cleanRecipient, chunkBytes).catch(() => {});
+                }
+            } else {
+                const payloadStr = JSON.stringify({
+                    id: msgId,
+                    content,
+                    sender: myDid,
+                    sender_name: options?.sender_name ?? myNickname,
+                    sender_pk: options?.sender_pk ?? myPk,
+                    avatar_url: options?.avatar_url !== undefined ? options.avatar_url : myAvatar,
+                    recipient: cleanRecipient,
+                    msg_type: options?.msg_type || 'text',
+                    timestamp: Date.now() / 1000,
+                    ...sanitizedOptions
+                });
+                const payloadBytes = new TextEncoder().encode(payloadStr);
+                await meshRouter.send(cleanRecipient, payloadBytes);
+            }
         } catch (meshErr) {
             console.warn('[RedAPI.sendMessage] Mesh dispatch failed:', meshErr);
         }
@@ -992,6 +1048,10 @@ export class RedAPIClient {
                 }
 
                 list.push(lightMsg);
+                const MAX_STORED_MSGS = 100;
+                if (list.length > MAX_STORED_MSGS) {
+                    list.splice(0, list.length - MAX_STORED_MSGS);
+                }
                 localStorage.setItem(convKey, JSON.stringify(list));
 
                 // Keep conversation list entry up to date

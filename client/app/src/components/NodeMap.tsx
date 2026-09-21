@@ -414,6 +414,9 @@ export default function NodeMap() {
         : null;
 
     // 1. Geolocalización en tiempo real continua de hardware y broadcast por la malla (SSOT vía TacticalLocationEngine)
+    const lastBroadcastLocationRef = useRef<{ lat: number; lng: number; time: number }>({ lat: 0, lng: 0, time: 0 });
+    const hasCenteredMapRef = useRef<boolean>(false);
+
     useEffect(() => {
         let mounted = true;
 
@@ -433,15 +436,24 @@ export default function NodeMap() {
             });
             setRealGPS(!loc.isEstimated);
 
-            if (leafletMapRef.current && !realGPS) {
+            // Centrado táctico inicial una sola vez al adquirir fix real
+            if (leafletMapRef.current && !hasCenteredMapRef.current && !loc.isEstimated) {
+                hasCenteredMapRef.current = true;
                 try {
                     leafletMapRef.current.setView([newLat, newLng], 17);
                 } catch {}
             }
 
-            // Retransmitir coordenadas reales a los demás nodos de la malla
+            // Retransmisión táctica con deadband cinemático (mínimo 5 metros o 8 segundos)
             if (!loc.isEstimated) {
-                meshRouter.broadcastLocation(newLat, newLng, loc.alt, loc.accuracy);
+                const now = Date.now();
+                const last = lastBroadcastLocationRef.current;
+                const distMoved = last.lat !== 0 ? getHaversineDistanceMeters(last.lat, last.lng, newLat, newLng) : 999;
+
+                if (distMoved >= 5 || (now - last.time) >= 8000) {
+                    lastBroadcastLocationRef.current = { lat: newLat, lng: newLng, time: now };
+                    meshRouter.broadcastLocation(newLat, newLng, loc.alt, loc.accuracy);
+                }
             }
         });
 
@@ -449,12 +461,14 @@ export default function NodeMap() {
             mounted = false;
             unsubLocation();
         };
-    }, [realGPS]);
+    }, []);
 
     // 2. Extracción y Deduplicación Estricta de Telemetría de Malla
     useEffect(() => {
         const updatePeers = async () => {
             const rawLocal = localTransport.allPeers || [];
+            const bleDiscovered = (localTransport as any).discoveredBluetoothPeers || [];
+            const meshPeers = Array.from(meshRouter.peers.values());
             let apiPeers: any[] = [];
             try {
                 apiPeers = await RedAPI.getPeers();
@@ -471,13 +485,14 @@ export default function NodeMap() {
             const canonicalMap = new Map<string, CanonicalNode>();
 
             const processEntry = (raw: any, defaultTransport: string) => {
-                if (!raw || !raw.id) return;
-                const rawId = String(raw.id).trim();
+                if (!raw) return;
+                const rawId = String(raw.id || raw.peer_id || raw.node_id || raw.address || '').trim();
+                if (!rawId) return;
 
                 // Filtrar auto-reflexión
                 if (rawId === myHash || (myNodeId && rawId === myNodeId)) return;
 
-                let displayName = (raw.name || "").trim();
+                let displayName = (raw.name || raw.peer_name || raw.display_name || "").trim();
 
                 // Filtrar periféricos de terceros ajenos a RED
                 const lowerName = displayName.toLowerCase();
@@ -503,6 +518,10 @@ export default function NodeMap() {
                     displayName = `Nodo ${canonicalKey.substring(0, 8)}…`;
                 }
 
+                // Normalización de coordenadas GNSS
+                const resolvedLat = typeof raw.lat === 'number' ? raw.lat : (typeof raw.latitude === 'number' ? raw.latitude : undefined);
+                const resolvedLng = typeof raw.lng === 'number' ? raw.lng : (typeof raw.longitude === 'number' ? raw.longitude : (typeof raw.lon === 'number' ? raw.lon : undefined));
+
                 // Deduplicar si ya existe un nodo con la misma clave o nombre único no genérico
                 let targetKey = canonicalKey;
                 for (const [k, node] of canonicalMap.entries()) {
@@ -516,7 +535,7 @@ export default function NodeMap() {
                 const knownCaps = HiveMindEngine.getKnownCapabilities();
                 const hiveCap = knownCaps.find(c => c.nodeId === targetKey || c.nodeId === canonicalKey);
 
-                const transport = raw.transport || defaultTransport;
+                const transport = raw.transport || raw.primaryTransport || defaultTransport;
                 const existing = canonicalMap.get(targetKey);
 
                 if (existing) {
@@ -526,9 +545,10 @@ export default function NodeMap() {
                     if (raw.rssi != null && (existing.rssi == null || raw.rssi > existing.rssi)) {
                         existing.rssi = raw.rssi;
                     }
-                    if (raw.lat && raw.lng) {
-                        existing.lat = raw.lat;
-                        existing.lng = raw.lng;
+                    if (resolvedLat !== undefined && resolvedLng !== undefined && resolvedLat !== 0 && resolvedLng !== 0) {
+                        existing.lat = resolvedLat;
+                        existing.lng = resolvedLng;
+                        existing.isEstimated = false;
                     }
                     if (raw.lastSeen && raw.lastSeen > existing.lastSeen) {
                         existing.lastSeen = raw.lastSeen;
@@ -553,8 +573,8 @@ export default function NodeMap() {
                         primaryTransport: transport || 'ble',
                         rssi: raw.rssi,
                         lastSeen: raw.lastSeen || Date.now(),
-                        lat: raw.lat,
-                        lng: raw.lng,
+                        lat: resolvedLat,
+                        lng: resolvedLng,
                         isContact,
                         batteryLevel: hiveCap?.batteryLevel,
                         cpuUsagePercent: hiveCap?.cpuUsagePercent,
@@ -565,8 +585,10 @@ export default function NodeMap() {
                 }
             };
 
-            rawLocal.forEach(p => processEntry(p, p.transport || 'ble'));
-            apiPeers.forEach(p => processEntry(p, 'wifi'));
+            meshPeers.forEach((p: any) => processEntry(p, p.transport || 'mesh'));
+            bleDiscovered.forEach((p: any) => processEntry(p, 'ble'));
+            rawLocal.forEach((p: any) => processEntry(p, p.transport || 'ble'));
+            apiPeers.forEach((p: any) => processEntry(p, 'wifi'));
 
             // Calcular distancias
             const resolvedList = Array.from(canonicalMap.values()).map(p => {

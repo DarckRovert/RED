@@ -8,6 +8,7 @@ import { ErrorBanner } from "./ui/ErrorBanner";
 import { CallRingtoneEngine } from "../lib/CallRingtoneEngine";
 import { callHistory } from "../lib/audio/CallHistoryEngine";
 import { SettingsManager, type VideoCallQuality } from "../lib/settingsManager";
+import { AudioContextManager } from "../lib/audio/AudioContextManager";
 
 import { CallVideoGrid, VideoTacticalFilter } from "./call/CallVideoGrid";
 import { CallConnectingOverlay } from "./call/CallConnectingOverlay";
@@ -39,7 +40,8 @@ export default function CallScreen() {
         setActiveCallId,
         clearCallSignals,
         preferences,
-        setCallPipMinimized
+        setCallPipMinimized,
+        isCallPipMinimized
     } = useRedStore();
 
     // Ensure any leftover ringtone is immediately stopped
@@ -227,11 +229,27 @@ export default function CallScreen() {
     const animFrameRef = useRef<number | null>(null);
     const [vadLevel, setVadLevel] = useState<number>(0);
 
+    // Live state refs to prevent stale closures inside rAF loop
+    const isCallPipMinimizedRef = useRef(isCallPipMinimized);
+    useEffect(() => { isCallPipMinimizedRef.current = isCallPipMinimized; }, [isCallPipMinimized]);
+
+    const isAudioOnlyRef = useRef(isAudioOnly);
+    useEffect(() => { isAudioOnlyRef.current = isAudioOnly; }, [isAudioOnly]);
+
+    const callActiveRef = useRef(callActive);
+    useEffect(() => { callActiveRef.current = callActive; }, [callActive]);
+
+    const micMutedRef = useRef(micMuted);
+    useEffect(() => { micMutedRef.current = micMuted; }, [micMuted]);
+
+    const lastVadUpdateRef = useRef<number>(0);
+    const lastVadValueRef = useRef<number>(0);
+
     // Cleanup de AudioContext y AnimationFrame al desmontar CallScreen
     useEffect(() => {
         return () => {
-            if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
-                try { audioCtxRef.current.close().catch(() => {}); } catch {}
+            if (audioCtxRef.current) {
+                AudioContextManager.releaseDedicatedContext("call-screen-visualizer");
                 audioCtxRef.current = null;
             }
             if (animFrameRef.current) {
@@ -258,6 +276,19 @@ export default function CallScreen() {
             if (timer) clearInterval(timer);
         };
     }, [callActive]);
+
+    // Timeout de 45 segundos para llamadas salientes sin respuesta
+    useEffect(() => {
+        if (callActive || status.includes("CONECTADO") || activeCallOffer) return;
+        const timeoutTimer = setTimeout(() => {
+            if (!callActiveRef.current && !status.includes("CONECTADO")) {
+                toast.info("Sin respuesta del interlocutor");
+                CallRingtoneEngine.stop();
+                handleUserEndCall();
+            }
+        }, 45000);
+        return () => clearTimeout(timeoutTimer);
+    }, [callActive, status, activeCallOffer]);
 
     const formatDuration = (seconds: number) => {
         const m = Math.floor(seconds / 60).toString().padStart(2, "0");
@@ -287,15 +318,18 @@ export default function CallScreen() {
         if (!audioTrack) return;
 
         try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (!AudioContextClass) return;
-
-            if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
-                audioCtxRef.current.close().catch(() => {});
+            if (audioCtxRef.current) {
+                AudioContextManager.releaseDedicatedContext("call-screen-visualizer");
+                audioCtxRef.current = null;
             }
 
-            const ctx = new AudioContextClass();
+            const ctx = AudioContextManager.acquireDedicatedContext("call-screen-visualizer");
+            if (!ctx) return;
             audioCtxRef.current = ctx;
+
+            if (ctx.state === "suspended") {
+                ctx.resume().catch(() => {});
+            }
 
             const analyser = ctx.createAnalyser();
             analyser.fftSize = 64;
@@ -310,6 +344,28 @@ export default function CallScreen() {
 
             const renderWaveform = () => {
                 if (!analyserRef.current) return;
+
+                // 1. Omitir computación si está minimizado en PiP o pestaña oculta
+                if (isCallPipMinimizedRef.current || (typeof document !== "undefined" && document.hidden)) {
+                    animFrameRef.current = requestAnimationFrame(renderWaveform);
+                    return;
+                }
+
+                // 2. Si el micrófono está silenciado, limpiar canvas y omitir FFT
+                if (micMutedRef.current) {
+                    if (lastVadValueRef.current !== 0) {
+                        lastVadValueRef.current = 0;
+                        setVadLevel(0);
+                    }
+                    const canvas = waveformCanvasRef.current;
+                    if (canvas) {
+                        const canvasCtx = canvas.getContext("2d");
+                        if (canvasCtx) canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+                    }
+                    animFrameRef.current = requestAnimationFrame(renderWaveform);
+                    return;
+                }
+
                 analyserRef.current.getByteFrequencyData(dataArray);
 
                 let sum = 0;
@@ -317,10 +373,21 @@ export default function CallScreen() {
                     sum += dataArray[i];
                 }
                 const avg = sum / bufferLength;
-                setVadLevel(avg);
 
+                // 3. Throttling reactivo: solo si el overlay es visible, a máx 10 Hz y con delta significativo
+                const now = Date.now();
+                const shouldRenderOverlay = isAudioOnlyRef.current || !callActiveRef.current;
+                if (shouldRenderOverlay && now - lastVadUpdateRef.current >= 100) {
+                    if (Math.abs(avg - lastVadValueRef.current) >= 3) {
+                        lastVadUpdateRef.current = now;
+                        lastVadValueRef.current = avg;
+                        setVadLevel(avg);
+                    }
+                }
+
+                // 4. Renderizado directo a Canvas a 60 FPS sin re-renderizar React
                 const canvas = waveformCanvasRef.current;
-                if (canvas) {
+                if (canvas && shouldRenderOverlay) {
                     const canvasCtx = canvas.getContext("2d");
                     if (canvasCtx) {
                         const width = canvas.width;
@@ -346,7 +413,10 @@ export default function CallScreen() {
                 animFrameRef.current = requestAnimationFrame(renderWaveform);
             };
 
-            renderWaveform();
+            if (animFrameRef.current) {
+                cancelAnimationFrame(animFrameRef.current);
+            }
+            animFrameRef.current = requestAnimationFrame(renderWaveform);
         } catch (e) {
             console.warn("[CallScreen] Audio Visualizer init warning:", e);
         }
@@ -642,6 +712,7 @@ export default function CallScreen() {
                     if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
                         setStatus("CONECTADO (E2E DTLS-SRTP)");
                         setCallActive(true);
+                        CallRingtoneEngine.stop();
                     } else if (pc.iceConnectionState === "failed") {
                         setStatus("Reconectando canal P2P (ICE Restart)...");
                         if (typeof pc.restartIce === "function") pc.restartIce();
@@ -655,6 +726,7 @@ export default function CallScreen() {
                     if (pc.connectionState === "connected") {
                         setStatus("CONECTADO (E2E DTLS-SRTP)");
                         setCallActive(true);
+                        CallRingtoneEngine.stop();
                     }
                 };
 
@@ -779,6 +851,7 @@ export default function CallScreen() {
                 // CALLER MODE: Creating new call offer
                 else {
                     setStatus("Llamando (Esperando respuesta E2E)...");
+                    CallRingtoneEngine.startOutgoing();
                     const sessionStartTime = Date.now();
                     callStartTimeRef.current = sessionStartTime;
 
@@ -816,7 +889,13 @@ export default function CallScreen() {
 
             } catch (err: any) {
                 setStatus("Error: Permiso de hardware denegado o no disponible");
+                CallRingtoneEngine.stop();
                 console.error("[CallScreen] Media Error:", err);
+                toast.error("No se pudo acceder a la cámara/micrófono");
+                setTimeout(() => {
+                    endCallInternal();
+                    goBack();
+                }, 2200);
             }
         };
 
@@ -915,8 +994,12 @@ export default function CallScreen() {
                             continue;
                         }
                         setStatus("Llamada Finalizada");
+                        CallRingtoneEngine.stop();
                         processedSignalsRef.current.add(signalId);
-                        setTimeout(endCallInternal, 400);
+                        setTimeout(() => {
+                            endCallInternal();
+                            goBack();
+                        }, 1000);
                     }
                     // Remote In-Call Heartbeat Keepalive
                     else if (signal.type === "call-heartbeat") {
@@ -976,9 +1059,10 @@ export default function CallScreen() {
             remoteStreamRef.current.getTracks().forEach(t => {
                 try { t.stop(); } catch {}
             });
+            remoteStreamRef.current = null;
         }
-        if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
-            try { audioCtxRef.current.close(); } catch {}
+        if (audioCtxRef.current) {
+            AudioContextManager.releaseDedicatedContext("call-screen-visualizer");
             audioCtxRef.current = null;
         }
         if (animFrameRef.current) {

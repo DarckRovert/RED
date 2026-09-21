@@ -15,3 +15,5 @@ export * from './MetabolicNeuromorphicGovernor';
 export * from './OpticLobeEngine';
 export * from './TacticalMotorActuatorEngine';
 export * from './ConnectomeEcosystemOrchestrator';
+export * from './GlobalWorkspaceConsciousnessBus';
+export * from './human';

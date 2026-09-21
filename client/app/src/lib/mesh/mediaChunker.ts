@@ -8,6 +8,7 @@
 
 export interface ChunkMetadata {
     fileId: string;
+    originalMsgId?: string;
     totalChunks?: number;       // Legacy compatibility
     totalDataChunks: number;    // K (bloques de datos originales)
     totalParityChunks: number;  // M (bloques de paridad)

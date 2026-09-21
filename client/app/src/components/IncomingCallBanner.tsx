@@ -43,6 +43,15 @@ export function IncomingCallBanner() {
         return unregister;
     }, [incomingCall, currentScreen]);
 
+    // ── Timeout de 45 segundos para llamada entrante desatendida ──────────────
+    React.useEffect(() => {
+        if (!incomingCall || currentScreen === 'call') return;
+        const timeoutTimer = setTimeout(() => {
+            handleReject();
+        }, 45000);
+        return () => clearTimeout(timeoutTimer);
+    }, [incomingCall, currentScreen]);
+
     if (!incomingCall || currentScreen === 'call') return null;
 
     const handleAccept = () => {

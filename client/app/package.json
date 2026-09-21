@@ -1,6 +1,6 @@
 {
   "name": "red-app",
-  "version": "115.0.0",
+  "version": "116.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -120,6 +120,7 @@
     "test:optic-looming": "node scripts/test-optic-lobe-motion-looming.js",
     "test:motor-actuator": "node scripts/test-tactical-motor-actuator.js",
     "test:connectome": "node scripts/test-malecns-connectome-hud-resilience.js",
+    "test:consciousness": "node scripts/test-global-workspace-consciousness.js",
     "test:all": "node -e \"const fs=require('fs'); const {execSync}=require('child_process'); const tests=fs.readdirSync('scripts').filter(f=>f.startsWith('test-')&&(f.endsWith('.js')||f.endsWith('.mjs'))); let failed=0; for(const t of tests){ try { execSync('node scripts/'+t, {stdio:'inherit'}); } catch(e){ failed++; } } if(failed>0) process.exit(1);\"",
     "prepare": "node scripts/setup_git_hooks.js",
     "postinstall": "node scripts/copy-wasm.js",

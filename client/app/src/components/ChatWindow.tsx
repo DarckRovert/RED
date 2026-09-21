@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { MessageItem, RedAPI, summarizeChannelAI, translateTextAI } from "../lib/api";
-import { mediaChunker } from "../lib/mesh/mediaChunker";
 import { MessageBubble } from "./chat/MessageBubble";
 import { ChatInput } from "./chat/ChatInput";
 import { ChatHeader } from "./chat/ChatHeader";
@@ -721,7 +720,6 @@ export default function ChatWindow() {
             await sendMessage(dataUrl, {
                 msg_type: type,
                 mime_type: mimeType,
-                media_data: dataUrl,
                 caption: caption || undefined,
             });
             TacticalAudioEngine.playMessageSent();
@@ -794,29 +792,6 @@ export default function ChatWindow() {
             setReplyTo(null);
         } catch {
             toast.error("Error al enviar mensaje");
-        }
-    };
-
-    const handleSendVoice = async (blob?: Blob) => {
-        if (!blob || !peerHash) return;
-        try {
-            const elapsedMs = Math.max(500, Date.now() - recordStartTimeRef.current);
-            const analysis = await TacticalVoiceAnalyzer.analyzeAudioBlob(blob, elapsedMs, 28);
-            const reader = new FileReader();
-            reader.onload = async () => {
-                const b64 = reader.result as string;
-                await sendMessage(b64, {
-                    msg_type: "voice",
-                    mime_type: recordedMimeTypeRef.current,
-                    duration_ms: analysis.durationMs,
-                    waveform: analysis.waveform
-                });
-                TacticalAudioEngine.playMessageSent();
-            };
-            reader.readAsDataURL(blob);
-            toast.success("Nota de voz enviada");
-        } catch {
-            toast.error("Error al enviar nota de voz");
         }
     };
 
@@ -913,19 +888,39 @@ export default function ChatWindow() {
                 if (res.value && res.value.recordDataBase64) {
                     const rawB64 = res.value.recordDataBase64;
                     const mimeType = res.value.mimeType || "audio/aac";
-                    const dataUrl = rawB64.startsWith("data:") ? rawB64 : `data:${mimeType};base64,${rawB64}`;
+                    const cleanB64 = rawB64.includes(',') ? rawB64.split(',')[1] : rawB64;
+                    const binary = atob(cleanB64);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) {
+                        bytes[i] = binary.charCodeAt(i);
+                    }
+                    const blob = new Blob([bytes], { type: mimeType });
+                    if (blob.size < 100) {
+                        toast.info("Audio muy corto");
+                        return;
+                    }
                     const durMs = res.value.msDuration || Math.max(500, Date.now() - recordStartTimeRef.current);
-                    await sendMessage(dataUrl, {
-                        msg_type: "voice",
-                        mime_type: mimeType,
-                        duration_ms: durMs,
+                    recordedMimeTypeRef.current = mimeType;
+
+                    const url = URL.createObjectURL(blob);
+                    setVoicePreviewBlob(blob);
+                    setVoicePreviewUrl(url);
+                    setVoicePreviewPlaying(false);
+                    setVoicePreviewCurrentTime(0);
+
+                    TacticalVoiceAnalyzer.analyzeAudioBlob(blob, durMs, 28).then(analysis => {
+                        setVoiceDurationSec(Math.max(1, Math.round(analysis.durationMs / 1000)));
+                        setVoicePreviewWaveform(analysis.waveform);
+                    }).catch(() => {
+                        setVoiceDurationSec(Math.max(1, Math.round(durMs / 1000)));
+                        setVoicePreviewWaveform([]);
                     });
-                    TacticalAudioEngine.playMessageSent();
-                    toast.success("Nota de voz enviada");
+                } else {
+                    toast.info("Audio no detectado");
                 }
             } catch (err) {
                 console.error("[ChatWindow] Error in native VoiceRecorder stop:", err);
-                toast.error("Error al guardar nota de voz");
+                toast.error("Error al capturar nota de voz");
             }
             return;
         }
@@ -960,6 +955,8 @@ export default function ChatWindow() {
                     setVoiceDurationSec(Math.max(1, Math.round(elapsedMs / 1000)));
                     setVoicePreviewWaveform([]);
                 });
+            } else {
+                toast.info("Audio muy corto");
             }
         }
     };
@@ -2176,7 +2173,6 @@ export default function ChatWindow() {
             }}>
                 <ChatInput
                     onSendMessage={handleSendText}
-                    onSendVoice={handleSendVoice}
                     sendTyping={() => sendTypingStatus('typing')}
                     replyTo={replyTo}
                     setReplyTo={setReplyTo}

@@ -25,6 +25,7 @@ import { metabolicGovernor } from '../neuro/MetabolicNeuromorphicGovernor';
 import { opticLobe } from '../neuro/OpticLobeEngine';
 import { tacticalMotorActuator } from '../neuro/TacticalMotorActuatorEngine';
 import { humanBrainOrchestrator } from '../neuro/human/HumanBrainOrchestrator';
+import { globalWorkspaceConsciousnessBus, ConsciousnessSnapshot } from '../neuro/GlobalWorkspaceConsciousnessBus';
 
 export interface ConnectomeSnapshot {
   timestamp: number;
@@ -108,6 +109,7 @@ export interface ConnectomeSnapshot {
     topPeerBearing: RfPeerBearing | null;
     summary: string;
   };
+  consciousnessBus?: ConsciousnessSnapshot;
 }
 
 export class ConnectomeCortexBridge {
@@ -242,6 +244,7 @@ export class ConnectomeCortexBridge {
         topPeerBearing: topBearing,
         summary,
       },
+      consciousnessBus: globalWorkspaceConsciousnessBus.getSnapshot(),
     };
   }
 
@@ -269,6 +272,13 @@ export class ConnectomeCortexBridge {
       `• Ínsula Anterior TCCC: Vagal ${humanSnapshot.insular.isBoxBreathingActive ? humanSnapshot.insular.boxBreathingPhase : 'STANDBY'} | Bajas: ${humanSnapshot.insular.activeCasualtiesCount} | Torniquetes: ${humanSnapshot.insular.activeTourniquetsCount}\n` +
       `• Economía OFC: Autarquía: ${humanSnapshot.orbitofrontal.autarkyDaysRemaining} días | Contratos Barter: ${humanSnapshot.orbitofrontal.activeContractsCount}`;
 
+    const consciousnessSnapshot = globalWorkspaceConsciousnessBus.getSnapshot();
+    const consciousnessSection = `\n\n[Espacio de Trabajo Global (GNWT & Conciencia de Enjambre)]:\n` +
+      `• Ignición Atencional: ${consciousnessSnapshot.isIgnited ? '🔥 IGNITADO' : '🟢 LATENTE'} (Intensidad: ${(consciousnessSnapshot.ignitionIntensity * 100).toFixed(0)}%)\n` +
+      `• Foco Consciente: ${consciousnessSnapshot.consciousFocus} (${consciousnessSnapshot.salienceWinner.rationale})\n` +
+      `• Integración Φ (IIT): ${(consciousnessSnapshot.phiApprox * 10).toFixed(1)}/10 | Energía Libre F: ${consciousnessSnapshot.variationalFreeEnergy.toFixed(3)}\n` +
+      `• Sincronización Kuramoto: ${(consciousnessSnapshot.kuramotoOrderR * 100).toFixed(1)}% coherencia de enjambre`;
+
     return `[Conectoma Bio-Cibernético Drosophila MaleCNS v1.0]:\n` +
       `• Rumbo E-PG: ${s.compass.headingDeg}° (${s.compass.cardinal}, Conf: ${(s.compass.confidence * 100).toFixed(0)}%, Anclaje: ${s.compass.isSensoryAnchored ? 'OK' : 'INERCIAL'})\n` +
       `• Navegación FB (Home Vector): ${s.fanShapedBody.homeDistanceMeters}m hacia ${s.fanShapedBody.homeBearingDeg}° (${s.fanShapedBody.homeCardinal}) | Recorrido: ${s.fanShapedBody.totalDistanceTraveledMeters}m\n` +
@@ -278,7 +288,7 @@ export class ConnectomeCortexBridge {
       `• Actuador Háptico DNa: Modo ${s.motorActuator.currentMode} (Error: ${s.motorActuator.steeringErrorDeg}°)\n` +
       `• Fibras Gigantes: ${s.giantFiber.state} (EMCON: ${s.giantFiber.isRadioSilenced ? 'ACTIVO' : 'NO'})\n` +
       `• Sensor JO: ${(s.johnstonOrgan.acousticEnergyLevel * 100).toFixed(0)}% energía acústica (${s.johnstonOrgan.vibrationFrequencyHz} Hz)\n` +
-      `• Metabolismo IPC/NPF: Régimen ${s.metabolicGovernor.regime} (Batería: ${s.metabolicGovernor.batteryPct}%, Autonomía: ${s.metabolicGovernor.estimatedStandbyHours}h)${bearingSection}${humanSection}`;
+      `• Metabolismo IPC/NPF: Régimen ${s.metabolicGovernor.regime} (Batería: ${s.metabolicGovernor.batteryPct}%, Autonomía: ${s.metabolicGovernor.estimatedStandbyHours}h)${bearingSection}${humanSection}${consciousnessSection}`;
   }
 
   /**

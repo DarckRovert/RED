@@ -551,6 +551,99 @@ export async function dispatchIncomingMessage(
             return;
         }
 
+        // ── P2P Walkie-Talkie Tactical Voice Burst ─────────────────────────────
+        if (
+            item.msg_type === 'p2p_voice_burst' ||
+            item.msg_type === 'voice_burst' ||
+            (item as any)?.type === 'P2P_VOICE_BURST' ||
+            (data as any)?.type === 'P2P_VOICE_BURST' ||
+            (typeof item.content === 'string' && item.content.includes('"type":"P2P_VOICE_BURST"'))
+        ) {
+            try {
+                const parsedBurst = typeof item.content === 'string' && item.content.startsWith('{')
+                    ? JSON.parse(item.content)
+                    : (item as any);
+                const audioPayload = parsedBurst.audio_b64 || parsedBurst.audio_opus_b64 || (item as any).audio_b64 || (item as any).audio_opus_b64;
+                if (audioPayload) {
+                    const senderName = parsedBurst.sender || parsedBurst.sender_name || (item as any).sender || `Operador ${(item.sender || '').slice(0, 6)}`;
+                    const duration = parsedBurst.duration || parsedBurst.duration_seconds || (item as any).duration || 2;
+                    const channel = parsedBurst.channel || (item as any).channel || 'CH-01 · TÁCTICO';
+                    const burstId = parsedBurst.id || item.id || `burst_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+                    const burstObj: VoiceBurst = {
+                        id: burstId,
+                        sender_did: item.sender || parsedBurst.sender || 'OPERADOR',
+                        sender_name: senderName,
+                        duration_seconds: duration,
+                        audio_opus_b64: audioPayload,
+                        timestamp: typeof item.timestamp === 'number' ? (item.timestamp > 1e11 ? item.timestamp : item.timestamp * 1000) : Date.now(),
+                        channel: channel
+                    };
+                    get().addVoiceBurst(burstObj);
+                    TacticalAudioEngine.playRogerBeep();
+                    toast.info(`📻 Ráfaga PTT de ${senderName} (${channel})`);
+                }
+            } catch (err) {
+                console.warn('[P2P Voice Burst Dispatch Error]', err);
+            }
+            return; // Retorno estricto para evitar que audio base64 sature la memoria del chat
+        }
+
+        // ── Emergency SOS Distress Beacon & Resolution ────────────────────────
+        if (
+            item.msg_type === 'sos_beacon' ||
+            (item as any)?.type === 'SOS_BEACON' ||
+            (data as any)?.type === 'SOS_BEACON' ||
+            (typeof item.content === 'string' && (item.content.includes('"msg_type":"sos_beacon"') || item.content.includes('"type":"SOS_BEACON"')))
+        ) {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{')
+                    ? JSON.parse(item.content)
+                    : (item as any);
+                const b = parsed.beacon || parsed;
+                if (b && (b.id || b.beacon_id)) {
+                    const formattedBeacon: SosBeacon = {
+                        id: b.id || b.beacon_id,
+                        beacon_id: b.beacon_id || b.id,
+                        sender_did: b.sender_did || item.sender,
+                        sender_name: b.sender_name || `Operador ${(item.sender || '').slice(0, 6)}`,
+                        lat: b.lat ?? b.latitude ?? b.coords?.lat,
+                        lon: b.lon ?? b.longitude ?? b.coords?.lon,
+                        altitude: b.altitude ?? b.alt ?? b.coords?.alt,
+                        timestamp: b.timestamp ? (b.timestamp > 1e11 ? b.timestamp : b.timestamp * 1000) : Date.now(),
+                        battery_level: b.battery_level ?? b.batteryLevel ?? 100,
+                        note: b.note || 'ALERTA SOS SOLICITANDO AUXILIO',
+                        is_active: b.is_active ?? b.active ?? true,
+                        distress_type: b.distress_type || b.distressType || 'SOS_GENERAL'
+                    };
+                    get().addSosBeacon(formattedBeacon);
+                    TacticalAudioEngine.playEmergencyAlarm();
+                }
+            } catch (err) {
+                console.warn('[SOS Beacon Dispatch Error]', err);
+            }
+            return; // Retorno estricto para que la baliza sea tratada exclusivamente en el motor de emergencia
+        }
+
+        if (
+            item.msg_type === 'sos_resolve' ||
+            (item as any)?.type === 'SOS_RESOLVE' ||
+            (data as any)?.type === 'SOS_RESOLVE' ||
+            (typeof item.content === 'string' && (item.content.includes('"msg_type":"sos_resolve"') || item.content.includes('"type":"SOS_RESOLVE"')))
+        ) {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{')
+                    ? JSON.parse(item.content)
+                    : (item as any);
+                const targetId = parsed.sos_id || parsed.id || parsed.beacon_id;
+                if (targetId) {
+                    get().resolveSosBeacon(targetId);
+                }
+            } catch (err) {
+                console.warn('[SOS Resolve Dispatch Error]', err);
+            }
+            return;
+        }
+
         // ── Real-Time Profile Update Mesh Synchronization (v51.1.0) ────────────
         if (item.msg_type === 'profile_update') {
             try {

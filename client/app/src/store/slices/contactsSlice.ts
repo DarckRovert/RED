@@ -18,7 +18,33 @@ function trackProcessedHandshake(key: string): void {
     _processedHandshakes.set(key, Date.now());
 }
 
-export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = (set, get) => ({
+export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = (set, get) => {
+    // Sincronización reactiva en memoria cuando MeshRouter descubre claves PQC en la malla
+    if (typeof window !== 'undefined' && !(window as any).__red_pqc_slice_listener_registered) {
+        (window as any).__red_pqc_slice_listener_registered = true;
+        window.addEventListener('red:contact_pqc_updated', (e: Event) => {
+            const detail = (e as CustomEvent)?.detail;
+            if (!detail?.identity_hash || !detail?.kyber_public_key) return;
+            const targetH = normalizeIdentity(detail.identity_hash);
+            const current = get().contacts || [];
+            const idx = current.findIndex(c => {
+                const cH = normalizeIdentity(c.identity_hash || '');
+                return cH === targetH || (targetH.length >= 8 && cH.startsWith(targetH.slice(0, 8)));
+            });
+            if (idx >= 0 && current[idx].kyber_public_key !== detail.kyber_public_key) {
+                const updated = [...current];
+                updated[idx] = {
+                    ...updated[idx],
+                    kyber_public_key: detail.kyber_public_key,
+                    x25519_public_key: detail.x25519_public_key || updated[idx].x25519_public_key
+                };
+                set({ contacts: updated });
+                RedAPI.setWebStore('red_web_contacts', updated);
+            }
+        });
+    }
+
+    return {
     contacts: [],
 
     groups: [],
@@ -180,12 +206,21 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
 
     // Real-time Mesh SSE Events State
 
-    addContact: async (identity_hash: string, display_name: string, public_key?: string | null, isAcceptingHandshake = false) => {
+    addContact: async (
+        identity_hash: string, 
+        display_name: string, 
+        public_key?: string | null, 
+        isAcceptingHandshake = false,
+        kyber_public_key?: string | null,
+        x25519_public_key?: string | null
+    ) => {
         const inputStr = identity_hash.trim();
         let cleanName = display_name ? display_name.trim() : '';
 
         let cleanHash = normalizeIdentity(inputStr);
         let pubKey: string | null = public_key ?? null;
+        let kyberPubKey: string | null = kyber_public_key ?? null;
+        let x25519PubKey: string | null = x25519_public_key ?? null;
 
         const isGenericName = (name?: string) => !name || 
             name.startsWith('Operador ') || 
@@ -196,8 +231,21 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             name === 'Par Malla' ||
             name === 'Contacto P2P';
 
-        // 1. Comprehensive Parsing: did:red:<hash>:<pk>:<name> | RED_ID_VAULT:<base64> | <hash>:<pk>:<name>
-        if (inputStr.startsWith("did:red:")) {
+        // 1. Comprehensive Parsing: did:red:<hash>:<pk>:<name> | RED_ID_VAULT:<base64> | JSON | <hash>:<pk>:<name>
+        if (inputStr.startsWith("{") && inputStr.endsWith("}")) {
+            try {
+                const parsed = JSON.parse(inputStr);
+                cleanHash = normalizeIdentity(parsed.hash || parsed.peerHash || (parsed.did ? parsed.did.replace(/^did:red:/i, "") : ""));
+                if (parsed.name && isGenericName(cleanName)) cleanName = parsed.name || parsed.nickname;
+                if (parsed.pk && !pubKey) pubKey = parsed.pk || parsed.publicKey;
+                if ((parsed.kyber_public_key || parsed.kyberPublicKeyHex) && !kyberPubKey) {
+                    kyberPubKey = parsed.kyber_public_key || parsed.kyberPublicKeyHex;
+                }
+                if ((parsed.x25519_public_key || parsed.x25519PublicKeyHex) && !x25519PubKey) {
+                    x25519PubKey = parsed.x25519_public_key || parsed.x25519PublicKeyHex;
+                }
+            } catch {}
+        } else if (inputStr.startsWith("did:red:")) {
             const withoutScheme = inputStr.slice(8);
             const parts = withoutScheme.split(":");
             cleanHash = normalizeIdentity(parts[0].trim());
@@ -218,6 +266,8 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
                 cleanHash = normalizeIdentity(decoded.did || "");
                 if (decoded.pk && !pubKey) pubKey = decoded.pk;
                 if (decoded.name && isGenericName(cleanName)) cleanName = decoded.name;
+                if (decoded.kyber_public_key && !kyberPubKey) kyberPubKey = decoded.kyber_public_key;
+                if (decoded.x25519_public_key && !x25519PubKey) x25519PubKey = decoded.x25519_public_key;
             } catch {}
         } else if (inputStr.includes(":") && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(inputStr)) {
             const parts = inputStr.split(":");
@@ -242,7 +292,7 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             cleanHash = canonicalFromMesh;
         }
 
-        // Check active peers in MeshRouter to extract public key or canonical DID
+        // Check active peers in MeshRouter to extract public key or canonical DID + PQC keys
         const peerInfo = meshRouter.getPeerByAnyId(cleanHash) || meshRouter.getPeerByAnyId(inputStr);
         if (peerInfo) {
             if (peerInfo.canonicalId && peerInfo.canonicalId.length === 64) {
@@ -254,13 +304,19 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             if (peerInfo.name && isGenericName(cleanName)) {
                 cleanName = peerInfo.name;
             }
+            if (peerInfo.kyberPublicKey && !kyberPubKey) {
+                kyberPubKey = peerInfo.kyberPublicKey;
+            }
+            if (peerInfo.x25519PublicKey && !x25519PubKey) {
+                x25519PubKey = peerInfo.x25519PublicKey;
+            }
         }
 
         if (isGenericName(cleanName)) {
             cleanName = `Nodo ${cleanHash.slice(0, 8)}`;
         }
 
-        // Cache peer in meshRouter immediately for instant resolution across views
+        // Cache peer in meshRouter immediately with PQC keys for instant resolution across views
         const existingPeer = meshRouter.getPeerByAnyId(cleanHash);
         const peerTransport: 'wifi' | 'ble' | 'lora' = (existingPeer?.transport === 'ble' || existingPeer?.transport === 'lora') ? existingPeer.transport : 'wifi';
         meshRouter.updatePeer(
@@ -269,13 +325,19 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             undefined,
             cleanHash,
             cleanName,
-            pubKey || undefined
+            pubKey || undefined,
+            undefined,
+            undefined,
+            kyberPubKey || undefined,
+            x25519PubKey || undefined
         );
 
         const localContact = {
             identity_hash: cleanHash,
             display_name: cleanName,
-            public_key: pubKey
+            public_key: pubKey,
+            kyber_public_key: kyberPubKey || null,
+            x25519_public_key: x25519PubKey || null
         };
 
         // 3. Smart Deduplication & Merging with zero lag
@@ -311,12 +373,16 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
                 : (currentEntry.identity_hash.length === 64 ? currentEntry.identity_hash : cleanHash);
             const resolvedName = !isGenericName(cleanName) ? cleanName : currentEntry.display_name;
             const resolvedPk = pubKey || currentEntry.public_key;
+            const resolvedKyber = kyberPubKey || currentEntry.kyber_public_key || peerInfo?.kyberPublicKey || null;
+            const resolvedX25519 = x25519PubKey || currentEntry.x25519_public_key || peerInfo?.x25519PublicKey || null;
 
             updatedContacts[existingIdx] = { 
                 ...currentEntry, 
                 identity_hash: resolvedHash, 
                 display_name: resolvedName, 
-                public_key: resolvedPk 
+                public_key: resolvedPk,
+                kyber_public_key: resolvedKyber,
+                x25519_public_key: resolvedX25519
             };
 
             // Migrate conversations and messages seamlessly
@@ -520,4 +586,5 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         }
         return ok;
     },
-});
+    };
+};

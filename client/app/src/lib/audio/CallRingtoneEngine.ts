@@ -144,6 +144,54 @@ export class CallRingtoneEngine {
     }
 
     /**
+     * Starts tactical outgoing ringback tone (dual 440/480 Hz pulse)
+     */
+    public static startOutgoing() {
+        if (this.isRunning) {
+            this.stop();
+        }
+        this.isRunning = true;
+
+        const playOutgoingPulse = () => {
+            const ctx = this.getAudioContext();
+            if (!ctx || ctx.state === "closed" || !this.isRunning) return;
+            try {
+                const now = ctx.currentTime;
+                const osc1 = ctx.createOscillator();
+                const osc2 = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc1.type = "sine";
+                osc1.frequency.setValueAtTime(440, now);
+                osc2.type = "sine";
+                osc2.frequency.setValueAtTime(480, now);
+
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+
+                osc1.connect(gain);
+                osc2.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc1.start(now);
+                osc2.start(now);
+                osc1.stop(now + 1.2);
+                osc2.stop(now + 1.2);
+                this.activeOscillators.push(osc1, osc2);
+                osc1.onended = () => {
+                    this.activeOscillators = this.activeOscillators.filter(o => o !== osc1 && o !== osc2);
+                };
+            } catch {}
+        };
+
+        playOutgoingPulse();
+        this.intervalTimer = setInterval(() => {
+            if (!this.isRunning) return;
+            playOutgoingPulse();
+        }, 3500);
+    }
+
+    /**
      * Plays a single test preview for settings menu
      */
     public static playPreview(toneType: RingtoneType) {
