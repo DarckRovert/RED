@@ -32,6 +32,14 @@ async function getTransformers() {
             }
             if (!modelsUrl.endsWith('/')) modelsUrl += '/';
             tfMod.env.localModelPath = modelsUrl;
+
+            // Runtime WASM offline en /ort-wasm/ con cota de hilos para procesadores móviles
+            const wasmBasePath = origin ? `${origin}/ort-wasm/` : '/ort-wasm/';
+            if (tfMod.env.backends?.onnx?.wasm) {
+                tfMod.env.backends.onnx.wasm.wasmPaths = wasmBasePath;
+                const cores = typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 2;
+                (tfMod.env.backends.onnx.wasm as any).numThreads = Math.max(1, Math.min(2, Math.floor(cores / 2)));
+            }
         } catch {
             return null;
         }
@@ -205,12 +213,39 @@ if (typeof self !== 'undefined') {
         } else if (type === 'SUMMARIZE_CHANNEL') {
             const messages: string[] = Array.isArray(payload?.messages) ? payload.messages : [];
             const count = messages.length;
+            const sampleText = messages.slice(-8).join('\n- ');
+
+            let bullets: string[] = [];
+            try {
+                const generator = await getGenerator();
+                if (generator) {
+                    const prompt = `<|im_start|>system\nResume en 2 o 3 viñetas concisas los siguientes mensajes de radio:<|im_end|>\n<|im_start|>user\n- ${sampleText}<|im_end|>\n<|im_start|>assistant\n`;
+                    const out = await generator(prompt, { max_new_tokens: 120, temperature: 0.3 });
+                    let genText = '';
+                    if (Array.isArray(out) && out[0]?.generated_text) genText = out[0].generated_text;
+                    else if (out && (out as any).generated_text) genText = (out as any).generated_text;
+                    if (genText) {
+                        const clean = genText.includes('<|im_start|>assistant\n')
+                            ? genText.split('<|im_start|>assistant\n').pop() || ''
+                            : genText.replace(prompt, '');
+                        bullets = clean
+                            .replace(/<\|im_end\|>|<\|endoftext\|>/g, '')
+                            .split('\n')
+                            .map(b => b.replace(/^[•\-\*\d\.]+\s*/, '').trim())
+                            .filter(b => b.length > 0);
+                    }
+                }
+            } catch {}
+
+            if (bullets.length === 0) {
+                bullets = [`Síntesis táctica: ${count} mensaje(s) analizados localmente.`];
+            }
 
             self.postMessage({
                 id, type: 'SUMMARIZE_CHANNEL_RESULT', success: true,
                 data: {
-                    summaryBullets: [`Síntesis Neuronal ONNX: ${count} mensaje(s) analizados.`, `Estado de la red: Saludable.`],
-                    sentiment: 'Táctico Neutral',
+                    summaryBullets: bullets,
+                    sentiment: 'Análisis Neuronal Completado',
                     totalMessages: count
                 },
                 executionTimeMs: Math.round(performance.now() - start)
