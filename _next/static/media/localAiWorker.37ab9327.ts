@@ -7,22 +7,37 @@
 
 export interface WorkerInputMessage {
     id: string;
-    type: 'CLASSIFY_SAFETY' | 'GENERATE_COPILOT' | 'SUMMARIZE_CHANNEL' | 'TRANSLATE_TEXT' | 'DIAGNOSE_HEALTH' | 'TRANSCRIBE_AUDIO';
+    type: 'CLASSIFY_SAFETY' | 'GENERATE_COPILOT' | 'SUMMARIZE_CHANNEL' | 'TRANSLATE_TEXT' | 'DIAGNOSE_HEALTH' | 'TRANSCRIBE_AUDIO' | 'EXTRACT_EMBEDDINGS';
     payload: any;
 }
 
 let classifierPipeline: any = null;
+let classifierLoadingPromise: Promise<any> | null = null;
 let embeddingPipeline: any = null;
+let embeddingLoadingPromise: Promise<any> | null = null;
 let generatorPipeline: any = null;
+let generatorLoadingPromise: Promise<any> | null = null;
 let asrPipeline: any = null;
+let asrLoadingPromise: Promise<any> | null = null;
 let tfMod: any = null;
+
+function withWorkerTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+    let timer: any;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`[Worker AI Timeout] ${label} excedió ${timeoutMs}ms`)), timeoutMs);
+    });
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+        if (timer) clearTimeout(timer);
+    });
+}
 
 async function getTransformers() {
     if (!tfMod) {
         try {
             tfMod = await import('@xenova/transformers');
+            const isOnline = typeof navigator !== 'undefined' ? Boolean(navigator.onLine) : false;
             tfMod.env.allowLocalModels = true;
-            tfMod.env.allowRemoteModels = true;
+            tfMod.env.allowRemoteModels = isOnline;
             tfMod.env.useBrowserCache = true;
 
             const origin = typeof self !== 'undefined' && self.location ? self.location.origin : '';
@@ -48,66 +63,127 @@ async function getTransformers() {
 }
 
 async function getClassifier() {
-    if (!classifierPipeline) {
-        const tf = await getTransformers();
-        if (tf) {
-            classifierPipeline = await tf.pipeline('text-classification', 'Xenova/toxic-bert', { quantized: true });
-        }
-    }
-    return classifierPipeline;
+    if (classifierPipeline) return classifierPipeline;
+    if (classifierLoadingPromise) return classifierLoadingPromise;
+
+    const tf = await getTransformers();
+    if (!tf) return null;
+
+    classifierLoadingPromise = withWorkerTimeout(
+        tf.pipeline('text-classification', 'Xenova/toxic-bert', { quantized: true }),
+        35000,
+        'toxic-bert classifier'
+    ).then(pipe => {
+        classifierPipeline = pipe;
+        classifierLoadingPromise = null;
+        return pipe;
+    }).catch(err => {
+        classifierLoadingPromise = null;
+        throw err;
+    });
+
+    return classifierLoadingPromise;
 }
 
 async function getExtractor() {
-    if (!embeddingPipeline) {
-        const tf = await getTransformers();
-        if (tf) {
-            try {
-                embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', { quantized: true });
-            } catch {
-                embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { quantized: true });
-            }
+    if (embeddingPipeline) return embeddingPipeline;
+    if (embeddingLoadingPromise) return embeddingLoadingPromise;
+
+    const tf = await getTransformers();
+    if (!tf) return null;
+
+    embeddingLoadingPromise = (async () => {
+        try {
+            return await withWorkerTimeout(
+                tf.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { quantized: true }),
+                35000,
+                'all-MiniLM-L6-v2'
+            );
+        } catch {
+            return await withWorkerTimeout(
+                tf.pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', { quantized: true }),
+                35000,
+                'paraphrase-multilingual-MiniLM-L12-v2'
+            );
         }
-    }
-    return embeddingPipeline;
+    })().then(pipe => {
+        embeddingPipeline = pipe;
+        embeddingLoadingPromise = null;
+        return pipe;
+    }).catch(err => {
+        embeddingLoadingPromise = null;
+        throw err;
+    });
+
+    return embeddingLoadingPromise;
 }
 
 let currentGeneratorModel: string | null = null;
 
 async function getGenerator(modelId?: string) {
     const targetModel = modelId || 'onnx-community/Qwen2.5-0.5B-Instruct';
-    if (!generatorPipeline || currentGeneratorModel !== targetModel) {
-        const tf = await getTransformers();
-        if (tf) {
-            try {
-                generatorPipeline = await tf.pipeline('text-generation', targetModel, { quantized: true });
-                currentGeneratorModel = targetModel;
-            } catch {
-                try {
-                    generatorPipeline = await tf.pipeline('text-generation', 'onnx-community/SmolLM2-360M-Instruct', { quantized: true });
-                    currentGeneratorModel = 'onnx-community/SmolLM2-360M-Instruct';
-                } catch {
-                    try {
-                        generatorPipeline = await tf.pipeline('text-generation', 'Xenova/LaMini-GPT-124M', { quantized: true });
-                        currentGeneratorModel = 'Xenova/LaMini-GPT-124M';
-                    } catch {
-                        generatorPipeline = await tf.pipeline('text-generation', 'Xenova/distilgpt2', { quantized: true });
-                        currentGeneratorModel = 'Xenova/distilgpt2';
-                    }
-                }
-            }
-        }
+    if (generatorPipeline && currentGeneratorModel === targetModel) {
+        return generatorPipeline;
     }
-    return generatorPipeline;
+    if (generatorLoadingPromise && currentGeneratorModel === targetModel) {
+        return generatorLoadingPromise;
+    }
+
+    const tf = await getTransformers();
+    if (!tf) return null;
+
+    generatorLoadingPromise = (async () => {
+        const candidates = [
+            targetModel,
+            'onnx-community/SmolLM2-360M-Instruct',
+            'Xenova/LaMini-GPT-124M',
+            'Xenova/distilgpt2'
+        ];
+        for (const candidate of candidates) {
+            try {
+                const pipe = await withWorkerTimeout(
+                    tf.pipeline('text-generation', candidate, { quantized: true }),
+                    45000,
+                    candidate
+                );
+                currentGeneratorModel = candidate;
+                return pipe;
+            } catch {}
+        }
+        return null;
+    })().then(pipe => {
+        generatorPipeline = pipe;
+        generatorLoadingPromise = null;
+        return pipe;
+    }).catch(err => {
+        generatorLoadingPromise = null;
+        throw err;
+    });
+
+    return generatorLoadingPromise;
 }
 
 async function getTranscriber() {
-    if (!asrPipeline) {
-        const tf = await getTransformers();
-        if (tf) {
-            asrPipeline = await tf.pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny', { quantized: true });
-        }
-    }
-    return asrPipeline;
+    if (asrPipeline) return asrPipeline;
+    if (asrLoadingPromise) return asrLoadingPromise;
+
+    const tf = await getTransformers();
+    if (!tf) return null;
+
+    asrLoadingPromise = withWorkerTimeout(
+        tf.pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny', { quantized: true }),
+        45000,
+        'whisper-tiny'
+    ).then(pipe => {
+        asrPipeline = pipe;
+        asrLoadingPromise = null;
+        return pipe;
+    }).catch(err => {
+        asrLoadingPromise = null;
+        throw err;
+    });
+
+    return asrLoadingPromise;
 }
 
 if (typeof self !== 'undefined') {
@@ -306,6 +382,43 @@ if (typeof self !== 'undefined') {
                 data: { text: transcribedText },
                 executionTimeMs: Math.round(performance.now() - start)
             });
+        } else if (type === 'EXTRACT_EMBEDDINGS') {
+            const text = String(payload?.text || '').trim();
+            if (!text) {
+                self.postMessage({
+                    id, type: 'EXTRACT_EMBEDDINGS_RESULT', success: true,
+                    data: {
+                        dimensions: 384,
+                        magnitude: "0.0000",
+                        vectorPreview: [],
+                        fullVector: new Array(384).fill(0),
+                    },
+                    executionTimeMs: 0
+                });
+                return;
+            }
+            const extractor = await getExtractor();
+            if (!extractor) {
+                throw new Error('Pipeline de Feature Extraction ONNX no disponible en el Worker');
+            }
+            const tensor = await extractor(text, { pooling: 'mean', normalize: true });
+            const vecData = Array.from(tensor.data as Float32Array);
+            if (tensor && typeof (tensor as any).dispose === 'function') {
+                try { (tensor as any).dispose(); } catch {}
+            }
+            const norm = vecData.reduce((acc, v) => acc + v * v, 0);
+            const magnitude = Math.sqrt(norm).toFixed(4);
+
+            self.postMessage({
+                id, type: 'EXTRACT_EMBEDDINGS_RESULT', success: true,
+                data: {
+                    dimensions: vecData.length,
+                    magnitude,
+                    vectorPreview: vecData.slice(0, 10).map((v: number) => v.toFixed(6)),
+                    fullVector: vecData,
+                },
+                executionTimeMs: Math.round(performance.now() - start)
+            });
         }
     } catch (err: any) {
         // El tipo de respuesta de error debe corresponder al tipo de solicitud
@@ -317,6 +430,7 @@ if (typeof self !== 'undefined') {
             type === 'TRANSLATE_TEXT'     ? 'TRANSLATE_TEXT_RESULT'      :
             type === 'DIAGNOSE_HEALTH'    ? 'DIAGNOSE_HEALTH_RESULT'     :
             type === 'TRANSCRIBE_AUDIO'   ? 'TRANSCRIBE_AUDIO_RESULT'    :
+            type === 'EXTRACT_EMBEDDINGS' ? 'EXTRACT_EMBEDDINGS_RESULT'  :
             'CLASSIFY_SAFETY_RESULT'
         );
         self.postMessage({
