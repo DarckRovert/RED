@@ -628,8 +628,11 @@ pub fn build_router(state: ApiState) -> Router {
         )
         .route("/api/settings/dms/ping", post(handle_ping_dms))
         .route("/api/settings/dms/panic_wipe", post(handle_panic_wipe))
-        // C1: LoRa config — persists serial port + baud so LoraBridge picks it up on restart
-        .route("/api/settings/lora", post(handle_set_lora_config))
+        // C1: LoRa config — lectura y persistencia limpia en almacenamiento Sled
+        .route(
+            "/api/settings/lora",
+            get(handle_get_lora_config).post(handle_set_lora_config),
+        )
         // LoRa Plug & Play: auto-detección en caliente de transceptores USB
         .route("/api/hardware/lora/ports", get(handle_scan_lora_ports))
         .route("/api/network/ip", get(handle_network_ip))
@@ -2192,17 +2195,50 @@ struct LoraConfigRequest {
     enabled: bool,
 }
 
+async fn handle_get_lora_config(State(state): State<ApiState>) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let port = node.get_config("lora_port").await.unwrap_or_default();
+    let baud = node
+        .get_config("lora_baud")
+        .await
+        .and_then(|b| b.parse::<u32>().ok())
+        .unwrap_or(115200);
+    let enabled = node
+        .get_config("lora_enabled")
+        .await
+        .map(|e| e == "true")
+        .unwrap_or(false);
+    let active = node
+        .lora_bridge
+        .as_ref()
+        .map(|b| b.is_active())
+        .unwrap_or(false);
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "ok": true,
+            "port": port,
+            "baud": baud,
+            "enabled": enabled,
+            "active": active
+        })),
+    )
+}
+
 async fn handle_set_lora_config(
     State(state): State<ApiState>,
     Json(req): Json<LoraConfigRequest>,
 ) -> impl IntoResponse {
-    let mut node = state.node.lock().await;
-    futures::executor::block_on(async {
-        node.set_nickname(&format!("__lora_port__:{}", req.port))
-            .await
-    });
-    drop(node);
+    // 1. Persistencia asíncrona segura en Sled bajo claves dedicadas (respetando el apodo del usuario)
+    {
+        let node = state.node.lock().await;
+        node.set_config("lora_port", &req.port).await;
+        node.set_config("lora_baud", &req.baud.to_string()).await;
+        node.set_config("lora_enabled", if req.enabled { "true" } else { "false" }).await;
+    }
 
+    // 2. Si está habilitado, acoplar el puente físico LoRa en caliente
     if req.enabled {
         let _ = red_core::network::Node::attach_lora_bridge(
             state.node.clone(),
@@ -2213,7 +2249,7 @@ async fn handle_set_lora_config(
     }
 
     tracing::info!(
-        "[API] LoRa config saved and attached: port={}, baud={}, enabled={}",
+        "[API] LoRa config guardada en Sled y transceptor acoplado: port={}, baud={}, enabled={}",
         req.port,
         req.baud,
         req.enabled
@@ -2225,7 +2261,7 @@ async fn handle_set_lora_config(
             "ok": true,
             "port": req.port,
             "baud": req.baud,
-            "note": "Config persisted and radio bridge attached in hot runtime."
+            "note": "Configuracion persistida en Sled sin alterar el perfil del operador."
         })),
     )
 }
@@ -2757,8 +2793,21 @@ async fn handle_mark_read(
     let node = state.node.lock().await;
     match node.get_sync_payload().await {
         Ok((_, _, conversations)) => {
+            let clean_conv_id = conv_id.to_lowercase().replace("did:red:", "");
             let conv = conversations.iter().find(|c| {
-                format!("{}-{}", c.our_identity.short(), c.their_identity.short()) == conv_id
+                let legacy_id = format!("{}-{}", c.our_identity.short(), c.their_identity.short()).to_lowercase();
+                let their_hex = c.their_identity.to_hex().to_lowercase();
+                let our_hex = c.our_identity.to_hex().to_lowercase();
+                let their_short = c.their_identity.short().to_lowercase();
+
+                legacy_id == clean_conv_id
+                    || their_hex == clean_conv_id
+                    || their_short == clean_conv_id
+                    || clean_conv_id.contains(&their_short)
+                    || clean_conv_id.contains(&their_hex)
+                    || their_hex.starts_with(&clean_conv_id)
+                    || our_hex == clean_conv_id
+                    || c.id.to_string().to_lowercase() == clean_conv_id
             });
             match conv {
                 Some(c) => {

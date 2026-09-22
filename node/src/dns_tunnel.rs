@@ -1,18 +1,27 @@
 // RED v64.0.0 — Native Rust DNS Tunneling Server Module
 // Engine for encoding/decoding Noise XK frames into UDP 53 DNS Queries for Zero-Balance cellular bypass.
 
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::net::UdpSocket;
+use tokio::sync::Mutex;
 use tracing::{error, info};
 
 use red_core::network::Node;
-use tokio::sync::Mutex;
+
+struct ShardAssembly {
+    chunks: HashMap<usize, String>,
+    total: usize,
+    created_at: Instant,
+}
 
 pub struct DnsTunnelServer {
     pub is_active: bool,
     pub domain_zone: String,
     pub packets_processed: std::sync::atomic::AtomicU64,
     pub node: Arc<Mutex<Node>>,
+    assemblies: Arc<Mutex<HashMap<String, ShardAssembly>>>,
 }
 
 impl DnsTunnelServer {
@@ -22,6 +31,7 @@ impl DnsTunnelServer {
             domain_zone: domain_zone.to_string(),
             packets_processed: std::sync::atomic::AtomicU64::new(0),
             node,
+            assemblies: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -102,47 +112,99 @@ impl DnsTunnelServer {
         }
         let qname_end = idx;
 
-        // 3. Decode payload: strip known RED zone suffixes and session metadata labels,
-        //    then concatenate all remaining Base32 chunks and decode.
-        //    Supported zones: "dns.redmesh.net" (TS client default) and "red.mesh" (legacy)
+        // 3. Decode payload: parse session metadata labels, reassemble multipart buffers,
+        //    then decode Base32 into native binary message.
         let qname_str = String::from_utf8_lossy(&qname).to_string();
         let normalized = qname_str.to_uppercase();
-        // Strip zone suffix (either variant)
         let zone_stripped = normalized
             .trim_end_matches(".DNS.REDMESH.NET")
             .trim_end_matches(".RED.MESH")
             .to_string();
-        // Remove session metadata labels: s<id>.p<n>of<n>
-        // Labels look like: CHUNK1.S1A2B.P1OF3 → we want only CHUNK1
-        let payload_parts: Vec<&str> = zone_stripped
-            .split('.')
-            .filter(|label| {
-                !(label.is_empty()
-                    // drop session-id label: starts with S and rest is alnum
-                    || (label.starts_with('S') && label.len() >= 4 && label[1..].chars().all(|c| c.is_alphanumeric()))
-                    // drop position label: starts with P and contains OF
-                    || (label.starts_with('P') && label.contains("OF")))
-            })
-            .collect();
-        let payload_str = payload_parts.join("");
 
-        // Use base32 decode (standard RFC4648 without padding)
-        let decoded = data_encoding::BASE32_NOPAD
-            .decode(payload_str.as_bytes())
-            .unwrap_or_default();
+        let labels: Vec<&str> = zone_stripped.split('.').filter(|l| !l.is_empty()).collect();
 
-        if !decoded.is_empty() {
-            info!(
-                "[DNS Tunnel] Recibido payload real Base32, bytes: {}",
-                decoded.len()
-            );
-            // Attempt to deserialize into a Message
-            if let Ok(msg) = bincode::deserialize::<red_core::protocol::Message>(&decoded) {
-                let mut node = self.node.lock().await;
-                info!("[DNS Tunnel] Inyectando mensaje de {}", msg.sender.to_hex());
-                node.handle_incoming_message(msg).await;
+        let mut chunk_data = String::new();
+        let mut session_id = String::new();
+        let mut part_idx = 1usize;
+        let mut total_parts = 1usize;
+
+        for label in &labels {
+            if label.starts_with('S') && label.len() >= 4 && label[1..].chars().all(|c| c.is_alphanumeric()) {
+                session_id = label.to_string();
+            } else if label.starts_with('P') && label.contains("OF") {
+                let parts: Vec<&str> = label[1..].split("OF").collect();
+                if parts.len() == 2 {
+                    if let (Ok(p), Ok(tot)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
+                        part_idx = p;
+                        total_parts = tot;
+                    }
+                }
             } else {
-                error!("[DNS Tunnel] Falló la deserialización bincode del mensaje");
+                chunk_data.push_str(label);
+            }
+        }
+
+        let full_payload_opt = if total_parts <= 1 || session_id.is_empty() {
+            Some(chunk_data)
+        } else {
+            let mut assemblies = self.assemblies.lock().await;
+            // Purga de sesiones expiradas (> 30s)
+            let now = Instant::now();
+            assemblies.retain(|_, v| now.duration_since(v.created_at) < Duration::from_secs(30));
+
+            let entry = assemblies.entry(session_id.clone()).or_insert_with(|| ShardAssembly {
+                chunks: HashMap::new(),
+                total: total_parts,
+                created_at: now,
+            });
+
+            entry.chunks.insert(part_idx, chunk_data);
+
+            if entry.chunks.len() >= entry.total {
+                let mut assembled = String::new();
+                for i in 1..=entry.total {
+                    if let Some(c) = entry.chunks.get(&i) {
+                        assembled.push_str(c);
+                    }
+                }
+                assemblies.remove(&session_id);
+                Some(assembled)
+            } else {
+                None
+            }
+        };
+
+        if let Some(payload_str) = full_payload_opt {
+            let decoded = data_encoding::BASE32_NOPAD
+                .decode(payload_str.as_bytes())
+                .unwrap_or_default();
+
+            if !decoded.is_empty() {
+                info!(
+                    "[DNS Tunnel] Recibido payload Base32 reensamblado, bytes: {}",
+                    decoded.len()
+                );
+
+                // Soporte dual: bincode directo o hex-decodificado
+                let target_bytes = if let Ok(hex_str) = std::str::from_utf8(&decoded) {
+                    if hex_str.len() % 2 == 0 && hex_str.chars().all(|c| c.is_ascii_hexdigit()) {
+                        hex::decode(hex_str.trim()).unwrap_or(decoded)
+                    } else {
+                        decoded
+                    }
+                } else {
+                    decoded
+                };
+
+                if let Ok(msg) = bincode::deserialize::<red_core::protocol::Message>(&target_bytes) {
+                    let mut node = self.node.lock().await;
+                    info!("[DNS Tunnel] Inyectando mensaje de {}", msg.sender.to_hex());
+                    node.handle_incoming_message(msg).await;
+                } else {
+                    let mut node = self.node.lock().await;
+                    info!("[DNS Tunnel] Inyectando frame crudo de {} bytes", target_bytes.len());
+                    let _ = node.inject_raw_payload(target_bytes).await;
+                }
             }
         }
 

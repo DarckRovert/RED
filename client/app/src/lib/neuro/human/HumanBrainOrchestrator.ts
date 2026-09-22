@@ -22,6 +22,8 @@ import { TheoryOfMindEpistemicEngine, TheoryOfMindTelemetry } from './TheoryOfMi
 import { TacticalWorkingMemoryEngine, WorkingMemoryTelemetry } from './TacticalWorkingMemoryEngine';
 import { InsularTcccInteroceptionEngine, InteroceptionTelemetry } from './InsularTcccInteroceptionEngine';
 import { OrbitofrontalValuationEngine, OrbitofrontalTelemetry } from './OrbitofrontalValuationEngine';
+import { meshRouter } from '../../mesh/meshRouter';
+import { TacticalLocationEngine } from '../../sensors/TacticalLocationEngine';
 
 export interface HumanBrainTelemetrySnapshot {
   timestamp: number;
@@ -110,7 +112,6 @@ export class HumanBrainOrchestrator {
     // 4. Ingesta reactiva de tráfico de malla DTN hacia los motores corticales
     let unsubMesh: (() => void) | null = null;
     try {
-      const { meshRouter } = require('../../mesh/meshRouter');
       unsubMesh = meshRouter.onLocalDelivery((packet: any) => {
         try {
           if (!packet || !packet.payload) return;
@@ -140,7 +141,6 @@ export class HumanBrainOrchestrator {
     // 5. Acoplar geoposición sensorial a la memoria de trabajo DLPFC
     let unsubLocation: (() => void) | null = null;
     try {
-      const { TacticalLocationEngine } = require('../../sensors/TacticalLocationEngine');
       unsubLocation = TacticalLocationEngine.watchLocation((loc: any) => {
         if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
           this.workingMemory.evaluateSensoryTriggers({ lat: loc.lat, lon: loc.lon });

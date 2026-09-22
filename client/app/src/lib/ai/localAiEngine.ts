@@ -62,9 +62,13 @@ export interface HealthDiagnosticResponse {
 
 class LocalAIEngineClass {
     private classifierPipeline: any = null;
+    private classifierLoadingPromise: Promise<any> | null = null;
     private embeddingPipeline: any = null;
+    private extractorLoadingPromise: Promise<any> | null = null;
     private generatorPipeline: any = null;
+    private generatorLoadingPromise: Promise<any> | null = null;
     private asrPipeline: any = null;
+    private asrLoadingPromise: Promise<any> | null = null;
     private transformersLib: any = null;
 
     // ─── Off-Main-Thread Worker Bridge ──────────────────────────────────────────
@@ -151,11 +155,11 @@ class LocalAIEngineClass {
             const mod = await import('@xenova/transformers');
 
             // Offline-first: prioriza modelos en /models/ o caché del browser.
-            // allowRemoteModels=true permite la descarga única de HF si el modelo no está
-            // en caché local (ej. toxic-bert en instalación limpia). Tras la primera descarga
-            // el browser lo cachea y ya no se necesita internet.
+            // allowRemoteModels se desactiva estrictamente cuando no hay conexión WAN
+            // para evitar que Transformers.js congele el hilo con timeouts de red HTTP.
+            const isOnline = typeof navigator !== 'undefined' ? Boolean(navigator.onLine) : false;
             mod.env.allowLocalModels = true;
-            mod.env.allowRemoteModels = true;
+            mod.env.allowRemoteModels = isOnline;
             mod.env.useBrowserCache = true;
 
             // Absolute URL resolution for Android WebView / Capacitor
@@ -187,10 +191,14 @@ class LocalAIEngineClass {
     /** Disposes loaded WASM pipelines to free memory upon switching models or low RAM warning */
     public disposePipelines() {
         this.generatorPipeline = null;
+        this.generatorLoadingPromise = null;
         this.currentLoadedGeneratorId = null;
         this.classifierPipeline = null;
+        this.classifierLoadingPromise = null;
         this.embeddingPipeline = null;
+        this.extractorLoadingPromise = null;
         this.asrPipeline = null;
+        this.asrLoadingPromise = null;
         // Terminar el worker ONNX off-thread y limpiar requests pendientes
         if (this.worker) {
             for (const [, p] of this.pendingWorkerRequests) p.reject(new Error('disposePipelines called'));
@@ -221,32 +229,66 @@ class LocalAIEngineClass {
 
     /** Real Offline ONNX Toxic-BERT (multi-label) */
     private async getClassifier() {
-        if (!this.classifierPipeline) {
-            const tf = await this.getTransformers();
-            if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
-            this.classifierPipeline = await tf.pipeline('text-classification', 'Xenova/toxic-bert', {
+        if (this.classifierPipeline) return this.classifierPipeline;
+        if (this.classifierLoadingPromise) return this.classifierLoadingPromise;
+
+        const tf = await this.getTransformers();
+        if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
+
+        this.classifierLoadingPromise = this.withTimeout(
+            tf.pipeline('text-classification', 'Xenova/toxic-bert', {
                 quantized: true,
-            });
-        }
-        return this.classifierPipeline;
+            }),
+            35000,
+            'toxic-bert'
+        ).then(pipe => {
+            this.classifierPipeline = pipe;
+            this.classifierLoadingPromise = null;
+            return pipe;
+        }).catch(err => {
+            this.classifierLoadingPromise = null;
+            throw err;
+        });
+
+        return this.classifierLoadingPromise;
     }
 
     /** Multilingual Sentence Feature Extractor (384-Dim) */
     private async getExtractor() {
-        if (!this.embeddingPipeline) {
-            const tf = await this.getTransformers();
-            if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
+        if (this.embeddingPipeline) return this.embeddingPipeline;
+        if (this.extractorLoadingPromise) return this.extractorLoadingPromise;
+
+        const tf = await this.getTransformers();
+        if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
+
+        this.extractorLoadingPromise = (async () => {
             try {
-                this.embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
-                    quantized: true,
-                });
+                return await this.withTimeout(
+                    tf.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+                        quantized: true,
+                    }),
+                    35000,
+                    'all-MiniLM-L6-v2'
+                );
             } catch {
-                this.embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', {
-                    quantized: true,
-                });
+                return await this.withTimeout(
+                    tf.pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', {
+                        quantized: true,
+                    }),
+                    35000,
+                    'paraphrase-multilingual-MiniLM-L12-v2'
+                );
             }
-        }
-        return this.embeddingPipeline;
+        })().then(pipe => {
+            this.embeddingPipeline = pipe;
+            this.extractorLoadingPromise = null;
+            return pipe;
+        }).catch(err => {
+            this.extractorLoadingPromise = null;
+            throw err;
+        });
+
+        return this.extractorLoadingPromise;
     }
 
     /**
@@ -345,30 +387,57 @@ class LocalAIEngineClass {
             if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
                 cleanUrl = `http://${cleanUrl}`;
             }
-            const targetUrl = `${cleanUrl}/v1/audio/transcriptions`;
+            // [BUG-7 FIX] Prevenir duplicación /v1/v1 si el endpoint base ya incluye /v1
+            const targetUrl = cleanUrl.endsWith('/v1')
+                ? `${cleanUrl}/audio/transcriptions`
+                : `${cleanUrl}/v1/audio/transcriptions`;
 
             let blob: Blob;
+            let fileName = 'voice_note.wav';
             if (audioData instanceof Blob) {
                 blob = audioData;
+                if (blob.type.includes('webm')) fileName = 'voice_note.webm';
+                else if (blob.type.includes('ogg')) fileName = 'voice_note.ogg';
+                else if (blob.type.includes('mp4') || blob.type.includes('m4a') || blob.type.includes('aac')) fileName = 'voice_note.m4a';
+                else if (blob.type.includes('mpeg') || blob.type.includes('mp3')) fileName = 'voice_note.mp3';
             } else if (audioData instanceof ArrayBuffer) {
-                blob = new Blob([audioData], { type: 'audio/wav' });
+                const u8 = new Uint8Array(audioData);
+                const isWebm = u8.length >= 4 && u8[0] === 0x1a && u8[1] === 0x45 && u8[2] === 0xdf && u8[3] === 0xa3;
+                const isOgg = u8.length >= 4 && u8[0] === 0x4f && u8[1] === 0x67 && u8[2] === 0x67 && u8[3] === 0x53;
+                const mime = isWebm ? 'audio/webm' : (isOgg ? 'audio/ogg' : 'audio/wav');
+                fileName = isWebm ? 'voice_note.webm' : (isOgg ? 'voice_note.ogg' : 'voice_note.wav');
+                blob = new Blob([audioData], { type: mime });
             } else if (typeof audioData === 'string') {
                 if (audioData.startsWith('data:') || audioData.startsWith('http') || audioData.startsWith('blob:')) {
                     const resp = await fetch(audioData);
                     blob = await resp.blob();
+                    if (blob.type.includes('webm')) fileName = 'voice_note.webm';
+                    else if (blob.type.includes('ogg')) fileName = 'voice_note.ogg';
+                    else if (blob.type.includes('mp4') || blob.type.includes('m4a') || blob.type.includes('aac')) fileName = 'voice_note.m4a';
                 } else {
                     const binary = atob(audioData);
                     const bytes = new Uint8Array(binary.length);
                     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                    blob = new Blob([bytes], { type: 'audio/wav' });
+                    const isWebm = bytes.length >= 4 && bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3;
+                    const isOgg = bytes.length >= 4 && bytes[0] === 0x4f && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53;
+                    const mime = isWebm ? 'audio/webm' : (isOgg ? 'audio/ogg' : 'audio/wav');
+                    fileName = isWebm ? 'voice_note.webm' : (isOgg ? 'voice_note.ogg' : 'voice_note.wav');
+                    blob = new Blob([bytes], { type: mime });
                 }
             } else {
                 return null;
             }
 
+            // [BUG-7 FIX] Si el modelo configurado es un LLM de chat, conmutar a Whisper
+            const isGroq = cleanUrl.includes('groq.com');
+            const defaultWhisper = isGroq ? 'whisper-large-v3-turbo' : 'whisper-1';
+            const whisperModel = (sovereign.modelName && sovereign.modelName.toLowerCase().includes('whisper'))
+                ? sovereign.modelName
+                : defaultWhisper;
+
             const formData = new FormData();
-            formData.append('file', blob, 'voice_note.wav');
-            formData.append('model', sovereign.modelName || 'whisper-1');
+            formData.append('file', blob, fileName);
+            formData.append('model', whisperModel);
             formData.append('language', 'es');
 
             const headers: Record<string, string> = {};
@@ -424,9 +493,13 @@ class LocalAIEngineClass {
 
         for (const candidate of candidates) {
             try {
-                this.generatorPipeline = await tf.pipeline('text-generation', candidate, {
-                    quantized: true,
-                });
+                this.generatorPipeline = await this.withTimeout(
+                    tf.pipeline('text-generation', candidate, {
+                        quantized: true,
+                    }),
+                    45000,
+                    `generator-${candidate}`
+                );
                 this.currentLoadedGeneratorId = activeId;
                 console.warn(`[LocalAIEngine] ✅ Pipeline de inferencia cargado para: ${activeModel?.name || candidate}`);
                 break;
@@ -440,14 +513,28 @@ class LocalAIEngineClass {
 
     /** Automatic Speech Recognition Pipeline (Whisper-Tiny 39MB) */
     public async getTranscriber() {
-        if (!this.asrPipeline) {
-            const tf = await this.getTransformers();
-            if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
-            this.asrPipeline = await tf.pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny', {
+        if (this.asrPipeline) return this.asrPipeline;
+        if (this.asrLoadingPromise) return this.asrLoadingPromise;
+
+        const tf = await this.getTransformers();
+        if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
+
+        this.asrLoadingPromise = this.withTimeout(
+            tf.pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny', {
                 quantized: true,
-            });
-        }
-        return this.asrPipeline;
+            }),
+            45000,
+            'whisper-tiny'
+        ).then(pipe => {
+            this.asrPipeline = pipe;
+            this.asrLoadingPromise = null;
+            return pipe;
+        }).catch(err => {
+            this.asrLoadingPromise = null;
+            throw err;
+        });
+
+        return this.asrLoadingPromise;
     }
 
     /**
@@ -616,7 +703,7 @@ class LocalAIEngineClass {
             // ─ Nivel 0: Off-main-thread via Worker (no bloquea UI) ──────────────────────────────
         try {
             const workerRes = await this.dispatchToWorker<any>(
-                'CLASSIFY_SAFETY', { text: trimmed }, 'CLASSIFY_SAFETY_RESULT', 2000
+                'CLASSIFY_SAFETY', { text: trimmed }, 'CLASSIFY_SAFETY_RESULT', 5000
             );
             if (workerRes?.data) {
                 const d = workerRes.data;
@@ -631,6 +718,13 @@ class LocalAIEngineClass {
         } catch {/* worker no disponible — cae al path ONNX inline */}
 
         try {
+            // Si el clasificador aún no está cargado en memoria en el hilo principal,
+            // no bloquear la interfaz gráfica; iniciar la carga en background y evaluar contingencia
+            if (!this.classifierPipeline) {
+                this.getClassifier().catch(() => {});
+                throw new Error('Classifier warming up in background');
+            }
+
             const classifier = await this.getClassifier();
             const results: Array<{ label: string; score: number }> = await this.withTimeout(
                 classifier(trimmed, { topk: null }),
@@ -680,9 +774,16 @@ class LocalAIEngineClass {
                         'estafa gana dinero rápido airdrop duplica bitcoins link fraudulento'
                     ];
                     for (const anchor of HOSTILE_SEMANTIC_ANCHORS) {
-                        const anchorEmb = await this.extractEmbeddings(anchor);
-                        if (anchorEmb.fullVector && anchorEmb.fullVector.length > 0) {
-                            const sim = cosineSimilarity(emb.fullVector, anchorEmb.fullVector);
+                        let anchorVec = LocalAIEngineClass.hostileAnchorCache.get(anchor);
+                        if (!anchorVec) {
+                            const anchorEmb = await this.extractEmbeddings(anchor);
+                            if (anchorEmb.fullVector && anchorEmb.fullVector.length > 0) {
+                                anchorVec = anchorEmb.fullVector;
+                                LocalAIEngineClass.hostileAnchorCache.set(anchor, anchorVec);
+                            }
+                        }
+                        if (anchorVec && anchorVec.length > 0) {
+                            const sim = cosineSimilarity(emb.fullVector, anchorVec);
                             if (sim >= 0.75) {
                                 return {
                                     isToxic: true,
@@ -746,6 +847,7 @@ class LocalAIEngineClass {
      *  Cap: 256 entradas para prevenir OOM en dispositivos con RAM limitada (Moto G22, 4 GB) */
     private static readonly KB_VECTOR_CACHE_MAX = 256;
     private static kbVectorCache = new Map<string, number[]>();
+    private static hostileAnchorCache = new Map<string, number[]>();
 
     /** RAG Táctico Offline: Búsqueda Semántica Vectorial Híbrida (Léxica + Embeddings INT8 / 384-D) */
     public async findTacticalContext(query: string, categoryContext?: string): Promise<{ matchedFragment: KnowledgeFragment | null; similarity: number }> {
@@ -770,7 +872,7 @@ class LocalAIEngineClass {
             try {
                 const { vectorKnowledgeStore } = await import('./VectorKnowledgeStore');
                 const vResults = await vectorKnowledgeStore.search(query, 1);
-                if (vResults.length > 0 && vResults[0].similarityScore >= 0.70) {
+                if (vResults.length > 0 && vResults[0].similarityScore >= 0.38) {
                     const top = vResults[0];
                     const matchedFromKb = EMERGENCY_KNOWLEDGE_BASE.find(f => f.id === top.document.id || f.title.toLowerCase().includes(top.document.title.toLowerCase().slice(0, 15)));
                     if (matchedFromKb) {
@@ -799,50 +901,27 @@ class LocalAIEngineClass {
             const lexicalMatches = searchKnowledgeBaseLexical(query);
             const topLexical = lexicalMatches.length > 0 ? lexicalMatches[0] : null;
 
-            // 3. Coincidencia vectorial semántica densa (MiniLM 384-D)
-            let bestVecMatch: KnowledgeFragment | null = null;
-            let highestSim = 0;
-
-            try {
-                const emb = await this.extractEmbeddings(query);
-                const queryVec = emb.fullVector;
-                if (queryVec && queryVec.length > 0) {
-                    for (const frag of EMERGENCY_KNOWLEDGE_BASE) {
-                        const fragKey = frag.id || frag.title;
-                        let fragVec = LocalAIEngineClass.kbVectorCache.get(fragKey);
-                        if (!fragVec) {
-                            const fragEmb = await this.extractEmbeddings(`${frag.title} ${frag.summary}`);
-                            fragVec = fragEmb.fullVector;
-                            if (fragVec && fragVec.length > 0) {
-                                // Evicción LRU: si el caché alcanza el límite, eliminar la entrada más antigua
-                                if (LocalAIEngineClass.kbVectorCache.size >= LocalAIEngineClass.KB_VECTOR_CACHE_MAX) {
-                                    const oldestKey = LocalAIEngineClass.kbVectorCache.keys().next().value;
-                                    if (oldestKey) LocalAIEngineClass.kbVectorCache.delete(oldestKey);
-                                }
-                                LocalAIEngineClass.kbVectorCache.set(fragKey, fragVec);
-                            }
-                        }
-                        if (fragVec && fragVec.length > 0) {
-                            const sim = cosineSimilarity(queryVec, fragVec);
-                            if (sim > highestSim) {
-                                highestSim = sim;
-                                bestVecMatch = frag;
-                            }
-                        }
-                    }
-                }
-            } catch (embErr) {
-                console.warn('[RED Vector Extraction Fallback]', embErr);
-            }
-
-            if (bestVecMatch && highestSim > 0.40) {
-                return { matchedFragment: bestVecMatch, similarity: parseFloat(highestSim.toFixed(2)) };
-            }
-
-            if (topLexical && topLexical.score >= 2.0) {
+            if (topLexical && topLexical.score >= 1.5) {
                 const normalizedSim = Math.min(0.98, parseFloat((0.70 + (topLexical.score / 20)).toFixed(2)));
                 return { matchedFragment: topLexical.fragment, similarity: normalizedSim };
             }
+
+            // 3. Fallback semántico sin bloqueo secuencial
+            if (topLexical && topLexical.score > 0) {
+                return { matchedFragment: topLexical.fragment, similarity: 0.50 };
+            }
+
+            try {
+                const { vectorKnowledgeStore } = await import('./VectorKnowledgeStore');
+                const vResults = await vectorKnowledgeStore.search(query, 1);
+                if (vResults.length > 0 && vResults[0].similarityScore >= 0.20) {
+                    const top = vResults[0];
+                    const matchedFromKb = EMERGENCY_KNOWLEDGE_BASE.find(f => f.id === top.document.id);
+                    if (matchedFromKb) {
+                        return { matchedFragment: matchedFromKb, similarity: parseFloat(top.similarityScore.toFixed(2)) };
+                    }
+                }
+            } catch {}
 
             return { matchedFragment: null, similarity: 0 };
         } catch (e) {
@@ -1393,11 +1472,33 @@ class LocalAIEngineClass {
             }
         }
 
-        // 2. Nivel 2: Intentar con generador ONNX WASM (si está cargado)
+        // 2. Nivel 2: Inferencia en Web Worker off-thread (no bloquea UI en Moto G22)
+        try {
+            const workerRes = await this.dispatchToWorker<any>(
+                'SUMMARIZE_CHANNEL',
+                { messages },
+                'SUMMARIZE_CHANNEL_RESULT',
+                15000
+            );
+            if (workerRes?.data?.summaryBullets && workerRes.data.summaryBullets.length > 0) {
+                return {
+                    summaryBullets: workerRes.data.summaryBullets,
+                    sentiment: workerRes.data.sentiment || 'Análisis Neuronal Completado',
+                    totalMessages: count,
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
+            }
+        } catch {/* Worker timeout o no disponible, continuar al fallback */}
+
+        // 3. Nivel 3: Intentar con generador ONNX WASM inline (si está cargado)
         try {
             if (this.generatorPipeline) {
                 const generator = await this.getGenerator();
-                const output = await generator(`Summarize: ${sampleText}`, { max_new_tokens: 100 });
+                const output = await this.withTimeout(
+                    generator(`Summarize: ${sampleText}`, { max_new_tokens: 100 }),
+                    6000,
+                    'Channel Summarize'
+                );
 
                 if (Array.isArray(output) && output[0]?.generated_text) {
                     return {
@@ -1413,7 +1514,7 @@ class LocalAIEngineClass {
             }
         } catch {}
 
-        // 2. Extractor Estadístico NLP de Alta Fidelidad (TF-IDF + Heurística de Alertas)
+        // 4. Nivel 4: Extractor Estadístico NLP de Alta Fidelidad (TF-IDF + Heurística de Alertas)
         const stopwords = new Set([
             'de', 'la', 'que', 'el', 'en', 'y', 'a', 'los', 'del', 'se', 'las', 'por', 'un', 'para',
             'con', 'no', 'una', 'su', 'al', 'lo', 'como', 'más', 'pero', 'sus', 'le', 'ya', 'o',
@@ -1549,7 +1650,25 @@ class LocalAIEngineClass {
             }
         }
 
-        // 2. Nivel 2: Inferencia neuronal mediante generador local WASM si está disponible
+        // 2. Nivel 2: Inferencia en Web Worker off-thread (no bloquea UI en Moto G22)
+        try {
+            const workerRes = await this.dispatchToWorker<any>(
+                'TRANSLATE_TEXT',
+                { text: trimmed, targetLang },
+                'TRANSLATE_TEXT_RESULT',
+                12000
+            );
+            if (workerRes?.data?.translatedText && workerRes.data.translatedText.trim().length > 0) {
+                return {
+                    originalText: text,
+                    translatedText: workerRes.data.translatedText.trim(),
+                    targetLang,
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
+            }
+        } catch {/* Worker timeout o no disponible, continuar al fallback inline */}
+
+        // 3. Nivel 3: Inferencia neuronal mediante generador local WASM si está disponible
         try {
             const prompt = `<|im_start|>system\nEres un traductor táctico militar y de emergencias de alta fidelidad. Traduce el siguiente texto al ${targetName}. Devuelve EXCLUSIVAMENTE la traducción exacta del mensaje, sin preámbulos, sin comillas, sin explicaciones ni texto adicional.\n<|im_end|>\n<|im_start|>user\n${trimmed}\n<|im_end|>\n<|im_start|>assistant\n`;
 
@@ -1828,43 +1947,85 @@ class LocalAIEngineClass {
         };
     }
 
-    /** Extractor de Embeddings Neuronal 384-Dim (Motor Nativo Rust ARM64 / NNAPI) */
-    public async extractEmbeddings(text: string) {
-        zeroFootprintAiMemoryManager.notifyInferenceStart();
-        try {
-            const start = performance.now();
-            const trimmed = text.trim();
+    /** Extractor de Embeddings Neuronal 384-Dim (Web Worker ONNX / Inline Fallback / Fast Hash Fallback) */
+    public async extractEmbeddings(text: string): Promise<{
+        dimensions: number;
+        magnitude: string;
+        vectorPreview: string[];
+        fullVector: number[];
+        executionTimeMs: number;
+    }> {
+        const trimmed = text.trim();
+        if (!trimmed) {
+            return {
+                dimensions: 384,
+                magnitude: "0.0000",
+                vectorPreview: [],
+                fullVector: new Array(384).fill(0),
+                executionTimeMs: 0,
+            };
+        }
 
+        zeroFootprintAiMemoryManager.notifyInferenceStart();
+        const start = performance.now();
+        try {
+            // Nivel 0: Despacho prioritario a Web Worker (Off-Main-Thread para evitar ANR y congelamiento de UI)
             try {
-                const resp = await fetch('http://127.0.0.1:7333/api/ai/embeddings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: trimmed }),
-                });
-                if (resp.ok) {
-                    const data = await resp.json();
+                const workerRes = await this.dispatchToWorker<any>(
+                    'EXTRACT_EMBEDDINGS',
+                    { text: trimmed },
+                    'EXTRACT_EMBEDDINGS_RESULT',
+                    10000
+                );
+                if (workerRes?.data?.fullVector && workerRes.data.fullVector.length > 0) {
                     return {
-                        dimensions: data.dimensions || 384,
-                        magnitude: data.magnitude ? data.magnitude.toFixed(4) : "1.0000",
-                        vectorPreview: data.vector_preview || [],
-                        fullVector: data.full_vector || [],
+                        dimensions: workerRes.data.dimensions || workerRes.data.fullVector.length,
+                        magnitude: workerRes.data.magnitude || "1.0000",
+                        vectorPreview: workerRes.data.vectorPreview || workerRes.data.fullVector.slice(0, 10).map((v: number) => v.toFixed(6)),
+                        fullVector: workerRes.data.fullVector,
+                        executionTimeMs: workerRes.executionTimeMs ?? Math.round(performance.now() - start),
+                    };
+                }
+            } catch {
+                // Worker no disponible o timeout: continuar al path inline
+            }
+
+            // Nivel 1: Inferencia local en Transformers.js inline si el worker falló
+            try {
+                const extractor = await this.getExtractor();
+                if (extractor) {
+                    const tensor = await extractor(trimmed, { pooling: 'mean', normalize: true });
+                    const vecData = Array.from(tensor.data as Float32Array);
+                    if (tensor && typeof (tensor as any).dispose === 'function') {
+                        try { (tensor as any).dispose(); } catch {}
+                    }
+                    const norm = vecData.reduce((acc, v) => acc + v * v, 0);
+                    const magnitude = Math.sqrt(norm).toFixed(4);
+
+                    return {
+                        dimensions: vecData.length,
+                        magnitude,
+                        vectorPreview: vecData.slice(0, 10).map(v => v.toFixed(6)),
+                        fullVector: vecData,
                         executionTimeMs: Math.round(performance.now() - start),
                     };
                 }
-            } catch {}
+            } catch (inlineErr) {
+                console.warn('[LocalAIEngine] Inline ONNX extractor no disponible, usando fallback determinista:', inlineErr);
+            }
 
-            // Fallback local instantáneo sin bloquear el hilo principal
-            const extractor = await this.getExtractor();
-            const tensor = await extractor(trimmed, { pooling: 'mean', normalize: true });
-            const vecData = Array.from(tensor.data as Float32Array);
-            const norm = vecData.reduce((acc, v) => acc + v * v, 0);
+            // Nivel 2: Fallback determinista hiper-rápido INT8 MurmurHash3 (384-D)
+            const { VectorKnowledgeStore } = await import('./VectorKnowledgeStore');
+            const int8Vec = VectorKnowledgeStore.generateEmbedding(trimmed, 384);
+            const floatVec = Array.from(int8Vec, (val) => Number((val / 127.0).toFixed(6)));
+            const norm = floatVec.reduce((acc, v) => acc + v * v, 0);
             const magnitude = Math.sqrt(norm).toFixed(4);
 
             return {
-                dimensions: vecData.length,
+                dimensions: 384,
                 magnitude,
-                vectorPreview: vecData.slice(0, 10).map(v => v.toFixed(6)),
-                fullVector: vecData,
+                vectorPreview: floatVec.slice(0, 10).map(v => v.toFixed(6)),
+                fullVector: floatVec,
                 executionTimeMs: Math.round(performance.now() - start),
             };
         } finally {
@@ -2037,6 +2198,7 @@ class LocalAIEngineClass {
     public destroy(): void {
         this.disposePipelines();
         LocalAIEngineClass.kbVectorCache.clear();
+        LocalAIEngineClass.hostileAnchorCache.clear();
         LocalAIEngineClass.lastSyncCache.clear();
         LocalAIEngineClass.sessionDialogHistory = [];
     }
@@ -2044,3 +2206,8 @@ class LocalAIEngineClass {
 
 export const LocalAIEngine = new LocalAIEngineClass();
 export const localAiEngine = LocalAIEngine;
+
+// Conectar callback de purga con el gestor de memoria zero-footprint
+zeroFootprintAiMemoryManager.registerPurgeCallback(() => {
+    LocalAIEngine.disposePipelines();
+});

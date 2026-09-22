@@ -20,6 +20,8 @@
  *    para evitar ceguera topológica y descubrir nuevos nodos sin saturar el canal RF.
  */
 
+import { RingAttractorEngine } from './RingAttractorEngine';
+
 export interface RfSectorHistogram {
   sectors: number[];                 // 16 sectores circulares con media móvil LQS [0, 100]
   samples: number[];                 // Conteo de paquetes recibidos por sector
@@ -809,7 +811,6 @@ export class SynapticMeshRouterEngine {
     // Si la confianza es notable y hay al menos 3 muestras, propagar al RingAttractor
     if (decoded.bearingDeg !== null && decoded.confidence >= 0.20 && hist.totalSamples >= 3) {
       try {
-        const { RingAttractorEngine } = require('./RingAttractorEngine');
         RingAttractorEngine.getInstance().injectRfBearingCue(link.peerId, decoded.bearingDeg, decoded.confidence);
       } catch {}
     }
@@ -888,7 +889,6 @@ export class SynapticMeshRouterEngine {
    */
   private getCurrentHeadingSafe(): number | null {
     try {
-      const { RingAttractorEngine } = require('./RingAttractorEngine');
       return RingAttractorEngine.getInstance().getTelemetry().headingDeg;
     } catch {
       return null;

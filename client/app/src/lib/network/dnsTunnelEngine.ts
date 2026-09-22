@@ -98,16 +98,25 @@ export class DnsTunnelEngine {
   ];
 
   /**
-   * Encapsula un mensaje cifrado Noise XK en subdominios DNS (max 63 chars por etiqueta)
+   * Encapsula un mensaje cifrado Noise XK o trama binaria en subdominios DNS (max 63 chars por etiqueta)
    */
-  public static packPayloadIntoDnsQuery(encryptedPayloadHex: string, domainZone = "dns.redmesh.net"): string[] {
-    const rawStr = typeof encryptedPayloadHex === 'string' ? encryptedPayloadHex : '';
-    if (!rawStr) return [];
-    const rawBytes = new TextEncoder().encode(rawStr);
+  public static packPayloadIntoDnsQuery(payload: string | Uint8Array, domainZone = "dns.redmesh.net"): string[] {
+    let rawBytes: Uint8Array;
+    if (payload instanceof Uint8Array) {
+      rawBytes = payload;
+    } else if (typeof payload === 'string' && payload.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(payload)) {
+      // Si es una cadena hexadecimal, decodificar a bytes directos para reducir a la mitad el volumen DNS
+      const match = payload.match(/.{1,2}/g);
+      rawBytes = match ? new Uint8Array(match.map(b => parseInt(b, 16))) : new TextEncoder().encode(payload);
+    } else {
+      rawBytes = new TextEncoder().encode(String(payload || ''));
+    }
+
+    if (!rawBytes || rawBytes.length === 0) return [];
     const b32 = encodeBase32(rawBytes);
     if (!b32) return [];
     
-    // Fragmentar en etiquetas DNS de máximo 48 caracteres para seguridad
+    // Fragmentar en etiquetas DNS de máximo 48 caracteres para cumplir con RFC 1035
     const CHUNK_SIZE = 48;
     const chunks: string[] = [];
     const rand = typeof crypto !== 'undefined' && crypto.getRandomValues ? crypto.getRandomValues(new Uint16Array(1))[0] : (Date.now() & 0xffff);

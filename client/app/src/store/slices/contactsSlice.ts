@@ -80,16 +80,22 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         
         // Persist contact using full addContact workflow (creates conversation + deduplicates + syncs to DB)
         // Mark isAcceptingHandshake = true to prevent re-broadcasting a redundant contact_request
-        await get().addContact(req.senderHash, req.senderName, req.senderPk, true);
+        await get().addContact(req.senderHash, req.senderName, req.senderPk, true, req.kyber_public_key, req.x25519_public_key);
 
         // Send signed contact_response via direct message and local mesh broadcast
         if (identity?.identity_hash) {
+            const localKyber = typeof window !== 'undefined' ? (localStorage.getItem('red_pqc_kyber_public_key') || '') : '';
+            const localX25519 = typeof window !== 'undefined' ? (localStorage.getItem('red_pqc_x25519_public_key') || '') : '';
             const respPayload = JSON.stringify({
                 type: 'contact_response',
                 id: `cres_${Date.now()}_${identity.identity_hash.slice(0, 8)}`,
                 sender_hash: identity.identity_hash,
                 sender_name: identity.nickname || 'Operador RED',
                 sender_pk: identity.public_key || null,
+                sender_kyber_pk: localKyber || null,
+                sender_x25519_pk: localX25519 || null,
+                kyber_public_key: localKyber || null,
+                x25519_public_key: localX25519 || null,
                 avatar_url: identity.avatar_url || null,
                 channel: req.channel || 'Mesh',
                 accepted: true,
@@ -198,6 +204,16 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         // Send deletion to Rust backend (contacts & conversations)
         try { await RedAPI.req(`/contacts/${target}`, { method: 'DELETE' }); } catch {}
         try { await RedAPI.req(`/conversations/${target}/clear`, { method: 'DELETE' }); } catch {}
+
+        // Notify Web Companion if paired
+        try {
+            import('../../lib/mesh/companionSyncEngine').then(({ companionSyncEngine }) => {
+                if (companionSyncEngine.isLiveSessionActive()) {
+                    companionSyncEngine.publishLiveEvent('LIVE_CONV_WIPE', { peer: target }).catch(() => {});
+                    companionSyncEngine.publishLiveEvent('LIVE_CONTACT_UPDATE', { peer: target, action: 'deleted' }).catch(() => {});
+                }
+            }).catch(() => {});
+        } catch {}
 
         toast.info('🗑️ Contacto eliminado');
     },
@@ -453,11 +469,23 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         RedAPI.setWebStore('red_web_contacts', updatedContacts);
         RedAPI.setWebStore('red_web_conversations', updatedConvs);
 
+        // Notify Web Companion if paired
+        try {
+            import('../../lib/mesh/companionSyncEngine').then(({ companionSyncEngine }) => {
+                if (companionSyncEngine.isLiveSessionActive()) {
+                    companionSyncEngine.publishLiveEvent('LIVE_CONTACT_UPDATE', {
+                        peer: cleanHash,
+                        contact: localContact
+                    }).catch(() => {});
+                }
+            }).catch(() => {});
+        } catch {}
+
         // 5. Proactively announce identity & initiate WebRTC P2P link over meshRouter
         meshRouter.sendIdentityAnnounce(cleanHash).catch(() => {});
 
         try {
-            await RedAPI.addContact(cleanHash, cleanName, pubKey);
+            await RedAPI.addContact(cleanHash, cleanName, pubKey, kyberPubKey, x25519PubKey);
         } catch (err) {
             console.log(`[addContact] Local P2P contact registered: ${cleanHash.slice(0, 8)}`);
         }
@@ -468,6 +496,8 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         const myName = myIdentity?.nickname || 'Operador RED';
         if (!isAcceptingHandshake && myIdentity?.identity_hash) {
             trackProcessedHandshake(`${cleanHash.toLowerCase()}_res`);
+            const localKyber = typeof window !== 'undefined' ? (localStorage.getItem('red_pqc_kyber_public_key') || '') : '';
+            const localX25519 = typeof window !== 'undefined' ? (localStorage.getItem('red_pqc_x25519_public_key') || '') : '';
             const reqPayload = JSON.stringify({
                 type: 'contact_request',
                 msg_type: 'contact_request',
@@ -475,6 +505,10 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
                 sender_hash: myIdentity.identity_hash,
                 sender_name: myName,
                 sender_pk: myIdentity.public_key || null,
+                sender_kyber_pk: localKyber || null,
+                sender_x25519_pk: localX25519 || null,
+                kyber_public_key: localKyber || null,
+                x25519_public_key: localX25519 || null,
                 avatar_url: myIdentity.avatar_url || null,
                 channel: 'QR',
                 timestamp: Date.now()
@@ -544,15 +578,20 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             set({ pendingContactRequests: updatedPending, activeContactRequestModal: updatedPending[0] || null });
 
             // Auto-respond to each matched pending request
-            const myIdentity = get().identity;
             if (myIdentity?.identity_hash) {
                 for (const req of matchingPending) {
+                    const localKyber = typeof window !== 'undefined' ? (localStorage.getItem('red_pqc_kyber_public_key') || '') : '';
+                    const localX25519 = typeof window !== 'undefined' ? (localStorage.getItem('red_pqc_x25519_public_key') || '') : '';
                     const respPayload = JSON.stringify({
                         type: 'contact_response',
                         id: `cres_auto_${Date.now()}_${myIdentity.identity_hash.slice(0, 8)}`,
                         sender_hash: myIdentity.identity_hash,
                         sender_name: myIdentity.nickname || 'Operador RED',
                         sender_pk: myIdentity.public_key || null,
+                        sender_kyber_pk: localKyber || null,
+                        sender_x25519_pk: localX25519 || null,
+                        kyber_public_key: localKyber || null,
+                        x25519_public_key: localX25519 || null,
                         channel: req.channel || 'Mesh',
                         accepted: true,
                         timestamp: Date.now()

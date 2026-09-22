@@ -16,6 +16,7 @@
 
 import { loraTdmaScheduler } from './LoRaTdmaSchedulerEngine';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { loraBridge } from '../hardware/LoraSerialBridgeEngine';
 
 const RedNode = registerPlugin<any>('RedNode');
 
@@ -182,6 +183,10 @@ function decodeData(buf: Uint8Array): { portnum: MeshtasticPortNum; payload: Uin
             const dataSlice = new Uint8Array(buf.slice(offset, offset + len));
             offset += len;
             if (fieldNum === 2) payload = dataSlice;
+        } else if (wireType === 5) {
+            offset += 4;
+        } else if (wireType === 1) {
+            offset += 8;
         } else {
             break;
         }
@@ -321,6 +326,10 @@ export class LoRaMeshtasticBridge {
     private constructor() {
         loraTdmaScheduler.setTransmitHandler(async (framed: Uint8Array) => {
             return await this.transmitRawFramed(framed);
+        });
+        // Enlazar flujo crudo de radio procedente de LoraSerialBridgeEngine
+        loraBridge.onRawStream((bytes) => {
+            this.feedIncomingBytes(bytes);
         });
     }
 
@@ -465,6 +474,24 @@ export class LoRaMeshtasticBridge {
         this.knownNodes.set(nodeInfo.nodeNum, nodeInfo);
     }
 
+    public getLocalNodeNum(): number {
+        return this.localNodeInfo?.nodeNum || 0x12345678;
+    }
+
+    /**
+     * Retorna verdadero si hay un transceptor LoRa conectado físicamente (USB, BLE NUS o WebSerial)
+     */
+    public isRadioConnected(): boolean {
+        return this.isConnected || loraBridge.isConnected;
+    }
+
+    /**
+     * Canaliza la transmisión de tramas crudas encuadradas hacia el canal de hardware activo
+     */
+    public async transmitRawBytes(framed: Uint8Array): Promise<boolean> {
+        return await this.transmitRawFramed(framed);
+    }
+
     /**
      * Encapsulates and broadcasts a raw RED encrypted mesh frame over physical LoRa RF
      */
@@ -570,6 +597,10 @@ export class LoRaMeshtasticBridge {
     }
 
     private async transmitRawFramed(framed: Uint8Array, packetForLoopback?: LoRaPacket): Promise<boolean> {
+        if (loraBridge.isConnected) {
+            return await loraBridge.sendRawBytes(framed);
+        }
+
         if (!this.isConnected) {
             if (packetForLoopback) {
                 this.dispatchInbound(packetForLoopback);
@@ -619,12 +650,15 @@ export class LoRaMeshtasticBridge {
         if (buf[0] !== 0x94 || buf[1] !== 0xC3) return null;
 
         const len = (buf[2] << 8) | buf[3];
-        if (len < 16 || buf.length < 4 + len) return null;
+        if (len < 4 || buf.length < 4 + len) return null;
 
         const body = buf.slice(4, 4 + len);
 
-        // Check if body is Protobuf FromRadio (starts with field tags: 0x08 id, 0x12 packet, 0x1a my_info, 0x22 node_info)
-        const isProtobuf = (body[0] & 0x07) <= 5 && (body[0] === 0x08 || body[0] === 0x12 || body[0] === 0x1A || body[0] === 0x22 || body[0] === 0x38 || body[0] === 0x40);
+        // Check if body is Protobuf FromRadio (starts with field tags: 1..16, wireTypes 0, 2, 5)
+        const firstTag = body[0];
+        const firstWire = firstTag & 0x07;
+        const firstField = firstTag >>> 3;
+        const isProtobuf = (firstWire === 0 || firstWire === 2 || firstWire === 5) && firstField >= 1 && firstField <= 16;
 
         if (isProtobuf) {
             return this.unframeProtobufFromRadio(body);
@@ -699,6 +733,8 @@ export class LoRaMeshtasticBridge {
                 offset += vLen;
             } else if (wireType === 5) {
                 offset += 4;
+            } else if (wireType === 1) {
+                offset += 8;
             } else {
                 break;
             }
@@ -715,12 +751,27 @@ export class LoRaMeshtasticBridge {
             offset += tLen;
             const field = tag >>> 3;
             const wire = tag & 0x07;
-            if (wire === 5 && field === 1) {
-                myNum = decodeFixed32(slice, offset);
-                offset += 4;
+            if (field === 1) {
+                if (wire === 0) {
+                    const { value: v, bytesRead: vLen } = decodeVarint(slice, offset);
+                    myNum = v;
+                    offset += vLen;
+                } else if (wire === 5) {
+                    myNum = decodeFixed32(slice, offset);
+                    offset += 4;
+                } else {
+                    break;
+                }
             } else if (wire === 0) {
                 const { bytesRead: vLen } = decodeVarint(slice, offset);
                 offset += vLen;
+            } else if (wire === 2) {
+                const { value: skipLen, bytesRead: sklLen } = decodeVarint(slice, offset);
+                offset += sklLen + skipLen;
+            } else if (wire === 5) {
+                offset += 4;
+            } else if (wire === 1) {
+                offset += 8;
             } else {
                 break;
             }
@@ -751,9 +802,17 @@ export class LoRaMeshtasticBridge {
             offset += tLen;
             const field = tag >>> 3;
             const wire = tag & 0x07;
-            if (wire === 5 && field === 1) {
-                num = decodeFixed32(slice, offset);
-                offset += 4;
+            if (field === 1) {
+                if (wire === 0) {
+                    const { value: v, bytesRead: vLen } = decodeVarint(slice, offset);
+                    num = v;
+                    offset += vLen;
+                } else if (wire === 5) {
+                    num = decodeFixed32(slice, offset);
+                    offset += 4;
+                } else {
+                    break;
+                }
             } else if (wire === 2 && field === 2) {
                 // user info submessage
                 const { value: uLen, bytesRead: ulLen } = decodeVarint(slice, offset);
@@ -777,6 +836,10 @@ export class LoRaMeshtasticBridge {
                     } else if (uWire === 0) {
                         const { bytesRead: uvLen } = decodeVarint(userSlice, uOff);
                         uOff += uvLen;
+                    } else if (uWire === 5) {
+                        uOff += 4;
+                    } else if (uWire === 1) {
+                        uOff += 8;
                     } else {
                         break;
                     }
@@ -817,6 +880,10 @@ export class LoRaMeshtasticBridge {
             } else if (wire === 2) {
                 const { value: skipLen, bytesRead: sklLen } = decodeVarint(slice, offset);
                 offset += sklLen + skipLen;
+            } else if (wire === 5) {
+                offset += 4;
+            } else if (wire === 1) {
+                offset += 8;
             } else {
                 break;
             }
@@ -867,10 +934,18 @@ export class LoRaMeshtasticBridge {
         newBuf.set(value, this.rxBuffer.length);
         this.rxBuffer = newBuf;
 
+        // Protección de sobreflujo de memoria para dispositivos de recursos restringidos (Moto G22 / Redmi Note 14)
+        if (this.rxBuffer.length > 4096) {
+            this.rxBuffer = this.rxBuffer.slice(-512);
+        }
+
         while (this.rxBuffer.length >= 4) {
             const syncIdx = this.findSyncHeader(this.rxBuffer);
             if (syncIdx === -1) {
-                this.rxBuffer = new Uint8Array(0);
+                // Preservar byte 0x94 si quedó al final del buffer entre trozos de recepción
+                this.rxBuffer = (this.rxBuffer.length > 0 && this.rxBuffer[this.rxBuffer.length - 1] === 0x94)
+                    ? new Uint8Array([0x94])
+                    : new Uint8Array(0);
                 break;
             }
             if (syncIdx > 0) {
@@ -879,6 +954,13 @@ export class LoRaMeshtasticBridge {
             if (this.rxBuffer.length < 4) break;
 
             const frameLen = (this.rxBuffer[2] << 8) | this.rxBuffer[3];
+            // En Meshtastic v2 sobre LoRa MTU (237B), las tramas no exceden 512B ni bajan de 4B
+            if (frameLen < 4 || frameLen > 512) {
+                // Cabecera corrupta por ruido RF: descartar marcador y resincronizar
+                this.rxBuffer = this.rxBuffer.slice(2);
+                continue;
+            }
+
             const totalFrameLen = 4 + frameLen;
             if (this.rxBuffer.length < totalFrameLen) break;
 

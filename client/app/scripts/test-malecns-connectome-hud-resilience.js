@@ -88,7 +88,7 @@ console.log('  ✅ [PASS] 4. Suscripción Reactiva Cuádruple y Limpieza de Cicl
 
 // TEST 5: Filtrado de Subsistemas (ALL / CX / MB / GFS)
 console.log('  Testing 5: Aislamiento visual por subsistema biológico...');
-assert(hudCode.includes('filterSystem === "ALL" || n.system === filterSystem'), 'Debe filtrar nodos por subsistema');
+assert(hudCode.includes('filterSystem === "ALL" || n.system === filterSystem') || hudCode.includes('filterSystem !== "ALL" && n.system !== filterSystem'), 'Debe filtrar nodos por subsistema');
 assert(hudCode.includes('filterSystem !== "ALL" && edge.system !== filterSystem'), 'Debe filtrar axones por subsistema');
 console.log('  ✅ [PASS] 5. Aislamiento Visual por Subsistema (ALL, CX, MB, GFS)');
 

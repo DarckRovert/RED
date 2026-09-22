@@ -1,5 +1,29 @@
 # Changelog
 
+## [117.0.0-resiliencia-tactica-y-blindaje-p2p-de-grado-militar] - 2026-09-21
+
+### 🛡️ Resiliencia Táctica & Blindaje P2P de Grado Militar (Release Oficial v117.0.0)
+
+- **Normalización Canónica de Identidades (`wifiDirectTransport.ts`):**
+  - Unificación de identificadores de nodos en la malla eliminando discrepancias entre prefijos `peer_`, direcciones MAC, IPs loopback y nombres de dispositivo.
+  - Supresión de particiones en enjambres heterogéneos y bucles de reconexión concurrente.
+- **WebRTC Perfect Negotiation con Gracia Transitoria (`WebRtcTransport.ts`):**
+  - Resolución determinista de colisiones de ofertas SDP simultáneas ("glare") implementando Perfect Negotiation.
+  - Ventana de gracia de 5 segundos para reconexiones transitorias sin pérdida de canal.
+- **BLE Mesh MTU Adaptativo (`BleMeshTransport.ts`):**
+  - Negociación dinámica de fragmentos MTU previniendo desconexiones abruptas de clientes Android periféricos.
+- **Navegación Táctica & Supresión de "Null Island" (`PdrEngine.ts`, `KalmanFilter.ts`):**
+  - Erradicación de saltos a coordenadas (0,0) en PDR cuando el fix GNSS no es válido o está desfasado.
+  - Capping y estabilización de la matriz de covarianza del filtro de Kalman durante inmovilidad estática con deadband cinemático.
+- **Comunicaciones Críticas, Audio Mesh & Alertas SOS (`AudioStreamEngine.ts`, `VoiceMeshEngine.ts`, `MeshSosBeaconEngine.ts`, `EmergencyBanner.tsx`):**
+  - Compresión y procesamiento asíncrono de ráfagas PTT sin congelamiento del hilo de interfaz de usuario.
+  - Jitter buffer elástico para compensar fluctuaciones temporales en transmisiones de audio táctico.
+  - Persistencia inmutable atómica de alertas SOS en RedStore y saneamiento de suscripciones de eventos.
+- **Inteligencia Local y Seguridad Operacional (`RagVectorStore.ts`, `SatelliteBridge.ts`, `DuressPlausibleDeniability.ts`, `SecurityAuditEngine.ts`):**
+  - Cuantización INT8 en el almacén de vectores tácticos RAG logrando respuestas sub-5ms en consultas de supervivencia offline.
+  - Modelado cinemático para tracking satelital LEO y corrección de desplazamiento Doppler.
+  - Aislamiento riguroso del almacenamiento señuelo en modo coerción y validación matemática de firmas Ed25519 anti-replay.
+
 ## [116.0.0-arquitectura-bio-cibernetica-unificada] - 2026-09-21
 
 ### 🧠 Arquitectura Bio-Cibernética Unificada: MaleCNS + Neocórtex + GNWT + Kuramoto (Release Oficial v116.0.0)
@@ -15,18 +39,17 @@
   - Cálculo continuo del Parámetro de Orden de Kuramoto $R = \left|\frac{1}{N}\sum e^{i\theta_j}\right|$ para coherencia de fase del enjambre.
   - Discretización compacta a 1 byte ($[0,360) \to [0,255]$) sobre ranura Slot-8 LoRa TDMA.
   - Asignación de bit de protocolo `FLAG_KURAMOTO_SYNC = 0x40` (Bit 6) y broadcast reactivo en malla.
-- **HUD Táctico y Conectoma (`MaleCnsConnectomeHUD.tsx`, `ConnectomeCortexBridge.ts`):**
-  - Nueva pestaña `CONSCIOUS_SWARM_BUS` con medidor de ignición GNWT, monitores de $\Phi$ y $F$, visualizador circular de fase Kuramoto con vector $R$ y monitor estigmérgico de feromonas.
-  - Corrección de renderizado en React 19 eliminando lectura de `ref.current` durante render y transicionando a estado `isDraggingUI`.
-  - Inyección de instantánea consciente en el contexto de inferencia del copiloto LLM.
-- **Correcciones Críticas de Estabilidad, Memoria y Radio (`messageDispatcher.ts`, `authSlice.ts`, `MeshSosBeaconEngine.ts`, `NodeMap.tsx`):**
-  - Early-exit gates para `P2P_VOICE_BURST` y beacons `SOS_BEACON_V1` en `messageDispatcher.ts` para eliminar desbordamientos de memoria (OOM).
-  - Intercepción limpia de balizas SOS antes de degradación a texto plano y mapeo explícito de tipos en `authSlice.ts`.
-  - Supresión del bucle destructivo del watcher GNSS en `NodeMap.tsx` al desvincular dependencia inestable `[realGPS]`.
-  - Deadband cinemático (5 m / 8 s) e integración unificada de pares BLE y mesh para visualización cartográfica sin saturación de bus.
-- **Telemetría Nativa y Exportación Limpia en Android (`MainActivity.java`, `deploy-and-release.md`):**
-  - `WebView.setWebContentsDebuggingEnabled(true)` y reexpedición de consola a Logcat bajo etiqueta `RED_JS_CONSOLE`.
-  - Estandarización de `npm run build:mobile` en el pipeline de release para prevenir contaminación de rutas `/RED/` en el APK de producción.
+- **Persistencia de Estado de Mensajes No Leídos y Sincronización Rust/Web (`chatSlice.ts`, `client.ts`, `authSlice.ts`, `red_mobile/src/api.rs`, `node/src/api.rs`):**
+  - Erradicación de la resurrección de insignias (badges) no leídas al navegar o reiniciar la aplicación: persistencia inmediata de `unread_count: 0` en `localStorage` (`red_web_conversations` y `red_web_messages_*`).
+  - Resolución del conflicto de mezcla en `RedAPIClient.getConversations()` conservando el valor `0` local frente a respuestas asíncronas desfasadas del backend.
+  - Corrección de acumulación aditiva errónea (`Math.max` y preservación de 0) y salvaguarda en `fetchData` de `authSlice.ts`.
+  - Ampliación en Rust de `handle_mark_conversation_read` y `handle_mark_read` para aceptar variantes canónicas DID hex, hash corto y GUID.
+- **Optimización y Estabilidad Numérica del Conectoma 3D MaleCNS (`MaleCnsConnectomeHUD.tsx`, `RingAttractorEngine.ts`):**
+  - Desacoplamiento de las 11 suscripciones neurobiológicas de alta frecuencia de React a refs con compuerta de actualización por intervalos a 4 Hz, reduciendo el 99% de re-renders innecesarios.
+  - Capping de DPR del Canvas 3D a 1.5 en dispositivos móviles, reduciendo la saturación de fillrate y memoria de GPU.
+  - Indexación $O(1)$ de nodos vía `nodeMap` eliminando el cuello de botella cuadrático $O(N \cdot E)$ por frame.
+  - Integración numérica Euler Exponencial con sub-stepping (máx 10 ms) y salvaguardas contra valores `NaN`/`Infinity` en `RingAttractorEngine.ts`.
+  - Bucle de renderizado 3D resistente a montaje/desmontaje de pestañas y halo alfa de alto rendimiento para somas neuronales.
 
 ## [115.0.0-bug-fix-arquitectonico-dms-sse-loopback-sha256-dedup-rutas-api] - 2026-09-20
 

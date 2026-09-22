@@ -237,8 +237,7 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
             // badge doesn't reappear on next fetchData.
             const convForReceipt = existingConv || conversations.find(c => c.id === finalId);
             if (convForReceipt && (convForReceipt.unread_count || 0) > 0) {
-                // Tell Rust the conversation was read (best-effort, non-blocking)
-                RedAPI.req(`/conversations/${finalId}/read`, { method: 'POST' }).catch(() => {});
+                get().markAsRead(finalId);
             }
         } else {
             set({ currentScreen: screen, activeConversationId: null });

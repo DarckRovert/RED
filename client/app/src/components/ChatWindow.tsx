@@ -673,10 +673,16 @@ export default function ChatWindow() {
         if (isMine || isAtBottomRef.current) {
             scrollToBottom(true);
             setUnreadInChatCount(0);
+            if (activeConversationId) {
+                markAsRead(activeConversationId);
+            }
         } else {
             setUnreadInChatCount(c => c + 1);
         }
-    }, [convMessages.length]);
+    // [BUG-4 FIX] Incluir activeConversationId y markAsRead en las dependencias para que el closure
+    // siempre use el ID correcto. Sin esto, al navegar rápidamente entre chats (A→B), el efecto
+    // puede invocar markAsRead(A) en lugar de markAsRead(B), dejando el badge de B intacto.
+    }, [convMessages.length, activeConversationId, markAsRead]);
 
 
     const [replyTo, setReplyTo] = useState<MessageItem | null>(null);
@@ -695,6 +701,16 @@ export default function ChatWindow() {
     const [voicePreviewCurrentTime, setVoicePreviewCurrentTime] = useState(0);
     const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null);
     const recordStartTimeRef = useRef<number>(0);
+
+    // Revocar voicePreviewUrl al desmontar o cambiar para evitar fugas de memoria
+    useEffect(() => {
+        return () => {
+            if (voicePreviewUrl) {
+                try { URL.revokeObjectURL(voicePreviewUrl); } catch {}
+            }
+        };
+    }, [voicePreviewUrl]);
+
     // Media preview state
     const [mediaPreview, setMediaPreview] = useState<{ dataUrl: string; type: "image" | "video"; mimeType: string; caption: string } | null>(null);
     const [mediaSendPreviewData, setMediaSendPreviewData] = useState<{
@@ -981,20 +997,24 @@ export default function ChatWindow() {
         const waveform = voicePreviewWaveform;
         cancelVoicePreview();
         try {
-            const reader = new FileReader();
-            reader.onload = async () => {
-                const b64 = reader.result as string;
-                await sendMessage(b64, {
-                    msg_type: "voice",
-                    mime_type: recordedMimeTypeRef.current,
-                    duration_ms: Math.max(500, durSec * 1000),
-                    waveform: waveform.length > 0 ? waveform : undefined
-                });
-                TacticalAudioEngine.playMessageSent();
-            };
-            reader.readAsDataURL(blob);
+            const b64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result as string);
+                reader.onerror = (err) => reject(err);
+                reader.readAsDataURL(blob);
+            });
+            await sendMessage(b64, {
+                msg_type: "voice",
+                mime_type: recordedMimeTypeRef.current || "audio/webm",
+                duration_ms: Math.max(500, durSec * 1000),
+                waveform: waveform.length > 0 ? waveform : undefined
+            });
+            TacticalAudioEngine.playMessageSent();
             toast.success("Nota de voz enviada");
-        } catch { toast.error("Error al enviar nota de voz"); }
+        } catch (err) {
+            console.error("[ChatWindow] Error sending voice note:", err);
+            toast.error("Error al enviar nota de voz");
+        }
     };
 
     const compressImage = (file: File): Promise<string> => {
@@ -1658,8 +1678,9 @@ export default function ChatWindow() {
                                         a.pause();
                                         setVoicePreviewPlaying(false);
                                     } else {
-                                        a.play().catch(() => {});
-                                        setVoicePreviewPlaying(true);
+                                        a.play()
+                                            .then(() => setVoicePreviewPlaying(true))
+                                            .catch(() => setVoicePreviewPlaying(false));
                                     }
                                 }}
                                 style={{

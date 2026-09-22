@@ -58,6 +58,27 @@ export class MeshSosBeaconEngine {
                         const jsonStr = text.substring(14);
                         const beacon: SosBeaconPacket = JSON.parse(jsonStr);
                         this.processIncomingSosBeacon(beacon);
+                    } else if (text.startsWith('{')) {
+                        const obj = JSON.parse(text);
+                        if (obj.msg_type === 'sos_beacon' || obj.type === 'SOS_BEACON') {
+                            const b = obj.beacon || obj;
+                            this.processIncomingSosBeacon({
+                                id: b.id || b.beacon_id,
+                                issuerDid: b.sender_did || obj.sender || 'unknown',
+                                issuerName: b.sender_name || 'Operador en Peligro',
+                                coords: { lat: b.lat, lon: b.lon, alt: b.altitude },
+                                distressType: b.distress_type || 'GENERAL_DISTRESS',
+                                triageColor: b.triageColor || 'RED',
+                                note: b.note || 'ALERTA SOS SOLICITANDO AUXILIO',
+                                batteryLevel: b.battery_level ?? 100,
+                                timestamp: b.timestamp || Date.now(),
+                                active: b.is_active ?? b.active ?? true,
+                                hopCount: b.hopCount || 0
+                            });
+                        } else if (obj.msg_type === 'sos_resolve' || obj.type === 'SOS_RESOLVE') {
+                            const id = obj.sos_id || obj.id || obj.beacon_id;
+                            if (id) this.deactivateRemoteBeacon(id);
+                        }
                     }
                 } catch {}
             });
@@ -114,6 +135,35 @@ export class MeshSosBeaconEngine {
     }
 
     /**
+     * Almacena de forma determinista e idempotente una copia de la baliza en la bóveda DTN
+     * para reenvío oportunista por nodos mulas sin inundar la base de datos.
+     */
+    private enqueueBeaconInDtn(beacon: SosBeaconPacket, relayHop?: number) {
+        try {
+            const envelope = `SOS_BEACON_V1:${JSON.stringify(beacon)}`;
+            const bytes = new TextEncoder().encode(envelope);
+            const deterministicNonce = relayHop 
+                ? `sos_relay_${beacon.id}` 
+                : `sos_${beacon.id}`;
+
+            // Actualizar / reemplazar registro previo en DTN sin generar duplicados
+            dtnStorage.remove(deterministicNonce);
+
+            dtnStorage.enqueue({
+                recipient: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+                sender: beacon.issuerDid,
+                ttl: relayHop ? Math.max(1, 7 - relayHop) : 7,
+                flags: 0x01,
+                timestamp: beacon.timestamp,
+                nonce: deterministicNonce,
+                payload: bytes,
+            }, 10);
+        } catch (e) {
+            console.warn('[MeshSosBeaconEngine] Error enqueuing SOS in DTN:', e);
+        }
+    }
+
+    /**
      * Activa una baliza SOS y comienza la difusión de emergencia
      */
     public async activateSosBeacon(
@@ -122,13 +172,13 @@ export class MeshSosBeaconEngine {
         authorName: string
     ): Promise<SosBeaconPacket> {
         const now = Date.now();
-        const id = `SOS-${authorDid.substring(0, 8).toUpperCase()}-${now.toString(36).toUpperCase()}`;
+        const id = beaconData.id || `SOS-${authorDid.substring(0, 8).toUpperCase()}-${now.toString(36).toUpperCase()}`;
 
         const beacon: SosBeaconPacket = {
             id,
             issuerDid: authorDid,
             issuerName: authorName || 'Operador en Peligro',
-            coords: beaconData.coords || {},
+            coords: beaconData.coords ? { ...beaconData.coords } : {},
             distressType: beaconData.distressType || 'GENERAL_DISTRESS',
             triageColor: beaconData.triageColor || 'RED',
             note: beaconData.note || 'AUXILIO INMEDIATO REQUERIDO',
@@ -148,8 +198,11 @@ export class MeshSosBeaconEngine {
             `Baliza SOS activada: ${beacon.id} (${beacon.issuerName}) [${beacon.distressType}/${beacon.triageColor}] - ${beacon.note}`
         );
 
-        // Difusión inmediata
+        // 1. Difusión inmediata en vivo por la malla local
         await this.broadcastSosHeartbeat();
+
+        // 2. Custodia única e idempotente en DTN para transporte off-grid
+        this.enqueueBeaconInDtn(beacon);
 
         return beacon;
     }
@@ -160,8 +213,10 @@ export class MeshSosBeaconEngine {
     public async deactivateSosBeacon(beaconId?: string): Promise<boolean> {
         if (!this.myBeacon) return false;
 
+        const targetId = this.myBeacon.id;
         const cancelledBeacon: SosBeaconPacket = {
             ...this.myBeacon,
+            coords: this.myBeacon.coords ? { ...this.myBeacon.coords } : {},
             active: false,
             timestamp: Date.now(),
             note: 'EMERGENCIA CANCELADA / RESCATE COMPLETADO',
@@ -170,6 +225,11 @@ export class MeshSosBeaconEngine {
         this.myBeacon = null;
         this.meshBeacons.set(cancelledBeacon.id, cancelledBeacon);
         this.saveState();
+
+        // Purgar de la bóveda DTN para que el nodo no siga mulando un SOS cancelado
+        try {
+            dtnStorage.remove(`sos_${targetId}`);
+        } catch {}
 
         // Emitir paquete de desactivación a la malla
         try {
@@ -183,7 +243,7 @@ export class MeshSosBeaconEngine {
 
     /**
      * Actualiza las coordenadas de la baliza SOS activa cuando se obtiene un fix GNSS tardío
-     * y difunde inmediatamente la actualización a la malla.
+     * y difunde inmediatamente la actualización a la malla y a la custodia DTN.
      */
     public async updateCoords(coords: { lat: number; lon: number; alt?: number }) {
         if (!this.myBeacon || !this.myBeacon.active) return;
@@ -194,11 +254,14 @@ export class MeshSosBeaconEngine {
         };
         this.myBeacon.timestamp = Date.now();
         this.saveState();
+        
         await this.broadcastSosHeartbeat();
+        this.enqueueBeaconInDtn(this.myBeacon);
     }
 
     /**
-     * Emite una ráfaga de telemetría de la baliza SOS activa
+     * Emite una ráfaga de telemetría de la baliza SOS activa en vivo.
+     * Solo transmite por radio (BLE/LoRa/WiFi); NUNCA encola en DTN en cada latido.
      */
     public async broadcastSosHeartbeat() {
         if (!this.myBeacon || !this.myBeacon.active) return;
@@ -207,19 +270,8 @@ export class MeshSosBeaconEngine {
             const envelope = `SOS_BEACON_V1:${JSON.stringify(this.myBeacon)}`;
             const bytes = new TextEncoder().encode(envelope);
 
-            // 1. Envío prioritario por la malla local
+            // Envío prioritario por la malla local en vivo
             await meshRouter.broadcast(bytes);
-
-            // 2. Almacenamiento en Bóveda DTN con prioridad SOS máxima (10)
-            dtnStorage.enqueue({
-                recipient: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-                sender: this.myBeacon.issuerDid,
-                ttl: 7,
-                flags: 0x01,
-                timestamp: Date.now(),
-                nonce: `sos_${this.myBeacon.id}_${Date.now()}`,
-                payload: bytes,
-            }, 10);
         } catch (e) {
             console.warn('[MeshSosBeaconEngine] Heartbeat broadcast error:', e);
         }
@@ -231,18 +283,39 @@ export class MeshSosBeaconEngine {
     public processIncomingSosBeacon(beacon: SosBeaconPacket) {
         if (!beacon || !beacon.id) return;
 
+        // Ignorar ecos de nuestra propia baliza activa
+        if (this.myBeacon && (beacon.issuerDid === this.myBeacon.issuerDid || beacon.id === this.myBeacon.id)) {
+            return;
+        }
+
         const existing = this.meshBeacons.get(beacon.id);
         if (!existing || beacon.timestamp > existing.timestamp) {
             const isNewAlert = !existing && beacon.active;
-            beacon.hopCount = (beacon.hopCount || 0) + 1;
-            this.meshBeacons.set(beacon.id, beacon);
+            const nextHop = (beacon.hopCount || 0) + 1;
+
+            // Clonación inmutable para evitar mutaciones indeseadas por referencia
+            const updatedBeacon: SosBeaconPacket = {
+                ...beacon,
+                coords: beacon.coords ? { ...beacon.coords } : {},
+                hopCount: nextHop,
+            };
+
+            this.meshBeacons.set(beacon.id, updatedBeacon);
             this.saveState();
+
+            // Si la baliza remota fue cancelada o resuelta, purgar su custodia en DTN
+            if (!beacon.active) {
+                try {
+                    dtnStorage.remove(`sos_${beacon.id}`);
+                    dtnStorage.remove(`sos_relay_${beacon.id}`);
+                } catch {}
+            }
 
             if (isNewAlert) {
                 forensicBlackBox.recordEvent(
                     'SOS_BROADCAST',
                     'CRITICAL',
-                    `Alerta SOS remota recibida: ${beacon.id} (${beacon.issuerName}) [${beacon.distressType}/${beacon.triageColor}] hop=${beacon.hopCount}`
+                    `Alerta SOS remota recibida: ${beacon.id} (${beacon.issuerName}) [${beacon.distressType}/${beacon.triageColor}] hop=${nextHop}`
                 );
             }
 
@@ -271,6 +344,33 @@ export class MeshSosBeaconEngine {
             } catch (err) {
                 console.warn('[MeshSosBeaconEngine] Failed to sync with RedStore:', err);
             }
+
+            // Inundación Multi-Salto Táctica & Bóveda DTN (hasta 7 saltos)
+            if (nextHop <= 7 && beacon.active) {
+                setTimeout(async () => {
+                    try {
+                        const envelope = `SOS_BEACON_V1:${JSON.stringify(updatedBeacon)}`;
+                        const bytes = new TextEncoder().encode(envelope);
+                        await meshRouter.broadcast(bytes);
+                        
+                        // Custodia determinista única para relay
+                        this.enqueueBeaconInDtn(updatedBeacon, nextHop);
+                    } catch {}
+                }, 120 + Math.random() * 200);
+            }
+        }
+    }
+
+    public deactivateRemoteBeacon(beaconId: string) {
+        const existing = this.meshBeacons.get(beaconId);
+        if (existing && existing.active) {
+            this.processIncomingSosBeacon({
+                ...existing,
+                coords: existing.coords ? { ...existing.coords } : {},
+                active: false,
+                timestamp: Date.now(),
+                note: 'EMERGENCIA RESUELTA / CANCELADA'
+            });
         }
     }
 

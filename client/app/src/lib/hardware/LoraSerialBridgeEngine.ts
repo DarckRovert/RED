@@ -38,6 +38,7 @@ export interface LoraTelemetry {
 }
 
 export type LoraPacketCallback = (packet: Uint8Array, rssi?: number, snr?: number) => void;
+export type LoraRawStreamConsumer = (bytes: Uint8Array, rssi?: number, snr?: number) => void;
 
 export class LoraSerialBridgeEngine {
     private static instance: LoraSerialBridgeEngine;
@@ -65,6 +66,7 @@ export class LoraSerialBridgeEngine {
     };
 
     private rxCallbacks: Set<LoraPacketCallback> = new Set();
+    private rawStreamConsumers: Set<LoraRawStreamConsumer> = new Set();
     private rxBuffer: number[] = [];
 
     private serialPort: any = null;
@@ -77,6 +79,7 @@ export class LoraSerialBridgeEngine {
     private bleServer: any = null;
     private bleCharacteristicTx: any = null;
     private bleCharacteristicRx: any = null;
+    private nativeBleDeviceId: string | null = null;
 
     public static readonly NORDIC_UART_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
     public static readonly NORDIC_UART_RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
@@ -334,6 +337,11 @@ export class LoraSerialBridgeEngine {
     // ─── Conexión Web Bluetooth LE / Nordic UART Service (NUS) ──────────────────
 
     public async connectBluetoothLE(): Promise<boolean> {
+        // En entorno nativo Android/iOS, utilizar BleClient de Capacitor
+        if (Capacitor.isNativePlatform()) {
+            return await this.connectNativeBleNus();
+        }
+
         if (typeof navigator === 'undefined' || !(navigator as any).bluetooth) {
             console.warn('[LoRa] Web Bluetooth no soportado en este entorno');
             return false;
@@ -378,11 +386,69 @@ export class LoraSerialBridgeEngine {
 
             this.telemetry.connected = true;
             this.telemetry.transportType = 'BLE_NUS';
-            console.log(`[LoRa] Conectado a transceptor LoRa inalámbrico BLE (${this.bleDevice.name || 'NUS Device'})`);
+            this.telemetry.driverInfo = `BLE NUS (${this.bleDevice.name || 'LoRa'})`;
+
+            console.log(`[LoRa] Conectado a transceptor LoRa BLE NUS (${this.telemetry.driverInfo})`);
             return true;
         } catch (e) {
-            console.error('[LoRa] Error al conectar Bluetooth LE:', e);
+            console.error('[LoRa] Error al conectar Bluetooth LE (Web):', e);
             this.telemetry.connected = false;
+            return false;
+        }
+    }
+
+    /**
+     * Conexión BLE Nordic UART Service (NUS) nativa en Android/iOS mediante BleClient
+     */
+    public async connectNativeBleNus(): Promise<boolean> {
+        try {
+            const { BleClient } = await import('@capacitor-community/bluetooth-le');
+            await BleClient.initialize();
+
+            const device = await BleClient.requestDevice({
+                services: [LoraSerialBridgeEngine.NORDIC_UART_SERVICE],
+                optionalServices: [LoraSerialBridgeEngine.NORDIC_UART_SERVICE],
+            }).catch(async () => {
+                // Fallback sin filtro restrictivo para transceptores con nombres personalizados
+                return await BleClient.requestDevice({
+                    optionalServices: [LoraSerialBridgeEngine.NORDIC_UART_SERVICE]
+                });
+            });
+
+            if (!device || !device.deviceId) {
+                console.warn('[LoRa] Selección de dispositivo BLE cancelada o no disponible');
+                return false;
+            }
+
+            this.nativeBleDeviceId = device.deviceId;
+
+            await BleClient.connect(device.deviceId, (disconnectedId) => {
+                console.warn('[LoRa] Dispositivo BLE desconectado por hardware:', disconnectedId);
+                this.disconnect();
+            });
+
+            // Suscribir notificaciones de TX del transceptor (nuestros bytes RX entrantes)
+            await BleClient.startNotifications(
+                device.deviceId,
+                LoraSerialBridgeEngine.NORDIC_UART_SERVICE,
+                LoraSerialBridgeEngine.NORDIC_UART_TX,
+                (value) => {
+                    if (value && value.buffer) {
+                        this.feedRawBytes(new Uint8Array(value.buffer));
+                    }
+                }
+            );
+
+            this.telemetry.connected = true;
+            this.telemetry.transportType = 'BLE_NUS';
+            this.telemetry.driverInfo = `BLE NUS (${device.name || device.deviceId.slice(0, 8)})`;
+
+            console.log(`[LoRa] ✅ Conectado nativamente a transceptor LoRa BLE NUS: ${this.telemetry.driverInfo}`);
+            return true;
+        } catch (e) {
+            console.error('[LoRa] Error conectando BLE NUS Nativo:', e);
+            this.telemetry.connected = false;
+            this.nativeBleDeviceId = null;
             return false;
         }
     }
@@ -395,6 +461,11 @@ export class LoraSerialBridgeEngine {
         }
         if (snr !== undefined && typeof snr === 'number' && isFinite(snr)) {
             this.telemetry.lastSnrDb = snr;
+        }
+
+        // Reenviar flujo binario íntegro a decodificadores registrados (e.g. LoRaMeshtasticBridge Protobuf)
+        for (const consumer of this.rawStreamConsumers) {
+            try { consumer(bytes, rssi, snr); } catch {}
         }
 
         for (let i = 0; i < bytes.length; i++) {
@@ -425,34 +496,67 @@ export class LoraSerialBridgeEngine {
     // ─── Transmisión de Paquetes ────────────────────────────────────────────────
 
     public async sendPacket(payload: Uint8Array): Promise<boolean> {
+        // Si la carga útil ya está encuadrada con cabecera Meshtastic (0x94, 0xC3), omitir encuadre COBS
+        if (payload.length >= 4 && payload[0] === 0x94 && payload[1] === 0xC3) {
+            return await this.sendRawBytes(payload);
+        }
         const framed = LoraSerialBridgeEngine.framePacket(payload);
+        return await this.sendRawBytes(framed);
+    }
 
-        if (this.telemetry.transportType === 'BLE_NUS' && this.bleCharacteristicRx) {
-            try {
-                // Fragmentar en bloques de MTU BLE (128 bytes) para compatibilidad universal
-                const chunkSize = 128;
-                for (let i = 0; i < framed.length; i += chunkSize) {
-                    const chunk = framed.slice(i, i + chunkSize);
-                    if (this.bleCharacteristicRx.writeValueWithoutResponse) {
-                        await this.bleCharacteristicRx.writeValueWithoutResponse(chunk);
-                    } else {
-                        await this.bleCharacteristicRx.writeValue(chunk);
+    public async sendRawBytes(bytes: Uint8Array): Promise<boolean> {
+        if (this.telemetry.transportType === 'BLE_NUS') {
+            // Rama Nativa Android / iOS vía BleClient
+            if (this.nativeBleDeviceId && Capacitor.isNativePlatform()) {
+                try {
+                    const { BleClient } = await import('@capacitor-community/bluetooth-le');
+                    const chunkSize = 128;
+                    for (let i = 0; i < bytes.length; i += chunkSize) {
+                        const chunk = bytes.slice(i, i + chunkSize);
+                        await BleClient.writeWithoutResponse(
+                            this.nativeBleDeviceId,
+                            LoraSerialBridgeEngine.NORDIC_UART_SERVICE,
+                            LoraSerialBridgeEngine.NORDIC_UART_RX,
+                            new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+                        );
                     }
+                    this.telemetry.packetsSent++;
+                    this.telemetry.bytesSent += bytes.length;
+                    return true;
+                } catch (e) {
+                    console.error('[LoRa] Error al transmitir por BleClient NUS Nativo:', e);
+                    return false;
                 }
-                this.telemetry.packetsSent++;
-                this.telemetry.bytesSent += framed.length;
-                return true;
-            } catch (e) {
-                console.error('[LoRa] Error al transmitir por BLE NUS:', e);
-                return false;
+            }
+
+            // Rama Web Bluetooth de escritorio (Chrome)
+            if (this.bleCharacteristicRx) {
+                try {
+                    // Fragmentar en bloques de MTU BLE (128 bytes) para compatibilidad universal
+                    const chunkSize = 128;
+                    for (let i = 0; i < bytes.length; i += chunkSize) {
+                        const chunk = bytes.slice(i, i + chunkSize);
+                        if (this.bleCharacteristicRx.writeValueWithoutResponse) {
+                            await this.bleCharacteristicRx.writeValueWithoutResponse(chunk);
+                        } else {
+                            await this.bleCharacteristicRx.writeValue(chunk);
+                        }
+                    }
+                    this.telemetry.packetsSent++;
+                    this.telemetry.bytesSent += bytes.length;
+                    return true;
+                } catch (e) {
+                    console.error('[LoRa] Error al transmitir por BLE NUS Web:', e);
+                    return false;
+                }
             }
         }
 
         if (this.telemetry.transportType === 'USB_NATIVE') {
             try {
-                await RedNode.writeUsbSerial({ data: Array.from(framed) });
+                await RedNode.writeUsbSerial({ data: Array.from(bytes) });
                 this.telemetry.packetsSent++;
-                this.telemetry.bytesSent += framed.length;
+                this.telemetry.bytesSent += bytes.length;
                 return true;
             } catch (e) {
                 console.error('[LoRa] Error al transmitir por USB Serial Nativo:', e);
@@ -463,12 +567,12 @@ export class LoraSerialBridgeEngine {
         if (this.serialPort && this.serialPort.writable) {
             try {
                 this.serialWriter = this.serialPort.writable.getWriter();
-                await this.serialWriter.write(framed);
+                await this.serialWriter.write(bytes);
                 this.serialWriter.releaseLock();
                 this.serialWriter = null;
 
                 this.telemetry.packetsSent++;
-                this.telemetry.bytesSent += framed.length;
+                this.telemetry.bytesSent += bytes.length;
                 return true;
             } catch (e) {
                 console.error('[LoRa] Error al transmitir por puerto serie:', e);
@@ -483,6 +587,11 @@ export class LoraSerialBridgeEngine {
     public onPacketReceived(cb: LoraPacketCallback) {
         this.rxCallbacks.add(cb);
         return () => this.rxCallbacks.delete(cb);
+    }
+
+    public onRawStream(consumer: LoraRawStreamConsumer): () => void {
+        this.rawStreamConsumers.add(consumer);
+        return () => this.rawStreamConsumers.delete(consumer);
     }
 
     public updateConfig(newConfig: Partial<LoraConfig>) {
@@ -514,6 +623,20 @@ export class LoraSerialBridgeEngine {
             try {
                 await RedNode.closeUsbSerial();
             } catch {}
+        }
+
+        // Limpieza nativa de BleClient en Android / iOS
+        if (this.nativeBleDeviceId && Capacitor.isNativePlatform()) {
+            try {
+                const { BleClient } = await import('@capacitor-community/bluetooth-le');
+                await BleClient.stopNotifications(
+                    this.nativeBleDeviceId,
+                    LoraSerialBridgeEngine.NORDIC_UART_SERVICE,
+                    LoraSerialBridgeEngine.NORDIC_UART_TX
+                ).catch(() => {});
+                await BleClient.disconnect(this.nativeBleDeviceId).catch(() => {});
+            } catch {}
+            this.nativeBleDeviceId = null;
         }
 
         this.telemetry.connected = false;

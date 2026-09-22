@@ -30,11 +30,16 @@ interface AssemblySession {
     parityChunks: Map<number, Uint8Array>;
     chunkLength: number;
     fileSize?: number;
+    caption?: string;
+    fileName?: string;
+    durationMs?: number;
+    waveform?: string | number[];
     ts: number;
 }
 
 export class MediaChunker {
     private sessions: Map<string, AssemblySession> = new Map();
+    private completedMetadata: Map<string, { caption?: string; fileName?: string; durationMs?: number; waveform?: any }> = new Map();
 
     /**
      * Calcula una suma de verificación rápida Fletcher-32
@@ -233,10 +238,23 @@ export class MediaChunker {
         }
 
         const session = this.sessions.get(chunk.fileId)!;
+        session.ts = Date.now(); // Renovar ventana viva de inactividad
+
+        // Acumular metadatos multimedia presentes en cualquier fragmento
+        const rawAny = chunk as any;
+        if (rawAny.caption && !session.caption) session.caption = rawAny.caption;
+        if (rawAny.file_name && !session.fileName) session.fileName = rawAny.file_name;
+        if (rawAny.duration_ms && !session.durationMs) session.durationMs = rawAny.duration_ms;
+        if (rawAny.waveform && !session.waveform) session.waveform = rawAny.waveform;
+
         if (chunk.fileSize && !session.fileSize) {
             session.fileSize = chunk.fileSize;
         }
         const chunkBytes = this.base64ToUint8(chunk.payloadBase64);
+        if (typeof chunk.checksum === 'number' && this.fletcher32(chunkBytes) !== chunk.checksum) {
+            console.warn(`[MediaChunker] ⚠️ Fragmento corrupto rechazado por checksum: ${chunk.fileId}#${chunk.chunkIndex}`);
+            return null;
+        }
         session.chunkLength = chunkBytes.length;
 
         // Registrar bloque
@@ -249,6 +267,7 @@ export class MediaChunker {
         // 1. Caso Óptimo: Todos los K bloques de datos originales están presentes
         if (session.dataChunks.size === k) {
             const assembled = this.joinDataBlocks(session.dataChunks, k, session.fileSize);
+            this.saveCompletedMetadata(chunk.fileId, session);
             this.sessions.delete(chunk.fileId);
             return `data:${session.mimeType};base64,${this.uint8ToBase64(assembled)}`;
         }
@@ -258,12 +277,31 @@ export class MediaChunker {
         if (totalUnique >= k && session.parityChunks.size > 0) {
             const reconstructed = this.recoverMissingBlocks(session);
             if (reconstructed) {
+                this.saveCompletedMetadata(chunk.fileId, session);
                 this.sessions.delete(chunk.fileId);
                 return `data:${session.mimeType};base64,${this.uint8ToBase64(reconstructed)}`;
             }
         }
 
         this.cleanup();
+        return null;
+    }
+
+    private saveCompletedMetadata(fileId: string, session: AssemblySession) {
+        this.completedMetadata.set(fileId, {
+            caption: session.caption,
+            fileName: session.fileName,
+            durationMs: session.durationMs,
+            waveform: session.waveform
+        });
+    }
+
+    public popSessionMetadata(fileId: string): { caption?: string; fileName?: string; durationMs?: number; waveform?: any } | null {
+        const meta = this.completedMetadata.get(fileId);
+        if (meta) {
+            this.completedMetadata.delete(fileId);
+            return meta;
+        }
         return null;
     }
 

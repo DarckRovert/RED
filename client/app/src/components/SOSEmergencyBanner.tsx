@@ -97,7 +97,8 @@ export const SOSEmergencyBanner: React.FC = () => {
             });
 
             if (res && res.ok && res.sos) {
-                setSosBeacons([res.sos, ...beacons]);
+                const mySos = { ...res.sos, is_mine: true };
+                setSosBeacons([mySos, ...beacons]);
                 TacticalAudioEngine.playEmergencyAlarm();
                 toast.error(t('sos_banner.sos_broadcasted') || '🚨 ¡BALIZA SOS DIFUNDIDA A TODA LA MALLA P2P!');
                 setIsTriggering(false);
@@ -111,7 +112,7 @@ export const SOSEmergencyBanner: React.FC = () => {
     const handleResolve = async (beaconId: string) => {
         try {
             await resolveSos(beaconId);
-            setSosBeacons(beacons.filter(b => b.beacon_id !== beaconId));
+            setSosBeacons(beacons.filter(b => b.id !== beaconId && b.beacon_id !== beaconId));
             TacticalAudioEngine.playRogerBeep();
             toast.success('Baliza SOS resuelta y desactivada');
         } catch {
@@ -158,7 +159,7 @@ export const SOSEmergencyBanner: React.FC = () => {
                         </button>
                         {beacons[0].is_mine && (
                             <button
-                                onClick={() => { TacticalAudioEngine.playTap(); handleResolve(beacons[0].beacon_id); }}
+                                onClick={() => { TacticalAudioEngine.playTap(); handleResolve(beacons[0].beacon_id || beacons[0].id); }}
                                 style={{
                                     padding: '6px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.4)',
                                     color: '#FFFFFF', fontWeight: 800, fontSize: '0.74rem', border: '1px solid rgba(255,255,255,0.3)', cursor: 'pointer'

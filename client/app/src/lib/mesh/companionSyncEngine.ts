@@ -92,13 +92,10 @@ function getRandomBytes(len: number): Uint8Array {
     const buf = new Uint8Array(len);
     const c = (typeof window !== 'undefined' && window.crypto) || (globalThis as any)?.crypto;
     if (c?.getRandomValues) return c.getRandomValues(buf);
-    try {
-        const nodeCrypto = require('crypto');
-        return new Uint8Array(nodeCrypto.randomBytes(len));
-    } catch {
-        for (let i = 0; i < len; i++) buf[i] = (Date.now() ^ (i * 0x9e3779b9)) & 0xFF;
-        return buf;
+    for (let i = 0; i < len; i++) {
+        buf[i] = Math.floor(Math.random() * 256) ^ ((Date.now() + i * 0x9e3779b9) & 0xFF);
     }
+    return buf;
 }
 
 async function generateEcdhKeyPair(): Promise<CryptoKeyPair> {
@@ -242,6 +239,18 @@ class SimpleMqttClient {
         this.shouldReconnect = true;
         return new Promise<void>((resolve, reject) => {
             try {
+                // Higiene de reconexión: cerrar y desvincular handlers de socket previo
+                if (this.ws) {
+                    try {
+                        this.ws.onopen = null;
+                        this.ws.onmessage = null;
+                        this.ws.onerror = null;
+                        this.ws.onclose = null;
+                        this.ws.close();
+                    } catch {}
+                    this.ws = null;
+                }
+
                 this.ws = new WebSocket(this.brokerUrl, "mqtt");
                 this.ws.binaryType = "arraybuffer";
 
@@ -329,6 +338,7 @@ class SimpleMqttClient {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
         const topicBytes = new TextEncoder().encode(topic);
         const pid = this.packetId++;
+        if (this.packetId > 0xFFFF) this.packetId = 1;
 
         const varHeader = [(pid >> 8) & 0xff, pid & 0xff];
         const payload = [(topicBytes.length >> 8) & 0xff, topicBytes.length & 0xff, ...topicBytes, 0x00];
@@ -404,6 +414,7 @@ class SimpleMqttClient {
 
     private handlePublish(data: Uint8Array) {
         try {
+            const qos = (data[0] >> 1) & 0x03;
             let offset = 1;
             let multiplier = 1;
             let remLen = 0;
@@ -414,12 +425,32 @@ class SimpleMqttClient {
                 if ((byte & 0x80) === 0) break;
             }
 
+            const headerStart = offset;
             const topicLen = (data[offset] << 8) | data[offset + 1];
             offset += 2;
             const topic = new TextDecoder().decode(data.slice(offset, offset + topicLen));
             offset += topicLen;
 
-            const payloadStr = new TextDecoder().decode(data.slice(offset));
+            // En MQTT v3.1.1, si QoS > 0, el Variable Header incluye un Packet Identifier de 2 bytes
+            let packetId = 0;
+            if (qos > 0) {
+                packetId = (data[offset] << 8) | data[offset + 1];
+                offset += 2;
+
+                // Si QoS 1, responder inmediatamente PUBACK al broker para confirmar entrega
+                if (qos === 1 && this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    try {
+                        const pubAck = new Uint8Array([0x40, 0x02, (packetId >> 8) & 0xFF, packetId & 0xFF]);
+                        this.ws.send(pubAck);
+                    } catch {}
+                }
+            }
+
+            // Delimitar exactamente los bytes del payload según Remaining Length
+            const payloadBytesLen = remLen - (offset - headerStart);
+            const payloadSlice = data.slice(offset, offset + Math.max(0, payloadBytesLen));
+            const payloadStr = new TextDecoder().decode(payloadSlice);
+
             if (this.onMessageCb) {
                 this.onMessageCb(topic, payloadStr);
             }
@@ -956,6 +987,13 @@ class CompanionSyncEngineClass {
      */
     public isLiveSessionActive(): boolean {
         return Boolean(this.liveClient?.isConnected && this.activeSession);
+    }
+
+    /**
+     * Indica si el dispositivo actual es el Host Móvil soberano (nodo con radios RF de malla).
+     */
+    public isMobileHost(): boolean {
+        return Boolean(this.activeSession?.isMobileHost);
     }
 
     /**

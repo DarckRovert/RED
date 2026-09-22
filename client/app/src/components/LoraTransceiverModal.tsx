@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { loraBridge, LoraConfig, LoraTelemetry } from "../lib/hardware/LoraSerialBridgeEngine";
-import { loraMeshtastic, LoRaNodeInfo } from "../lib/mesh/LoRaMeshtasticBridge";
+import { loraMeshtastic, LoRaNodeInfo, MeshtasticPortNum } from "../lib/mesh/LoRaMeshtasticBridge";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { fetchWithFallback } from "../api/core";
@@ -34,7 +34,7 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
     // Vocoder Recording State & Lifecycle Guards
     const [isRecordingVocoder, setIsRecordingVocoder] = useState<boolean>(false);
     const activeStreamRef = React.useRef<MediaStream | null>(null);
-    const activeRecorderRef = React.useRef<MediaRecorder | null>(null);
+    const activeProcessorRef = React.useRef<ScriptProcessorNode | null>(null);
     const activeAudioCtxRef = React.useRef<AudioContext | null>(null);
     const recordTimeoutRef = React.useRef<any>(null);
 
@@ -43,8 +43,12 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
             clearTimeout(recordTimeoutRef.current);
             recordTimeoutRef.current = null;
         }
-        if (activeRecorderRef.current && activeRecorderRef.current.state === "recording") {
-            try { activeRecorderRef.current.stop(); } catch {}
+        if (activeProcessorRef.current) {
+            try {
+                activeProcessorRef.current.onaudioprocess = null;
+                activeProcessorRef.current.disconnect();
+            } catch {}
+            activeProcessorRef.current = null;
         }
         if (activeStreamRef.current) {
             try { activeStreamRef.current.getTracks().forEach(t => t.stop()); } catch {}
@@ -100,9 +104,16 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
             setLogs(prev => [logEntry, ...prev.slice(0, 99)]);
         });
 
+        const unbindMeshtastic = loraMeshtastic.onPacket((pkt) => {
+            const portName = MeshtasticPortNum[pkt.portnum] || `PORT_${pkt.portnum}`;
+            const logEntry = `[RX-MESHTASTIC] ${new Date().toLocaleTimeString()} · ${portName} · ${pkt.payload.length}B · De: !${pkt.from.toString(16).padStart(8, '0')} · RSSI: ${pkt.rxRssi ?? -90}dBm`;
+            setLogs(prev => [logEntry, ...prev.slice(0, 99)]);
+        });
+
         return () => {
             clearInterval(interval);
             unbindRx();
+            unbindMeshtastic();
         };
     }, []);
 
@@ -614,39 +625,51 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                                     activeAudioCtxRef.current = audioCtx;
 
                                     const sourceNode = audioCtx.createMediaStreamSource(stream);
-                                    const dest = audioCtx.createMediaStreamDestination();
-                                    sourceNode.connect(dest);
-                                    
-                                    const mediaRecorder = new MediaRecorder(dest.stream);
-                                    activeRecorderRef.current = mediaRecorder;
-                                    const chunks: Blob[] = [];
-                                    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-                                    
-                                    mediaRecorder.onstop = async () => {
+                                    // Captura directa de muestras PCM de 32 bits sin compresión intermedia
+                                    const processorNode = audioCtx.createScriptProcessor(4096, 1, 1);
+                                    activeProcessorRef.current = processorNode;
+
+                                    const collectedChunks: Float32Array[] = [];
+                                    processorNode.onaudioprocess = (e) => {
+                                        if (!activeStreamRef.current) return;
+                                        const input = e.inputBuffer.getChannelData(0);
+                                        collectedChunks.push(new Float32Array(input));
+                                    };
+
+                                    sourceNode.connect(processorNode);
+                                    processorNode.connect(audioCtx.destination);
+
+                                    recordTimeoutRef.current = setTimeout(async () => {
                                         try {
-                                            const blob = new Blob(chunks, { type: 'audio/webm' });
-                                            const arrayBuffer = await blob.arrayBuffer();
-                                            const decodedAudio = await audioCtx.decodeAudioData(arrayBuffer);
-                                            const rawChannel = decodedAudio.getChannelData(0);
+                                            // Detener captura de flujo
+                                            processorNode.onaudioprocess = null;
+                                            processorNode.disconnect();
+                                            sourceNode.disconnect();
+
+                                            let totalLen = 0;
+                                            for (const chunk of collectedChunks) totalLen += chunk.length;
+                                            if (totalLen === 0) throw new Error("No se capturaron muestras de audio");
+
+                                            const mergedSamples = new Float32Array(totalLen);
+                                            let offset = 0;
+                                            for (const chunk of collectedChunks) {
+                                                mergedSamples.set(chunk, offset);
+                                                offset += chunk.length;
+                                            }
+
+                                            // Procesamiento con el motor Vocoder táctico a 8kHz
                                             const { LowBitrateVocoder } = await import('../lib/audio/LowBitrateVocoder');
-                                            const pcm16 = LowBitrateVocoder.resampleTo8kHz(rawChannel, decodedAudio.sampleRate);
+                                            const pcm16 = LowBitrateVocoder.resampleTo8kHz(mergedSamples, audioCtx.sampleRate);
                                             const compressedBytes = LowBitrateVocoder.encode(pcm16);
                                             const { loraMeshtastic } = await import('../lib/mesh/LoRaMeshtasticBridge');
                                             await loraMeshtastic.broadcastVocoderAudio(compressedBytes);
+
                                             toast.success(`🎙️ Ráfaga de Voz Vocoder transmitida por LoRa (${compressedBytes.length}B, 1.2 kbps)`);
                                             setLogs(prev => [`[TX-VOICE] ${new Date().toLocaleTimeString()} · ${compressedBytes.length}B · Ráfaga Vocoder LoRa Port 64`, ...prev.slice(0, 99)]);
                                         } catch (err: any) {
                                             toast.error("Error al procesar audio Vocoder: " + err.message);
                                         } finally {
-                                            try { audioCtx.close(); } catch {}
                                             cleanupVocoderRecorder();
-                                        }
-                                    };
-                                    
-                                    mediaRecorder.start();
-                                    recordTimeoutRef.current = setTimeout(() => {
-                                        if (mediaRecorder.state === 'recording') {
-                                            mediaRecorder.stop();
                                         }
                                     }, 1000);
                                 } catch (e: any) {

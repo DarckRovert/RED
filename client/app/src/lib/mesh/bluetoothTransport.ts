@@ -11,6 +11,7 @@ export interface RedDevice {
     deviceId?: string;
     name: string;
     rssi: number;
+    lastSeen?: number;
 }
 
 export interface LinkQualityMetrics {
@@ -46,13 +47,13 @@ class BluetoothTransport {
         switch (profile) {
             case 'SHAKE_BOOST':
             case 'HIGH_PERFORMANCE':
-                return { activeScanMs: 1500, restMs: 3000 };
+                return { activeScanMs: 4000, restMs: 3000 };
             case 'BALANCED_PATROL':
-                return { activeScanMs: 1000, restMs: 9000 };
+                return { activeScanMs: 3000, restMs: 7000 };
             case 'SURVIVAL_SENTRY':
             default:
-                // Asymmetric ultra-low power standby (20ms scan / 980ms sleep duty cycle for >48h battery)
-                return { activeScanMs: 20, restMs: 980 };
+                // Standby ultra-bajo consumo compatible con el límite AOSP (< 5 arranques en 30s)
+                return { activeScanMs: 3000, restMs: 22000 };
         }
     }
 
@@ -157,7 +158,9 @@ class BluetoothTransport {
     }
 
     public isDeviceConnected(deviceId: string): boolean {
-        return this.connectedDevices.has(deviceId);
+        if (!deviceId) return false;
+        const clean = this.sanitizeBleDeviceId(deviceId);
+        return this.connectedDevices.has(deviceId) || this.connectedDevices.has(clean) || this.connectedDevices.has(clean.toUpperCase());
     }
 
     public getLinkMetrics(deviceId: string): LinkQualityMetrics | undefined {
@@ -230,6 +233,8 @@ class BluetoothTransport {
     private activeScanHolders = 0;
     private isScanning = false;
     private scanStartingPromise: Promise<void> | null = null;
+    private scanStartTimestamps: number[] = [];
+    private scanCooldownTimer: any = null;
 
     /**
      * Inicia o mantiene activa la sesión física de escaneo BLE si no está ya corriendo.
@@ -243,9 +248,20 @@ class BluetoothTransport {
             return;
         }
 
+        // Cancelar cualquier apagado diferido de cooldown si un nuevo escaneo lo necesita
+        if (this.scanCooldownTimer) {
+            clearTimeout(this.scanCooldownTimer);
+            this.scanCooldownTimer = null;
+        }
+
         this.scanStartingPromise = (async () => {
             await this.init();
             try {
+                // Registrar timestamp para protección contra límite AOSP (máximo 5 arranques en 30s)
+                const now = Date.now();
+                this.scanStartTimestamps = this.scanStartTimestamps.filter(t => now - t < 30_000);
+                this.scanStartTimestamps.push(now);
+
                 this.isScanning = true;
                 const isBg = typeof document !== 'undefined' && document.hidden;
                 const scanOptions = isBg
@@ -293,6 +309,8 @@ class BluetoothTransport {
     /**
      * Detiene el escaneo físico si y solo si ningún consumidor continuo ni ventana temporal
      * de escaneo requiere el hardware de radio activo.
+     * En Android, si la tasa de arranques se acerca al límite de AOSP (5 en 30s), retarda
+     * el apagado físico para evitar un ciclo destructivo de arranque/parada.
      */
     public async stopPhysicalScanIfIdle(): Promise<void> {
         if (this.scanStartingPromise) {
@@ -306,6 +324,29 @@ class BluetoothTransport {
             // Hay ventanas temporales activas (mesh duty-cycle o modal de espectro)
             return;
         }
+
+        // Protección AOSP: Si hemos arrancado >= 3 veces en los últimos 30 segundos,
+        // no apagar de golpe si el ciclo de la malla volverá a pedir escaneo pronto.
+        const now = Date.now();
+        this.scanStartTimestamps = this.scanStartTimestamps.filter(t => now - t < 30_000);
+        if (this.scanStartTimestamps.length >= 3) {
+            if (!this.scanCooldownTimer) {
+                // Programar apagado suave tras 8 segundos de inactividad real para no quemar tokens AOSP
+                this.scanCooldownTimer = setTimeout(async () => {
+                    this.scanCooldownTimer = null;
+                    if (this.continuousScanRequesters.size === 0 && this.activeScanHolders === 0 && this.isScanning) {
+                        try {
+                            await BleClient.stopLEScan();
+                        } catch (e) {
+                            console.warn('[BLE-Arbiter] Cooldown stop scan warning:', e);
+                        }
+                        this.isScanning = false;
+                    }
+                }, 8000);
+            }
+            return;
+        }
+
         if (this.isScanning) {
             try {
                 await BleClient.stopLEScan();
@@ -423,7 +464,9 @@ class BluetoothTransport {
 
         this.connectingSet.add(targetId);
         try {
-            await BleClient.connect(targetId);
+            await BleClient.connect(targetId, (disconnectedId) => {
+                this.handleDeviceDisconnected(disconnectedId || targetId);
+            });
             this.connectedDevices.add(targetId);
 
             // Request adaptive MTU (512 bytes for maximum throughput)
@@ -462,20 +505,39 @@ class BluetoothTransport {
         }
     }
 
+    /**
+     * Limpieza completa de estado cuando un par GATT se desconecta espontáneamente
+     * o por pérdida de cobertura física. Evita referencias zombis y fallos silenciosos.
+     */
+    private handleDeviceDisconnected(targetId: string): void {
+        console.log(`[BLE] 🔌 Peer disconnected: ${targetId.slice(0, 8)}`);
+        this.connectedDevices.delete(targetId);
+        this.negotiatedMtu.delete(targetId);
+        const entry = this.incomingBuffers.get(targetId);
+        if (entry?.timer) clearTimeout(entry.timer);
+        this.incomingBuffers.delete(targetId);
+
+        const metrics = this.linkMetrics.get(targetId);
+        if (metrics) {
+            metrics.lossRate = 1.0;
+            metrics.lqs = 0;
+            this.linkMetrics.set(targetId, metrics);
+        }
+    }
+
     async disconnect(deviceId: string) {
         const targetId = (await this.resolveTargetMac(deviceId)) || this.sanitizeBleDeviceId(deviceId);
         if (!this.connectedDevices.has(targetId)) return;
         try {
             await BleClient.disconnect(targetId);
         } catch {}
-        this.connectedDevices.delete(targetId);
-        this.negotiatedMtu.delete(targetId);
-        const entry = this.incomingBuffers.get(targetId);
-        if (entry?.timer) clearTimeout(entry.timer);
-        this.incomingBuffers.delete(targetId);
+        this.handleDeviceDisconnected(targetId);
     }
 
     async send(deviceId: string, payload: Uint8Array): Promise<boolean> {
+        const targetId = await this.resolveTargetMac(deviceId);
+        const targetUpper = (targetId || deviceId).trim().toUpperCase();
+
         // 1. Si el dispositivo actúa como Peripheral, verificar si el objetivo (o el único Central en radio) es un cliente conectado a nuestro GATT Server local
         if (typeof window !== 'undefined') {
             try {
@@ -485,9 +547,22 @@ class BluetoothTransport {
                     const serverRes = await RedNode.getBleServerClients().catch(() => null);
                     const serverClients: string[] = serverRes?.clients || [];
                     if (serverClients.length > 0) {
-                        const targetUpper = deviceId.trim().toUpperCase();
-                        const isMatch = serverClients.some(c => c.toUpperCase() === targetUpper);
-                        const targetClient = isMatch ? deviceId.trim() : (serverClients.length === 1 ? serverClients[0] : null);
+                        // Difusión a todos los Centrales conectados si es broadcast
+                        if (deviceId.startsWith('ffffffff') || deviceId === 'broadcast') {
+                            let anySent = false;
+                            for (const clientMac of serverClients) {
+                                const sendRes = await RedNode.sendBleServerMessage({
+                                    device: clientMac,
+                                    data: Array.from(payload)
+                                }).catch(() => null);
+                                if (sendRes?.success) anySent = true;
+                            }
+                            if (anySent) return true;
+                        }
+
+                        // Envío unicast al cliente conectado cuya MAC coincida con el destino resuelto
+                        const matchedClient = serverClients.find(c => c.toUpperCase() === targetUpper || c.toUpperCase() === deviceId.trim().toUpperCase());
+                        const targetClient = matchedClient || (serverClients.length === 1 ? serverClients[0] : null);
                         if (targetClient) {
                             const sendRes = await RedNode.sendBleServerMessage({
                                 device: targetClient,
@@ -505,7 +580,6 @@ class BluetoothTransport {
             }
         }
 
-        const targetId = await this.resolveTargetMac(deviceId);
         if (!targetId) {
             return false;
         }
@@ -539,32 +613,54 @@ class BluetoothTransport {
         }
 
         try {
-            const CHUNK_SIZE = this.negotiatedMtu.get(targetId) || 128;
+            let currentMtu = this.negotiatedMtu.get(targetId) || 20;
             const totalLength = payload.length;
 
             // Direct streaming chunking without corrupting payload with ambiguous 0xAA 0x55 header
             let offset = 0;
             while (offset < totalLength) {
-                const sliceLength = Math.min(CHUNK_SIZE, totalLength - offset);
+                const sliceLength = Math.min(currentMtu, totalLength - offset);
                 const chunk = payload.slice(offset, offset + sliceLength);
 
                 const dataView = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
                 let writeOk = false;
-                try {
-                    await BleClient.writeWithoutResponse(targetId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
-                    writeOk = true;
-                } catch (writeNoRespErr) {
+                let attempts = 0;
+
+                while (!writeOk && attempts < 3) {
+                    attempts++;
                     try {
-                        await BleClient.write(targetId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
+                        await BleClient.writeWithoutResponse(targetId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
                         writeOk = true;
-                    } catch (writeWithRespErr: any) {
-                        const errStr = String(writeWithRespErr?.message || writeWithRespErr || '');
-                        if (errStr.includes('ATTRIBUTE_LENGTH') || errStr.includes('invalid length') || CHUNK_SIZE > 20) {
-                            this.negotiatedMtu.set(targetId, 20);
+                    } catch (writeNoRespErr) {
+                        try {
+                            await BleClient.write(targetId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
+                            writeOk = true;
+                        } catch (writeWithRespErr: any) {
+                            const errStr = String(writeWithRespErr?.message || writeWithRespErr || '');
+                            if (errStr.includes('ATTRIBUTE_LENGTH') || errStr.includes('invalid length') || currentMtu > 20) {
+                                currentMtu = 20;
+                                this.negotiatedMtu.set(targetId, 20);
+                                break; // Recalcular chunk inmediatamente con 20 bytes
+                            }
+                            if (attempts < 3) {
+                                await new Promise(r => setTimeout(r, 35 * attempts));
+                            }
                         }
-                        console.warn('[BLE] Write retry failed:', writeWithRespErr);
                     }
                 }
+
+                if (!writeOk) {
+                    // Si se redujo el MTU a 20 bytes, reintentar este mismo offset con el nuevo tamaño
+                    if (currentMtu === 20 && sliceLength > 20) {
+                        continue;
+                    }
+                    console.error(`[BLE] Failed to write chunk at offset ${offset}/${totalLength} to ${targetId.slice(0, 8)}`);
+                    metrics.lossRate = 1 - (metrics.packetsAcked / Math.max(1, metrics.packetsSent));
+                    metrics.lqs = this.calculateLqs(metrics.rssi, metrics.lossRate);
+                    this.linkMetrics.set(targetId, metrics);
+                    return false;
+                }
+
                 offset += sliceLength;
                 
                 // Controlled delay (25ms) to prevent GATT queue saturation on Android controllers (Moto G / Lenovo)
@@ -692,8 +788,21 @@ class BluetoothTransport {
                     } else {
                         break; // JSON incompleto, esperar siguientes fragmentos
                     }
+                } else if (
+                    entry.buffer.length >= 14 &&
+                    entry.buffer[0] === 0x53 && entry.buffer[1] === 0x4F && entry.buffer[2] === 0x53 /* 'SOS' */
+                ) {
+                    // 3. Trama de emergencia SOS táctica íntegra (SOS_BEACON_V1:{...})
+                    const prefixEnd = 14;
+                    const jsonSlice = entry.buffer.slice(prefixEnd);
+                    const jsonLen = this.findCompleteJsonLength(jsonSlice);
+                    if (jsonLen > 0) {
+                        entry.expectedLen = prefixEnd + jsonLen;
+                    } else {
+                        break; // JSON de emergencia incompleto, esperar siguientes fragmentos
+                    }
                 } else {
-                    // 3. Resincronización: buscar el primer delimitador válido (0x52454401, '{' o '[')
+                    // 4. Resincronización: buscar el primer delimitador válido (0x52454401, '{', '[' o 'SOS_BEACON_V1:')
                     let syncIdx = -1;
                     for (let i = 1; i < entry.buffer.length; i++) {
                         if (entry.buffer[i] === 0x7B || entry.buffer[i] === 0x5B) {
@@ -701,6 +810,10 @@ class BluetoothTransport {
                             break;
                         }
                         if (i <= entry.buffer.length - 4 && view.getUint32(i, false) === 0x52454401) {
+                            syncIdx = i;
+                            break;
+                        }
+                        if (i <= entry.buffer.length - 14 && entry.buffer[i] === 0x53 && entry.buffer[i + 1] === 0x4F && entry.buffer[i + 2] === 0x53) {
                             syncIdx = i;
                             break;
                         }

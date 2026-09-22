@@ -33,6 +33,18 @@ export class WifiDirectTransport {
     private heartbeatTimer: any = null;
     private currentCandidateIndex = 0;
     private activeSignalingUrl: string = '';
+    private disconnectGraceTimers: Map<string, any> = new Map();
+
+    private cleanId(raw: string): string {
+        if (!raw) return '';
+        let clean = raw.trim().toLowerCase();
+        if (clean.startsWith('did:red:')) clean = clean.replace(/^did:red:/i, '');
+        if (clean.includes(':') && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(clean)) {
+            const parts = clean.split(':');
+            if (parts[0].length >= 16) clean = parts[0].trim();
+        }
+        return clean;
+    }
 
     private static readonly ICE_SERVERS: RTCIceServer[] = [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -310,15 +322,14 @@ export class WifiDirectTransport {
                         }
                         const offer = await pc.createOffer({ iceRestart: true });
                         await pc.setLocalDescription(offer);
-                        this.sendWs({
+                        const sigPayload = {
                             type: 'offer',
                             targetPeerId: peerId,
                             sdp: offer,
-                        });
-                        mqttRelay.sendSignaling(peerId, {
-                            type: 'offer',
-                            sdp: offer,
-                        });
+                        };
+                        this.sendWs(sigPayload);
+                        blindRelay.sendSignaling(peerId, sigPayload);
+                        mqttRelay.sendSignaling(peerId, sigPayload);
                     }
                 } catch (err) {
                     console.warn(`[WebRtcTransport] ICE restart failed for peer ${peerId.slice(0, 8)}:`, err);
@@ -354,11 +365,13 @@ export class WifiDirectTransport {
             case 'registered':
             case 'room-joined': {
                 const peerList = Array.isArray(msg.onlinePeers) ? msg.onlinePeers : (Array.isArray(msg.peers) ? msg.peers : []);
+                const cleanMy = this.cleanId(this.myId);
                 for (const peerId of peerList) {
                     if (peerId && peerId !== this.myId) {
                         this.onlinePeers.add(peerId);
-                        // Initiate P2P WebRTC offer if our ID is greater to avoid double glare
-                        if (this.myId > peerId && !this.peerConnections.has(peerId)) {
+                        // Initiate P2P WebRTC offer if our normalized ID is greater to avoid double glare
+                        const cleanPeer = this.cleanId(peerId);
+                        if (cleanMy > cleanPeer && !this.peerConnections.has(peerId)) {
                             this.createOffer(peerId).catch(() => {});
                         }
                     }
@@ -371,8 +384,10 @@ export class WifiDirectTransport {
                 if (peerId && peerId !== this.myId) {
                     this.onlinePeers.add(peerId);
                     console.log(`[WebRtcTransport] Remote peer discovered on mesh: ${peerId.slice(0, 8)}`);
-                    // Initiate P2P WebRTC offer if our ID is greater to avoid double glare
-                    if (this.myId > peerId && !this.peerConnections.has(peerId)) {
+                    // Initiate P2P WebRTC offer if our normalized ID is greater to avoid double glare
+                    const cleanMy = this.cleanId(this.myId);
+                    const cleanPeer = this.cleanId(peerId);
+                    if (cleanMy > cleanPeer && !this.peerConnections.has(peerId)) {
                         this.createOffer(peerId).catch(() => {});
                     }
                 }
@@ -463,10 +478,33 @@ export class WifiDirectTransport {
         };
 
         pc.onconnectionstatechange = () => {
-            console.log(`[WebRtcTransport] Peer ${peerId.slice(0, 8)} state: ${pc?.connectionState}`);
-            if (pc?.connectionState === 'connected') {
+            const state = pc?.connectionState;
+            console.log(`[WebRtcTransport] Peer ${peerId.slice(0, 8)} state: ${state}`);
+            if (state === 'connected') {
+                const timer = this.disconnectGraceTimers.get(peerId);
+                if (timer) {
+                    clearTimeout(timer);
+                    this.disconnectGraceTimers.delete(peerId);
+                }
                 this.onlinePeers.add(peerId);
-            } else if (pc?.connectionState === 'disconnected' || pc?.connectionState === 'failed' || pc?.connectionState === 'closed') {
+            } else if (state === 'disconnected') {
+                // Estado transitorio: conceder 5 segundos de gracia para recuperación automática ICE
+                if (!this.disconnectGraceTimers.has(peerId)) {
+                    const graceTimer = setTimeout(() => {
+                        this.disconnectGraceTimers.delete(peerId);
+                        if (pc?.connectionState === 'disconnected' || pc?.connectionState === 'failed') {
+                            console.log(`[WebRtcTransport] Grace period expired for ${peerId.slice(0, 8)} — cleaning up`);
+                            this.cleanupPeer(peerId);
+                        }
+                    }, 5000);
+                    this.disconnectGraceTimers.set(peerId, graceTimer);
+                }
+            } else if (state === 'failed' || state === 'closed') {
+                const timer = this.disconnectGraceTimers.get(peerId);
+                if (timer) {
+                    clearTimeout(timer);
+                    this.disconnectGraceTimers.delete(peerId);
+                }
                 this.cleanupPeer(peerId);
             }
         };
@@ -665,6 +703,11 @@ export class WifiDirectTransport {
     }
 
     private cleanupPeer(peerId: string) {
+        const timer = this.disconnectGraceTimers.get(peerId);
+        if (timer) {
+            clearTimeout(timer);
+            this.disconnectGraceTimers.delete(peerId);
+        }
         const channel = this.dataChannels.get(peerId);
         if (channel) {
             try { channel.close(); } catch {}

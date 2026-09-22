@@ -15,6 +15,8 @@ import { globalShield } from '../../lib/network/GlobalShieldEngine';
 import { companionSyncEngine } from '../../lib/mesh/companionSyncEngine';
 import { getSecureStored, setSecureStored } from '../../api/core';
 import { mediaChunker } from '../../lib/mesh/mediaChunker';
+import { dtnStorage } from '../../lib/mesh/dtnStorage';
+import { meshSosBeacon } from '../../lib/emergency/MeshSosBeaconEngine';
 
 // Persistent cross-session message deduplication set
 // W3 FIX: Hard cap on in-memory messages per conversation to prevent OOM
@@ -588,22 +590,84 @@ export async function dispatchIncomingMessage(
             return; // Retorno estricto para evitar que audio base64 sature la memoria del chat
         }
 
-        // ── Emergency SOS Distress Beacon & Resolution ────────────────────────
+        // ── Emergency SOS Distress Beacon & Resolution Pipeline ──────────────
+        const executeSosResolution = (targetId: string) => {
+            get().resolveSosBeacon(targetId);
+
+            // Persistencia física en red_sos_beacons
+            try {
+                const rawSos = localStorage.getItem('red_sos_beacons');
+                const sosList: any[] = rawSos ? JSON.parse(rawSos) : [];
+                const updatedSos = sosList.map((b: any) =>
+                    (b.id === targetId || b.beacon_id === targetId || (targetId.startsWith('did:red:') && b.sender_did === targetId))
+                        ? { ...b, is_active: false, active: false }
+                        : b
+                );
+                localStorage.setItem('red_sos_beacons', JSON.stringify(updatedSos));
+                void setSecureStored('red_sos_beacons', updatedSos);
+            } catch {}
+
+            // Persistencia física en red_emergency_beacons
+            try {
+                const rawEmerg = localStorage.getItem('red_emergency_beacons');
+                const emergList: any[] = rawEmerg ? JSON.parse(rawEmerg) : [];
+                const updatedEmerg = emergList.map((b: any) =>
+                    (b.id === targetId || b.beacon_id === targetId || (targetId.startsWith('did:red:') && b.sender_did === targetId))
+                        ? { ...b, is_active: false, active: false }
+                        : b
+                );
+                localStorage.setItem('red_emergency_beacons', JSON.stringify(updatedEmerg));
+                void setSecureStored('red_emergency_beacons', updatedEmerg);
+            } catch {}
+
+            // Sincronización con MeshSosBeaconEngine
+            try {
+                meshSosBeacon.deactivateRemoteBeacon(targetId);
+                const myBeacon = meshSosBeacon.getMyActiveBeacon();
+                if (myBeacon && (myBeacon.id === targetId || myBeacon.id === `sos_${targetId}`)) {
+                    void meshSosBeacon.deactivateSosBeacon(targetId);
+                }
+            } catch {}
+
+            // Purga determinista en bóveda DTN
+            try {
+                dtnStorage.remove(`sos_${targetId}`);
+                dtnStorage.remove(targetId);
+            } catch {}
+        };
+
         if (
             item.msg_type === 'sos_beacon' ||
+            item.msg_type === 'emergency_beacon' ||
             (item as any)?.type === 'SOS_BEACON' ||
             (data as any)?.type === 'SOS_BEACON' ||
-            (typeof item.content === 'string' && (item.content.includes('"msg_type":"sos_beacon"') || item.content.includes('"type":"SOS_BEACON"')))
+            (typeof item.content === 'string' && (
+                item.content.startsWith('SOS_BEACON_V1:') ||
+                item.content.includes('"msg_type":"sos_beacon"') ||
+                item.content.includes('"msg_type":"emergency_beacon"') ||
+                item.content.includes('"type":"SOS_BEACON"')
+            ))
         ) {
             try {
-                const parsed = typeof item.content === 'string' && item.content.startsWith('{')
-                    ? JSON.parse(item.content)
-                    : (item as any);
+                let parsed: any;
+                if (typeof item.content === 'string') {
+                    if (item.content.startsWith('SOS_BEACON_V1:')) {
+                        parsed = JSON.parse(item.content.substring(14));
+                    } else if (item.content.startsWith('{')) {
+                        parsed = JSON.parse(item.content);
+                    } else {
+                        parsed = item as any;
+                    }
+                } else {
+                    parsed = item as any;
+                }
                 const b = parsed.beacon || parsed;
-                if (b && (b.id || b.beacon_id)) {
+                const beaconId = b?.id || b?.beacon_id || parsed.id || parsed.beacon_id;
+                if (b && beaconId) {
+                    const isActive = b.is_active ?? b.active ?? true;
                     const formattedBeacon: SosBeacon = {
-                        id: b.id || b.beacon_id,
-                        beacon_id: b.beacon_id || b.id,
+                        id: beaconId,
+                        beacon_id: beaconId,
                         sender_did: b.sender_did || item.sender,
                         sender_name: b.sender_name || `Operador ${(item.sender || '').slice(0, 6)}`,
                         lat: b.lat ?? b.latitude ?? b.coords?.lat,
@@ -612,31 +676,63 @@ export async function dispatchIncomingMessage(
                         timestamp: b.timestamp ? (b.timestamp > 1e11 ? b.timestamp : b.timestamp * 1000) : Date.now(),
                         battery_level: b.battery_level ?? b.batteryLevel ?? 100,
                         note: b.note || 'ALERTA SOS SOLICITANDO AUXILIO',
-                        is_active: b.is_active ?? b.active ?? true,
+                        is_active: isActive,
                         distress_type: b.distress_type || b.distressType || 'SOS_GENERAL'
                     };
-                    get().addSosBeacon(formattedBeacon);
-                    TacticalAudioEngine.playEmergencyAlarm();
+
+                    if (formattedBeacon.is_active) {
+                        get().addSosBeacon(formattedBeacon);
+
+                        try {
+                            const rawSos = localStorage.getItem('red_sos_beacons');
+                            const sosList: any[] = rawSos ? JSON.parse(rawSos) : [];
+                            if (!sosList.some((x: any) => (x.id || x.beacon_id) === beaconId)) {
+                                sosList.unshift(formattedBeacon);
+                                const clamped = sosList.slice(0, 200);
+                                localStorage.setItem('red_sos_beacons', JSON.stringify(clamped));
+                                void setSecureStored('red_sos_beacons', clamped);
+                            }
+
+                            const rawEmerg = localStorage.getItem('red_emergency_beacons');
+                            const emergList: any[] = rawEmerg ? JSON.parse(rawEmerg) : [];
+                            if (!emergList.some((x: any) => (x.id || x.beacon_id) === beaconId)) {
+                                emergList.unshift(formattedBeacon);
+                                const clamped = emergList.slice(0, 200);
+                                localStorage.setItem('red_emergency_beacons', JSON.stringify(clamped));
+                                void setSecureStored('red_emergency_beacons', clamped);
+                            }
+                        } catch {}
+
+                        TacticalAudioEngine.playEmergencyAlarm();
+                        toast.error(`🚨 SOS: ${formattedBeacon.sender_name || 'Alerta de Emergencia'} transmitió auxilio!`);
+                    } else {
+                        executeSosResolution(beaconId);
+                    }
                 }
             } catch (err) {
                 console.warn('[SOS Beacon Dispatch Error]', err);
             }
-            return; // Retorno estricto para que la baliza sea tratada exclusivamente en el motor de emergencia
+            return;
         }
 
         if (
             item.msg_type === 'sos_resolve' ||
+            item.msg_type === 'emergency_beacon_cancel' ||
             (item as any)?.type === 'SOS_RESOLVE' ||
             (data as any)?.type === 'SOS_RESOLVE' ||
-            (typeof item.content === 'string' && (item.content.includes('"msg_type":"sos_resolve"') || item.content.includes('"type":"SOS_RESOLVE"')))
+            (typeof item.content === 'string' && (
+                item.content.includes('"msg_type":"sos_resolve"') ||
+                item.content.includes('"msg_type":"emergency_beacon_cancel"') ||
+                item.content.includes('"type":"SOS_RESOLVE"')
+            ))
         ) {
             try {
                 const parsed = typeof item.content === 'string' && item.content.startsWith('{')
                     ? JSON.parse(item.content)
                     : (item as any);
-                const targetId = parsed.sos_id || parsed.id || parsed.beacon_id;
+                const targetId = parsed.sos_id || parsed.id || parsed.beacon_id || (item as any).sos_id || (item as any).beacon_id;
                 if (targetId) {
-                    get().resolveSosBeacon(targetId);
+                    executeSosResolution(targetId);
                 }
             } catch (err) {
                 console.warn('[SOS Resolve Dispatch Error]', err);
@@ -829,6 +925,8 @@ export async function dispatchIncomingMessage(
                 );
 
                 const msgType = item.msg_type || parsed.type || (parsed.accepted ? 'contact_response' : 'contact_request');
+                const peerKyberPk = parsed.kyber_public_key || parsed.sender_kyber_pk || parsed.kyberPublicKeyHex || null;
+                const peerX25519Pk = parsed.x25519_public_key || parsed.sender_x25519_pk || parsed.x25519PublicKeyHex || null;
 
                 // ── CASO A: SOLICITUD DE CONTACTO ENTRANTE (Requiere Consentimiento) ──
                 if (msgType === 'contact_request') {
@@ -842,6 +940,8 @@ export async function dispatchIncomingMessage(
                                     identity_hash: senderHash,
                                     display_name: finalName,
                                     public_key: senderPk || c.public_key,
+                                    kyber_public_key: peerKyberPk || c.kyber_public_key,
+                                    x25519_public_key: peerX25519Pk || c.x25519_public_key,
                                     avatar_url: parsed.avatar_url || c.avatar_url
                                 };
                             }
@@ -852,12 +952,18 @@ export async function dispatchIncomingMessage(
                         if (trackHandshake(autoRespKey, 120_000)) {
                             const myId = get().identity;
                             if (myId?.identity_hash) {
+                                const myKyber = typeof window !== 'undefined' ? (localStorage.getItem('red_pqc_kyber_public_key') || '') : '';
+                                const myX25519 = typeof window !== 'undefined' ? (localStorage.getItem('red_pqc_x25519_public_key') || '') : '';
                                 const respPayload = JSON.stringify({
                                     type: 'contact_response',
                                     id: `cres_${Date.now()}_${myId.identity_hash.slice(0, 8)}`,
                                     sender_hash: myId.identity_hash,
                                     sender_name: myId.nickname || 'Operador RED',
                                     sender_pk: myId.public_key || null,
+                                    sender_kyber_pk: myKyber || null,
+                                    sender_x25519_pk: myX25519 || null,
+                                    kyber_public_key: myKyber || null,
+                                    x25519_public_key: myX25519 || null,
                                     avatar_url: myId.avatar_url || null,
                                     accepted: true,
                                     timestamp: Date.now()
@@ -877,6 +983,8 @@ export async function dispatchIncomingMessage(
                             timestamp: parsed.timestamp ? (parsed.timestamp > 1e11 ? parsed.timestamp : parsed.timestamp * 1000) : Date.now(),
                             avatarUrl: parsed.avatar_url || null,
                             bio: parsed.bio || null,
+                            kyber_public_key: peerKyberPk,
+                            x25519_public_key: peerX25519Pk,
                         };
 
                         const currentPending = get().pendingContactRequests || [];
@@ -902,34 +1010,76 @@ export async function dispatchIncomingMessage(
 
                 // ── CASO B: RESPUESTA DE CONTACTO ACEPTADA (Handshake Bidireccional) ──
                 if (msgType === 'contact_response') {
-                    // [BUG-10 FIX] Verificar que enviamos una solicitud previa a este peer.
-                    // Sin este guard, un nodo malicioso puede inyectar contact_response y
-                    // añadirse a nuestra agenda sin consentimiento explícito.
+                    // [BUG-10 FIX & CANONICAL RESOLUTION] Verificar que enviamos una solicitud previa a este peer.
+                    // Resuelve identidades canónicas vs hardware IDs (BLE/WiFi) para evitar falsos rechazos de suplantación.
                     const pendingRequests = get().pendingContactRequests || [];
                     const storedOutbound = typeof window !== 'undefined'
                         ? (() => { try { return JSON.parse(localStorage.getItem('red_outbound_contact_requests') || '[]'); } catch { return []; } })()
                         : [];
-                    const hadOutboundRequest = [...pendingRequests, ...storedOutbound].some((r: any) =>
-                        r && (r.senderHash === senderHash ||
-                        (senderHash.length >= 8 && (r.senderHash || '').startsWith(senderHash.slice(0, 8))))
-                    );
+
+                    const cleanSender = normalizeIdentity(senderHash);
+                    const senderCanonical = meshRouter.getCanonicalId(cleanSender);
+
+                    const matchRequest = (r: any) => {
+                        if (!r) return false;
+                        const reqHash = normalizeIdentity(r.senderHash || r.target_hash || r.peer || '');
+                        if (!reqHash) return false;
+                        if (reqHash === cleanSender) return true;
+                        if (cleanSender.length >= 8 && reqHash.startsWith(cleanSender.slice(0, 8))) return true;
+                        if (reqHash.length >= 8 && cleanSender.startsWith(reqHash.slice(0, 8))) return true;
+
+                        const reqCanonical = meshRouter.getCanonicalId(reqHash);
+                        if (reqCanonical) {
+                            if (reqCanonical === cleanSender) return true;
+                            if (senderCanonical && reqCanonical === senderCanonical) return true;
+                            if (cleanSender.length >= 8 && reqCanonical.startsWith(cleanSender.slice(0, 8))) return true;
+                            if (reqCanonical.length >= 8 && cleanSender.startsWith(reqCanonical.slice(0, 8))) return true;
+                        }
+                        if (senderCanonical) {
+                            if (reqHash === senderCanonical) return true;
+                            if (senderCanonical.length >= 8 && reqHash.startsWith(senderCanonical.slice(0, 8))) return true;
+                            if (reqHash.length >= 8 && senderCanonical.startsWith(reqHash.slice(0, 8))) return true;
+                        }
+                        return false;
+                    };
+
+                    const hadOutboundRequest = [...pendingRequests, ...storedOutbound].some(matchRequest);
+
                     // Also allow if sender is already an existing contact (mutual re-confirmation)
                     const isExistingContact = (get().contacts || []).some((c: any) => {
                         const cHash = normalizeIdentity(c?.identity_hash || '');
-                        return cHash === senderHash || (senderHash.length >= 8 && cHash.startsWith(senderHash.slice(0, 8)));
+                        if (!cHash) return false;
+                        if (cHash === cleanSender) return true;
+                        if (cleanSender.length >= 8 && cHash.startsWith(cleanSender.slice(0, 8))) return true;
+                        if (cHash.length >= 8 && cleanSender.startsWith(cHash.slice(0, 8))) return true;
+                        if (senderCanonical && cHash === senderCanonical) return true;
+                        const cCanonical = meshRouter.getCanonicalId(cHash);
+                        if (cCanonical && senderCanonical && cCanonical === senderCanonical) return true;
+                        return false;
                     });
 
                     if (!hadOutboundRequest && !isExistingContact) {
-                        console.warn(`[RED][Security] contact_response rechazado de ${senderHash.slice(0, 12)}: no existe solicitud previa enviada a este peer`);
+                        console.warn(`[RED][Security] contact_response rechazado de ${cleanSender.slice(0, 12)}: no existe solicitud previa enviada a este peer`);
                         return;
                     }
 
                     if (parsed.accepted !== false) {
+                        // Purge confirmed request from stored outbound requests to maintain hygiene
+                        if (typeof window !== 'undefined' && storedOutbound.length > 0) {
+                            try {
+                                const remainingOutbound = storedOutbound.filter((r: any) => !matchRequest(r));
+                                localStorage.setItem('red_outbound_contact_requests', JSON.stringify(remainingOutbound));
+                            } catch {}
+                        }
+
                         const currentContacts = get().contacts || [];
                         const cIdx = currentContacts.findIndex(c => {
                             if (!c) return false;
                             const cHash = normalizeIdentity(c.identity_hash || '');
-                            return cHash === senderHash || (senderHash.length >= 8 && cHash.startsWith(senderHash.slice(0, 8)));
+                            return cHash === cleanSender ||
+                                (cleanSender.length >= 8 && cHash.startsWith(cleanSender.slice(0, 8))) ||
+                                (cHash.length >= 8 && cleanSender.startsWith(cHash.slice(0, 8))) ||
+                                (senderCanonical && cHash === senderCanonical);
                         });
 
                         let nextContacts = [...currentContacts];
@@ -939,6 +1089,8 @@ export async function dispatchIncomingMessage(
                                 identity_hash: senderHash,
                                 display_name: finalName,
                                 public_key: senderPk || nextContacts[cIdx].public_key,
+                                kyber_public_key: peerKyberPk || nextContacts[cIdx].kyber_public_key,
+                                x25519_public_key: peerX25519Pk || nextContacts[cIdx].x25519_public_key,
                                 avatar_url: parsed.avatar_url || nextContacts[cIdx].avatar_url
                             };
                         } else {
@@ -946,6 +1098,8 @@ export async function dispatchIncomingMessage(
                                 identity_hash: senderHash,
                                 display_name: finalName,
                                 public_key: senderPk,
+                                kyber_public_key: peerKyberPk,
+                                x25519_public_key: peerX25519Pk,
                                 avatar_url: parsed.avatar_url || undefined
                             });
                         }
@@ -973,7 +1127,8 @@ export async function dispatchIncomingMessage(
                         set({ contacts: nextContacts, conversations: nextConvs });
                         RedAPI.setWebStore('red_web_contacts', nextContacts);
                         RedAPI.setWebStore('red_web_conversations', nextConvs);
-                        RedAPI.addContact(senderHash, finalName, senderPk).catch(() => {});
+                        RedAPI.addContact(senderHash, finalName, senderPk, peerKyberPk, peerX25519Pk).catch(() => {});
+                        meshRouter.updatePeer(senderHash, 'ble', undefined, senderHash, finalName, senderPk, undefined, undefined, peerKyberPk || undefined, peerX25519Pk || undefined);
 
                         const handshakeKey = `${senderHash.toLowerCase()}_confirmed`;
                         if (trackHandshake(handshakeKey, 60_000)) {
@@ -1139,49 +1294,83 @@ export async function dispatchIncomingMessage(
             return;
         }
 
-        // ── Emergency Distress SOS Beacon: ingest, alert & update activeSosBeacons ──
-        if (item.msg_type === 'emergency_beacon') {
+
+
+        // ── AMBER Alert Protocol: Ingestion & Off-grid Broadcast Handling ──
+        const isAmberAlert = item.msg_type === 'amber_alert' ||
+            (typeof item.content === 'string' && item.content.startsWith('{') && (
+                item.content.includes('"msg_type":"amber_alert"') ||
+                item.content.includes('"event_type":"amber_alert"') ||
+                item.content.includes('"type":"red_amber_alert"')
+            ));
+
+        if (isAmberAlert) {
             try {
                 const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
-                const beacon = (parsed as any).beacon || parsed;
-                const raw = localStorage.getItem('red_emergency_beacons');
-                const list: any[] = raw ? JSON.parse(raw) : [];
-                if (!list.some((b: any) => b.beacon_id === beacon.beacon_id)) {
-                    list.unshift({ ...beacon, active: true });
-                    // Write-through: sync a localStorage inmediato + async a Keystore
-                    localStorage.setItem('red_emergency_beacons', JSON.stringify(list));
-                    void setSecureStored('red_emergency_beacons', list);
-                    set((s: any) => ({
-                        activeSosBeacons: [...s.activeSosBeacons.filter((b: any) => b.beacon_id !== beacon.beacon_id), { ...beacon, active: true }]
-                    }));
-                    TacticalAudioEngine.playEmergencyAlarm();
-                    toast.error(`🚨 SOS: ${beacon.sender_name || 'Alerta de Emergencia'} transmitió auxilio!`);
+                const alert = (parsed as any).alert || parsed;
+                if (alert && alert.id) {
+                    const raw = localStorage.getItem('red_amber_alerts');
+                    const alerts: any[] = raw ? JSON.parse(raw) : [];
+                    if (!alerts.some((a: any) => a.id === alert.id)) {
+                        alerts.unshift({ ...alert, status: alert.status || 'Active' });
+                        const trimmed = alerts.slice(0, 200);
+                        localStorage.setItem('red_amber_alerts', JSON.stringify(trimmed));
+                        void setSecureStored('red_amber_alerts', trimmed);
+
+                        if (typeof window !== 'undefined') {
+                            window.dispatchEvent(new CustomEvent('red_amber_updated'));
+                        }
+
+                        TacticalAudioEngine.playEmergencyAlarm();
+                        toast.error(`🚨 ALERTA AMBER: ${alert.name || 'Menor extraviado'} (${alert.age || '?'} años)`);
+                    }
                 }
             } catch (e) {
-                console.warn('[Emergency Beacon Parse Error]', e);
+                console.warn('[Amber Alert Ingest Error]', e);
             }
             return;
         }
 
-        // ── Cancel SOS Beacon ──
-        if (item.msg_type === 'emergency_beacon_cancel') {
+        // ── AMBER Alert Resolved / Sighting ──
+        if (item.msg_type === 'amber_resolved' || (typeof item.content === 'string' && item.content.includes('"msg_type":"amber_resolved"'))) {
             try {
                 const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
-                const beaconId = (parsed as any).beacon_id || (item as any).beacon_id;
-                if (beaconId) {
-                    const raw = localStorage.getItem('red_emergency_beacons');
-                    const list: any[] = raw ? JSON.parse(raw) : [];
-                    const updated = list.map((b: any) => b.beacon_id === beaconId ? { ...b, active: false } : b);
-                    localStorage.setItem('red_emergency_beacons', JSON.stringify(updated));
-                    void setSecureStored('red_emergency_beacons', updated);
-                    set((s: any) => ({
-                        activeSosBeacons: s.activeSosBeacons.filter((b: any) => b.beacon_id !== beaconId)
-                    }));
-                    toast.info(`Baliza SOS cancelada.`);
+                const alertId = parsed.alert_id || parsed.id;
+                if (alertId) {
+                    const raw = localStorage.getItem('red_amber_alerts');
+                    const alerts: any[] = raw ? JSON.parse(raw) : [];
+                    const updated = alerts.map((a: any) => a.id === alertId ? { ...a, status: 'Resolved', resolution_notes: parsed.resolution_notes } : a);
+                    localStorage.setItem('red_amber_alerts', JSON.stringify(updated));
+                    void setSecureStored('red_amber_alerts', updated);
+
+                    if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('red_amber_updated'));
+                    }
+                    TacticalAudioEngine.playRogerBeep();
+                    toast.info(`✅ Alerta AMBER resuelta: persona localizada`);
                 }
-            } catch (e) {
-                console.warn('[Cancel SOS Error]', e);
-            }
+            } catch (e) {}
+            return;
+        }
+
+        if (item.msg_type === 'amber_sighting' || (typeof item.content === 'string' && item.content.includes('"msg_type":"amber_sighting"'))) {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const alertId = parsed.alert_id;
+                if (alertId) {
+                    const raw = localStorage.getItem('red_amber_alerts');
+                    const alerts: any[] = raw ? JSON.parse(raw) : [];
+                    const target = alerts.find((a: any) => a.id === alertId);
+                    if (target) {
+                        target.sighting_count = (target.sighting_count || 0) + 1;
+                        localStorage.setItem('red_amber_alerts', JSON.stringify(alerts));
+                        if (typeof window !== 'undefined') {
+                            window.dispatchEvent(new CustomEvent('red_amber_updated'));
+                        }
+                    }
+                    toast.info(`📍 Nuevo avistamiento reportado para alerta AMBER`);
+                }
+            } catch (e) {}
             return;
         }
 
@@ -1302,6 +1491,7 @@ export async function dispatchIncomingMessage(
                 }
                 if (chunkMeta && chunkMeta.fileId && typeof chunkMeta.chunkIndex === 'number') {
                     const dataUrl = mediaChunker.assemble(chunkMeta);
+                    const extraMeta = mediaChunker.popSessionMetadata(chunkMeta.fileId);
                     if (dataUrl) {
                         const fullMsgId = chunkMeta.originalMsgId || chunkMeta.fileId;
                         const msgType = chunkMeta.mimeType?.startsWith('image/') ? 'image' :
@@ -1316,6 +1506,10 @@ export async function dispatchIncomingMessage(
                             msg_type: msgType,
                             file_size: chunkMeta.fileSize,
                             mime_type: chunkMeta.mimeType,
+                            caption: chunkMeta.caption || (item as any).caption || extraMeta?.caption,
+                            file_name: chunkMeta.file_name || (item as any).file_name || extraMeta?.fileName,
+                            duration_ms: chunkMeta.duration_ms || (item as any).duration_ms || extraMeta?.durationMs,
+                            waveform: chunkMeta.waveform || (item as any).waveform || extraMeta?.waveform,
                         };
                         return dispatchIncomingMessage(assembledItem, set, get);
                     }
@@ -1931,14 +2125,54 @@ export async function dispatchIncomingMessage(
         if (item.msg_type === 'message_edit') {
             try {
                 const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
-                const targetId = parsed.target_id || parsed.targetMsgId;
-                const newContent = parsed.new_content || parsed.newContent;
+                const targetId = parsed.target_id || parsed.targetMsgId || (item as any).target_id || (item as any).target_message_id;
+                const newContent = parsed.new_content || parsed.newContent || (item as any).new_content;
                 if (targetId && newContent) {
                     const updated = messages.map((m: MessageItem) => {
                         if (m.id !== targetId) return m;
                         return { ...m, content: newContent, is_edited: true, edited: true };
                     });
                     set({ messages: updated });
+
+                    // [BUG-8 FIX] Persistir edición en localStorage del receptor
+                    const convId = parsed.conversation_id || item.conversation_id || item.sender;
+                    if (convId && typeof window !== 'undefined') {
+                        try {
+                            const cleanConv = (convId || '').toLowerCase().replace(/^did:red:/i, '').trim();
+                            const keysToUpdate = [`red_web_messages_${cleanConv}`];
+                            const mapRaw = localStorage.getItem('red_device_canonical_map');
+                            if (mapRaw) {
+                                try {
+                                    const mappings: [string, string][] = JSON.parse(mapRaw);
+                                    for (const [hw, canon] of mappings) {
+                                        if (canon.toLowerCase() === cleanConv) keysToUpdate.push(`red_web_messages_${hw.toLowerCase()}`);
+                                        else if (hw.toLowerCase() === cleanConv) keysToUpdate.push(`red_web_messages_${canon.toLowerCase()}`);
+                                    }
+                                } catch {}
+                            }
+                            for (const k of keysToUpdate) {
+                                const raw = localStorage.getItem(k);
+                                if (raw) {
+                                    const list: any[] = JSON.parse(raw);
+                                    if (list.some((m: any) => m && m.id === targetId)) {
+                                        const updatedList = list.map((m: any) => (m && m.id === targetId ? { ...m, content: newContent, is_edited: true, edited: true } : m));
+                                        localStorage.setItem(k, JSON.stringify(updatedList));
+                                    }
+                                }
+                            }
+                        } catch {}
+                    }
+
+                    // [BUG-8 FIX] Actualizar resumen de la conversación en barra lateral si corresponde
+                    const currentConvs = get().conversations || [];
+                    const convIdx = currentConvs.findIndex(c => c && (c.id === convId || c.peer === convId));
+                    if (convIdx >= 0) {
+                        const conv = currentConvs[convIdx];
+                        const updatedConvs = [...currentConvs];
+                        updatedConvs[convIdx] = { ...conv, last_message: newContent };
+                        set({ conversations: updatedConvs });
+                        RedAPI.setWebStore('red_web_conversations', updatedConvs);
+                    }
                 }
             } catch (e) {
                 console.warn('[Message Edit Parse Error]', e);
@@ -2084,13 +2318,20 @@ export async function dispatchIncomingMessage(
         }
 
         const myHash = get().identity?.identity_hash;
+        // [BUG-14 FIX] Normalizar el sender antes de comparar para cubrir el caso de bounces SSE del
+        // nodo Rust donde item.sender llega como "did:red:ABCD..." con prefijo DID, mientras que
+        // myHash son solo los 64 hex chars sin prefijo. La comparación sin normalizar produce
+        // resolvedIsMine=false, causando audio de recepción y badge de no leído en mensajes propios.
+        const normSenderForSelfCheck = normalizeIdentity(item.sender || '');
         const resolvedIsMine = Boolean(
             item.is_mine ||
             item.sender === 'me' ||
             (myHash && item.sender &&
                 (
+                    normSenderForSelfCheck === myHash.toLowerCase() ||
                     item.sender.toLowerCase() === myHash.toLowerCase() ||
-                    // Only match short_id scenario: full myHash starts with a genuine short sender prefix
+                    // Short-ID prefix match: full myHash starts with a genuine short sender prefix
+                    (myHash.length > 16 && normSenderForSelfCheck.length >= 8 && normSenderForSelfCheck.length < myHash.length && myHash.toLowerCase().startsWith(normSenderForSelfCheck)) ||
                     (myHash.length > 16 && item.sender.length >= 8 && item.sender.length < myHash.length && myHash.toLowerCase().startsWith(item.sender.toLowerCase()))
                 )
             )
@@ -2216,16 +2457,16 @@ export async function dispatchIncomingMessage(
                 const isSyncedBatch = (item as any).is_synced_batch || (item as any).is_historical_sync;
                 if (!normalizedItem.is_mine && !isSyncedBatch) {
                     TacticalAudioEngine.playMessageReceived();
-                    if (item.sender && item.sender !== myHash && item.msg_type !== 'ack' && item.msg_type !== 'typing') {
+                    if (!(item as any)._ackEmitted && item.sender && item.sender !== myHash && item.msg_type !== 'ack' && item.msg_type !== 'typing') {
                         const ackTargetNonce = (data as any)?.nonce || (item as any)?.nonce || (item as any)?.packet_nonce || item.id || 'ack_nonce';
                         meshRouter.sendDeliveryAck(item.sender, ackTargetNonce, item.id).catch(() => {});
                     }
                 }
             }
 
-            // Mirror incoming message to active Web Companion Live Bridge
+            // Mirror incoming message to active Web Companion Live Bridge (suprimir si provino de sync para evitar ping-pong)
             try {
-                if (companionSyncEngine.isLiveSessionActive()) {
+                if (companionSyncEngine.isLiveSessionActive() && !(item as any)._from_companion_sync) {
                     companionSyncEngine.publishLiveEvent('LIVE_MSG_RECV', normalizedItem).catch(() => {});
                 }
             } catch {}
@@ -2371,6 +2612,18 @@ export async function dispatchIncomingMessage(
                 return;
             }
 
+            const activeId = (get().activeConversationId || '').toLowerCase().replace(/^did:red:/i, '').trim();
+            const targetPeer = (convId || '').toLowerCase().replace(/^did:red:/i, '').trim();
+            const senderClean = (canonicalSender || item.sender || '').toLowerCase().replace(/^did:red:/i, '').trim();
+            const isCurrentChat = !!activeId && (
+                activeId === targetPeer ||
+                activeId === senderClean ||
+                (targetPeer.length >= 8 && activeId.startsWith(targetPeer.slice(0, 8))) ||
+                (activeId.length >= 8 && targetPeer.startsWith(activeId.slice(0, 8))) ||
+                (senderClean.length >= 8 && activeId.startsWith(senderClean.slice(0, 8))) ||
+                (activeId.length >= 8 && senderClean.startsWith(activeId.slice(0, 8)))
+            );
+
             const currentConvs = get().conversations || [];
             const idx = currentConvs.findIndex(c => 
                 c && (
@@ -2408,7 +2661,8 @@ export async function dispatchIncomingMessage(
                     peer_name: convName || (isNonGenericSender ? rawSenderName : existing.peer_name),
                     last_message: snippet,
                     last_timestamp: normTimestamp,
-                    unread_count: (existing.unread_count || 0) + 1,
+                    // [BUG-6 FIX] Mensajes propios (resolvedIsMine) nunca incrementan el contador de no leídos
+                    unread_count: (isCurrentChat || resolvedIsMine) ? (isCurrentChat ? 0 : (existing.unread_count || 0)) : ((existing.unread_count || 0) + 1),
                     is_group: isGroup || existing.is_group
                 };
                 updatedConvs.splice(idx, 1);
@@ -2420,7 +2674,8 @@ export async function dispatchIncomingMessage(
                     peer_name: convName || (isNonGenericSender ? rawSenderName : undefined),
                     last_message: snippet,
                     last_timestamp: normTimestamp,
-                    unread_count: 1,
+                    // [BUG-6 FIX] Si la conversación es creada por un envío propio, inicia en 0 no leídos
+                    unread_count: (isCurrentChat || resolvedIsMine) ? 0 : 1,
                     is_group: isGroup
                 };
                 updatedConvs.unshift(newObj);
@@ -2475,7 +2730,7 @@ export async function dispatchIncomingMessage(
                     const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
                     const isAlreadyInList = list.some(m => {
                         if (m.id === item.id) return true;
-                        if (!m.is_mine && !item.is_mine && isSameSender(m.sender, item.sender)) {
+                        if (!m.is_mine && !resolvedIsMine && isSameSender(m.sender, item.sender)) {
                             const mTs = m.timestamp ? (m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp) : 0;
                             const itemTs = (item as any).timestamp ? ((item as any).timestamp > 1e11 ? (item as any).timestamp / 1000 : (item as any).timestamp) : 0;
                             if (m.content && item.content && m.content === item.content && Math.abs(mTs - itemTs) < 15) return true;
@@ -2491,19 +2746,51 @@ export async function dispatchIncomingMessage(
                             ...(item as MessageItem),
                             media_data: rawMedia && rawMedia.length > 512 ? `red_vault://${item.id}` : item.media_data,
                             content: item.content?.startsWith('data:') && item.content.length > 512 ? `red_vault://${item.id}` : item.content,
-                            conversation_id: isGroup ? convId : item.conversation_id
+                            conversation_id: isGroup ? convId : item.conversation_id,
+                            status: isCurrentChat ? 'Read' : ((item as MessageItem).status || 'Delivered'),
+                            // [BUG-6 FIX] Mensajes propios siempre se guardan como leídos
+                            is_read: (isCurrentChat || resolvedIsMine) ? true : ((item as MessageItem).is_read ?? false)
                         };
                         list.push(lightItem);
                         localStorage.setItem(convKey, JSON.stringify(list));
+
+                        // Si coincide con el chat activo en pantalla, insertar en el buffer de memoria
+                        if (isCurrentChat) {
+                            set({ messages: [...get().messages.filter(m => m.id !== item.id), lightItem].slice(-MAX_IN_MEMORY_MESSAGES) });
+                        }
                     }
                 } catch {}
             }
             const isSyncedBatch = (item as any).is_synced_batch || (item as any).is_historical_sync;
-            if (!item.is_mine && !isSyncedBatch) {
+
+            // 1. Confirmación de Entrega a la Malla: Notificar al remitente que el paquete llegó físicamente
+            if (!resolvedIsMine && !isSyncedBatch && !(item as any)._ackEmitted && item.sender && item.sender !== myHash && item.msg_type !== 'ack' && item.msg_type !== 'typing') {
+                const ackTargetNonce = (data as any)?.nonce || (item as any)?.nonce || (item as any)?.packet_nonce || item.id || 'ack_nonce';
+                meshRouter.sendDeliveryAck(item.sender, ackTargetNonce, item.id).catch(() => {});
+            }
+
+            // 2. Espejo en Tiempo Real a Web Companion vinculado
+            try {
+                if (companionSyncEngine.isLiveSessionActive() && !(item as any)._from_companion_sync) {
+                    const syncItem: MessageItem = {
+                        ...(item as MessageItem),
+                        timestamp: normTimestamp,
+                        is_mine: resolvedIsMine,
+                        conversation_id: isGroup ? convId : item.conversation_id,
+                        status: isCurrentChat ? 'Read' : ((item as MessageItem).status || 'Delivered'),
+                    };
+                    companionSyncEngine.publishLiveEvent('LIVE_MSG_RECV', syncItem).catch(() => {});
+                }
+            } catch {}
+
+            // [BUG-3 FIX] Usar resolvedIsMine (auditado contra myHash) en lugar del campo raw item.is_mine.
+            // item.is_mine puede llegar undefined/false en bounce-backs SSE del nodo Rust, causando
+            // que el audio de "mensaje recibido" suene en el dispositivo del remitente.
+            if (!resolvedIsMine && !isSyncedBatch) {
                 TacticalAudioEngine.playMessageReceived();
             }
-            // FIRE LOCAL NOTIFICATION IF CHAT IS NOT FOCUSED OR APP IS BACKGROUNDED
-            if (!isSyncedBatch) {
+            // [BUG-6 FIX] Solo notificar si el chat no está activo Y el mensaje proviene de un par remoto (no bounce-back propio)
+            if (!isSyncedBatch && !isCurrentChat && !resolvedIsMine) {
                 import('@capacitor/core').then(({ Capacitor }) => {
                     if (Capacitor.isNativePlatform()) {
                         const contacts = get().contacts || [];
@@ -2532,6 +2819,10 @@ export async function dispatchIncomingMessage(
                         });
                     }
                 });
+            }
+
+            if (isCurrentChat && convId) {
+                RedAPI.req(`/conversations/${convId}/read`, { method: 'POST', body: '{}' }).catch(() => {});
             }
             debouncedFetchData(get);
         }

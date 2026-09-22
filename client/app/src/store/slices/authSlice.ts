@@ -18,6 +18,7 @@ let _identityResolvedUnsub: (() => void) | null = null;
 // [RIESGO-01 FIX] Guardar el unsubscriber de onLocalDelivery para cancerlarlo antes de re-registrar.
 // Sin esto, múltiples login/logout acumulan handlers huérfanos en localDeliveryHandlers Set.
 let _meshLocalDeliveryUnsub: (() => void) | null = null;
+let _companionLiveSyncUnsub: (() => void) | null = null;
 let _connectMainSSERef: (() => void) | null = null;
 let _connectOutboundSSERef: (() => void) | null = null;
 let _visibilityListenerRegistered = false;
@@ -48,6 +49,95 @@ function registerMeshLocalDeliveryListener(get: () => RedStore) {
                         });
                     }
                 } catch {}
+                return;
+            }
+
+            // Descarte de telemetría y tramas de transporte satelital en bruto (consumidas por SatelliteMeshGatewayEngine)
+            if (
+                payloadStr.startsWith('SAT_RELAY_V1|') ||
+                payloadStr.startsWith('SAT_BURST_V1:') ||
+                payloadStr.startsWith('SBD_V1|')
+            ) {
+                return;
+            }
+
+            // Desempaquetado seguro de bajadas satelitales (SAT_DOWNLINK_MSG)
+            if (payloadStr.startsWith('SAT_DOWNLINK_MSG:')) {
+                try {
+                    const withoutPrefix = payloadStr.substring(17); // Quitar 'SAT_DOWNLINK_MSG:'
+                    const colonFirst = withoutPrefix.indexOf(':');
+                    if (colonFirst > 0) {
+                        const origSender = withoutPrefix.substring(0, colonFirst);
+                        const rest = withoutPrefix.substring(colonFirst + 1);
+                        const colonSecond = rest.indexOf(':');
+
+                        let finalRecipient = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+                        let innerPayload = rest;
+
+                        // Verificar si incluye formato extendido: origSender:finalRecipient:innerPayload
+                        if (colonSecond > 0 && colonSecond <= 64) {
+                            const candidateRecipient = rest.substring(0, colonSecond);
+                            if (candidateRecipient.length === 64 || candidateRecipient === '*' || candidateRecipient === 'all') {
+                                finalRecipient = candidateRecipient;
+                                innerPayload = rest.substring(colonSecond + 1);
+                            }
+                        }
+
+                        let currentMyHash = get().identity?.identity_hash || '';
+                        if (!currentMyHash && typeof window !== 'undefined') {
+                            currentMyHash = localStorage.getItem('red_identity_hash') || '';
+                        }
+
+                        const isBroadcastTarget = !finalRecipient ||
+                            finalRecipient === '*' ||
+                            finalRecipient === 'all' ||
+                            finalRecipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
+                            finalRecipient === '0000000000000000000000000000000000000000000000000000000000000000';
+                        const isTargetedToMe = isBroadcastTarget ||
+                            (!!currentMyHash && finalRecipient.toLowerCase() === currentMyHash.toLowerCase()) ||
+                            (!!currentMyHash && finalRecipient.length >= 8 && currentMyHash.toLowerCase().startsWith(finalRecipient.toLowerCase()));
+
+                        if (isTargetedToMe) {
+                            // Si el payload satelital es una baliza SOS de emergencia
+                            if (innerPayload.startsWith('SOS_BEACON_V1:')) {
+                                try {
+                                    const jsonStr = innerPayload.substring(14);
+                                    const beacon = JSON.parse(jsonStr);
+                                    if (beacon && beacon.id) {
+                                        import('../../lib/emergency/MeshSosBeaconEngine').then(({ meshSosBeacon }) => {
+                                            meshSosBeacon.processIncomingSosBeacon(beacon);
+                                        });
+                                    }
+                                } catch {}
+                                return;
+                            }
+
+                            const normTs = packet.timestamp ? (packet.timestamp > 1e11 ? packet.timestamp / 1000 : packet.timestamp) : Date.now() / 1000;
+                            let satParsed: any;
+                            try {
+                                satParsed = JSON.parse(innerPayload);
+                            } catch {
+                                satParsed = {
+                                    id: packet.nonce || `sat_${origSender.slice(0, 8)}_${Math.floor(normTs)}`,
+                                    content: innerPayload,
+                                    sender: origSender,
+                                    recipient: finalRecipient,
+                                    timestamp: normTs,
+                                    is_mine: false,
+                                    msg_type: 'text'
+                                };
+                            }
+                            if (satParsed) {
+                                if (!satParsed.id) satParsed.id = packet.nonce || `sat_${origSender.slice(0, 8)}_${Date.now()}`;
+                                if (!satParsed.sender) satParsed.sender = origSender;
+                                if (!satParsed.timestamp) satParsed.timestamp = normTs;
+                                get().addIncomingMessage(satParsed);
+                            }
+                        }
+                    }
+                } catch (satErr) {
+                    console.warn('[RED] Error decodificando SAT_DOWNLINK_MSG:', satErr);
+                }
                 return;
             }
 
@@ -97,6 +187,118 @@ function registerMeshLocalDeliveryListener(get: () => RedStore) {
             }
         } catch (deliveryErr) {
             console.warn('[RED] Error handling mesh packet delivery:', deliveryErr);
+        }
+    });
+}
+
+function wireCompanionLiveSyncBridge(get: () => RedStore, set: any) {
+    if (_companionLiveSyncUnsub) {
+        _companionLiveSyncUnsub();
+        _companionLiveSyncUnsub = null;
+    }
+    _companionLiveSyncUnsub = companionSyncEngine.onLiveEvent((event) => {
+        try {
+            const isMobile = companionSyncEngine.isMobileHost();
+
+            if (event.type === 'LIVE_MSG_RECV') {
+                get().addIncomingMessage({ ...event.data, _from_companion_sync: true });
+            } else if (event.type === 'LIVE_MSG_SEND') {
+                const { recipient, content, options, id } = event.data;
+                const isGroup = Boolean(options?.is_group || options?.group_id);
+                const isControl = options?.msg_type && 
+                    options.msg_type !== 'text' && 
+                    options.msg_type !== 'image' && 
+                    options.msg_type !== 'voice' && 
+                    options.msg_type !== 'audio' && 
+                    options.msg_type !== 'video' && 
+                    options.msg_type !== 'file' && 
+                    options.msg_type !== 'location' && 
+                    options.msg_type !== 'contact';
+
+                // Descartar señales de control internas para no ensuciar el historial de chat
+                if (isControl) return;
+
+                const myHash = get().identity?.identity_hash || '';
+                const targetConvId = isGroup ? (options?.group_id || recipient) : recipient;
+                const mirroredMsg: any = {
+                    id: id || options?.id || `msg_mirror_${Date.now()}`,
+                    sender: myHash,
+                    recipient: targetConvId,
+                    conversation_id: targetConvId,
+                    content: content,
+                    timestamp: Math.floor(Date.now() / 1000),
+                    status: 'Sent',
+                    is_mine: true,
+                    is_group: isGroup,
+                    group_id: isGroup ? targetConvId : undefined,
+                    msg_type: options?.msg_type || 'text',
+                    media_data: options?.media_data,
+                    _from_companion_sync: true
+                };
+
+                if (isMobile) {
+                    // 1. Host Móvil: transmitir el mensaje a la malla según el tipo de destino
+                    if (isGroup) {
+                        RedAPI.sendGroupMessage(targetConvId, content, { ...options, _skipCompanionSync: true }).catch((err) => {
+                            console.warn('[CompanionEngine:Mobile] Error broadcasting web group message to mesh:', err);
+                        });
+                    } else {
+                        RedAPI.sendMessage(recipient, content, { ...options, _skipCompanionSync: true }).catch((err) => {
+                            console.warn('[CompanionEngine:Mobile] Error broadcasting web message to mesh:', err);
+                        });
+                    }
+                    // 2. Reflejar en el historial local del móvil
+                    get().addIncomingMessage(mirroredMsg);
+                } else {
+                    // 2. Cliente Web Companion: espejar el mensaje saliente enviado por el móvil
+                    get().addIncomingMessage(mirroredMsg);
+                }
+            } else if (event.type === 'LIVE_READ_ACK') {
+                const { peer, conversationId } = event.data;
+                if (peer || conversationId) {
+                    get().markAsRead(peer || conversationId);
+                }
+            } else if (event.type === 'LIVE_TYPING') {
+                const { peer, isTyping } = event.data;
+                if (peer) {
+                    set((s: any) => ({
+                        peerTyping: Boolean(isTyping),
+                        peerTypingStatus: { ...s.peerTypingStatus, [peer]: isTyping ? 'typing' : 'idle' }
+                    }));
+                }
+            } else if (event.type === 'LIVE_CONTACT_UPDATE') {
+                get().fetchData();
+            } else if (event.type === 'LIVE_CONV_WIPE') {
+                const { peer } = event.data;
+                if (peer) {
+                    set((s: any) => ({
+                        conversations: s.conversations.filter((c: any) => c.peer !== peer && c.id !== peer),
+                        messages: s.activeConversationId === peer ? [] : s.messages
+                    }));
+                }
+            } else if (event.type === 'LIVE_MSG_DELETE') {
+                const { conversation_id, message_id } = event.data;
+                if (message_id) {
+                    set((s: any) => ({
+                        messages: s.messages.filter((m: any) => m.id !== message_id)
+                    }));
+                    if (conversation_id) {
+                        RedAPI.deleteMessage(conversation_id, message_id).catch(() => {});
+                    }
+                }
+            } else if (event.type === 'LIVE_CONV_CLEAR') {
+                const { conversation_id } = event.data;
+                if (conversation_id) {
+                    set((s: any) => ({
+                        messages: s.activeConversationId === conversation_id ? [] : s.messages
+                    }));
+                    RedAPI.clearConversation(conversation_id).catch(() => {});
+                }
+            } else if (event.type === 'LIVE_PROFILE_UPDATE') {
+                get().fetchData();
+            }
+        } catch (liveErr) {
+            console.warn('[RED Live Companion] Error handling live event:', liveErr);
         }
     });
 }
@@ -216,6 +418,7 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                         set({ pendingChatNavigation: null });
                         get().navigate('chat', pending);
                     }
+                    wireCompanionLiveSyncBridge(get, set);
                     return true;
                 }
                 return false;
@@ -298,61 +501,7 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 await get().fetchData();
 
                 // Wire Live Companion Sync Bridge (WhatsApp Web Style Real-time Mirror)
-                companionSyncEngine.onLiveEvent((event) => {
-                    try {
-                        if (event.type === 'LIVE_MSG_RECV') {
-                            get().addIncomingMessage(event.data);
-                        } else if (event.type === 'LIVE_MSG_SEND') {
-                            const { recipient, content, options } = event.data;
-                            RedAPI.sendMessage(recipient, content, options).catch((err) => {
-                                console.warn('[CompanionEngine:Mobile] Error broadcasting web message to mesh:', err);
-                            });
-                        } else if (event.type === 'LIVE_READ_ACK') {
-                            const { peer, conversationId } = event.data;
-                            if (peer || conversationId) {
-                                get().markAsRead(peer || conversationId);
-                            }
-                        } else if (event.type === 'LIVE_TYPING') {
-                            const { peer, isTyping } = event.data;
-                            if (peer) {
-                                set((s: any) => ({
-                                    peerTyping: Boolean(isTyping),
-                                    peerTypingStatus: { ...s.peerTypingStatus, [peer]: isTyping ? 'typing' : 'idle' }
-                                }));
-                            }
-                        } else if (event.type === 'LIVE_CONTACT_UPDATE') {
-                            get().fetchData();
-                        } else if (event.type === 'LIVE_CONV_WIPE') {
-                            const { peer } = event.data;
-                            if (peer) {
-                                set((s: any) => ({
-                                    conversations: s.conversations.filter((c: any) => c.peer !== peer && c.id !== peer),
-                                    messages: s.activeConversationId === peer ? [] : s.messages
-                                }));
-                            }
-                        } else if (event.type === 'LIVE_MSG_DELETE') {
-                            const { conversation_id, message_id } = event.data;
-                            if (message_id) {
-                                set((s: any) => ({
-                                    messages: s.messages.filter((m: any) => m.id !== message_id)
-                                }));
-                                if (conversation_id) {
-                                    RedAPI.deleteMessage(conversation_id, message_id).catch(() => {});
-                                }
-                            }
-                        } else if (event.type === 'LIVE_CONV_CLEAR') {
-                            const { conversation_id } = event.data;
-                            if (conversation_id) {
-                                set((s: any) => ({
-                                    messages: s.activeConversationId === conversation_id ? [] : s.messages
-                                }));
-                                RedAPI.clearConversation(conversation_id).catch(() => {});
-                            }
-                        }
-                    } catch (liveErr) {
-                        console.warn('[RED Live Companion] Error handling live event:', liveErr);
-                    }
-                });
+                wireCompanionLiveSyncBridge(get, set);
 
                 return true;
             }
@@ -395,6 +544,7 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             if (resolvedPin) {
                 await get().login(resolvedPin);
             }
+            wireCompanionLiveSyncBridge(get, set);
             await get().fetchData();
             toast.success(`🎉 ¡Dispositivo vinculado con éxito! Bienvenido ${payload.identity.nickname || 'Operador'}`);
             return true;
@@ -493,6 +643,15 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 }
             }
             console.log(`[Store] 📡 Profile update broadcasted for ${cleanName} to ${currentContacts.length} contacts.`);
+
+            // 3. Mirror profile update to active Web Companion Live Bridge
+            if (companionSyncEngine.isLiveSessionActive()) {
+                companionSyncEngine.publishLiveEvent('LIVE_PROFILE_UPDATE', {
+                    nickname: cleanName,
+                    phone_number: phone,
+                    bio
+                }).catch(() => {});
+            }
         }
     },
 
@@ -695,11 +854,14 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                             const convTs = (typeof conv.last_message === 'object' && (conv.last_message as any)?.timestamp) || conv.last_timestamp || 0;
                             const bestTs = Math.max(existingTs, convTs);
                             const bestSnippet = convTs > existingTs ? (conv.last_message || existing.last_message) : (existing.last_message || conv.last_message);
+                            const bestUnread = (existing.unread_count === 0 || conv.unread_count === 0)
+                                ? 0
+                                : Math.max(existing.unread_count || 0, conv.unread_count || 0);
                             dedupedMap.set(targetKey, {
                                 ...existing,
                                 last_message: bestSnippet,
                                 last_timestamp: bestTs,
-                                unread_count: (existing.unread_count || 0) + (conv.unread_count || 0)
+                                unread_count: bestUnread
                             });
                         }
                     }
@@ -759,6 +921,8 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     }
                 }).catch(() => {});
                 
+                wireCompanionLiveSyncBridge(get, set);
+
                 const connectSSE = () => {
                     if (_mainSSE) { _mainSSE.close(); _mainSSE = null; }
                     const es = RedAPI.subscribeToEvents((data) => {
@@ -1090,9 +1254,12 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 });
 
                 if (existingIdx === -1) {
+                    const peer = meshRouter.getPeerByAnyId(canonicalH);
                     dedupedConts.push({
                         ...ct,
-                        identity_hash: canonicalH
+                        identity_hash: canonicalH,
+                        kyber_public_key: ct.kyber_public_key || peer?.kyberPublicKey || null,
+                        x25519_public_key: ct.x25519_public_key || peer?.x25519PublicKey || null,
                     });
                 } else {
                     // Merge: prefer 64-char hex canonical DID over local_ or ephemeral hardware ID
@@ -1114,11 +1281,14 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                         ? existingName 
                         : (!isGeneric(incomingName) ? incomingName : (existingName || incomingName));
 
+                    const peer = meshRouter.getPeerByAnyId(bestHash) || meshRouter.getPeerByAnyId(canonicalH);
                     dedupedConts[existingIdx] = {
                         ...existing,
                         identity_hash: bestHash,
                         display_name: chosenDisplayName,
-                        public_key: ct.public_key || existing.public_key
+                        public_key: ct.public_key || existing.public_key,
+                        kyber_public_key: ct.kyber_public_key || existing.kyber_public_key || peer?.kyberPublicKey || null,
+                        x25519_public_key: ct.x25519_public_key || existing.x25519_public_key || peer?.x25519PublicKey || null,
                     };
                 }
             }
@@ -1198,6 +1368,12 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     const existing = mergedMap.get(key)!;
                     const existingTs = (typeof existing.last_message === 'object' && (existing.last_message as any)?.timestamp) || existing.last_timestamp || 0;
                     const localTs = (typeof lc.last_message === 'object' && (lc.last_message as any)?.timestamp) || lc.last_timestamp || 0;
+                    const activeChatId = get().activeConversationId?.toLowerCase();
+                    const isActive = activeChatId && (key === activeChatId.slice(0, 16) || canonicalP.toLowerCase() === activeChatId);
+                    const safeUnread = (isActive || lc.unread_count === 0)
+                        ? 0
+                        : (localTs > existingTs ? (lc.unread_count ?? existing.unread_count) : (existing.unread_count ?? lc.unread_count));
+
                     if (localTs > existingTs) {
                         mergedMap.set(key, {
                             ...existing,
@@ -1205,7 +1381,14 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                             peer: canonicalP,
                             last_message: lc.last_message || existing.last_message,
                             last_timestamp: localTs,
-                            unread_count: lc.unread_count ?? existing.unread_count
+                            unread_count: safeUnread
+                        });
+                    } else {
+                        mergedMap.set(key, {
+                            ...existing,
+                            id: canonicalP,
+                            peer: canonicalP,
+                            unread_count: safeUnread
                         });
                     }
                 }

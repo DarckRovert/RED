@@ -2,13 +2,17 @@
  * SoundMeshEngine.ts — RED 100% Offline Ultrasonic Sound-Modem Engine
  * 
  * Encodes encrypted Noise XK payloads into high-frequency FSK audio tones (18.5 kHz - 20.5 kHz)
- * emitted by the device speaker and decoded with symbol-timed FSK demodulation by nearby microphones.
+ * emitted by the device speaker via Continuous-Phase FSK (CPFSK) and decoded with
+ * symbol-timed FSK demodulation by nearby microphones.
  * Zero simulated data or random numbers.
  */
+
+import { AudioContextManager } from './AudioContextManager';
 
 export interface SoundMeshPacket {
     senderId: string;
     payloadHex: string;
+    rawBytes?: Uint8Array;
     rawText?: string;
     payload?: string;
     timestamp: number;
@@ -21,23 +25,16 @@ export class SoundMeshEngine {
     private static FREQ_PREAMBLE = 20500; // Hz for sync preamble
     private static BIT_DURATION_MS = 40;  // 40ms per bit (25 bps)
 
-    private static audioCtx: AudioContext | null = null;
     private static isReceiving = false;
     private static micStream: MediaStream | null = null;
-    private static onPacketCallback: ((pkt: SoundMeshPacket) => void) | null = null;
+    private static packetListeners: Set<(pkt: SoundMeshPacket) => void> = new Set();
     private static sampleInterval: any = null;
 
-    private static getAudioContext(): AudioContext | null {
-        if (!this.audioCtx && typeof window !== 'undefined') {
-            const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-            if (AudioCtxClass) {
-                this.audioCtx = new AudioCtxClass();
-            }
-        }
-        if (this.audioCtx && this.audioCtx.state === 'suspended') {
-            this.audioCtx.resume().catch(() => {});
-        }
-        return this.audioCtx;
+    // Mutex de serialización para transmisiones físicas consecutivas
+    private static txChain: Promise<boolean> = Promise.resolve(true);
+
+    private static getTxAudioContext(): AudioContext | null {
+        return AudioContextManager.getSharedContext();
     }
 
     /**
@@ -72,8 +69,7 @@ export class SoundMeshEngine {
         const p3 = d2 ^ d3 ^ d4;
 
         // Formato de 7 bits: [p1, p2, d1, p3, d2, d3, d4]
-        const code7 = (p1 << 6) | (p2 << 5) | (d1 << 4) | (p3 << 3) | (d2 << 2) | (d3 << 1) | d4;
-        return code7;
+        return (p1 << 6) | (p2 << 5) | (d1 << 4) | (p3 << 3) | (d2 << 2) | (d3 << 1) | d4;
     }
 
     /**
@@ -88,7 +84,6 @@ export class SoundMeshEngine {
         const d3 = (code7 >> 1) & 1;
         const d4 = code7 & 1;
 
-        // Calcular síndrome de error
         const s1 = p1 ^ d1 ^ d2 ^ d4;
         const s2 = p2 ^ d1 ^ d3 ^ d4;
         const s3 = p3 ^ d2 ^ d3 ^ d4;
@@ -98,7 +93,6 @@ export class SoundMeshEngine {
         let c = code7;
 
         if (syndrome !== 0) {
-            // Invertir bit erróneo según síndrome (1-indexado de izquierda a derecha)
             const bitToFlip = 7 - syndrome;
             if (bitToFlip >= 0 && bitToFlip < 7) {
                 c ^= (1 << bitToFlip);
@@ -156,85 +150,145 @@ export class SoundMeshEngine {
         return this.transmitPayload(payload);
     }
 
+    /**
+     * Transmite un payload mediante modulación CPFSK (Continuous Phase Frequency Shift Keying)
+     * empleando un único oscilador con ráfagas suaves para erradicar discontinuidades y fuga de AudioNodes.
+     */
     public static async transmitPayload(payload: string | Uint8Array): Promise<boolean> {
-        try {
-            const ctx = this.getAudioContext();
-            if (!ctx) return false;
-            const rawBytes = typeof payload === 'string' ? new TextEncoder().encode(payload) : payload;
-            const framedBytes = this.framePacket(rawBytes);
-
-            // Convert framed bytes to bit array (MSB first)
-            const bits: number[] = [];
-            for (let i = 0; i < framedBytes.length; i++) {
-                for (let bit = 7; bit >= 0; bit--) {
-                    bits.push((framedBytes[i] >> bit) & 1);
+        // Encolar de manera atómica para evitar superposición física en el aire
+        const txTask = async (): Promise<boolean> => {
+            try {
+                const ctx = this.getTxAudioContext();
+                if (!ctx) return false;
+                if (ctx.state === 'suspended') {
+                    await ctx.resume().catch(() => {});
                 }
-            }
 
-            const now = ctx.currentTime;
-            let timeOffset = now + 0.1;
+                const rawBytes = typeof payload === 'string' ? new TextEncoder().encode(payload) : payload;
+                if (rawBytes.length === 0 || rawBytes.length > 255) return false;
 
-            // Preamble: 200ms tone at 20.5 kHz to trigger receiver sync
-            const oscPreamble = ctx.createOscillator();
-            const gainPreamble = ctx.createGain();
-            oscPreamble.type = 'sine';
-            oscPreamble.frequency.setValueAtTime(this.FREQ_PREAMBLE, timeOffset);
-            gainPreamble.gain.setValueAtTime(0.35, timeOffset);
-            gainPreamble.gain.exponentialRampToValueAtTime(0.001, timeOffset + 0.2);
-            oscPreamble.connect(gainPreamble);
-            gainPreamble.connect(ctx.destination);
-            oscPreamble.start(timeOffset);
-            oscPreamble.stop(timeOffset + 0.2);
+                const framedBytes = this.framePacket(rawBytes);
 
-            timeOffset += 0.25;
+                // Convertir bytes enucleados a secuencia binaria MSB first
+                const bits: number[] = [];
+                for (let i = 0; i < framedBytes.length; i++) {
+                    for (let bit = 7; bit >= 0; bit--) {
+                        bits.push((framedBytes[i] >> bit) & 1);
+                    }
+                }
 
-            // Transmit data bits via FSK tones
-            const bitDurationSec = this.BIT_DURATION_MS / 1000;
-            bits.forEach((bit) => {
+                const bitDurationSec = this.BIT_DURATION_MS / 1000;
+                const totalDurationSec = 0.25 + (bits.length * bitDurationSec) + 0.05;
+
+                const now = ctx.currentTime;
+                let scheduleTime = now + 0.05;
+
+                // Instanciación limpia de EXACTAMENTE 1 oscilador y 1 nodo de ganancia para todo el paquete
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
-                const freq = bit === 1 ? this.FREQ_MARK_1 : this.FREQ_SPACE_0;
-
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(freq, timeOffset);
-                gain.gain.setValueAtTime(0.3, timeOffset);
-                gain.gain.setValueAtTime(0.3, timeOffset + bitDurationSec - 0.005);
-                gain.gain.exponentialRampToValueAtTime(0.001, timeOffset + bitDurationSec);
+
+                // 1. Preámbulo de sincronización: 20.5 kHz por 200ms
+                osc.frequency.setValueAtTime(this.FREQ_PREAMBLE, scheduleTime);
+                gain.gain.setValueAtTime(0.001, scheduleTime);
+                gain.gain.linearRampToValueAtTime(0.35, scheduleTime + 0.015);
+                gain.gain.setValueAtTime(0.35, scheduleTime + 0.185);
+                gain.gain.linearRampToValueAtTime(0.001, scheduleTime + 0.20);
+
+                scheduleTime += 0.25; // 50ms intervalo de guarda en silencio
+
+                // 2. Modulación continua de fase (CPFSK) para cada símbolo de bit
+                gain.gain.setValueAtTime(0.001, scheduleTime);
+                gain.gain.linearRampToValueAtTime(0.30, scheduleTime + 0.01);
+
+                for (let i = 0; i < bits.length; i++) {
+                    const freq = bits[i] === 1 ? this.FREQ_MARK_1 : this.FREQ_SPACE_0;
+                    osc.frequency.setValueAtTime(freq, scheduleTime);
+                    scheduleTime += bitDurationSec;
+                }
+
+                // Rampa suave de cierre
+                gain.gain.setValueAtTime(0.30, scheduleTime - 0.01);
+                gain.gain.linearRampToValueAtTime(0.001, scheduleTime);
 
                 osc.connect(gain);
                 gain.connect(ctx.destination);
-                osc.start(timeOffset);
-                osc.stop(timeOffset + bitDurationSec);
 
-                timeOffset += bitDurationSec;
-            });
+                return new Promise<boolean>((resolve) => {
+                    let isResolved = false;
+                    const cleanup = (success: boolean) => {
+                        if (isResolved) return;
+                        isResolved = true;
+                        try { osc.disconnect(); } catch {}
+                        try { gain.disconnect(); } catch {}
+                        resolve(success);
+                    };
 
-            return true;
-        } catch (e) {
-            console.error('[SoundMesh] Transmission failed', e);
-            return false;
-        }
+                    osc.onended = () => cleanup(true);
+                    osc.start(now + 0.05);
+                    osc.stop(scheduleTime + 0.02);
+
+                    // Timeout de guardia para Web Audio en Android WebView
+                    setTimeout(() => cleanup(true), Math.ceil(totalDurationSec * 1000) + 150);
+                });
+            } catch (e) {
+                console.error('[SoundMeshEngine] Transmission failed:', e);
+                return false;
+            }
+        };
+
+        this.txChain = this.txChain.then(() => txTask()).catch(() => txTask());
+        return this.txChain;
     }
 
     /**
      * Transmits a LowBitrateVocoder compressed audio packet via ultrasonic modem
      */
     public static async transmitVocoderVoiceBurst(vocoderBase64: string): Promise<boolean> {
-        // Prefix with 'VOX:' for acoustic routing
         return this.transmitPayload(`VOX:${vocoderBase64}`);
+    }
+
+    /**
+     * Registra un observador para paquetes acústicos recibidos
+     */
+    public static addPacketListener(callback: (pkt: SoundMeshPacket) => void): () => void {
+        this.packetListeners.add(callback);
+        return () => {
+            this.packetListeners.delete(callback);
+        };
     }
 
     /**
      * Starts listening on microphone for incoming ultrasonic SoundMesh packets using symbol-timed FSK demodulation
      */
-    public static async startListening(onPacketReceived: (pkt: SoundMeshPacket) => void): Promise<boolean> {
-        this.onPacketCallback = onPacketReceived;
+    public static async startListening(onPacketReceived?: (pkt: SoundMeshPacket) => void): Promise<boolean> {
+        if (onPacketReceived) {
+            this.packetListeners.add(onPacketReceived);
+        }
         if (this.isReceiving) return true;
 
         try {
-            this.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } });
-            const ctx = this.getAudioContext();
+            if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+                return false;
+            }
+
+            this.micStream = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: false, noiseSuppression: false }
+            });
+
+            const ctx = AudioContextManager.acquireDedicatedContext('soundmesh-rx');
             if (!ctx) return false;
+            if (ctx.state === 'suspended') {
+                await ctx.resume().catch(() => {});
+            }
+
+            // Validar frecuencia de Nyquist física del hardware
+            if (ctx.sampleRate / 2 < this.FREQ_PREAMBLE) {
+                console.warn(`[SoundMeshEngine] Hardware sampleRate (${ctx.sampleRate}Hz) insufficient for ultrasonic frequency (${this.FREQ_PREAMBLE}Hz)`);
+                this.stopListening();
+                return false;
+            }
+
             const source = ctx.createMediaStreamSource(this.micStream);
             const analyser = ctx.createAnalyser();
             analyser.fftSize = 2048;
@@ -245,9 +299,9 @@ export class SoundMeshEngine {
             const dataArray = new Float32Array(bufferLength);
             const sampleRate = ctx.sampleRate;
 
-            const binPreamble = Math.round((this.FREQ_PREAMBLE * analyser.fftSize) / sampleRate);
-            const binMark = Math.round((this.FREQ_MARK_1 * analyser.fftSize) / sampleRate);
-            const binSpace = Math.round((this.FREQ_SPACE_0 * analyser.fftSize) / sampleRate);
+            const binPreamble = Math.min(bufferLength - 1, Math.round((this.FREQ_PREAMBLE * analyser.fftSize) / sampleRate));
+            const binMark = Math.min(bufferLength - 1, Math.round((this.FREQ_MARK_1 * analyser.fftSize) / sampleRate));
+            const binSpace = Math.min(bufferLength - 1, Math.round((this.FREQ_SPACE_0 * analyser.fftSize) / sampleRate));
 
             let isDecoding = false;
             let receivingBits: number[] = [];
@@ -259,13 +313,11 @@ export class SoundMeshEngine {
                 analyser.getFloatFrequencyData(dataArray);
 
                 const dbPreamble = dataArray[binPreamble] || -120;
-                // Piso de ruido estimado en frecuencias adyacentes seguras
                 const noiseLeft = dataArray[Math.max(0, binPreamble - 6)] || -120;
                 const noiseRight = dataArray[Math.min(bufferLength - 1, binPreamble + 6)] || -120;
                 const noiseFloor = (noiseLeft + noiseRight) / 2;
                 const snrDb = dbPreamble - noiseFloor;
 
-                // Detect preamble signal with dynamic SNR tracking (SNR >= +12 dB and signal > -85 dB, or strong signal > -68 dB)
                 const isPreambleTriggered = (dbPreamble > -85 && snrDb >= 12) || (dbPreamble > -68);
 
                 if (!isDecoding && isPreambleTriggered) {
@@ -279,7 +331,6 @@ export class SoundMeshEngine {
 
                     const syncPattern = [1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1]; // 0xD391
 
-                    // Symbol-timed sampling every 40ms
                     this.sampleInterval = setInterval(() => {
                         if (!this.isReceiving) {
                             if (this.sampleInterval) clearInterval(this.sampleInterval);
@@ -295,25 +346,25 @@ export class SoundMeshEngine {
                         receivingBits.push(dbM >= dbS ? 1 : 0);
                         sampledCount++;
 
-                        // Sliding-window correlator: look for 0xD391 sync preamble across received bit stream
+                        // Correlador con ventana deslizante (tolerancia a 1 bit por dispersión acústica)
                         if (syncBitIndex === -1 && receivingBits.length >= 16) {
                             const last16 = receivingBits.slice(-16);
                             let diff = 0;
                             for (let k = 0; k < 16; k++) {
                                 if (last16[k] !== syncPattern[k]) diff++;
                             }
-                            if (diff <= 1) { // 1-bit tolerance for acoustic multipath fading
+                            if (diff <= 1) {
                                 syncBitIndex = receivingBits.length - 16;
                             }
                         }
 
-                        // Frame aligned: parse length byte to calculate exact packet length
+                        // Parsear byte de longitud
                         if (syncBitIndex !== -1 && receivingBits.length === syncBitIndex + 24) {
                             const payloadLen = receivingBits.slice(syncBitIndex + 16, syncBitIndex + 24).reduce((acc, b) => (acc << 1) | b, 0);
                             totalBitsToRead = syncBitIndex + 24 + (payloadLen * 8) + 16;
                         }
 
-                        // Completed packet reception or timeout
+                        // Final de recepción o timeout de ráfaga
                         if ((syncBitIndex !== -1 && receivingBits.length >= totalBitsToRead) || (syncBitIndex === -1 && sampledCount >= 100) || sampledCount >= 2200) {
                             if (this.sampleInterval) clearInterval(this.sampleInterval);
                             this.sampleInterval = null;
@@ -341,7 +392,7 @@ export class SoundMeshEngine {
     }
 
     private static processReceivedBits(bits: number[], rssiDb: number) {
-        if (bits.length < 40 || !this.onPacketCallback) return;
+        if (bits.length < 40 || this.packetListeners.size === 0) return;
 
         const bytes: number[] = [];
         for (let i = 0; i < bits.length; i += 8) {
@@ -357,40 +408,74 @@ export class SoundMeshEngine {
         const unframeRes = this.unframePacket(rawData);
 
         if (unframeRes.valid && unframeRes.payload) {
-            const decodedStr = new TextDecoder().decode(unframeRes.payload);
-            const parts = decodedStr.split(':');
-            const sender = parts.length > 1 ? parts[0] : 'Nodo Acústico RED';
-            const payloadText = parts.length > 1 ? parts.slice(1).join(':') : decodedStr;
+            const rawPayload = unframeRes.payload;
+            const hexStr = Array.from(rawPayload).map(b => b.toString(16).padStart(2, '0')).join('');
 
-            this.onPacketCallback({
+            let isPrintable = true;
+            let decodedText = '';
+            try {
+                let nonPrintable = 0;
+                for (let i = 0; i < rawPayload.length; i++) {
+                    const b = rawPayload[i];
+                    if (b < 32 && b !== 9 && b !== 10 && b !== 13) nonPrintable++;
+                }
+                if (nonPrintable > rawPayload.length * 0.15) {
+                    isPrintable = false;
+                } else {
+                    decodedText = new TextDecoder('utf-8', { fatal: false }).decode(rawPayload);
+                }
+            } catch {
+                isPrintable = false;
+            }
+
+            let sender = 'Nodo Acústico RED';
+            let payloadContent = hexStr;
+
+            if (isPrintable && decodedText) {
+                const parts = decodedText.split(':');
+                if (parts.length > 1) {
+                    sender = parts[0];
+                    payloadContent = parts.slice(1).join(':');
+                } else {
+                    payloadContent = decodedText;
+                }
+            }
+
+            const packet: SoundMeshPacket = {
                 senderId: sender,
-                payloadHex: payloadText,
-                rawText: payloadText,
-                payload: payloadText,
+                payloadHex: hexStr,
+                rawBytes: rawPayload,
+                rawText: isPrintable ? payloadContent : undefined,
+                payload: isPrintable ? payloadContent : hexStr,
                 timestamp: Date.now(),
                 rssiDb: Math.round(rssiDb)
+            };
+
+            this.packetListeners.forEach(cb => {
+                try { cb(packet); } catch (e) {
+                    console.error('[SoundMeshEngine] Packet listener callback error:', e);
+                }
             });
         }
     }
 
-    public static stopListening() {
+    public static stopListening(callback?: (pkt: SoundMeshPacket) => void) {
+        if (callback) {
+            this.packetListeners.delete(callback);
+            if (this.packetListeners.size > 0) return;
+        } else {
+            this.packetListeners.clear();
+        }
+
         this.isReceiving = false;
-        this.onPacketCallback = null;
-        // Stop the setInterval sampling loop (used in some decoder variants)
         if (this.sampleInterval) {
             clearInterval(this.sampleInterval);
             this.sampleInterval = null;
         }
-        // Release all microphone tracks to free the mic indicator on Android
         if (this.micStream) {
             this.micStream.getTracks().forEach(t => t.stop());
             this.micStream = null;
         }
-        // Close the AudioContext to release hardware DSP resources and stop
-        // the ~15% CPU drain that persists in Android WebView background mode.
-        if (this.audioCtx) {
-            try { this.audioCtx.close(); } catch {}
-            this.audioCtx = null;
-        }
+        AudioContextManager.releaseDedicatedContext('soundmesh-rx').catch(() => {});
     }
 }

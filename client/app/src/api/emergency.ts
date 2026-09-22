@@ -94,13 +94,31 @@ export async function resolveAmberAlert(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-    }, () => {
+    }, async () => {
         const alerts = getStored<AmberAlert[]>(STORAGE_KEYS.AMBER_ALERTS, []);
         const target = alerts.find(a => a.id === id);
         if (!target) throw new Error(`Alerta AMBER ${id} no existe`);
         target.status = 'Resolved';
         target.resolution_notes = payload.resolution_notes;
         setStored(STORAGE_KEYS.AMBER_ALERTS, alerts);
+
+        // Broadcast resolution packet across P2P Mesh
+        try {
+            const { meshRouter } = await import('../lib/mesh/meshRouter');
+            const payloadBytes = new TextEncoder().encode(JSON.stringify({
+                id: `resolve_${id}`,
+                msg_type: 'amber_resolved',
+                alert_id: id,
+                resolution_notes: payload.resolution_notes,
+                timestamp: Math.floor(Date.now() / 1000)
+            }));
+            await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+        } catch {}
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('red_amber_updated'));
+        }
+
         return { ok: true, alert: target };
     });
 }
@@ -114,13 +132,33 @@ export async function reportSighting(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-    }, () => {
+    }, async () => {
         const alerts = getStored<AmberAlert[]>(STORAGE_KEYS.AMBER_ALERTS, []);
         const target = alerts.find(a => a.id === alertId);
         if (target) {
             target.sighting_count = (target.sighting_count || 0) + 1;
             setStored(STORAGE_KEYS.AMBER_ALERTS, alerts);
         }
+
+        // Broadcast sighting report across P2P Mesh
+        try {
+            const { meshRouter } = await import('../lib/mesh/meshRouter');
+            const payloadBytes = new TextEncoder().encode(JSON.stringify({
+                id: `sighting_${alertId}_${Date.now()}`,
+                msg_type: 'amber_sighting',
+                alert_id: alertId,
+                lat: payload.lat,
+                lon: payload.lon,
+                notes: payload.notes,
+                timestamp: Math.floor(Date.now() / 1000)
+            }));
+            await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+        } catch {}
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('red_amber_updated'));
+        }
+
         return { ok: true };
     });
 }
@@ -167,8 +205,10 @@ export async function emitSos(payload: {
             ? payload.altitude : undefined;
 
         const idHash = await sha256Hex(`sos_${now}_${sender_did}`);
+        const sosId = `sos_${now}_${idHash.slice(0, 8)}`;
         const sos: SosBeacon = {
-            id: `sos_${now}_${idHash.slice(0, 8)}`,
+            id: sosId,
+            beacon_id: sosId,
             sender_did,
             sender_name: payload.sender_name || identity.nickname || 'Operador',
             lat: safeLat,
@@ -190,12 +230,26 @@ export async function emitSos(payload: {
             const { meshRouter } = await import('../lib/mesh/meshRouter');
             const payloadBytes = new TextEncoder().encode(JSON.stringify({
                 id: sos.id,
+                beacon_id: sos.id,
                 msg_type: 'sos_beacon',
                 beacon: sos,
                 sender: sos.sender_did,
                 timestamp: sos.timestamp
             }));
             await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+        } catch {}
+
+        // Sincronizar e iniciar latidos periódicos automáticos en MeshSosBeaconEngine con ID canónico
+        try {
+            const { meshSosBeacon } = await import('../lib/emergency/MeshSosBeaconEngine');
+            await meshSosBeacon.activateSosBeacon({
+                id: sos.id,
+                coords: { lat: safeLat, lon: safeLon, alt: safeAlt },
+                distressType: 'GENERAL_DISTRESS',
+                triageColor: 'RED',
+                note: sos.note,
+                batteryLevel: battLevel || 100
+            }, sender_did, sos.sender_name);
         } catch {}
 
         return { ok: true, sos };
@@ -206,7 +260,7 @@ export async function emitSos(payload: {
 export async function resolveSos(sosId: string): Promise<{ ok: boolean; resolved: boolean }> {
     return fetchWithFallback(`/api/sos/resolve/${sosId}`, { method: 'POST' }, async () => {
         const beacons = getStored<SosBeacon[]>(STORAGE_KEYS.SOS_BEACONS, []);
-        const target = beacons.find(b => b.id === sosId);
+        const target = beacons.find(b => b.id === sosId || b.beacon_id === sosId);
         if (target) {
             target.is_active = false;
             setStored(STORAGE_KEYS.SOS_BEACONS, beacons);
@@ -219,9 +273,17 @@ export async function resolveSos(sosId: string): Promise<{ ok: boolean; resolved
                 id: `resolve_${sosId}`,
                 msg_type: 'sos_resolve',
                 sos_id: sosId,
+                beacon_id: sosId,
+                sender_did: target?.sender_did,
                 timestamp: Date.now()
             }));
             await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+        } catch {}
+
+        // Desactivar motor de latidos periódicos local
+        try {
+            const { meshSosBeacon } = await import('../lib/emergency/MeshSosBeaconEngine');
+            await meshSosBeacon.deactivateSosBeacon(sosId);
         } catch {}
 
         return { ok: true, resolved: true };

@@ -267,6 +267,18 @@ impl Node {
         None
     }
 
+    /// Persiste un valor de configuración arbitrario en el almacenamiento encriptado Sled
+    pub async fn set_config(&self, key: &str, value: &str) {
+        let mut storage = self.storage.lock().await;
+        let _ = storage.set_config(key, value);
+    }
+
+    /// Obtiene un valor de configuración desde el almacenamiento encriptado Sled
+    pub async fn get_config(&self, key: &str) -> Option<String> {
+        let storage = self.storage.lock().await;
+        storage.get_config(key)
+    }
+
     /// Connect to a peer manually using a Multiaddr string (for manual WiFi P2P test)
     pub async fn connect_peer(&self, addr_str: &str) -> NetworkResult<()> {
         let multiaddr: libp2p::Multiaddr = addr_str

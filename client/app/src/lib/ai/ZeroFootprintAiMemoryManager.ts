@@ -7,9 +7,7 @@
  * 2. Guardián de presión de Heap: purga inmediata si el uso de memoria JS supera el 72% del límite.
  * 3. Ejecución de recolección de basura preventiva (window.gc / cache purge).
  */
-
-import { LocalAIEngine } from './localAiEngine';
-
+// Desacoplado: No importar localAiEngine estáticamente para evitar dependencias circulares ESM.
 export interface AiMemoryMetrics {
     isPipelineLoaded: boolean;
     idleTimeSec: number;
@@ -69,10 +67,21 @@ export class ZeroFootprintAiMemoryManager {
         this.notify();
     }
 
+    private onPurgeCallback: (() => void) | null = null;
+
+    /** Permite a LocalAIEngine registrar su callback de purga sin import estático */
+    public registerPurgeCallback(fn: () => void): void {
+        this.onPurgeCallback = fn;
+    }
+
     /** Purga inmediatamente los modelos de la memoria RAM */
     public purgeAiPipelines(reason = 'manual'): void {
         try {
-            LocalAIEngine.disposePipelines();
+            if (this.onPurgeCallback) {
+                this.onPurgeCallback();
+            } else {
+                import('./localAiEngine').then(m => m.LocalAIEngine?.disposePipelines?.()).catch(() => {});
+            }
             this.totalPurgesCount++;
             this.isPipelineActive = false;
             if (this.idleTimer) {

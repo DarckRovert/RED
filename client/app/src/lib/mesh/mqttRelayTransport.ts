@@ -22,7 +22,6 @@ export interface OutboxItem {
   topic: string;
   packetBuffer: ArrayBuffer;
   timestamp: number;
-  dispatchedBrokers: Set<string>;
 }
 
 export class MqttRelayTransport {
@@ -38,8 +37,20 @@ export class MqttRelayTransport {
   private reconnectAttempts: Map<string, number> = new Map();
   private pendingOutbox: OutboxItem[] = [];
 
-  private static readonly MAX_OUTBOX_CAPACITY = 1000;
-  private static readonly OUTBOX_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private static readonly MAX_OUTBOX_CAPACITY = 150;
+  private static readonly OUTBOX_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+  private encodeRemainingLength(length: number): number[] {
+    const bytes: number[] = [];
+    let temp = length;
+    do {
+      let b = temp % 128;
+      temp = Math.floor(temp / 128);
+      if (temp > 0) b |= 128;
+      bytes.push(b);
+    } while (temp > 0);
+    return bytes;
+  }
 
   private static readonly BROKER_POOL: string[] = [
     'wss://broker.emqx.io:8084/mqtt',
@@ -293,12 +304,13 @@ export class MqttRelayTransport {
     const varHeaderLen = 2 + protoBytes.length + 1 + 1 + 2;
     const payloadLen = 2 + clientBytes.length;
     const remainingLen = varHeaderLen + payloadLen;
+    const lenBytes = this.encodeRemainingLength(remainingLen);
 
-    const packet = new Uint8Array(2 + remainingLen);
+    const packet = new Uint8Array(1 + lenBytes.length + remainingLen);
     let offset = 0;
 
     packet[offset++] = 0x10; // CONNECT packet type
-    packet[offset++] = remainingLen;
+    for (const b of lenBytes) packet[offset++] = b;
 
     // Protocol Name
     packet[offset++] = (protoBytes.length >> 8) & 0xFF;
@@ -411,16 +423,7 @@ export class MqttRelayTransport {
     const payloadBytes = typeof payload === 'string' ? new TextEncoder().encode(payload) : payload;
     const topicBytes = new TextEncoder().encode(topic);
     const remainingLen = 2 + topicBytes.length + payloadBytes.length;
-
-    // Encode remaining length (variable length field for MQTT)
-    const lenBytes: number[] = [];
-    let tempLen = remainingLen;
-    do {
-      let encodedByte = tempLen % 128;
-      tempLen = Math.floor(tempLen / 128);
-      if (tempLen > 0) encodedByte |= 128;
-      lenBytes.push(encodedByte);
-    } while (tempLen > 0);
+    const lenBytes = this.encodeRemainingLength(remainingLen);
 
     const packet = new Uint8Array(1 + lenBytes.length + remainingLen);
     let offset = 0;
@@ -437,30 +440,27 @@ export class MqttRelayTransport {
     // Payload
     packet.set(payloadBytes, offset);
 
-    const now = Date.now();
     const packetBuffer = packet.buffer.slice(packet.byteOffset, packet.byteOffset + packet.byteLength);
-    const dispatchedBrokers = new Set<string>();
 
     let publishedCount = 0;
-    for (const [url, entry] of this.brokerSockets) {
+    for (const [, entry] of this.brokerSockets) {
       if (entry.isAuthed && entry.ws.readyState === WebSocket.OPEN) {
         try {
           entry.ws.send(packetBuffer);
-          dispatchedBrokers.add(url);
           publishedCount++;
         } catch {}
       }
     }
 
-    // Retain in pendingOutbox if not all brokers in BROKER_POOL have dispatched this packet
-    if (dispatchedBrokers.size < MqttRelayTransport.BROKER_POOL.length) {
+    // Store-and-Forward: Solo almacenar en outbox si NINGÚN broker pudo enviar el paquete (offline)
+    if (publishedCount === 0) {
+      const now = Date.now();
       const id = `${topic}_${now}_${(Math.random() * 1e6) | 0}`;
       this.pendingOutbox.push({
         id,
         topic,
         packetBuffer,
         timestamp: now,
-        dispatchedBrokers,
       });
 
       if (this.pendingOutbox.length > MqttRelayTransport.MAX_OUTBOX_CAPACITY) {
@@ -472,28 +472,26 @@ export class MqttRelayTransport {
   }
 
   private flushOutboxForBroker(url: string, socket: WebSocket) {
-    if (socket.readyState !== WebSocket.OPEN) return;
+    if (socket.readyState !== WebSocket.OPEN || this.pendingOutbox.length === 0) return;
     const now = Date.now();
 
-    // Filter out expired items
-    this.pendingOutbox = this.pendingOutbox.filter(item => (now - item.timestamp) < MqttRelayTransport.OUTBOX_TTL_MS);
+    // Purgar expirados por TTL
+    const activeItems = this.pendingOutbox.filter(item => (now - item.timestamp) < MqttRelayTransport.OUTBOX_TTL_MS);
 
     let flushed = 0;
-    for (const item of this.pendingOutbox) {
-      if (!item.dispatchedBrokers.has(url)) {
-        try {
-          socket.send(item.packetBuffer);
-          item.dispatchedBrokers.add(url);
-          flushed++;
-        } catch (err) {
-          console.warn(`[MqttRelay] Failed to flush packet ${item.id} to broker ${url}:`, err);
-        }
+    const remaining: OutboxItem[] = [];
+
+    for (const item of activeItems) {
+      try {
+        socket.send(item.packetBuffer);
+        flushed++;
+      } catch (err) {
+        console.warn(`[MqttRelay] Failed to flush packet ${item.id} to broker ${url}:`, err);
+        remaining.push(item);
       }
     }
 
-    // Remove items that have been dispatched to all brokers in BROKER_POOL
-    const totalBrokers = MqttRelayTransport.BROKER_POOL.length;
-    this.pendingOutbox = this.pendingOutbox.filter(item => item.dispatchedBrokers.size < totalBrokers);
+    this.pendingOutbox = remaining;
 
     if (flushed > 0) {
       console.log(`[MqttRelay] 🚀 Flushed ${flushed} pending outbox packet(s) to newly authenticated broker: ${url}`);
@@ -572,10 +570,14 @@ export class MqttRelayTransport {
     try {
       // Deduplicate identical MQTT payloads delivered across multiple topic subscriptions & brokers
       let hash = '';
-      const sampleLen = Math.min(payload.length, 32);
       const lut = MqttRelayTransport.HEX_LUT;
-      for (let i = 0; i < sampleLen; i++) {
-        hash += lut[payload[i]];
+      if (payload.length <= 48) {
+        for (let i = 0; i < payload.length; i++) hash += lut[payload[i]];
+      } else {
+        const midStart = (payload.length >> 1) - 8;
+        for (let i = 0; i < 16; i++) hash += lut[payload[i]];
+        for (let i = 0; i < 16; i++) hash += lut[payload[midStart + i]];
+        for (let i = payload.length - 16; i < payload.length; i++) hash += lut[payload[i]];
       }
       hash += '_' + payload.length;
       if (this.seenMqttHashes.has(hash)) return;
@@ -645,29 +647,18 @@ export class MqttRelayTransport {
     if (isBroadcast) {
       let published = this.publish('red/v65/broadcast', payload);
       if (this.publish('red/mesh/broadcast', payload)) published = true;
-      if (this.publish('red/v40/broadcast', payload)) published = true;
-      if (this.publish('red/v32/broadcast', payload)) published = true;
       return published;
     }
     
-    // Publish to primary v65, mesh, v40 and v32 realtime topics
+    // Publish to primary active v65 & mesh realtime topics
     let published = this.publish(`red/v65/dm/${clean}`, payload);
     if (this.publish(`red/v65/mb/${clean}`, payload)) published = true;
     if (this.publish(`red/mesh/dm/${clean}`, payload)) published = true;
-    if (this.publish(`red/v40/dm/${clean}`, payload)) published = true;
-    if (this.publish(`red/v40/mb/${clean}`, payload)) published = true;
-    if (this.publish(`red/v32/dm/${clean}`, payload)) published = true;
-    if (this.publish(`red/v32/mb/${clean}`, payload)) published = true;
 
     if (clean.length > 8) {
       const short = clean.slice(0, 8);
       if (this.publish(`red/v65/dm/${short}`, payload)) published = true;
-      if (this.publish(`red/v65/mb/${short}`, payload)) published = true;
       if (this.publish(`red/mesh/dm/${short}`, payload)) published = true;
-      if (this.publish(`red/v40/dm/${short}`, payload)) published = true;
-      if (this.publish(`red/v40/mb/${short}`, payload)) published = true;
-      if (this.publish(`red/v32/dm/${short}`, payload)) published = true;
-      if (this.publish(`red/v32/mb/${short}`, payload)) published = true;
     }
     return published;
   }
@@ -686,16 +677,12 @@ export class MqttRelayTransport {
     });
 
     let published = this.publish(`red/v65/sig/${clean}`, jsonStr);
-    this.publish(`red/mesh/sig/${clean}`, jsonStr);
-    this.publish(`red/v40/sig/${clean}`, jsonStr);
-    this.publish(`red/v32/sig/${clean}`, jsonStr);
+    if (this.publish(`red/mesh/sig/${clean}`, jsonStr)) published = true;
 
     if (clean.length > 8) {
       const short = clean.slice(0, 8);
-      this.publish(`red/v65/sig/${short}`, jsonStr);
-      this.publish(`red/mesh/sig/${short}`, jsonStr);
-      this.publish(`red/v40/sig/${short}`, jsonStr);
-      this.publish(`red/v32/sig/${short}`, jsonStr);
+      if (this.publish(`red/v65/sig/${short}`, jsonStr)) published = true;
+      if (this.publish(`red/mesh/sig/${short}`, jsonStr)) published = true;
     }
     return published;
   }

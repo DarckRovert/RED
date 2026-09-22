@@ -4,8 +4,9 @@
  * Supresor de Tormentas de Difusión y Control de Congestión RF en Mallas Densas.
  * Mitiga colisiones de paquetes en radiofrecuencia (BLE, Wi-Fi Direct, LoRa) mediante:
  * 1. TTL / Límite de Saltos Adaptativo según la densidad de nodos vecinos.
- * 2. Deduplicación con Filtro de Bloom Rotativo de 2048 bits.
- * 3. Jittered Exponential Backoff para desfasar retransmisiones concurrentes.
+ * 2. Deduplicación con Filtro de Bloom Doble Búfer (Generacional) de 2048 bits con rotación de épocas.
+ * 3. Supresión K-Counter según densidad de vecinos escuchados en el espectro.
+ * 4. Poda estricta de memoria para dispositivos móviles de bajos recursos.
  */
 
 export interface StormGuardMetrics {
@@ -17,11 +18,21 @@ export interface StormGuardMetrics {
     currentSuppressionRatePct: number;
 }
 
+interface SeenPacketRecord {
+    timestamp: number;
+    peerRelayCount: number;
+    localRelayed: boolean;
+}
+
 export class BroadcastStormGuardEngine {
     private static instance: BroadcastStormGuardEngine;
 
-    private bloomFilter: Uint8Array = new Uint8Array(256); // 2048 bits
-    private seenCache: Map<string, { timestamp: number; relayCount: number }> = new Map();
+    // Filtro de Bloom generacional (Doble búfer: Época actual y Época anterior)
+    private currentBloom: Uint8Array = new Uint8Array(256); // 2048 bits
+    private previousBloom: Uint8Array = new Uint8Array(256); // 2048 bits
+
+    private seenCache: Map<string, SeenPacketRecord> = new Map();
+    private readonly MAX_CACHE_SIZE = 2048;
     private pruneTimer: any = null;
 
     private metrics: StormGuardMetrics = {
@@ -47,7 +58,7 @@ export class BroadcastStormGuardEngine {
     }
 
     /**
-     * Calcula el TTL (límite de saltos) óptimo para un nuevo paquete según la densidad del vecindario.
+     * Calcula el TTL (límite de saltos) óptimo para un paquete según la densidad del vecindario.
      */
     public calculateAdaptiveTtl(peerCount: number): number {
         if (peerCount <= 3) {
@@ -57,6 +68,43 @@ export class BroadcastStormGuardEngine {
         } else {
             return 2; // Malla densa (>15 nodos): saltos cortos para evitar saturación del espectro
         }
+    }
+
+    /**
+     * Registra que se ha escuchado este paquete en el aire procedente de un nodo vecino.
+     */
+    public recordPeerRelay(packetId: string): void {
+        const existing = this.seenCache.get(packetId);
+        if (existing) {
+            existing.peerRelayCount++;
+            existing.timestamp = Date.now();
+        } else {
+            this.enforceCacheLimit();
+            this.seenCache.set(packetId, {
+                timestamp: Date.now(),
+                peerRelayCount: 1,
+                localRelayed: false,
+            });
+            this.addToBloom(packetId);
+        }
+    }
+
+    /**
+     * Consulta probabilística O(1) si el paquete ya ha sido observado en las últimas dos épocas.
+     */
+    public hasSeenBloom(packetId: string): boolean {
+        const h1 = this.hashString(packetId, 0x9747b28c) % 2048;
+        const h2 = this.hashString(packetId, 0x5bd1e995) % 2048;
+
+        const byte1 = Math.floor(h1 / 8);
+        const bit1 = 1 << (h1 % 8);
+        const byte2 = Math.floor(h2 / 8);
+        const bit2 = 1 << (h2 % 8);
+
+        const inCurrent = (this.currentBloom[byte1] & bit1) !== 0 && (this.currentBloom[byte2] & bit2) !== 0;
+        if (inCurrent) return true;
+
+        return (this.previousBloom[byte1] & bit1) !== 0 && (this.previousBloom[byte2] & bit2) !== 0;
     }
 
     /**
@@ -75,31 +123,43 @@ export class BroadcastStormGuardEngine {
         const now = Date.now();
         const existing = this.seenCache.get(packetId);
 
-        // Umbral de supresión: si ya vimos el paquete retransmitido por varios pares
+        // Umbral de supresión K-counter adaptado a la densidad RF
         const suppressionThreshold = peerCount > 15 ? 2 : peerCount > 6 ? 3 : 5;
 
-        if (existing) {
-            existing.relayCount++;
-            this.metrics.packetsSuppressed++;
-            this.metrics.collisionsAvoided++;
-            this.metrics.bandwidthSavedBytes += payloadSizeBytes;
-            this.updateSuppressionRate();
+        // 1. Si el nodo local ya lo retransmitió con éxito anteriormente, suprimir duplicado
+        if (existing && existing.localRelayed) {
+            this.recordSuppression(payloadSizeBytes);
             return { shouldRelay: false, backoffDelayMs: 0, adjustedTtl: 0 };
         }
 
-        // Límite de saltos excedido
+        // 2. Si ya escuchamos que K vecinos lo retransmitieron, suprimir retransmisión redundante
+        if (existing && existing.peerRelayCount >= suppressionThreshold) {
+            this.recordSuppression(payloadSizeBytes);
+            return { shouldRelay: false, backoffDelayMs: 0, adjustedTtl: 0 };
+        }
+
+        // 3. Límite de saltos adaptativo excedido
         const adaptiveMaxTtl = Math.min(maxTtl, this.calculateAdaptiveTtl(peerCount));
         if (currentHop >= adaptiveMaxTtl) {
-            this.metrics.packetsSuppressed++;
-            this.updateSuppressionRate();
+            this.recordSuppression(payloadSizeBytes);
             return { shouldRelay: false, backoffDelayMs: 0, adjustedTtl: 0 };
         }
 
-        // Registrar paquete en caché de deduplicación
-        this.seenCache.set(packetId, { timestamp: now, relayCount: 1 });
-        this.addToBloom(packetId);
+        // Registrar o actualizar entrada marcándola como retransmitida localmente
+        if (existing) {
+            existing.localRelayed = true;
+            existing.timestamp = now;
+        } else {
+            this.enforceCacheLimit();
+            this.seenCache.set(packetId, {
+                timestamp: now,
+                peerRelayCount: 1,
+                localRelayed: true,
+            });
+            this.addToBloom(packetId);
+        }
 
-        // Jittered Backoff Delay estocástico para desincronizar retransmisores
+        // Jitter sugerido para desfasar retransmisiones
         const baseMinMs = peerCount > 15 ? 40 : 15;
         const baseMaxMs = peerCount > 15 ? 160 : 65;
         const jitter = Math.floor(Math.random() * (baseMaxMs - baseMinMs + 1)) + baseMinMs;
@@ -110,15 +170,22 @@ export class BroadcastStormGuardEngine {
         return {
             shouldRelay: true,
             backoffDelayMs: jitter,
-            adjustedTtl: adaptiveMaxTtl - currentHop,
+            adjustedTtl: Math.max(1, adaptiveMaxTtl - currentHop),
         };
+    }
+
+    private recordSuppression(payloadSizeBytes: number): void {
+        this.metrics.packetsSuppressed++;
+        this.metrics.collisionsAvoided++;
+        this.metrics.bandwidthSavedBytes += payloadSizeBytes;
+        this.updateSuppressionRate();
     }
 
     private addToBloom(key: string): void {
         const h1 = this.hashString(key, 0x9747b28c) % 2048;
         const h2 = this.hashString(key, 0x5bd1e995) % 2048;
-        this.bloomFilter[Math.floor(h1 / 8)] |= (1 << (h1 % 8));
-        this.bloomFilter[Math.floor(h2 / 8)] |= (1 << (h2 % 8));
+        this.currentBloom[Math.floor(h1 / 8)] |= (1 << (h1 % 8));
+        this.currentBloom[Math.floor(h2 / 8)] |= (1 << (h2 % 8));
     }
 
     private hashString(str: string, seed: number): number {
@@ -130,6 +197,13 @@ export class BroadcastStormGuardEngine {
         return Math.abs(hash);
     }
 
+    private enforceCacheLimit(): void {
+        if (this.seenCache.size >= this.MAX_CACHE_SIZE) {
+            const oldestKey = this.seenCache.keys().next().value;
+            if (oldestKey) this.seenCache.delete(oldestKey);
+        }
+    }
+
     private pruneSeen(): void {
         const now = Date.now();
         const maxAge = 60000; // 60 segundos de retención
@@ -138,6 +212,10 @@ export class BroadcastStormGuardEngine {
                 this.seenCache.delete(key);
             }
         }
+
+        // Rotación generacional del Filtro de Bloom: Época actual pasa a previa y se reinicia
+        this.previousBloom.set(this.currentBloom);
+        this.currentBloom.fill(0);
     }
 
     private updateSuppressionRate(): void {

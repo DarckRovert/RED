@@ -711,21 +711,94 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
     // ── A3: Edit message ──────────────────────────────────────────────────────,
 
     editMessage: async (messageId: string, newContent: string) => {
-        const { activeConversationId, messages } = get();
+        const { activeConversationId, messages, conversations } = get();
         if (!activeConversationId) return;
-        // Optimistic update
-        set({
-            messages: messages.map(m =>
-                m.id === messageId ? { ...m, content: newContent, edited: true } : m
-            ) as MessageItem[],
-        });
+
+        // 1. Optimistic in-memory update
+        const updatedMsgs = messages.map(m =>
+            m.id === messageId ? { ...m, content: newContent, is_edited: true, edited: true } : m
+        ) as MessageItem[];
+        set({ messages: updatedMsgs });
+
+        // 2. Recalculate conversation snippet if last message was edited
+        const canonicalPeer = meshRouter.getCanonicalId(activeConversationId) || activeConversationId;
+        const convIdx = conversations.findIndex(c => c && (c.id === activeConversationId || c.peer === activeConversationId || c.id === canonicalPeer || c.peer === canonicalPeer));
+        if (convIdx >= 0) {
+            const lastMsg = updatedMsgs[updatedMsgs.length - 1];
+            if (lastMsg && lastMsg.id === messageId) {
+                const updatedConvs = [...conversations];
+                updatedConvs[convIdx] = {
+                    ...updatedConvs[convIdx],
+                    last_message: newContent
+                };
+                set({ conversations: updatedConvs });
+                RedAPI.setWebStore('red_web_conversations', updatedConvs);
+            }
+        }
+
+        // 3. Persist edited message to localStorage
+        if (typeof window !== 'undefined') {
+            try {
+                const cleanConv = (activeConversationId || '').toLowerCase().replace(/^did:red:/i, '').trim();
+                const keysToUpdate = [`red_web_messages_${cleanConv}`];
+                const mapRaw = localStorage.getItem('red_device_canonical_map');
+                if (mapRaw) {
+                    try {
+                        const mappings: [string, string][] = JSON.parse(mapRaw);
+                        for (const [hw, canon] of mappings) {
+                            if (canon.toLowerCase() === cleanConv) keysToUpdate.push(`red_web_messages_${hw.toLowerCase()}`);
+                            else if (hw.toLowerCase() === cleanConv) keysToUpdate.push(`red_web_messages_${canon.toLowerCase()}`);
+                        }
+                    } catch {}
+                }
+                for (const convKey of keysToUpdate) {
+                    const raw = localStorage.getItem(convKey);
+                    if (raw) {
+                        const list: any[] = JSON.parse(raw);
+                        if (list.some((m: any) => m && m.id === messageId)) {
+                            const updatedList = list.map((m: any) => m && m.id === messageId ? { ...m, content: newContent, is_edited: true, edited: true } : m);
+                            localStorage.setItem(convKey, JSON.stringify(updatedList));
+                        }
+                    }
+                }
+            } catch {}
+        }
+
+        // 4. Update local Rust node backend
         try {
             await RedAPI.editMessage(activeConversationId, messageId, newContent);
         } catch (e) {
-            const restored = await RedAPI.getMessages(activeConversationId).catch(() => messages);
-            set({ messages: restored });
-            console.error('Edit failed', e);
+            console.error('Edit backend call warning:', e);
         }
+
+        // 5. Broadcast message_edit control packet over mesh, BLE and WebRTC
+        try {
+            const rawGroups = get().groups || [];
+            const isGroupConv = rawGroups.some((g: any) => g && (g.id === activeConversationId || g.group_id === activeConversationId || g.id === canonicalPeer || g.group_id === canonicalPeer));
+            const editPayload = JSON.stringify({
+                type: 'message_edit',
+                target_id: messageId,
+                new_content: newContent,
+                conversation_id: activeConversationId,
+                sender: get().identity?.identity_hash || 'me'
+            });
+
+            if (isGroupConv) {
+                RedAPI.sendGroupMessage(activeConversationId, editPayload, {
+                    msg_type: 'message_edit',
+                    target_id: messageId,
+                    target_message_id: messageId,
+                    new_content: newContent
+                }).catch(() => {});
+            } else {
+                RedAPI.sendMessage(canonicalPeer, editPayload, {
+                    msg_type: 'message_edit',
+                    target_id: messageId,
+                    target_message_id: messageId,
+                    new_content: newContent
+                }).catch(() => {});
+            }
+        } catch {}
     },
 
     // ── Clear conversation ────────────────────────────────────────────────────,
@@ -821,23 +894,85 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             status,
             sender_hash: identity?.identity_hash || 'me'
         }), { msg_type: 'typing_status' }).catch(() => {});
+
+        // Mirror typing status to active Web Companion
+        try {
+            import('../../lib/mesh/companionSyncEngine').then(({ companionSyncEngine }) => {
+                if (companionSyncEngine.isLiveSessionActive()) {
+                    companionSyncEngine.publishLiveEvent('LIVE_TYPING', {
+                        peer: peerHash,
+                        isTyping: status === 'typing' || status === 'recording_voice'
+                    }).catch(() => {});
+                }
+            }).catch(() => {});
+        } catch {}
     },
 
     // ── Mark conversation as read (clear badge + notify Rust + send ACK) ───────,
-
     markAsRead: (conversationId: string) => {
         if (!conversationId) return;
         const { conversations, identity } = get();
-        const conv = conversations.find(c => c.id === conversationId || c.peer === conversationId);
+        const cleanTarget = conversationId.toLowerCase().replace(/^did:red:/i, '').trim();
+        const shortTarget = cleanTarget.slice(0, 16);
+
+        const isMatch = (c: any) => {
+            if (!c) return false;
+            const cid = (c.id || '').toLowerCase().replace(/^did:red:/i, '').trim();
+            const cpeer = (c.peer || '').toLowerCase().replace(/^did:red:/i, '').trim();
+            return cid === cleanTarget || cpeer === cleanTarget ||
+                (shortTarget.length >= 8 && (cid.startsWith(shortTarget) || cpeer.startsWith(shortTarget))) ||
+                (cleanTarget.length >= 8 && (cid.includes(cleanTarget.slice(0, 8)) || cpeer.includes(cleanTarget.slice(0, 8))));
+        };
+
+        const conv = conversations.find(isMatch);
         const peerHash = conv?.peer || conversationId;
-        const hasUnread = conv && (conv.unread_count || 0) > 0;
-        if (hasUnread) {
-            set({
-                conversations: conversations.map(c =>
-                    (c.id === conversationId || c.peer === conversationId) ? { ...c, unread_count: 0 } : c
-                )
-            });
+
+        let changed = false;
+        const updatedConvs = conversations.map(c => {
+            if (isMatch(c)) {
+                if ((c.unread_count || 0) > 0) changed = true;
+                return { ...c, unread_count: 0 };
+            }
+            return c;
+        });
+
+        if (changed || (conv && (conv.unread_count || 0) > 0)) {
+            set({ conversations: updatedConvs });
+            RedAPI.setWebStore('red_web_conversations', updatedConvs);
         }
+
+        // Marcar mensajes en localStorage como leídos para que no reaparezcan badges
+        if (typeof window !== 'undefined') {
+            try {
+                const keys = [`red_web_messages_${cleanTarget}`];
+                if (conv?.peer && conv.peer.toLowerCase() !== cleanTarget) {
+                    keys.push(`red_web_messages_${conv.peer.toLowerCase()}`);
+                }
+                if (conv?.id && conv.id.toLowerCase() !== cleanTarget) {
+                    keys.push(`red_web_messages_${conv.id.toLowerCase()}`);
+                }
+                for (const k of keys) {
+                    const raw = localStorage.getItem(k);
+                    if (raw) {
+                        const msgs = JSON.parse(raw);
+                        if (Array.isArray(msgs)) {
+                            let msgUpdated = false;
+                            const nextMsgs = msgs.map((m: any) => {
+                                if (m && !m.is_mine && m.status !== 'Read') {
+                                    msgUpdated = true;
+                                    return { ...m, status: 'Read', is_read: true };
+                                }
+                                return m;
+                            });
+                            if (msgUpdated) {
+                                localStorage.setItem(k, JSON.stringify(nextMsgs));
+                            }
+                        }
+                    }
+                }
+            } catch {}
+        }
+
         // Send E2E Read Receipt to peer
         if (peerHash && identity?.identity_hash) {
             RedAPI.sendMessage(peerHash, JSON.stringify({
@@ -846,8 +981,27 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 reader_hash: identity.identity_hash
             }), { msg_type: 'read_receipt' }).catch(() => {});
         }
-        // Best-effort: tell Rust the conversation is read
-        RedAPI.req(`/conversations/${conversationId}/read`, { method: 'POST' }).catch(() => {});
+
+        // Tell Rust backend the conversation is read (notificar múltiples variantes para match seguro)
+        RedAPI.req(`/conversations/${conversationId}/read`, { method: 'POST', body: '{}' }).catch(() => {});
+        if (cleanTarget !== conversationId) {
+            RedAPI.req(`/conversations/${cleanTarget}/read`, { method: 'POST', body: '{}' }).catch(() => {});
+        }
+        if (conv?.id && conv.id !== conversationId && conv.id !== cleanTarget) {
+            RedAPI.req(`/conversations/${conv.id}/read`, { method: 'POST', body: '{}' }).catch(() => {});
+        }
+
+        // Mirror Read ACK to active Web Companion Live Bridge (clear unread badges on paired PC/mobile)
+        try {
+            import('../../lib/mesh/companionSyncEngine').then(({ companionSyncEngine }) => {
+                if (companionSyncEngine.isLiveSessionActive()) {
+                    companionSyncEngine.publishLiveEvent('LIVE_READ_ACK', {
+                        peer: peerHash,
+                        conversationId
+                    }).catch(() => {});
+                }
+            }).catch(() => {});
+        } catch {}
     },
 
     addIncomingMessage: async (item: any) => {

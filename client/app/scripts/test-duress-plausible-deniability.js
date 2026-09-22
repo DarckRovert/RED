@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 
 console.log("================================================================================");
-console.log("🛡️  SUITE: ANTI-FORENSIC PLAUSIBLE DENIABILITY & SILENT ZEROIZE (v116.0.0)");
+console.log("🛡️  SUITE: ANTI-FORENSIC PLAUSIBLE DENIABILITY & SILENT ZEROIZE (v117.0.0)");
 console.log("================================================================================\n");
 
 let totalTests = 0;

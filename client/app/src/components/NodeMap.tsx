@@ -53,11 +53,17 @@ function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lo
 function derivePeerPosition(myLat: number, myLng: number, peer: { id: string; lat?: number; lng?: number; rssi?: number }): { lat: number; lng: number; distMeters: number; isEstimated: boolean } {
     // 1. Si el nodo remoto transmitió sus coordenadas GPS reales por la malla
     if (typeof peer.lat === "number" && typeof peer.lng === "number" && peer.lat !== 0 && peer.lng !== 0) {
-        const distMeters = getHaversineDistanceMeters(myLat, myLng, peer.lat, peer.lng);
+        const hasOrigin = myLat !== 0 && myLng !== 0;
+        const distMeters = hasOrigin ? getHaversineDistanceMeters(myLat, myLng, peer.lat, peer.lng) : 0;
         return { lat: peer.lat, lng: peer.lng, distMeters, isEstimated: false };
     }
 
-    // 2. Modelo Físico Log-Distance Path Loss a partir de la potencia de señal real (RSSI)
+    // 2. Proteger contra Null Island (0,0) cuando GPS o PDR aún están adquiriendo efemérides
+    const fallbackLoc = TacticalLocationEngine.getLastKnownLocation();
+    const validMyLat = (myLat !== 0 || myLng !== 0) ? myLat : (fallbackLoc?.lat || 19.4326);
+    const validMyLng = (myLat !== 0 || myLng !== 0) ? myLng : (fallbackLoc?.lon || -99.1332);
+
+    // 3. Modelo Físico Log-Distance Path Loss a partir de la potencia de señal real (RSSI)
     const rssi = peer.rssi ?? -85;
     const measuredPower = -59; // Potencia medida de referencia a 1 metro
     const n = 2.0; // Exponente de propagación en espacio libre / interiores
@@ -72,11 +78,11 @@ function derivePeerPosition(myLat: number, myLng: number, peer: { id: string; la
     const angleRad = ((hash % 360) * Math.PI) / 180;
     
     const deltaLat = (distMeters * Math.cos(angleRad)) / 111000;
-    const deltaLng = (distMeters * Math.sin(angleRad)) / (111000 * Math.cos((myLat * Math.PI) / 180));
+    const deltaLng = (distMeters * Math.sin(angleRad)) / (111000 * Math.max(0.01, Math.cos((validMyLat * Math.PI) / 180)));
     
     return {
-        lat: myLat + deltaLat,
-        lng: myLng + deltaLng,
+        lat: validMyLat + deltaLat,
+        lng: validMyLng + deltaLng,
         distMeters,
         isEstimated: true
     };
@@ -158,9 +164,12 @@ export default function NodeMap() {
     // ── Reportes de Situación (SITREPs Tácticos de Escuadrón)
     const [sitreps, setSitreps] = useState<SitrepReport[]>(() => sitrepEngine.getSitreps());
 
-    // ── Conectoma Drosophila MaleCNS v1.0 (Ring Attractor, FB 3D & Swarm Pheromones) ──
-    const [cxTelem, setCxTelem] = useState<RingAttractorTelemetry>(() => ringAttractor.getTelemetry());
-    const [fbTelem, setFbTelem] = useState<FanShapedBodyTelemetry>(() => fanShapedBody.getTelemetry());
+    // ── Conectoma Drosophila MaleCNS v1.0 (Desacoplado con Refs y Throttling a 4 Hz) ──
+    const fbTelemRef = useRef<FanShapedBodyTelemetry>(fanShapedBody.getTelemetry());
+    const cxTelemRef = useRef<RingAttractorTelemetry>(ringAttractor.getTelemetry());
+
+    const [cxTelem, setCxTelem] = useState<RingAttractorTelemetry>(() => cxTelemRef.current);
+    const [fbTelem, setFbTelem] = useState<FanShapedBodyTelemetry>(() => fbTelemRef.current);
     const [activePheromones, setActivePheromones] = useState<SwarmPheromone[]>(() => dtnMushroomBody.getActivePheromones());
     const [showHomeVector] = useState<boolean>(true);
     const [isPheromoneModalOpen, setIsPheromoneModalOpen] = useState<boolean>(false);
@@ -172,9 +181,31 @@ export default function NodeMap() {
     const [isHippocampalMemoryOpen, setIsHippocampalMemoryOpen] = useState<boolean>(false);
 
     useEffect(() => {
-        const unsubCx = ringAttractor.subscribe(setCxTelem);
-        const unsubFb = fanShapedBody.subscribe(setFbTelem);
-        const unsubMb = dtnMushroomBody.subscribe(() => setActivePheromones(dtnMushroomBody.getActivePheromones()));
+        let lastUiUpdate = 0;
+        const UI_THROTTLE_MS = 250; // 4 Hz máximo para actualizaciones de React UI (Moto G22 / Note 14)
+
+        const unsubCx = ringAttractor.subscribe((t) => {
+            cxTelemRef.current = t;
+            const now = Date.now();
+            if (now - lastUiUpdate > UI_THROTTLE_MS) {
+                lastUiUpdate = now;
+                setCxTelem(t);
+            }
+        });
+
+        const unsubFb = fanShapedBody.subscribe((t) => {
+            fbTelemRef.current = t;
+            const now = Date.now();
+            if (now - lastUiUpdate > UI_THROTTLE_MS) {
+                lastUiUpdate = now;
+                setFbTelem(t);
+            }
+        });
+
+        const unsubMb = dtnMushroomBody.subscribe(() => {
+            setActivePheromones(dtnMushroomBody.getActivePheromones());
+        });
+
         return () => {
             unsubCx();
             unsubFb();
@@ -292,6 +323,13 @@ export default function NodeMap() {
     const effectiveLng = isPdrActive && pdrOriginRef.current.lng !== 0
         ? pdrOriginRef.current.lng + (pdrState.displacementEastMeters / (111000 * Math.max(0.01, Math.cos((pdrOriginRef.current.lat * Math.PI) / 180))))
         : gpsData.lng;
+
+    // Deadband a ~1 metro (5 decimales) para mitigar reconstrucciones espurias del árbol Leaflet en reposo
+    const effectiveLatRounded = Math.round(effectiveLat * 100000) / 100000;
+    const effectiveLngRounded = Math.round(effectiveLng * 100000) / 100000;
+
+    const effectivePosRef = useRef({ lat: effectiveLat, lng: effectiveLng });
+    effectivePosRef.current = { lat: effectiveLat, lng: effectiveLng };
 
     const loadVaultStats = async () => {
         const stats = await offlineTileCacheEngine.getCacheStats();
@@ -464,6 +502,9 @@ export default function NodeMap() {
     }, []);
 
     // 2. Extracción y Deduplicación Estricta de Telemetría de Malla
+    const gpsDataRef = useRef(gpsData);
+    gpsDataRef.current = gpsData;
+
     useEffect(() => {
         const updatePeers = async () => {
             const rawLocal = localTransport.allPeers || [];
@@ -590,19 +631,36 @@ export default function NodeMap() {
             rawLocal.forEach((p: any) => processEntry(p, p.transport || 'ble'));
             apiPeers.forEach((p: any) => processEntry(p, 'wifi'));
 
-            // Calcular distancias
+            // Calcular distancias con posición efectiva actual (GPS o PDR inercial)
+            const curLat = effectivePosRef.current.lat !== 0 ? effectivePosRef.current.lat : gpsDataRef.current.lat;
+            const curLng = effectivePosRef.current.lng !== 0 ? effectivePosRef.current.lng : gpsDataRef.current.lng;
             const resolvedList = Array.from(canonicalMap.values()).map(p => {
-                const pos = derivePeerPosition(gpsData.lat, gpsData.lng, p);
+                const pos = derivePeerPosition(curLat, curLng, p);
                 return { ...p, distMeters: pos.distMeters };
             });
 
-            setPeers(resolvedList);
+            // Evitar re-renderizado masivo y cierre involuntario de popups cada 3s si los datos no cambiaron
+            setPeers(prev => {
+                if (prev.length !== resolvedList.length) return resolvedList;
+                const isIdentical = prev.every((oldP, idx) => {
+                    const newP = resolvedList[idx];
+                    return oldP.id === newP.id &&
+                           oldP.distMeters === newP.distMeters &&
+                           oldP.rssi === newP.rssi &&
+                           oldP.lat === newP.lat &&
+                           oldP.lng === newP.lng &&
+                           oldP.isContact === newP.isContact &&
+                           oldP.batteryLevel === newP.batteryLevel &&
+                           oldP.primaryTransport === newP.primaryTransport;
+                });
+                return isIdentical ? prev : resolvedList;
+            });
         };
 
         updatePeers();
-        const interval = setInterval(updatePeers, 2500);
+        const interval = setInterval(updatePeers, 3000);
         return () => clearInterval(interval);
-    }, [identity, status, contacts, gpsData.lat, gpsData.lng]);
+    }, [identity, status, contacts]);
 
     // 3. Inicialización e Interacción del Mapa Leaflet Base (Instancia Única)
     useEffect(() => {
@@ -625,6 +683,9 @@ export default function NodeMap() {
                 const OfflineTileLayer = (L.TileLayer as any).extend({
                     createTile(coords: any, done: any) {
                         const tile = document.createElement('img');
+                        let isAborted = false;
+                        (tile as any)._abortTile = () => { isAborted = true; };
+
                         L.DomEvent.on(tile, 'load', L.Util.bind((this as any)._tileOnLoad, this, done, tile));
                         L.DomEvent.on(tile, 'error', L.Util.bind((this as any)._tileOnError, this, done, tile));
 
@@ -643,14 +704,20 @@ export default function NodeMap() {
                         if (mbtilesReader.isPackageOpen()) {
                             mbtilesReader.getTileDataUrl(coords.z, coords.x, coords.y)
                                 .then((dataUrl) => {
+                                    if (isAborted) return;
                                     if (dataUrl) {
                                         tile.src = dataUrl;
                                     } else {
                                         const url = (this as any).getTileUrl(coords);
                                         offlineTileCacheEngine.getOrFetchTile(coords.z, coords.x, coords.y, url)
                                             .then((blob) => {
+                                                if (isAborted) return;
                                                 if (blob) {
                                                     const blobUrl = URL.createObjectURL(blob);
+                                                    if (isAborted) {
+                                                        try { URL.revokeObjectURL(blobUrl); } catch {}
+                                                        return;
+                                                    }
                                                     (tile as any)._blobUrl = blobUrl;
                                                     tile.src = blobUrl;
                                                 } else {
@@ -658,12 +725,12 @@ export default function NodeMap() {
                                                 }
                                             })
                                             .catch(() => {
-                                                tile.src = (this as any).options.errorTileUrl;
+                                                if (!isAborted) tile.src = (this as any).options.errorTileUrl;
                                             });
                                     }
                                 })
                                 .catch(() => {
-                                    tile.src = (this as any).options.errorTileUrl;
+                                    if (!isAborted) tile.src = (this as any).options.errorTileUrl;
                                 });
                             return tile;
                         }
@@ -671,8 +738,13 @@ export default function NodeMap() {
                         const url = (this as any).getTileUrl(coords);
                         offlineTileCacheEngine.getOrFetchTile(coords.z, coords.x, coords.y, url)
                             .then((blob) => {
+                                if (isAborted) return;
                                 if (blob) {
                                     const blobUrl = URL.createObjectURL(blob);
+                                    if (isAborted) {
+                                        try { URL.revokeObjectURL(blobUrl); } catch {}
+                                        return;
+                                    }
                                     (tile as any)._blobUrl = blobUrl;
                                     tile.src = blobUrl;
                                 } else {
@@ -680,15 +752,21 @@ export default function NodeMap() {
                                 }
                             })
                             .catch(() => {
-                                tile.src = (this as any).options.errorTileUrl;
+                                if (!isAborted) tile.src = (this as any).options.errorTileUrl;
                             });
 
                         return tile;
                     },
                     _removeTile(key: string) {
                         const tile = (this as any)._tiles[key]?.el;
-                        if (tile && (tile as any)._blobUrl) {
-                            try { URL.revokeObjectURL((tile as any)._blobUrl); } catch {}
+                        if (tile) {
+                            if (typeof (tile as any)._abortTile === 'function') {
+                                (tile as any)._abortTile();
+                            }
+                            if ((tile as any)._blobUrl) {
+                                try { URL.revokeObjectURL((tile as any)._blobUrl); } catch {}
+                                (tile as any)._blobUrl = null;
+                            }
                         }
                         (L.TileLayer.prototype as any)._removeTile?.call(this, key);
                     }
@@ -749,41 +827,44 @@ export default function NodeMap() {
             markersGroupRef.current.clearLayers();
 
                 // Marcador de Ubicación Propia (GPS Real o PDR Inercial con Cono de Rumbo 3D)
-                const selfIcon = L.divIcon({
-                    className: "custom-self-marker",
-                    html: isPdrActive ? (
-                        `<div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;">
-                            <div style="position:absolute;width:34px;height:34px;border-radius:50%;background:rgba(255,145,0,0.25);animation:pulse 1.2s infinite;"></div>
-                            <div id="tactical-self-cone" style="position:absolute;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:18px solid #FF9100;top:-2px;filter:drop-shadow(0 0 8px #FF9100);transform-origin:50% 19px;transform:rotate(${pdrState.currentHeadingDeg}deg);transition:transform 0.12s ease-out;"></div>
-                            <div style="width:16px;height:16px;border-radius:50%;background:#FF9100;border:2px solid #fff;box-shadow:0 0 12px #FF9100;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:#000;z-index:2;">🧭</div>
-                        </div>`
-                    ) : (
-                        `<div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;">
-                            <div style="position:absolute;width:34px;height:34px;border-radius:50%;background:rgba(0,229,255,0.25);animation:pulse 1.5s infinite;"></div>
-                            <div id="tactical-self-cone" style="position:absolute;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:18px solid #00E5FF;top:-2px;filter:drop-shadow(0 0 8px #00E5FF);transform-origin:50% 19px;transform:rotate(${effectiveHeading}deg);transition:transform 0.12s ease-out;"></div>
-                            <div style="width:14px;height:14px;border-radius:50%;background:#00E5FF;border:2px solid #fff;box-shadow:0 0 12px #00E5FF;z-index:2;"></div>
-                        </div>`
-                    ),
-                    iconSize: [34, 34],
-                    iconAnchor: [17, 17]
-                });
-                L.marker([effectiveLat, effectiveLng], { icon: selfIcon }).addTo(markersGroupRef.current);
+                if (TacticalLocationEngine.isValidCoordinates(effectiveLat, effectiveLng)) {
+                    const selfIcon = L.divIcon({
+                        className: "custom-self-marker",
+                        html: isPdrActive ? (
+                            `<div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;">
+                                <div style="position:absolute;width:34px;height:34px;border-radius:50%;background:rgba(255,145,0,0.25);animation:pulse 1.2s infinite;"></div>
+                                <div id="tactical-self-cone" style="position:absolute;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:18px solid #FF9100;top:-2px;filter:drop-shadow(0 0 8px #FF9100);transform-origin:50% 19px;transform:rotate(${pdrState.currentHeadingDeg}deg);transition:transform 0.12s ease-out;"></div>
+                                <div style="width:16px;height:16px;border-radius:50%;background:#FF9100;border:2px solid #fff;box-shadow:0 0 12px #FF9100;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:#000;z-index:2;">🧭</div>
+                            </div>`
+                        ) : (
+                            `<div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;">
+                                <div style="position:absolute;width:34px;height:34px;border-radius:50%;background:rgba(0,229,255,0.25);animation:pulse 1.5s infinite;"></div>
+                                <div id="tactical-self-cone" style="position:absolute;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:18px solid #00E5FF;top:-2px;filter:drop-shadow(0 0 8px #00E5FF);transform-origin:50% 19px;transform:rotate(${effectiveHeading}deg);transition:transform 0.12s ease-out;"></div>
+                                <div style="width:14px;height:14px;border-radius:50%;background:#00E5FF;border:2px solid #fff;box-shadow:0 0 12px #00E5FF;z-index:2;"></div>
+                            </div>`
+                        ),
+                        iconSize: [34, 34],
+                        iconAnchor: [17, 17]
+                    });
+                    L.marker([effectiveLat, effectiveLng], { icon: selfIcon }).addTo(markersGroupRef.current);
 
-                // Anillos Concéntricos de Radar Táctico (25m, 50m, 100m)
-                [25, 50, 100].forEach(radius => {
-                    L.circle([effectiveLat, effectiveLng], {
-                        radius,
-                        color: radius === 100 ? "rgba(0,229,255,0.4)" : "rgba(0,229,255,0.18)",
-                        weight: 1,
-                        fillColor: "rgba(0,229,255,0.02)",
-                        fillOpacity: 0.2,
-                        dashArray: "3, 6"
-                    }).addTo(markersGroupRef.current);
-                });
+                    // Anillos Concéntricos de Radar Táctico (25m, 50m, 100m)
+                    [25, 50, 100].forEach(radius => {
+                        L.circle([effectiveLat, effectiveLng], {
+                            radius,
+                            color: radius === 100 ? "rgba(0,229,255,0.4)" : "rgba(0,229,255,0.18)",
+                            weight: 1,
+                            fillColor: "rgba(0,229,255,0.02)",
+                            fillOpacity: 0.2,
+                            dashArray: "3, 6"
+                        }).addTo(markersGroupRef.current);
+                    });
+                }
 
                 // Marcadores de Nodos de la Malla (MIL-STD-2525D Blue-Force Tracking)
                 peers.forEach((p) => {
-                    const pos = derivePeerPosition(gpsData.lat, gpsData.lng, p);
+                    const pos = derivePeerPosition(effectiveLat, effectiveLng, p);
+                    if (!TacticalLocationEngine.isValidCoordinates(pos.lat, pos.lng)) return;
                     const isMulti = p.transports.length > 1;
                     const milSvg = milStd2525.generateSvg({
                         affiliation: 'FRIEND',
@@ -811,7 +892,8 @@ export default function NodeMap() {
                         const waypoints = JSON.parse(rawWps);
                         waypoints.forEach((wp: any) => {
                             if (typeof wp.lat === "number" && typeof wp.lon === "number") {
-                                const dist = getHaversineDistanceMeters(gpsData.lat, gpsData.lng, wp.lat, wp.lon);
+                                const hasOrigin = effectiveLat !== 0 && effectiveLng !== 0;
+                                const dist = hasOrigin ? getHaversineDistanceMeters(effectiveLat, effectiveLng, wp.lat, wp.lon) : (wp.distMeters || 0);
                                 const wpSvg = milStd2525.generateSvg({
                                     affiliation: 'NEUTRAL',
                                     role: 'SUPPLY_AMMO',
@@ -837,7 +919,7 @@ export default function NodeMap() {
                 } catch {}
 
                 // Marcador y Vector del Objetivo Táctico Activo (MIL-STD-2525D Hostile Threat)
-                if (target) {
+                if (target && TacticalLocationEngine.isValidCoordinates(target.lat, target.lon)) {
                     const targetSvg = milStd2525.generateSvg({
                         affiliation: 'HOSTILE',
                         role: 'RECON_DRONE',
@@ -851,8 +933,8 @@ export default function NodeMap() {
                     });
                     const targetMarker = L.marker([target.lat, target.lon], { icon: targetIcon }).addTo(markersGroupRef.current);
                     
-                    if (gpsData.lat !== 0 && gpsData.lng !== 0) {
-                        const distM = getHaversineDistanceMeters(gpsData.lat, gpsData.lng, target.lat, target.lon);
+                    if (effectiveLat !== 0 && effectiveLng !== 0) {
+                        const distM = getHaversineDistanceMeters(effectiveLat, effectiveLng, target.lat, target.lon);
                         targetMarker.bindPopup(`
                             <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#000;padding:2px;">
                                 <strong>🎯 ${target.name || 'Objetivo'}</strong><br/>
@@ -862,7 +944,7 @@ export default function NodeMap() {
                         `);
 
                         // Vector Polilínea Táctica
-                        L.polyline([[gpsData.lat, gpsData.lng], [target.lat, target.lon]], {
+                        L.polyline([[effectiveLat, effectiveLng], [target.lat, target.lon]], {
                             color: "#E8213A",
                             weight: 3.5,
                             dashArray: "8, 8",
@@ -906,9 +988,9 @@ export default function NodeMap() {
                 try {
                     const deadDrops = deadDropVault.getDeadDrops();
                     deadDrops.forEach(drop => {
-                        const hasGps = gpsData.lat !== 0 && gpsData.lng !== 0;
-                        const dist = hasGps ? getHaversineDistanceMeters(gpsData.lat, gpsData.lng, drop.lat, drop.lon) : 999999;
-                        const isNearby = hasGps && dist <= drop.unlockRadiusMeters;
+                        const hasPos = effectiveLat !== 0 && effectiveLng !== 0;
+                        const dist = hasPos ? getHaversineDistanceMeters(effectiveLat, effectiveLng, drop.lat, drop.lon) : 999999;
+                        const isNearby = hasPos && dist <= drop.unlockRadiusMeters;
                         const dropIcon = L.divIcon({
                             className: "custom-deaddrop-marker",
                             html: `<div style="width:24px;height:24px;border-radius:50%;background:${drop.isUnlocked ? '#00E676' : isNearby ? '#00E5FF' : '#B388FF'};border:2px solid #fff;box-shadow:0 0 16px ${drop.isUnlocked ? '#00E676' : '#B388FF'};display:flex;align-items:center;justify-content:center;font-size:12px;">${drop.isUnlocked ? '🔓' : isNearby ? '📦' : '🔒'}</div>`,
@@ -920,7 +1002,7 @@ export default function NodeMap() {
                             <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#000;padding:2px;">
                                 <strong>📦 Dead-Drop: ${drop.title}</strong><br/>
                                 Categoría: ${drop.category}<br/>
-                                Distancia: ${hasGps ? `${dist}m` : 'Buscando GPS...'} (Radio: ${drop.unlockRadiusMeters}m)<br/>
+                                Distancia: ${hasPos ? `${dist}m` : 'Buscando GPS...'} (Radio: ${drop.unlockRadiusMeters}m)<br/>
                                 Estado: <strong>${drop.isUnlocked ? 'DESBLOQUEADO' : isNearby ? 'LISTO PARA DESBLOQUEO' : 'FUERA DE RANGO'}</strong><br/>
                                 ${drop.isUnlocked && drop.plaintextPayload ? `<div style="margin-top:4px;padding:4px;background:#eef;border-radius:4px;word-break:break-all;">${drop.plaintextPayload}</div>` : ''}
                             </div>
@@ -1003,9 +1085,10 @@ export default function NodeMap() {
 
                 // ── Vector de Retorno a Casa 3D (Fan-Shaped Body Home Vector) ──
                 try {
-                    if (showHomeVector && fbTelem.homeVector.distanceMeters > 5 && effectiveLat !== 0 && effectiveLng !== 0) {
-                        const homeBearing = fbTelem.homeVector.bearingDeg;
-                        const distM = fbTelem.homeVector.distanceMeters;
+                    const curFb = fbTelemRef.current;
+                    if (showHomeVector && curFb.homeVector.distanceMeters > 5 && effectiveLat !== 0 && effectiveLng !== 0) {
+                        const homeBearing = curFb.homeVector.bearingDeg;
+                        const distM = curFb.homeVector.distanceMeters;
                         const angleRad = (homeBearing * Math.PI) / 180;
                         const deltaLat = (distM * Math.cos(angleRad)) / 111000;
                         const deltaLng = (distM * Math.sin(angleRad)) / (111000 * Math.max(0.01, Math.cos((effectiveLat * Math.PI) / 180)));
@@ -1040,13 +1123,13 @@ export default function NodeMap() {
                 // Superposición de Línea de Demora Foxhunting (RDF LOB)
                 try {
                     const rdfState = tacticalRdf.getState();
-                    if (rdfState.peakBearing && gpsData.lat !== 0 && gpsData.lng !== 0) {
+                    if (rdfState.peakBearing && effectiveLat !== 0 && effectiveLng !== 0) {
                         const bearingRad = (rdfState.peakBearing.peakHeadingDeg * Math.PI) / 180;
                         const rayDistMeters = Math.min(500, rdfState.peakBearing.estimatedDistMeters || 300);
-                        const endLat = gpsData.lat + (rayDistMeters * Math.cos(bearingRad)) / 111000;
-                        const endLon = gpsData.lng + (rayDistMeters * Math.sin(bearingRad)) / (111000 * Math.cos(gpsData.lat * Math.PI / 180));
+                        const endLat = effectiveLat + (rayDistMeters * Math.cos(bearingRad)) / 111000;
+                        const endLon = effectiveLng + (rayDistMeters * Math.sin(bearingRad)) / (111000 * Math.cos(effectiveLat * Math.PI / 180));
                         
-                        L.polyline([[gpsData.lat, gpsData.lng], [endLat, endLon]], {
+                        L.polyline([[effectiveLat, effectiveLng], [endLat, endLon]], {
                             color: "#00E5FF",
                             weight: 2.5,
                             dashArray: "6, 6",
@@ -1149,7 +1232,7 @@ export default function NodeMap() {
         return () => {
             isCancelled = true;
         };
-    }, [effectiveLat, effectiveLng, peers, target, isPdrActive, sitreps, activePheromones, showHomeVector, fbTelem]);
+    }, [effectiveLatRounded, effectiveLngRounded, peers, target, isPdrActive, sitreps, activePheromones, showHomeVector]);
 
     const recenterMap = () => {
         if (leafletMapRef.current) {

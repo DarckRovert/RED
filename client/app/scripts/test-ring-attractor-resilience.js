@@ -49,7 +49,7 @@ runTest('2. RingAttractorEngine: Conectividad sináptica recurrente continua', (
 });
 
 runTest('3. RingAttractorEngine: Neuronas P-EN de integración de velocidad angular', () => {
-    assert(engineCode.includes('this.betaShift * omegaRad * (this.u[prevIdx] - this.u[nextIdx])'), 'Debe implementar acoplamiento asimétrico P-EN');
+    assert(engineCode.includes('this.betaShift * effectiveOmega * (this.u[prevIdx] - this.u[nextIdx])') || engineCode.includes('this.betaShift * omegaRad * (this.u[prevIdx] - this.u[nextIdx])'), 'Debe implementar acoplamiento asimétrico P-EN');
     assert(engineCode.includes('injectAngularVelocity'), 'Debe exponer método de inyección cinemática');
 });
 

@@ -14,20 +14,79 @@ export const createEmergencySlice: StateCreator<RedStore, [], [], Partial<RedSto
 
     activeVoiceBursts: [],
 
-    setSosBeacons: (beacons: any[]) => set({ activeSosBeacons: Array.isArray(beacons) ? beacons : [] }),
+    setSosBeacons: (beacons: any[]) => {
+        const myHash = get().identity?.identity_hash || get().status?.identity_hash;
+        const normMyHash = myHash ? myHash.toLowerCase() : '';
+        const list = Array.isArray(beacons) ? beacons : [];
+        const enriched = list.map((b: any) => {
+            const sender = (b.sender_did || b.sender || b.issuerDid || '').toLowerCase();
+            const isMine = Boolean(
+                b.is_mine ||
+                (normMyHash && (
+                    sender === normMyHash ||
+                    sender === `did:red:${normMyHash}` ||
+                    (normMyHash.length >= 8 && sender.includes(normMyHash.slice(0, 12)))
+                ))
+            );
+            return { ...b, is_mine: isMine };
+        });
+        set({ activeSosBeacons: enriched });
+    },
 
     addSosBeacon: (beacon: any) => {
         const current = get().activeSosBeacons || [];
-        if (!current.some((b: any) => b.id === beacon.id)) {
-            set({ activeSosBeacons: [beacon, ...current] });
-            toast.error(`🚨 ¡ALERTA SOS RECIBIDA! Operador: ${beacon.sender_name || 'Desconocido'}`);
+        const beaconId = beacon.id || beacon.beacon_id;
+        if (!beaconId) return;
+
+        const myHash = get().identity?.identity_hash || get().status?.identity_hash;
+        const normMyHash = myHash ? myHash.toLowerCase() : '';
+        const sender = (beacon.sender_did || beacon.sender || beacon.issuerDid || '').toLowerCase();
+        const isMine = Boolean(
+            beacon.is_mine ||
+            (normMyHash && (
+                sender === normMyHash ||
+                sender === `did:red:${normMyHash}` ||
+                (normMyHash.length >= 8 && sender.includes(normMyHash.slice(0, 12)))
+            ))
+        );
+
+        const enrichedBeacon = { ...beacon, is_mine: isMine };
+        const existingIdx = current.findIndex((b: any) => (b.id || b.beacon_id) === beaconId);
+
+        if (existingIdx === -1) {
+            set({ activeSosBeacons: [enrichedBeacon, ...current] });
+            if (!isMine) {
+                toast.error(`🚨 ¡ALERTA SOS RECIBIDA! Operador: ${beacon.sender_name || 'Desconocido'}`);
+            }
+        } else {
+            const existing = current[existingIdx];
+            const isNewer = !existing.timestamp || !beacon.timestamp || beacon.timestamp >= existing.timestamp;
+            if (isNewer) {
+                const updated = [...current];
+                updated[existingIdx] = {
+                    ...existing,
+                    ...enrichedBeacon,
+                    lat: beacon.lat ?? existing.lat,
+                    lon: beacon.lon ?? existing.lon,
+                    altitude: beacon.altitude ?? existing.altitude,
+                };
+                set({ activeSosBeacons: updated });
+            }
         }
     },
 
     resolveSosBeacon: (id: string) => {
         const current = get().activeSosBeacons || [];
-        set({ activeSosBeacons: current.filter((b: any) => b.id !== id) });
-        toast.info("Baliza SOS resuelta por la red");
+        const prevCount = current.length;
+        const filtered = current.filter((b: any) => 
+            b.id !== id && 
+            b.beacon_id !== id &&
+            (id.startsWith('did:red:') ? b.sender_did !== id : (b.sender_did !== `did:red:${id}` && b.sender_did !== id))
+        );
+        if (filtered.length !== prevCount) {
+            set({ activeSosBeacons: filtered });
+            toast.info("Baliza SOS resuelta por la red");
+        }
     },
 
     addWeatherReport: (report: any) => {

@@ -67,6 +67,9 @@ export const P2PWalkieTalkieModal: React.FC = () => {
     const webStreamRef = useRef<MediaStream | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const holdTimerRef = useRef<any>(null);
+    // [BUG-5 FIX] Referencias sincronizadas para evitar race conditions en PTT Hold mode
+    const isRecordingRef = useRef<boolean>(false);
+    const holdReleasedRef = useRef<boolean>(false);
 
     const myNickname = identity?.nickname || "Operador RED";
 
@@ -293,7 +296,7 @@ export const P2PWalkieTalkieModal: React.FC = () => {
             toast.warning("Se requiere permiso de micrófono para transmitir");
             return;
         }
-        if (isRecording || isProcessingStop) return;
+        if (isRecordingRef.current || isProcessingStop) return;
 
         try {
             TacticalAudioEngine.playTap();
@@ -342,19 +345,28 @@ export const P2PWalkieTalkieModal: React.FC = () => {
             }
 
             setIsRecording(true);
+            isRecordingRef.current = true;
             setStatusMsg("🎙️ Transmitiendo por canal de voz...");
+
+            // [BUG-5 FIX] Si el operador soltó el botón PTT durante la inicialización asíncrona (150-400ms)
+            if (holdReleasedRef.current) {
+                holdReleasedRef.current = false;
+                await stopRecordingAndTransmit();
+            }
         } catch (err: any) {
             toast.error(`Error al iniciar audio: ${err.message}`);
             setIsRecording(false);
+            isRecordingRef.current = false;
         }
     };
 
     // ── 6. Finalizar Grabación Táctica y Transmitir ─────────────────────────
     const stopRecordingAndTransmit = async () => {
-        if (!isRecording || isProcessingStop) return;
+        if (!isRecordingRef.current || isProcessingStop) return;
 
         setIsProcessingStop(true);
         setIsRecording(false);
+        isRecordingRef.current = false;
         TacticalAudioEngine.playRogerBeep();
 
         if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -481,6 +493,8 @@ export const P2PWalkieTalkieModal: React.FC = () => {
     // ── 7. Cancelación Inmediata de Grabación ───────────────────────────────
     const handleAbortRecording = () => {
         setIsRecording(false);
+        isRecordingRef.current = false;
+        holdReleasedRef.current = false;
         setIsProcessingStop(false);
         if (webStreamRef.current) {
             webStreamRef.current.getTracks().forEach(t => t.stop());
@@ -880,20 +894,44 @@ export const P2PWalkieTalkieModal: React.FC = () => {
 
                                 <button
                                     onMouseDown={() => {
-                                        if (pttMode === "hold") startRecording();
+                                        if (pttMode === "hold") {
+                                            holdReleasedRef.current = false;
+                                            startRecording();
+                                        }
                                     }}
                                     onMouseUp={() => {
-                                        if (pttMode === "hold" && isRecording) stopRecordingAndTransmit();
+                                        if (pttMode === "hold") {
+                                            holdReleasedRef.current = true;
+                                            if (isRecordingRef.current) stopRecordingAndTransmit();
+                                        }
+                                    }}
+                                    onMouseLeave={() => {
+                                        if (pttMode === "hold" && isRecordingRef.current) {
+                                            holdReleasedRef.current = true;
+                                            stopRecordingAndTransmit();
+                                        }
                                     }}
                                     onTouchStart={() => {
-                                        if (pttMode === "hold") startRecording();
+                                        if (pttMode === "hold") {
+                                            holdReleasedRef.current = false;
+                                            startRecording();
+                                        }
                                     }}
                                     onTouchEnd={() => {
-                                        if (pttMode === "hold" && isRecording) stopRecordingAndTransmit();
+                                        if (pttMode === "hold") {
+                                            holdReleasedRef.current = true;
+                                            if (isRecordingRef.current) stopRecordingAndTransmit();
+                                        }
+                                    }}
+                                    onTouchCancel={() => {
+                                        if (pttMode === "hold" && isRecordingRef.current) {
+                                            holdReleasedRef.current = true;
+                                            stopRecordingAndTransmit();
+                                        }
                                     }}
                                     onClick={() => {
                                         if (pttMode === "toggle") {
-                                            if (isRecording) stopRecordingAndTransmit();
+                                            if (isRecordingRef.current) stopRecordingAndTransmit();
                                             else startRecording();
                                         }
                                     }}

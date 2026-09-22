@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * RedProxyServer — Servidor Proxy Local Soberano en Android (v116.0.0)
+ * RedProxyServer — Servidor Proxy Local Soberano en Android (v117.0.0)
  *
  * Provee un proxy HTTP/HTTPS multi-hilo real en 127.0.0.1:8088.
  * Permite que el sistema Android (vía APN o proxy Wi-Fi) o navegadores locales
@@ -672,7 +672,7 @@ public class RedProxyServer {
                     remoteOut.write(("Host: " + activeSniHost + "\r\n").getBytes());
                     remoteOut.write(("X-Forwarded-Host: " + host + "\r\n").getBytes());
                     remoteOut.write(("X-RED-Destination-URI: " + uri + "\r\n").getBytes());
-                    remoteOut.write(("X-RED-ZeroRating-Tunnel: v116.0.0\r\n").getBytes());
+                    remoteOut.write(("X-RED-ZeroRating-Tunnel: v117.0.0\r\n").getBytes());
                     bytesUploaded.addAndGet(("Host: " + activeSniHost + "\r\n").length());
                     hostInjected = true;
                     continue;

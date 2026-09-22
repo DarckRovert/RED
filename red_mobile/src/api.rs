@@ -1167,14 +1167,24 @@ async fn handle_mark_conversation_read(
     axum::extract::Path(conv_id): axum::extract::Path<String>,
 ) -> impl IntoResponse {
     let node = state.node.lock().await;
-    // Format is "ourHashHex-theirHashHex" (shortened) which isn't easy to reconstruct into proper ID
-    // So we iterate through conversations to find the matching one, like handle_get_messages does.
+    let clean_conv_id = conv_id.to_lowercase().replace("did:red:", "");
     let mut target_conv_id = None;
     if let Ok((_, _, conversations)) = node.get_sync_payload().await {
-        if let Some(conv) = conversations
-            .iter()
-            .find(|c| format!("{}-{}", c.our_identity.short(), c.their_identity.short()) == conv_id)
-        {
+        if let Some(conv) = conversations.iter().find(|c| {
+            let legacy_id = format!("{}-{}", c.our_identity.short(), c.their_identity.short()).to_lowercase();
+            let their_hex = c.their_identity.to_hex().to_lowercase();
+            let our_hex = c.our_identity.to_hex().to_lowercase();
+            let their_short = c.their_identity.short().to_lowercase();
+
+            legacy_id == clean_conv_id
+                || their_hex == clean_conv_id
+                || their_short == clean_conv_id
+                || clean_conv_id.contains(&their_short)
+                || clean_conv_id.contains(&their_hex)
+                || their_hex.starts_with(&clean_conv_id)
+                || our_hex == clean_conv_id
+                || c.id.to_string().to_lowercase() == clean_conv_id
+        }) {
             target_conv_id = Some(conv.id.clone());
         }
     }
@@ -1183,7 +1193,7 @@ async fn handle_mark_conversation_read(
         if let Err(e) = node.mark_conversation_read_in_storage(&id).await {
             tracing::warn!("[read] Failed to save conversation read state: {}", e);
         } else {
-            tracing::debug!("[read] Conversation {} fully marked read in DB", conv_id);
+            tracing::info!("[read] Conversation {} fully marked read in DB", conv_id);
         }
     } else {
         tracing::warn!("[read] Conversation {} not found for marking read", conv_id);

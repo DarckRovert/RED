@@ -294,11 +294,13 @@ export class LowBitrateVocoder {
      * Synthesizes LPC-10 encoded parametric frames into 16-bit 8kHz PCM audio.
      */
     public static decodeLpcTactical(encoded: Uint8Array): Int16Array {
-        if (encoded.length < 5 || encoded[0] !== this.MAGIC_LPC_HEADER) {
+        if (!encoded || encoded.length < 5 || encoded[0] !== this.MAGIC_LPC_HEADER) {
             throw new Error("Formato LPC Tactical inválido");
         }
 
-        const frameCount = (encoded[2] << 8) | encoded[3];
+        const rawFrameCount = (encoded[2] << 8) | encoded[3];
+        const maxAvailableFrames = Math.max(0, Math.floor((encoded.length - 5) / 4));
+        const frameCount = Math.min(rawFrameCount, maxAvailableFrames);
         const frameSize = this.LPC_FRAME_SIZE;
         const output = new Int16Array(frameCount * frameSize);
 
@@ -358,22 +360,25 @@ export class LowBitrateVocoder {
      * Decodes an encoded Vocoder byte stream (ADPCM or LPC Tactical) back into 16-bit 8kHz PCM.
      */
     public static decode(encoded: Uint8Array): Int16Array {
-        if (encoded.length === 0) {
+        if (!encoded || encoded.length === 0) {
             return new Int16Array(0);
         }
         if (encoded[0] === this.MAGIC_LPC_HEADER) {
             return this.decodeLpcTactical(encoded);
         }
-        if (encoded[0] !== this.MAGIC_HEADER) {
+        if (encoded.length < 9 || encoded[0] !== this.MAGIC_HEADER) {
             throw new Error("Formato de Vocoder inválido o cabecera corrupta");
         }
 
-        const sampleCount = (encoded[2] << 24) | (encoded[3] << 16) | (encoded[4] << 8) | encoded[5];
+        const rawSampleCount = (((encoded[2] << 24) >>> 0) + (encoded[3] << 16) + (encoded[4] << 8) + encoded[5]) >>> 0;
+        const maxPossibleSamples = Math.max(0, (encoded.length - 9) * 2);
+        const sampleCount = Math.min(rawSampleCount, maxPossibleSamples);
+
         let predictedSample = (encoded[6] << 8) | encoded[7];
         if (predictedSample & 0x8000) {
             predictedSample |= ~0xFFFF;
         }
-        let stepIndex = Math.max(0, Math.min(88, encoded[8]));
+        let stepIndex = Math.max(0, Math.min(88, Number.isFinite(encoded[8]) ? encoded[8] : 0));
 
         const output = new Int16Array(sampleCount);
         let inIdx = 9;
@@ -436,6 +441,16 @@ export class LowBitrateVocoder {
      * Compresses raw audio buffer into tactical payload
      */
     public static compressAudioBuffer(audioBuffer: AudioBuffer): VocoderCompressedAudio {
+        if (!audioBuffer || audioBuffer.length === 0 || audioBuffer.numberOfChannels === 0) {
+            return {
+                bytes: new Uint8Array([this.MAGIC_HEADER, 0, 0, 0, 0, 0, 0, 0, 0]),
+                base64: "",
+                sampleRate: this.TARGET_SAMPLE_RATE,
+                originalDurationMs: 0,
+                compressedSizeBytes: 9,
+                compressionRatioPercent: 0
+            };
+        }
         const floatData = audioBuffer.getChannelData(0);
         const pcm8k = this.resampleTo8kHz(floatData, audioBuffer.sampleRate);
         const encodedBytes = this.encode(pcm8k);
@@ -443,7 +458,7 @@ export class LowBitrateVocoder {
 
         const originalRawBytes = floatData.length * 4;
         const compressedSizeBytes = encodedBytes.length;
-        const compressionRatioPercent = Math.round((1 - compressedSizeBytes / originalRawBytes) * 100);
+        const compressionRatioPercent = originalRawBytes > 0 ? Math.round((1 - compressedSizeBytes / originalRawBytes) * 100) : 0;
 
         return {
             bytes: encodedBytes,
@@ -459,6 +474,16 @@ export class LowBitrateVocoder {
      * Compresses raw audio buffer into ultra-compact LPC tactical payload specifically for LoRa (~98% compression, <450B for 3s)
      */
     public static compressForLora(audioBuffer: AudioBuffer): VocoderCompressedAudio {
+        if (!audioBuffer || audioBuffer.length === 0 || audioBuffer.numberOfChannels === 0) {
+            return {
+                bytes: new Uint8Array([this.MAGIC_LPC_HEADER, 0, 0, 0, 0]),
+                base64: "",
+                sampleRate: this.TARGET_SAMPLE_RATE,
+                originalDurationMs: 0,
+                compressedSizeBytes: 5,
+                compressionRatioPercent: 0
+            };
+        }
         const floatData = audioBuffer.getChannelData(0);
         const pcm8k = this.resampleTo8kHz(floatData, audioBuffer.sampleRate);
         const encodedBytes = this.encodeLpcTactical(pcm8k);
@@ -466,7 +491,7 @@ export class LowBitrateVocoder {
 
         const originalRawBytes = floatData.length * 4;
         const compressedSizeBytes = encodedBytes.length;
-        const compressionRatioPercent = Math.round((1 - compressedSizeBytes / originalRawBytes) * 100);
+        const compressionRatioPercent = originalRawBytes > 0 ? Math.round((1 - compressedSizeBytes / originalRawBytes) * 100) : 0;
 
         return {
             bytes: encodedBytes,
@@ -486,7 +511,8 @@ export class LowBitrateVocoder {
         encodedBytes: Uint8Array
     ): AudioBuffer {
         const pcm = this.decode(encodedBytes);
-        const buffer = ctx.createBuffer(1, pcm.length, this.TARGET_SAMPLE_RATE);
+        const safeLength = Math.max(1, pcm.length);
+        const buffer = ctx.createBuffer(1, safeLength, this.TARGET_SAMPLE_RATE);
         const channelData = buffer.getChannelData(0);
 
         for (let i = 0; i < pcm.length; i++) {
@@ -500,13 +526,18 @@ export class LowBitrateVocoder {
      * Helper to decode Base64 into Uint8Array
      */
     public static base64ToBytes(base64: string): Uint8Array {
-        let clean = base64.includes(',') ? base64.split(',')[1] : base64;
-        clean = clean.replace(/[\s\r\n]+/g, '');
-        const bin = typeof atob !== 'undefined' ? atob(clean) : Buffer.from(clean, 'base64').toString('binary');
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) {
-            bytes[i] = bin.charCodeAt(i);
+        if (!base64 || typeof base64 !== 'string') return new Uint8Array(0);
+        try {
+            let clean = base64.includes(',') ? base64.split(',')[1] : base64;
+            clean = clean.replace(/[\s\r\n]+/g, '');
+            const bin = typeof atob !== 'undefined' ? atob(clean) : Buffer.from(clean, 'base64').toString('binary');
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) {
+                bytes[i] = bin.charCodeAt(i);
+            }
+            return bytes;
+        } catch {
+            return new Uint8Array(0);
         }
-        return bytes;
     }
 }

@@ -99,10 +99,6 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const [isOfcBarterOpen, setIsOfcBarterOpen] = useState<boolean>(false);
   const [isHippocampalMemoryOpen, setIsHippocampalMemoryOpen] = useState<boolean>(false);
 
-  useEffect(() => {
-    const unsub = humanBrainOrchestrator.subscribe(setHumanSnapshot);
-    return unsub;
-  }, []);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -236,23 +232,58 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     return unregister;
   }, [onClose]);
 
-  // Suscripción a los 7 subsistemas neurobiológicos
+  // Referencias de alta velocidad para desacoplar telemetría de React (0 lag interno)
+  const cxTelemRef = useRef<RingAttractorTelemetry>(cxTelemetry);
+  const fbTelemRef = useRef<FanShapedBodyTelemetry>(fbTelemetry);
+  const synTelemRef = useRef<SynapticMeshTelemetry>(synapticTelemetry);
+  const gfsTelemRef = useRef<GiantFiberTelemetry>(gfsTelemetry);
+  const mbTelemRef = useRef<MushroomBodyTelemetry>(mbTelemetry);
+  const joTelemRef = useRef<JohnstonOrganTelemetry>(joTelemetry);
+  const metTelemRef = useRef<MetabolicGovernorTelemetry>(metTelemetry);
+  const opticTelemRef = useRef<OpticLobeTelemetry>(opticTelemetry);
+  const motorTelemRef = useRef<TacticalMotorActuatorTelemetry>(motorTelemetry);
+  const rfBearingsRef = useRef<RfPeerBearing[]>(rfBearings);
+  const humanRef = useRef<HumanBrainTelemetrySnapshot>(humanSnapshot);
+  const consciousnessRef = useRef<ConsciousnessSnapshot>(consciousnessTelemetry);
+
+  // Suscripción desacoplada a los 11 subsistemas neurobiológicos
   useEffect(() => {
-    const unsubCx = ringAttractor.subscribe(setCxTelemetry);
-    const unsubFb = fanShapedBody.subscribe(setFbTelemetry);
+    const unsubCx = ringAttractor.subscribe((t) => { cxTelemRef.current = t; });
+    const unsubFb = fanShapedBody.subscribe((t) => { fbTelemRef.current = t; });
     const unsubSyn = synapticMeshRouter.subscribe((st) => {
-      setSynapticTelemetry(st);
-      setRfBearings(synapticMeshRouter.getAllActiveBearings());
+      synTelemRef.current = st;
+      rfBearingsRef.current = synapticMeshRouter.getAllActiveBearings();
     });
-    const unsubGfs = giantFiberReflex.subscribe(setGfsTelemetry);
-    const unsubMb = dtnMushroomBody.subscribe(setMbTelemetry);
-    const unsubJo = johnstonOrgan.subscribe(setJoTelemetry);
-    const unsubMet = metabolicGovernor.subscribe(setMetTelemetry);
-    const unsubOptic = opticLobe.subscribe(setOpticTelemetry);
-    const unsubMotor = tacticalMotorActuator.subscribe(setMotorTelemetry);
-    const unsubConsciousness = globalWorkspaceConsciousnessBus.subscribe(setConsciousnessTelemetry);
+    const unsubGfs = giantFiberReflex.subscribe((t) => { gfsTelemRef.current = t; });
+    const unsubMb = dtnMushroomBody.subscribe((t) => { mbTelemRef.current = t; });
+    const unsubJo = johnstonOrgan.subscribe((t) => { joTelemRef.current = t; });
+    const unsubMet = metabolicGovernor.subscribe((t) => { metTelemRef.current = t; });
+    const unsubOptic = opticLobe.subscribe((t) => { opticTelemRef.current = t; });
+    const unsubMotor = tacticalMotorActuator.subscribe((t) => { motorTelemRef.current = t; });
+    const unsubConsciousness = globalWorkspaceConsciousnessBus.subscribe((t) => { consciousnessRef.current = t; });
+    const unsubHuman = humanBrainOrchestrator.subscribe((t) => { humanRef.current = t; });
+
+    // Compuerta de actualización de interfaz a 4 Hz (250ms): agrupa todos los cambios en 1 único re-render
+    const syncTimer = setInterval(() => {
+      // Evitar re-renders y presión sobre el recolector de basura si la aplicación está en segundo plano
+      if (typeof document !== "undefined" && document.hidden) return;
+
+      setCxTelemetry(cxTelemRef.current);
+      setFbTelemetry(fbTelemRef.current);
+      setSynapticTelemetry(synTelemRef.current);
+      setRfBearings(rfBearingsRef.current);
+      setGfsTelemetry(gfsTelemRef.current);
+      setMbTelemetry(mbTelemRef.current);
+      setJoTelemetry(joTelemRef.current);
+      setMetTelemetry(metTelemRef.current);
+      setOpticTelemetry(opticTelemRef.current);
+      setMotorTelemetry(motorTelemRef.current);
+      setConsciousnessTelemetry(consciousnessRef.current);
+      setHumanSnapshot(humanRef.current);
+    }, 250);
 
     return () => {
+      clearInterval(syncTimer);
       unsubCx();
       unsubFb();
       unsubSyn();
@@ -263,6 +294,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       unsubOptic();
       unsubMotor();
       unsubConsciousness();
+      unsubHuman();
     };
   }, []);
 
@@ -275,7 +307,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     const cxRadius = 90;
     for (let i = 0; i < 16; i++) {
       const angle = (i / 16) * Math.PI * 2;
-      const act = cxTelemetry.wedges[i] ?? 0.2;
+      const rawWedge = cxTelemetry.wedges?.[i];
+      const act = (typeof rawWedge === 'number' && Number.isFinite(rawWedge)) ? rawWedge : 0.2;
       const x = Math.cos(angle) * cxRadius;
       const z = Math.sin(angle) * cxRadius;
       const y = 30; // Posición dorsal media
@@ -346,7 +379,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       const fz = Math.sin(colAng) * colRadius;
       const fy = 50; // Estrato dorsal sobre EB
 
-      const act = fbTelemetry.columnLayerMatrix[c * 9 + 4] ?? 0.25;
+      const rawFbAct = fbTelemetry.columnLayerMatrix?.[c * 9 + 4];
+      const act = (typeof rawFbAct === 'number' && Number.isFinite(rawFbAct)) ? rawFbAct : 0.25;
 
       nList.push({
         id: `FB_COL_${c}`,
@@ -549,6 +583,16 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const filterSystemRef = useRef<"ALL" | "CX" | "MB" | "GFS" | "FB">(filterSystem);
   const gfsTelemetryRef = useRef<GiantFiberTelemetry>(gfsTelemetry);
 
+  // Mapa de búsqueda O(1) de nodos para eliminar búsquedas lineales repetidas por arista
+  const nodeMap = useMemo(() => {
+    const map = new Map<string, ConnectomeNode>();
+    for (const n of nodes) {
+      map.set(n.id, n);
+    }
+    return map;
+  }, [nodes]);
+  const nodeMapRef = useRef<Map<string, ConnectomeNode>>(nodeMap);
+
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -558,6 +602,10 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   }, [edges]);
 
   useEffect(() => {
+    nodeMapRef.current = nodeMap;
+  }, [nodeMap]);
+
+  useEffect(() => {
     filterSystemRef.current = filterSystem;
   }, [filterSystem]);
 
@@ -565,36 +613,73 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     gfsTelemetryRef.current = gfsTelemetry;
   }, [gfsTelemetry]);
 
-  // Bucle de Renderizado 3D en Canvas (60 FPS puros desacoplados de React)
+  // Bucle de Renderizado 3D en Canvas (Optimizado con caché de dimensiones y gobernador térmico)
   useEffect(() => {
     let animationId: number;
     let pulseT = 0;
+    let lastRenderTime = 0;
+    let isMounted = true;
 
-    const render = () => {
+    // Caché de dimensiones para erradicar el Layout Reflow Thrashing de getBoundingClientRect() en cada fotograma
+    const updateCanvasResolution = () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      const currentEdges = edgesRef.current;
-      const currentNodes = nodesRef.current;
-      const filterSystem = filterSystemRef.current;
-      const currentGfs = gfsTelemetryRef.current;
-
-      // Sincronizar buffer del canvas con la resolución física del display (Retina / 4K)
       const rect = canvas.getBoundingClientRect();
-      const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+      const rawDpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+      const dpr = Math.min(rawDpr, 1.5);
       const targetW = Math.max(300, Math.floor((rect.width || 500) * dpr));
       const targetH = Math.max(200, Math.floor((rect.height || 320) * dpr));
       if (canvas.width !== targetW || canvas.height !== targetH) {
         canvas.width = targetW;
         canvas.height = targetH;
       }
+    };
+
+    updateCanvasResolution();
+    window.addEventListener("resize", updateCanvasResolution, { passive: true });
+
+    const isTouchDevice = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+    const minFrameDeltaMs = isTouchDevice ? 30 : 16; // 33 FPS en móviles (Helio G37 / PowerVR) vs 60 FPS en PC
+
+    const render = (currentTime: number = 0) => {
+      if (!isMounted) return;
+
+      // Suspender renderizado inmediato si la pantalla está bloqueada o la app en background
+      if (typeof document !== "undefined" && document.hidden) {
+        animationId = requestAnimationFrame(render);
+        return;
+      }
+
+      // Gobernador térmico: limitar tasa de refresco en GPUs móviles para erradicar thermal throttling
+      const elapsed = currentTime - lastRenderTime;
+      if (elapsed < minFrameDeltaMs) {
+        animationId = requestAnimationFrame(render);
+        return;
+      }
+      lastRenderTime = currentTime;
+
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        animationId = requestAnimationFrame(render);
+        return;
+      }
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        animationId = requestAnimationFrame(render);
+        return;
+      }
+
+      const currentEdges = edgesRef.current;
+      const currentNodes = nodesRef.current;
+      const filterSystem = filterSystemRef.current;
+      const currentGfs = gfsTelemetryRef.current;
 
       const width = canvas.width;
       const height = canvas.height;
       const cx = width / 2;
       const cy = height / 2;
+      const rawDpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+      const dpr = Math.min(rawDpr, 1.5);
 
       ctx.clearRect(0, 0, width, height);
 
@@ -660,12 +745,13 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           };
         };
 
-        // 1. Dibujar Aristas Sinápticas (Axones)
+        // 1. Dibujar Aristas Sinápticas (Axones con búsqueda O(1))
+        const nodeMap = nodeMapRef.current;
         currentEdges.forEach((edge) => {
           if (filterSystem !== "ALL" && edge.system !== filterSystem) return;
 
-          const srcNode = currentNodes.find((n) => n.id === edge.from);
-          const dstNode = currentNodes.find((n) => n.id === edge.to);
+          const srcNode = nodeMap.get(edge.from);
+          const dstNode = nodeMap.get(edge.to);
           if (!srcNode || !dstNode) return;
 
           const p1 = project(srcNode.pos);
@@ -698,46 +784,50 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           }
         });
 
-        // 2. Dibujar Nodos Neuronales (Somas y Glomérulos)
-        const sortedNodes = [...currentNodes]
-          .filter((n) => filterSystem === "ALL" || n.system === filterSystem)
-          .map((n) => ({ node: n, proj: project(n.pos) }))
-          .filter((item) => item.proj.visible)
-          .sort((a, b) => b.proj.zDepth - a.proj.zDepth);
+        // 2. Dibujar Nodos Neuronales (Somas y Glomérulos) con proyección en una sola pasada
+        const sortedNodes: { node: ConnectomeNode; proj: ReturnType<typeof project> }[] = [];
+        for (let i = 0; i < currentNodes.length; i++) {
+          const n = currentNodes[i];
+          if (filterSystem !== "ALL" && n.system !== filterSystem) continue;
+          const p = project(n.pos);
+          if (p.visible) {
+            sortedNodes.push({ node: n, proj: p });
+          }
+        }
+        sortedNodes.sort((a, b) => b.proj.zDepth - a.proj.zDepth);
 
-        sortedNodes.forEach(({ node, proj }) => {
-          if (!Number.isFinite(proj.x) || !Number.isFinite(proj.y)) return;
+        for (let i = 0; i < sortedNodes.length; i++) {
+          const { node, proj } = sortedNodes[i];
+          if (!Number.isFinite(proj.x) || !Number.isFinite(proj.y)) continue;
 
           const rawActivity = Number.isFinite(node.activity) ? Math.max(0, Math.min(1, node.activity)) : 0.3;
           const rawSize = Number.isFinite(node.size) && node.size > 0 ? node.size : 3;
           const glowRadius = Math.max(1, rawSize * (1 + rawActivity * 0.8) * dpr);
 
-          if (!Number.isFinite(glowRadius) || glowRadius <= 0) return;
+          if (!Number.isFinite(glowRadius) || glowRadius <= 0) continue;
 
-          // Resplandor externo con salvaguarda contra valores no-finitos
-          try {
-            const grad = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, glowRadius * 2);
-            grad.addColorStop(0, node.color || "#00E5FF");
-            grad.addColorStop(1, "rgba(0,0,0,0)");
-
-            ctx.beginPath();
-            ctx.arc(proj.x, proj.y, glowRadius * 2, 0, Math.PI * 2);
-            ctx.fillStyle = grad;
-            ctx.fill();
-          } catch (e) {
-            // Fallback en caso de incompatibilidad con contexto gráfico
-            ctx.beginPath();
-            ctx.arc(proj.x, proj.y, glowRadius, 0, Math.PI * 2);
-            ctx.fillStyle = node.color || "#00E5FF";
-            ctx.fill();
+          // Resplandor externo ultrarrápido con halo alfa (elimina el costoso createRadialGradient en móvil)
+          let glowColor = "rgba(0, 229, 255, 0.25)";
+          if (node.color) {
+            if (node.color.startsWith("#")) {
+              glowColor = node.color.length === 7 ? `${node.color}33` : node.color;
+            } else if (node.color.startsWith("rgba")) {
+              glowColor = node.color.replace(/[\d.]+\)$/, "0.25)");
+            } else if (node.color.startsWith("rgb(")) {
+              glowColor = node.color.replace("rgb(", "rgba(").replace(")", ", 0.25)");
+            }
           }
+          ctx.beginPath();
+          ctx.arc(proj.x, proj.y, glowRadius * 1.6, 0, Math.PI * 2);
+          ctx.fillStyle = glowColor;
+          ctx.fill();
 
           // Núcleo del soma
           ctx.beginPath();
           ctx.arc(proj.x, proj.y, Math.max(1, rawSize * dpr), 0, Math.PI * 2);
           ctx.fillStyle = "#FFFFFF";
           ctx.fill();
-        });
+        }
       } catch (renderErr) {
         console.warn('[ConnectomeHUD] Error durante renderizado de frame:', renderErr);
       }
@@ -745,12 +835,16 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       animationId = requestAnimationFrame(render);
     };
 
-    render();
+    if (architectureMode === "SUBCORTICAL_MALE_CNS") {
+      animationId = requestAnimationFrame(render);
+    }
 
     return () => {
+      isMounted = false;
       cancelAnimationFrame(animationId);
+      window.removeEventListener("resize", updateCanvasResolution);
     };
-  }, []);
+  }, [architectureMode]);
 
   // Controlador de arrastre táctil y pinch-to-zoom para navegación 3D
   const isDragging = useRef(false);

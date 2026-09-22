@@ -59,7 +59,13 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
   useEffect(() => {
     fetchAlerts();
     const interval = setInterval(fetchAlerts, 30_000);
-    
+
+    const handleAmberUpdate = () => {
+      fetchAlerts();
+    };
+    window.addEventListener('red_amber_updated', handleAmberUpdate);
+    window.addEventListener('storage', handleAmberUpdate);
+
     // Suscripción en tiempo real a push SSE
     const es = RedAPI.subscribeToEvents((data) => {
       if (data?.content) {
@@ -80,6 +86,8 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener('red_amber_updated', handleAmberUpdate);
+      window.removeEventListener('storage', handleAmberUpdate);
       es?.close();
     };
   }, [fetchAlerts]);

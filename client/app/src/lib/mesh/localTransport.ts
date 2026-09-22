@@ -107,8 +107,16 @@ class LocalTransport {
     this.bleScanIntervalTimer = setInterval(() => this.performBleScan(), this.bleScanIntervalMs);
   }
 
+  private isBleScanInProgress = false;
+
   private async performBleScan() {
-    this.discoveredBluetoothPeers = [];
+    if (this.isBleScanInProgress) return;
+    this.isBleScanInProgress = true;
+    const now = Date.now();
+
+    // Duración adaptativa: asegura reposo de radio y respeta el tick del gobernador
+    const scanDuration = Math.max(2000, Math.min(4500, this.bleScanIntervalMs - 1000));
+
     try {
       await bluetoothTransport.scan((device) => {
         const rawDevId = device.id.trim();
@@ -119,12 +127,13 @@ class LocalTransport {
         });
         if (existing) {
           existing.rssi = device.rssi;
+          existing.lastSeen = Date.now();
           if (device.name && (!existing.name || existing.name === 'Dispositivo RED' || existing.name.startsWith('Nodo '))) {
             existing.name = device.name;
           }
           meshRouter.updatePeer(rawDevId, 'ble', device.rssi, undefined, existing.name || device.name);
         } else {
-          const cleanDev = { ...device, id: rawDevId };
+          const cleanDev = { ...device, id: rawDevId, lastSeen: Date.now() };
           this.discoveredBluetoothPeers.push(cleanDev);
           // Register newly found BLE device in the mesh router with its advertised name
           meshRouter.addBlePeer(rawDevId, device.rssi, undefined, device.name);
@@ -136,10 +145,23 @@ class LocalTransport {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('red:ble_peers_updated'));
         }
-      }, 5000);
+      }, scanDuration);
+
+      // Poda no destructiva: purgar únicamente dispositivos no detectados en los últimos 45 segundos
+      const STALE_BLE_TIMEOUT_MS = 45_000;
+      const prevCount = this.discoveredBluetoothPeers.length;
+      this.discoveredBluetoothPeers = this.discoveredBluetoothPeers.filter(d => {
+        const seen = d.lastSeen || now;
+        return (Date.now() - seen) < STALE_BLE_TIMEOUT_MS;
+      });
+      if (this.discoveredBluetoothPeers.length !== prevCount && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('red:ble_peers_updated'));
+      }
     } catch (e) {
       // BLE not available (e.g. web browser or permission denied) — non-fatal
       console.warn('[LocalTransport] BLE scan unavailable:', e);
+    } finally {
+      this.isBleScanInProgress = false;
     }
   }
 
@@ -156,6 +178,9 @@ class LocalTransport {
     }
     this.lastAssociatedBleDevices.set(cleanId, Date.now());
 
+    // Registro INMEDIATO para evitar que escaneos paralelos pasen la comprobación
+    this.connectingBleDevices.add(cleanId);
+
     // ── BLE Arbitration / Tie-Breaking ──
     // Compares our identity vs target device ID to decide initiator role.
     // The node with the lower hash yields a 2-second grace period so the higher node connects first.
@@ -164,15 +189,14 @@ class LocalTransport {
     const targetComp = cleanId.replace(/:/g, '').toLowerCase();
     const isMasterInitiator = myComp >= targetComp;
 
-    if (!isMasterInitiator) {
-      await new Promise(r => setTimeout(r, 2000));
-      if (bluetoothTransport.isDeviceConnected(cleanId)) {
-        return; // El par con prioridad mayor ya estableció el enlace
-      }
-    }
-
-    this.connectingBleDevices.add(cleanId);
     try {
+      if (!isMasterInitiator) {
+        await new Promise(r => setTimeout(r, 2000));
+        if (bluetoothTransport.isDeviceConnected(cleanId)) {
+          return; // El par con prioridad mayor ya estableció el enlace
+        }
+      }
+
       await bluetoothTransport.connect(cleanId);
       meshRouter.addBlePeer(cleanId);
       // Immediately exchange IDENTITY_ANNOUNCE packet to bind hardware ID <-> 64-char canonical DID

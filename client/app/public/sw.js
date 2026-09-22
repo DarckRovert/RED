@@ -1,9 +1,9 @@
-// RED Service Worker v116.0.0
+// RED Service Worker v117.0.0
 // Sovereign Mesh OS — PWA & Full Offline Cache Engine
 // Handles: Push Notifications, Offline Cache Storage, Stale-While-Revalidate,
 //          Background Sync, and Scheduled Messages via IndexedDB
 
-const CACHE_NAME = 'red-vault-cache-v116';
+const CACHE_NAME = 'red-vault-cache-v117';
 const DB_NAME = 'red-sw-db';
 const STORE_SCHEDULED = 'scheduled-messages';
 const STORE_NOTIF_PREFS = 'notif-prefs';

@@ -467,9 +467,58 @@ export class SatelliteMeshGatewayEngine {
             this.recentRelays.unshift(relayPkt);
             if (this.recentRelays.length > 30) this.recentRelays.pop();
 
-            // Re-inyección en la malla local para que los teléfonos vecinos lo reciban por BLE/Wi-Fi/LoRa
-            const localBroadcastBytes = new TextEncoder().encode(`SAT_DOWNLINK_MSG:${origSender}:${payloadMsg}`);
+            // 1. Re-inyección en la malla local para que los teléfonos vecinos lo reciban por BLE/Wi-Fi/LoRa
+            const localBroadcastBytes = new TextEncoder().encode(`SAT_DOWNLINK_MSG:${origSender}:${finalRecipient}:${payloadMsg}`);
             meshRouter.broadcast(localBroadcastBytes).catch(() => {});
+
+            // 2. Auto-entrega local inmediata si el mensaje es broadcast o está dirigido a este nodo
+            const myHash = meshRouter.myIdentityHash || (typeof window !== 'undefined' ? localStorage.getItem('red_identity_hash') : '') || '';
+            const isBroadcastTarget = !finalRecipient ||
+                finalRecipient === '*' ||
+                finalRecipient === 'all' ||
+                finalRecipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
+                finalRecipient === '0000000000000000000000000000000000000000000000000000000000000000';
+            const isForThisNode = isBroadcastTarget ||
+                (!!myHash && finalRecipient.toLowerCase() === myHash.toLowerCase()) ||
+                (!!myHash && finalRecipient.length >= 8 && myHash.toLowerCase().startsWith(finalRecipient.toLowerCase()));
+
+            if (isForThisNode) {
+                if (payloadMsg.startsWith('SOS_BEACON_V1:')) {
+                    try {
+                        const jsonStr = payloadMsg.substring(14);
+                        const beacon = JSON.parse(jsonStr);
+                        if (beacon && beacon.id) {
+                            import('../emergency/MeshSosBeaconEngine').then(({ meshSosBeacon }) => {
+                                meshSosBeacon.processIncomingSosBeacon(beacon);
+                            }).catch(() => {});
+                        }
+                    } catch {}
+                } else {
+                    import('../../store/useRedStore').then(({ useRedStore }) => {
+                        let parsed: any;
+                        const normTs = Math.floor(timestamp / 1000);
+                        try {
+                            parsed = JSON.parse(payloadMsg);
+                        } catch {
+                            parsed = {
+                                id: `sat_downlink_${nonce}`,
+                                content: payloadMsg,
+                                sender: origSender,
+                                recipient: finalRecipient,
+                                timestamp: normTs,
+                                is_mine: false,
+                                msg_type: 'text'
+                            };
+                        }
+                        if (parsed) {
+                            if (!parsed.sender) parsed.sender = origSender;
+                            if (!parsed.id) parsed.id = `sat_downlink_${nonce}`;
+                            if (!parsed.timestamp) parsed.timestamp = normTs;
+                            useRedStore.getState().addIncomingMessage(parsed);
+                        }
+                    }).catch(() => {});
+                }
+            }
 
             this.notify();
             return { handled: true, packet: relayPkt, type: 'SAT_RELAY_INGESTED' };

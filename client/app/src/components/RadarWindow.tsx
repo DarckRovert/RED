@@ -120,6 +120,7 @@ export default function RadarWindow() {
         const updatePeers = async () => {
             if (typeof document !== 'undefined' && document.hidden) return;
             const blePeers = localTransport.discoveredBluetoothPeers || [];
+            const meshPeers = meshRouter.getPeerList() || [];
             try {
                 const apiNodes = await getProximityNodes().catch(() => []);
                 const peerMap = new Map<string, any>();
@@ -137,6 +138,22 @@ export default function RadarWindow() {
                         longitude: (node as any).longitude ?? (node as any).lon ?? (node as any).lng
                     });
                 }
+                for (const mPeer of meshPeers) {
+                    const id = mPeer.id || mPeer.canonicalId || mPeer.hardwareId || "";
+                    if (!id) continue;
+                    const existing = peerMap.get(id);
+                    peerMap.set(id, {
+                        ...existing,
+                        id,
+                        name: (mPeer.name && !mPeer.name.startsWith("Nodo ")) ? mPeer.name : (existing?.name || mPeer.name || `Nodo ${id.substring(0, 6)}`),
+                        rssi: typeof mPeer.rssi === "number" ? mPeer.rssi : (existing?.rssi ?? -70),
+                        address: mPeer.hardwareId || mPeer.canonicalId || id,
+                        transport: mPeer.transport || existing?.transport || "mesh",
+                        latitude: mPeer.lat ?? existing?.latitude,
+                        longitude: mPeer.lng ?? existing?.longitude,
+                        publicKey: mPeer.publicKey || existing?.publicKey
+                    });
+                }
                 for (const peer of blePeers) {
                     const id = peer.id || (peer as any).address || "";
                     if (!id) continue;
@@ -145,7 +162,7 @@ export default function RadarWindow() {
                         ...existing,
                         ...peer,
                         id,
-                        name: peer.name || existing?.name || `Nodo ${id.substring(0, 6)}`,
+                        name: (peer.name && !peer.name.startsWith("Nodo ")) ? peer.name : (existing?.name || peer.name || `Nodo ${id.substring(0, 6)}`),
                         rssi: typeof peer.rssi === "number" ? peer.rssi : (existing?.rssi ?? -70),
                         latitude: (peer as any).latitude ?? (peer as any).lat ?? existing?.latitude,
                         longitude: (peer as any).longitude ?? (peer as any).lon ?? (peer as any).lng ?? existing?.longitude
@@ -159,12 +176,14 @@ export default function RadarWindow() {
         updatePeers();
 
         window.addEventListener('red:ble_peers_updated', updatePeers);
+        const unsubMeshPeers = meshRouter.onPeersChange(updatePeers);
         document.addEventListener('visibilitychange', updatePeers);
         const interval = setInterval(updatePeers, 6000);
 
         return () => {
             clearInterval(interval);
             window.removeEventListener('red:ble_peers_updated', updatePeers);
+            unsubMeshPeers();
             document.removeEventListener('visibilitychange', updatePeers);
             stopScan();
         };
@@ -173,6 +192,7 @@ export default function RadarWindow() {
     const handleRefreshNearby = async () => {
         toast.info("Escaneando espectro BLE & Malla...");
         const blePeers = localTransport.discoveredBluetoothPeers || [];
+        const meshPeers = meshRouter.getPeerList() || [];
         try {
             const apiNodes = await getProximityNodes().catch(() => []);
             const peerMap = new Map<string, any>();
@@ -190,6 +210,21 @@ export default function RadarWindow() {
                     longitude: (node as any).longitude ?? (node as any).lon ?? (node as any).lng
                 });
             }
+            for (const mPeer of meshPeers) {
+                const id = mPeer.id || mPeer.canonicalId || mPeer.hardwareId || "";
+                if (!id) continue;
+                const existing = peerMap.get(id);
+                peerMap.set(id, {
+                    ...existing,
+                    id,
+                    name: (mPeer.name && !mPeer.name.startsWith("Nodo ")) ? mPeer.name : (existing?.name || mPeer.name || `Nodo ${id.substring(0, 6)}`),
+                    rssi: typeof mPeer.rssi === "number" ? mPeer.rssi : (existing?.rssi ?? -70),
+                    address: mPeer.hardwareId || mPeer.canonicalId || id,
+                    transport: mPeer.transport || existing?.transport || "mesh",
+                    latitude: mPeer.lat ?? existing?.latitude,
+                    longitude: mPeer.lng ?? existing?.longitude
+                });
+            }
             for (const peer of blePeers) {
                 const id = peer.id || (peer as any).address || "";
                 if (!id) continue;
@@ -198,7 +233,7 @@ export default function RadarWindow() {
                     ...existing,
                     ...peer,
                     id,
-                    name: peer.name || existing?.name || `Nodo ${id.substring(0, 6)}`,
+                    name: (peer.name && !peer.name.startsWith("Nodo ")) ? peer.name : (existing?.name || peer.name || `Nodo ${id.substring(0, 6)}`),
                     rssi: typeof peer.rssi === "number" ? peer.rssi : (existing?.rssi ?? -70)
                 });
             }
@@ -388,29 +423,70 @@ export default function RadarWindow() {
             video.srcObject = stream;
             await video.play();
 
+            // 1. Selector de motor de visión: BarcodeDetector nativo con fallback a @zxing/library
             const hasBD = "BarcodeDetector" in window;
             const detector = hasBD ? new (window as any).BarcodeDetector({ formats: ["qr_code"] }) : null;
+            let zxingReader: any = null;
+
+            if (!hasBD) {
+                try {
+                    const { BrowserQRCodeReader } = await import("@zxing/library");
+                    zxingReader = new BrowserQRCodeReader();
+                } catch (zxErr) {
+                    console.warn("[RadarScanner] ZXing fallback load failed:", zxErr);
+                }
+            }
+
+            // Si no hay motor de visión soportado en la plataforma, abortar limpiamente
+            if (!detector && !zxingReader) {
+                toast.warning("Escaneo en vivo no soportado en este entorno. Usa la subida de imagen QR.");
+                await stopScan();
+                return;
+            }
+
             const canvas = document.createElement("canvas");
             const ctx = canvas.getContext("2d");
+            let isProcessingFrame = false;
 
             const tick = async () => {
                 if (!shouldScanRef.current || !webCamStreamRef.current) return;
-                if (video.readyState >= 2 && ctx) {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    ctx.drawImage(video, 0, 0);
+
+                // 2. Semáforo anti-saturación para pantallas de 90Hz/120Hz (Note 14 / Helio G37)
+                if (video.readyState >= 2 && !isProcessingFrame) {
+                    isProcessingFrame = true;
                     try {
-                        if (detector) {
+                        if (detector && ctx) {
+                            canvas.width = video.videoWidth;
+                            canvas.height = video.videoHeight;
+                            ctx.drawImage(video, 0, 0);
                             const codes = await detector.detect(canvas);
                             if (codes.length > 0 && codes[0].rawValue) {
                                 await stopScan();
                                 await processScannedQr(codes[0].rawValue);
                                 return;
                             }
+                        } else if (zxingReader) {
+                            try {
+                                const zResult = await zxingReader.decodeFromVideoElement(video);
+                                if (zResult && zResult.getText()) {
+                                    await stopScan();
+                                    await processScannedQr(zResult.getText());
+                                    return;
+                                }
+                            } catch {
+                                // ZXing lanza excepción esperada cuando el cuadro no contiene un código QR válido
+                            }
                         }
-                    } catch {}
+                    } catch (scanErr) {
+                        // Tolera cuadros intermedios vacíos de la cámara
+                    } finally {
+                        isProcessingFrame = false;
+                    }
                 }
-                webCamRafRef.current = requestAnimationFrame(tick);
+
+                if (shouldScanRef.current && webCamStreamRef.current) {
+                    webCamRafRef.current = requestAnimationFrame(tick);
+                }
             };
             webCamRafRef.current = requestAnimationFrame(tick);
         } catch (err: any) {
@@ -584,6 +660,17 @@ export default function RadarWindow() {
 
     // Calcular posición polar para cada nodo detectado con acimut real y alineación con Norte
     const polarPeers = useMemo(() => {
+        // Determinar el rango dinámico del radar táctico si hay nodos con coordenadas GPS
+        const maxGpsDist = nearbyPeers.reduce((max, p) => {
+            if (myCoords && TacticalLocationEngine.isValidCoordinates(p.latitude, p.longitude)) {
+                const d = calculateHaversineDistanceMeters(myCoords.lat, myCoords.lon, p.latitude, p.longitude);
+                return Math.max(max, d);
+            }
+            return max;
+        }, 1000); // 1.000m como alcance táctico estándar base
+
+        const radarScopeMaxMeters = Math.max(500, maxGpsDist);
+
         return nearbyPeers.map((p, idx) => {
             const hasGps = !!(myCoords && TacticalLocationEngine.isValidCoordinates(p.latitude, p.longitude));
             let bearingDeg = 0;
@@ -601,12 +688,24 @@ export default function RadarWindow() {
                 let sum = 0;
                 for (let i = 0; i < hash.length; i++) sum += hash.charCodeAt(i);
                 bearingDeg = (sum * 47) % 360;
+                // Modelo de propagación log-distance path loss: d = 10^((Ptx - Prx)/(10*n))
                 estimatedMeters = Math.round(Math.pow(10, (-40 - rssi) / (10 * 2.2)));
             }
 
             // Proyección sobre retícula polar con 0° en Norte (-Y) y 90° en Este (+X)
             const angleRad = ((bearingDeg - 90) * Math.PI) / 180;
-            const radiusPercent = 15 + ((100 + normRssi) / 70) * 75; // 15% a 90%
+
+            // Proyección radial correcta y coherente:
+            // 15% (adyacente al nodo central) hasta 88% (perímetro exterior del osciloscopio)
+            let radiusPercent = 15;
+            if (hasGps && myCoords) {
+                const normalizedDist = Math.min(1.0, Math.max(0.04, estimatedMeters / radarScopeMaxMeters));
+                radiusPercent = 15 + normalizedDist * 73; // 15% a 88%
+            } else {
+                // Relación RSSI corregida: señal fuerte (-30 dBm) -> centro (15%); señal débil (-100 dBm) -> borde (85%)
+                const distanceFactor = (-30 - normRssi) / 70; // 0.0 en -30 dBm, 1.0 en -100 dBm
+                radiusPercent = 15 + distanceFactor * 70; // 15% a 85%
+            }
 
             const x = 50 + (radiusPercent / 2) * Math.cos(angleRad);
             const y = 50 + (radiusPercent / 2) * Math.sin(angleRad);

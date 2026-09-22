@@ -27,6 +27,7 @@ import { networkWatcher, NetworkState } from './networkWatcher';
 import { RED_VERSION } from '../version';
 import { dtnStorage } from './dtnStorage';
 import { loraBridge } from '../hardware/LoraSerialBridgeEngine';
+import { loraMeshtastic, MeshtasticPortNum, LoRaPacket } from './LoRaMeshtasticBridge';
 import {
   MeshPacket,
   createPacket,
@@ -41,7 +42,7 @@ import { RedAPI } from '../api';
 import { slottedGossip } from './SlottedGossipEngine';
 import { DnsTunnelEngine } from '../network/dnsTunnelEngine';
 import { cognitiveArbiter } from './CognitiveRadioArbiter';
-import { SoundMeshEngine } from '../audio/SoundMeshEngine';
+import { SoundMeshEngine, SoundMeshPacket } from '../audio/SoundMeshEngine';
 import { globalShield } from '../network/GlobalShieldEngine';
 import { multipathBonding, MultipathBondingEngine } from './MultipathBondingEngine';
 import { loraTdmaScheduler } from './LoRaTdmaSchedulerEngine';
@@ -51,6 +52,11 @@ import { tacticalMicroBurst } from './TacticalMicroBurstEngine';
 import { synapticMeshRouter } from '../neuro/SynapticMeshRouterEngine';
 import { giantFiberReflex } from '../neuro/GiantFiberReflexEngine';
 import { dtnMushroomBody, SwarmPheromoneType } from '../neuro/DtnMushroomBodyEngine';
+import { ringAttractor } from '../neuro/RingAttractorEngine';
+import { HippocampalEpisodicEngine } from '../neuro/human/HippocampalEpisodicEngine';
+import { TheoryOfMindEpistemicEngine } from '../neuro/human/TheoryOfMindEpistemicEngine';
+import { PredictiveCortexEngine } from '../neuro/human/PredictiveCortexEngine';
+import { TacticalLocationEngine } from '../sensors/TacticalLocationEngine';
 
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
 const DEDUP_WINDOW_MSG_MS = 30 * 60 * 1000;       // 30m  — chat messages (reduces Map size ~95% in long sessions)
@@ -135,6 +141,8 @@ export function generateDeterministicMsgId(sender: string, recipient: string, co
   return `msg_${ts}_${cleanSender}_${cleanRecipient}_${contentCode}`;
 }
 
+export type MeshTransport = 'wifi' | 'ble' | 'lora' | 'soundmesh';
+
 export interface MeshPeer {
   id: string;          // Canonical node ID or hardware device ID
   canonicalId?: string; // Resolved canonical identity hash (64-char hex)
@@ -143,8 +151,8 @@ export interface MeshPeer {
   publicKey?: string;
   kyberPublicKey?: string; // NIST FIPS 203 ML-KEM-768 public key (hex)
   x25519PublicKey?: string; // Curve25519 Diffie-Hellman public key (hex)
-  transport?: 'wifi' | 'ble' | 'lora' | string;
-  transports?: ('wifi' | 'ble' | 'lora')[];
+  transport?: MeshTransport | string;
+  transports?: MeshTransport[];
   lastSeen?: number;   // Unix ms
   rssi?: number;       // Signal strength (BLE only)
   lat?: number;
@@ -210,6 +218,7 @@ class MeshRouter {
 
   private purgeInterval: any = null;
   private flushInterval: any = null;
+  private pruneInterval: any = null;
   private isStarted = false;
 
   /** Pending identity query promises keyed by hardware device ID or sender hash */
@@ -255,10 +264,99 @@ class MeshRouter {
       this.handleRawPacket(payload, from, 'wifi');
     });
 
+    // Receive from ultrasonic SoundMesh acoustic modem channel (18.5 - 20.5 kHz)
+    SoundMeshEngine.addPacketListener((pkt: SoundMeshPacket) => {
+      if (!pkt.rawBytes || pkt.rawBytes.length === 0) return;
+      const peerId = pkt.senderId || 'soundmesh-acoustic-node';
+      this.updatePeer(peerId, 'soundmesh', pkt.rssiDb, undefined, 'Acoustic-Node');
+      this.handleRawPacket(pkt.rawBytes, peerId, 'soundmesh');
+    });
+
     // Receive from physical LoRa Serial / BLE bridge
     loraBridge.onPacketReceived((payload, rssi) => {
       this.updatePeer('lora-hardware-node', 'lora', rssi);
       this.handleRawPacket(payload, 'lora-hardware-node', 'lora');
+    });
+
+    // Receive from physical LoRa Meshtastic Wire Protocol Bridge
+    loraMeshtastic.onPacket((pkt: LoRaPacket) => {
+      const peerId = `lora-meshtastic-${pkt.from.toString(16).padStart(8, '0')}`;
+      const nodeName = `LoRa-${pkt.from.toString(16).slice(-4).toUpperCase()}`;
+      this.updatePeer(peerId, 'lora', pkt.rxRssi, undefined, nodeName);
+
+      if (!pkt.payload || pkt.payload.length === 0) return;
+
+      if (pkt.portnum === MeshtasticPortNum.RED_SOVEREIGN_MESH_APP) {
+        // Native RED encrypted mesh frame — pass raw bytes directly.
+        this.handleRawPacket(pkt.payload, peerId, 'lora');
+
+      } else if (pkt.portnum === MeshtasticPortNum.TEXT_MESSAGE_APP) {
+        // Plain-text UTF-8 Meshtastic message — wrap as RED JSON envelope.
+        try {
+          const text = new TextDecoder('utf-8', { fatal: false }).decode(pkt.payload).trim();
+          if (text.length === 0) return;
+          const envelope = JSON.stringify({
+            sender: peerId,
+            recipient: this.myIdentityHash || 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+            content: text,
+            msg_type: 'text',
+            timestamp: Date.now(),
+            id: `lora_text_${pkt.id ?? Date.now()}_${peerId.slice(-8)}`,
+            transport: 'lora',
+            is_meshtastic_native: true,
+          });
+          this.handleRawPacket(new TextEncoder().encode(envelope), peerId, 'lora');
+        } catch (e) {
+          console.warn('[MeshRouter][Meshtastic] Failed to decode TEXT_MESSAGE_APP:', e);
+        }
+
+      } else if (pkt.portnum === MeshtasticPortNum.RED_SOVEREIGN_VOCODER_APP) {
+        // LPC vocoder voice burst from a RED node over Meshtastic physical LoRa.
+        try {
+          // Payload is raw LPC bytes — encode as base64 and wrap as P2P voice burst.
+          const b64 = btoa(String.fromCharCode(...pkt.payload));
+          const envelope = JSON.stringify({
+            sender: peerId,
+            recipient: this.myIdentityHash || 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+            msg_type: 'p2p_voice_burst',
+            audio_b64: b64,
+            duration: Math.round((pkt.payload.length / 150) * 10) / 10, // ~150 B/s @ 1.2 kbps LPC-10
+            channel: 'LORA · TÁCTICO',
+            timestamp: Date.now(),
+            id: `lora_vox_${pkt.id ?? Date.now()}_${peerId.slice(-8)}`,
+            transport: 'lora',
+            is_meshtastic_native: true,
+          });
+          this.handleRawPacket(new TextEncoder().encode(envelope), peerId, 'lora');
+        } catch (e) {
+          console.warn('[MeshRouter][Meshtastic] Failed to dispatch RED_SOVEREIGN_VOCODER_APP:', e);
+        }
+
+      } else if (pkt.portnum === MeshtasticPortNum.POSITION_APP) {
+        // GPS position already decoded by LoRaMeshtasticBridge into knownNodes.
+        // Emit a lightweight radar-update CustomEvent for the UI map layer.
+        if (typeof window !== 'undefined') {
+          try {
+            const node = loraMeshtastic.getKnownNodes().find(n => n.nodeNum === pkt.from);
+            if (node && node.latitude !== undefined && node.longitude !== undefined) {
+              window.dispatchEvent(new CustomEvent('red_radar_position_update', {
+                detail: {
+                  peer_id: peerId,
+                  node_num: pkt.from,
+                  latitude: node.latitude,
+                  longitude: node.longitude,
+                  altitude: node.altitude,
+                  battery_level: node.batteryLevel,
+                  rssi: pkt.rxRssi,
+                  timestamp: Date.now(),
+                }
+              }));
+            }
+          } catch (e) {
+            console.warn('[MeshRouter][Meshtastic] Failed to emit POSITION_APP radar event:', e);
+          }
+        }
+      }
     });
 
     // Initialize Network Watcher for automatic transitions (WiFi <-> 4G/5G <-> Offline)
@@ -271,10 +369,7 @@ class MeshRouter {
 
     loraTdmaScheduler.setNodeId(myIdentityHash);
     loraTdmaScheduler.setTransmitHandler(async (bytes) => {
-      if (loraBridge.isConnected) {
-        return await loraBridge.sendPacket(bytes);
-      }
-      return false;
+      return await loraMeshtastic.transmitRawBytes(bytes);
     });
     synapticMeshRouter.init();
     console.log('[MeshRouter] Initialized — identity:', myIdentityHash.slice(0, 12));
@@ -322,6 +417,10 @@ class MeshRouter {
     if (this.purgeInterval) clearInterval(this.purgeInterval);
     this.purgeInterval = setInterval(() => this.purgeDedup(), 5 * 60 * 1000);
 
+    // Schedule periodic stale peer pruning (every 15 seconds)
+    if (this.pruneInterval) clearInterval(this.pruneInterval);
+    this.pruneInterval = setInterval(() => this.pruneStalePeers(), 15_000);
+
     // Actively retry unacknowledged DTN pending packets every 3 seconds for fast cellular/mesh recovery
     if (this.flushInterval) clearInterval(this.flushInterval);
     this.flushInterval = setInterval(() => this.flushPendingQueue(), 3000);
@@ -337,6 +436,7 @@ class MeshRouter {
     this.isStarted = false;
     if (this.purgeInterval) { clearInterval(this.purgeInterval); this.purgeInterval = null; }
     if (this.flushInterval) { clearInterval(this.flushInterval); this.flushInterval = null; }
+    if (this.pruneInterval) { clearInterval(this.pruneInterval); this.pruneInterval = null; }
     if (this.persistNoncesTimer) { clearTimeout(this.persistNoncesTimer); this.persistNoncesTimer = null; }
     if (this.unsubscribeNetwork) { this.unsubscribeNetwork(); this.unsubscribeNetwork = null; }
     for (const queries of this.pendingIdentityQueries.values()) {
@@ -581,7 +681,6 @@ class MeshRouter {
   async broadcastKuramotoPhase(): Promise<void> {
     try {
       if (!this.myIdentityHash) return;
-      const { ringAttractor } = require('../neuro/RingAttractorEngine');
       const phaseByte = ringAttractor.getKuramotoPhaseByte();
       const payloadObj = {
         type: 'KURAMOTO_PHASE_SYNC',
@@ -749,7 +848,7 @@ class MeshRouter {
   /**
    * Broadcasts or sends an IDENTITY_ANNOUNCE packet with Gateway capability metrics.
    */
-  async sendIdentityAnnounce(targetDeviceId?: string, transport?: 'ble' | 'wifi' | 'lora'): Promise<void> {
+  async sendIdentityAnnounce(targetDeviceId?: string, transport?: MeshTransport): Promise<void> {
     try {
       if (!this.myIdentityHash) return;
       let displayName = 'Operador RED';
@@ -812,7 +911,7 @@ class MeshRouter {
   /**
    * Sends an IDENTITY_RESPONSE packet directly to a peer that announced or requested identity.
    */
-  async sendIdentityResponse(recipientHash: string, targetDeviceId?: string, transport?: 'ble' | 'wifi' | 'lora'): Promise<void> {
+  async sendIdentityResponse(recipientHash: string, targetDeviceId?: string, transport?: MeshTransport): Promise<void> {
     try {
       if (!this.myIdentityHash) return;
       let displayName = 'Operador RED';
@@ -865,7 +964,7 @@ class MeshRouter {
   /**
    * Sends an IDENTITY_REQUEST query packet to a peer.
    */
-  private async sendIdentityRequest(targetDeviceId?: string, transport?: 'ble' | 'wifi' | 'lora'): Promise<void> {
+  private async sendIdentityRequest(targetDeviceId?: string, transport?: MeshTransport): Promise<void> {
     try {
       if (!this.myIdentityHash) return;
       const payloadObj = {
@@ -986,7 +1085,7 @@ class MeshRouter {
     await this.forwardPacket(packet, null).catch(() => {});
   }
 
-  public async handleSyncStateQuery(senderHash: string, queryPayload: any, fromTransportId?: string, transportType?: 'ble' | 'wifi' | 'lora') {
+  public async handleSyncStateQuery(senderHash: string, queryPayload: any, fromTransportId?: string, transportType?: MeshTransport) {
     const canonicalSender = this.getCanonicalId(senderHash);
     const lastTimestamp = queryPayload.last_timestamp || 0;
     if (fromTransportId) {
@@ -1369,6 +1468,16 @@ class MeshRouter {
       if (ok) sent++;
     }
 
+    // Transmisión broadcast física por Radiofrecuencia LoRa (Semtech SX1262 / Meshtastic)
+    if (exceptPeer !== 'lora' && (loraBridge.isConnected || loraMeshtastic.isRadioConnected())) {
+      try {
+        const okLoRa = await this.sendViaLoRa(payload);
+        if (okLoRa) sent++;
+      } catch (err) {
+        console.warn('[MeshRouter] Error en difusión broadcast por LoRa RF:', err);
+      }
+    }
+
     // Also forward to WAN / WebRTC / MQTT Blind Relay
     try {
       const packet = decode(payload);
@@ -1429,7 +1538,7 @@ class MeshRouter {
 
   // ─── Receiving & Relaying ───────────────────────────────────────────────────
 
-  private async handleRawPacket(raw: Uint8Array, fromTransportId?: string, transportType?: 'ble' | 'wifi' | 'lora') {
+  private async handleRawPacket(raw: Uint8Array, fromTransportId?: string, transportType?: MeshTransport) {
     // 0. MULTIPATH BONDING: Intercept raw wire bonded shards (Magic 0xBD01)
     if (raw.length >= 15 && raw[0] === 0xBD && raw[1] === 0x01) {
       const reconstructed = multipathBonding.ingestShard(raw);
@@ -1469,7 +1578,6 @@ class MeshRouter {
     if (!packet) {
       // 0. Hipocampo CA3: Intentar rescate de paquete corrupto / mutilado por jamming RF
       try {
-        const { HippocampalEpisodicEngine } = require('../neuro/human/HippocampalEpisodicEngine');
         const hippocampal = HippocampalEpisodicEngine.getInstance();
         let fragmentInput: string | Uint8Array = raw;
         try {
@@ -1507,11 +1615,13 @@ class MeshRouter {
     // Dedup check
     if (this.isDuplicate(packet.nonce)) {
       slottedGossip.recordHeardFromPeer(packet.nonce);
+      broadcastStormGuardEngine.recordPeerRelay(packet.nonce);
       try { globalShield.recordReplayAttack(packet.nonce, packet.sender || fromTransportId || 'PEER'); } catch {}
       return; // Already seen this packet — drop silently
     }
     this.markSeen(packet.nonce);
     slottedGossip.recordHeardFromPeer(packet.nonce);
+    broadcastStormGuardEngine.recordPeerRelay(packet.nonce);
 
     // 0.0 ALINEACIÓN TEMPORAL DE MALLA (Lamport Clock Skew PLL)
     if (packet.sender && packet.timestamp) {
@@ -1522,7 +1632,6 @@ class MeshRouter {
 
     // Memorización episódica bio-cibernética en CA3
     try {
-      const { HippocampalEpisodicEngine } = require('../neuro/human/HippocampalEpisodicEngine');
       const hippocampal = HippocampalEpisodicEngine.getInstance();
       let preview = '';
       try {
@@ -1642,7 +1751,6 @@ class MeshRouter {
         try {
           const parsed = JSON.parse(payloadStr);
           if (parsed.type === 'KURAMOTO_PHASE_SYNC' && typeof parsed.phaseByte === 'number') {
-            const { ringAttractor } = require('../neuro/RingAttractorEngine');
             ringAttractor.injectRemoteKuramotoPhase(
               packet.sender,
               parsed.phaseByte,
@@ -1726,6 +1834,7 @@ class MeshRouter {
         import('./SatelliteMeshGatewayEngine').then(({ satelliteMeshGateway }) => {
           satelliteMeshGateway.processIncomingDownlink(payloadStr);
         }).catch(() => {});
+        return; // Consumido por el motor satelital: evitar que se propague como mensaje de chat ordinario
       }
 
       // Check if this payload has an internal message ID
@@ -1922,10 +2031,6 @@ class MeshRouter {
 
           // Inferencia Activa & Teoría de la Mente mPFC/TPJ
           try {
-            const { TheoryOfMindEpistemicEngine } = require('../neuro/human/TheoryOfMindEpistemicEngine');
-            const { PredictiveCortexEngine } = require('../neuro/human/PredictiveCortexEngine');
-            const { TacticalLocationEngine } = require('../sensors/TacticalLocationEngine');
-            
             const myLoc = TacticalLocationEngine.getLastKnownLocation() || { lat: 0, lon: 0 };
             const measuredRssi = peer?.rssi || -75;
 
@@ -1975,30 +2080,36 @@ class MeshRouter {
       console.log(`[MeshRouter] Packet delivered locally from ${packet.sender.slice(0, 8)} (type: ${isHandshakeMsg ? 'handshake' : 'msg'})`);
       
       const isNative = typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.();
-      const isJsonPayload = payloadStr.trim().startsWith('{') || payloadStr.trim().startsWith('[');
 
-      if (isJsonPayload || !isNative) {
-        // Structured JSON packet (Web <-> Mobile bridge, direct P2P chat, handshakes):
-        // Deliver directly to local store handlers with idempotency deduplication
-        this.localDeliveryHandlers.forEach(h => {
-          try { h(packet); } catch (err) { console.error('[MeshRouter] Handler error:', err); }
-        });
-      } else {
-        // Binary OnionPacket from Rust P2P swarm: inject to Rust node
-        this.deliverToRustNode(packet).catch(() => {
-          this.localDeliveryHandlers.forEach(h => {
-            try { h(packet); } catch (err) { console.error('[MeshRouter] Handler fallback error:', err); }
-          });
+      // 1. Unconditional dispatch to local store / application handlers (SOS beacons, dead drops, chat, dApps, AI cortex)
+      this.localDeliveryHandlers.forEach(h => {
+        try { h(packet); } catch (err) { console.error('[MeshRouter] Handler error:', err); }
+      });
+
+      // 2. On native platform (Rust daemon active), bridge binary OnionPackets and Sled-bound JSON messages
+      // Skip pure TS-exclusive protocol envelopes that the Rust deserializer discards
+      const isTsExclusiveEnvelope =
+        payloadStr.startsWith('SOS_BEACON_') ||
+        payloadStr.startsWith('DEAD_DROP_') ||
+        payloadStr.startsWith('SAT_RELAY_') ||
+        payloadStr.startsWith('KURAMOTO_');
+
+      if (isNative && !isTsExclusiveEnvelope) {
+        this.deliverToRustNode(packet).catch(err => {
+          console.warn('[MeshRouter] Non-blocking Rust node injection failed:', err?.message || err);
         });
       }
 
       // Emit DELIVERY_ACK to sender (unless broadcast packet or handshake)
       if (packet.sender && packet.sender !== this.myIdentityHash && !isBroadcast && !isHandshakeMsg && !isDeliveryAck) {
+        (packet as any)._ackEmitted = true;
         this.sendDeliveryAck(packet.sender, packet.nonce, incomingMsgId || undefined).catch(() => {});
       }
-    } else {
-      // ── RELAY: packet is for someone else — forward it ──
-      // If we are a Gateway with internet and the packet is addressed to a remote DID, uplink it!
+    }
+
+    // ── RELAY: Forward broadcast packets OR unicast packets addressed to someone else ──
+    const shouldRelayPacket = (isBroadcast || !isForMe) && (packet.ttl > 0);
+    if (shouldRelayPacket) {
       const forwarded = relay(packet);
       if (forwarded) {
         const encoded = encode(forwarded);
@@ -2016,12 +2127,13 @@ class MeshRouter {
           return;
         }
 
-        // Apply jittered backoff delay to de-synchronize concurrent relays
-        if (stormEval.backoffDelayMs > 0) {
-          await new Promise(r => setTimeout(r, stormEval.backoffDelayMs));
+        // Apply adjusted TTL to prevent packet circulation beyond optimal topology depth
+        if (stormEval.adjustedTtl > 0 && stormEval.adjustedTtl < forwarded.ttl) {
+          forwarded.ttl = stormEval.adjustedTtl;
         }
 
         // 2. Slotted Backoff Gossip anti-storm suppression in dense RF topologies
+        // SlottedGossip applies the stochastic channel backoff and verifies concurrent echoes without serial delays
         const shouldRelay = await slottedGossip.shouldRelayPacket(packet.nonce, encoded.length, this.peers.size);
         if (!shouldRelay) {
           console.log(`[MeshRouter] SlottedGossip suppressed redundant relay for packet ${packet.nonce.slice(0, 8)}`);
@@ -2051,6 +2163,20 @@ class MeshRouter {
     const isBroadcast =
       packet.recipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
       packet.recipient === '0000000000000000000000000000000000000000000000000000000000000000';
+
+    let isProtocol = false;
+    try {
+      const previewStr = new TextDecoder().decode(packet.payload.slice(0, 100));
+      if (previewStr.includes('DELIVERY_ACK') || previewStr.includes('IDENTITY_ANNOUNCE') || previewStr.includes('IDENTITY_RESPONSE') || previewStr.includes('PQC_KEY') || previewStr.includes('KURAMOTO') || previewStr.includes('SWARM_PHEROMONE')) {
+        isProtocol = true;
+      }
+    } catch {}
+
+    // DTN Store-and-Forward Preventivo: Respaldar paquete unicast en almacén persistente
+    // ANTES de evaluar rutas rápidas, garantizando recuperación si el enlace físico colapsa
+    if (!isBroadcast && !isProtocol) {
+      dtnStorage.enqueue(packet, (packet.flags & 0x01) !== 0 ? 9 : 4);
+    }
 
     let anySent = false;
 
@@ -2174,6 +2300,16 @@ class MeshRouter {
       if (ok) anySent = true;
     }
 
+    // Difusión física por LoRa RF si el paquete es Broadcast o Emergencia crítica
+    if ((isBroadcast || isEmergency) && exceptPeer !== 'lora' && (loraBridge.isConnected || loraMeshtastic.isRadioConnected())) {
+      try {
+        const okLoRa = await this.sendViaLoRa(encoded);
+        if (okLoRa) anySent = true;
+      } catch (err) {
+        console.warn('[MeshRouter] Error en forwardPacket broadcast por LoRa RF:', err);
+      }
+    }
+
     // ─── 3. GLOBAL WAN / WebRTC / MQTT Blind Relay Transport ───
     // Attempt WAN relay uplink for both unicast and broadcast packets
     if (this.wifi) {
@@ -2198,21 +2334,36 @@ class MeshRouter {
 
     // ─── 5. ZERO-BALANCE CELLULAR DNS TUNNELING FALLBACK ───
     // If no local radio routes succeeded, attempt DNS tunneling query if on cellular.
-    // Notice: Only marks anySent=true if an authoritative ACK is received from the remote zone.
+    // Transmits all multipart fragments sequentially and marks anySent=true upon authoritative ACK.
     if (!anySent && !isBroadcast) {
       try {
-        const hex = Array.from(encoded).map(b => b.toString(16).padStart(2, '0')).join('');
-        const dnsQueries = DnsTunnelEngine.packPayloadIntoDnsQuery(hex);
+        const dnsQueries = DnsTunnelEngine.packPayloadIntoDnsQuery(encoded);
         if (dnsQueries.length > 0) {
-          DnsTunnelEngine.transmitDnsQuery(dnsQueries[0]).then(res => {
-            // Rust handle_dns_query retorna: "ACK_RECORDS_N", "ACK_OK_EMPTY", "ACK_PROCESSED"
-            // También acepta prefijo "RED:" para ACKs de un servidor autoritativo RED propio
+          let allSuccess = true;
+          let lastAck = '';
+          let lastLatency = 0;
+
+          for (const query of dnsQueries) {
+            const res = await DnsTunnelEngine.transmitDnsQuery(query);
             if (res.success && res.responseTxt && (res.responseTxt.startsWith('ACK') || res.responseTxt.startsWith('RED:'))) {
-              console.log(`[MeshRouter] 📡 Zero-Balance Carrier Bypass: Transmitted packet via DNS Tunneling (${res.latencyMs}ms, server_ack=${res.responseTxt})`);
+              lastAck = res.responseTxt;
+              lastLatency = res.latencyMs;
+            } else {
+              allSuccess = false;
+              break;
             }
-          }).catch(() => {});
+          }
+
+          if (allSuccess) {
+            console.log(`[MeshRouter] 📡 Zero-Balance Carrier Bypass: Transmitted packet (${dnsQueries.length} DNS queries) via DNS Tunneling (${lastLatency}ms, server_ack=${lastAck})`);
+            dtnStorage.markAttempt(packet.nonce, false);
+            anySent = true;
+            return 'sent';
+          }
         }
-      } catch {}
+      } catch (dnsErr) {
+        console.warn('[MeshRouter] DNS tunneling fallback failed:', dnsErr);
+      }
     }
 
     // ─── 6. AUTONOMOUS LEO SATELLITE GATEWAY FALLBACK & ORBITAL UPLINK ───
@@ -2247,17 +2398,7 @@ class MeshRouter {
       }
     }
 
-    // Enqueue in persistent DTN store-and-forward storage for all unicast data packets
-    let isProtocol = false;
-    try {
-      const previewStr = new TextDecoder().decode(packet.payload.slice(0, 100));
-      if (previewStr.includes('DELIVERY_ACK') || previewStr.includes('IDENTITY_ANNOUNCE') || previewStr.includes('IDENTITY_RESPONSE') || previewStr.includes('PQC_KEY') || previewStr.includes('KURAMOTO') || previewStr.includes('SWARM_PHEROMONE')) {
-        isProtocol = true;
-      }
-    } catch {}
-
     if (!isBroadcast && !isProtocol) {
-      dtnStorage.enqueue(packet, (packet.flags & 0x01) !== 0 ? 9 : 4);
       dtnStorage.markAttempt(packet.nonce, false);
     }
 
@@ -2308,8 +2449,22 @@ class MeshRouter {
         }
       } catch {}
 
+      // Si el enlace de hardware está activo, encapsular en trama ToRadio Protobuf compatible
+      const framedPayload = (loraBridge.isConnected || loraMeshtastic.isRadioConnected())
+        ? loraMeshtastic.framePacket({
+            from: loraMeshtastic.getLocalNodeNum(),
+            to: 0xFFFFFFFF,
+            channel: 0,
+            portnum: MeshtasticPortNum.RED_SOVEREIGN_MESH_APP,
+            payload,
+            id: (Date.now() & 0xFFFFFFFF) >>> 0,
+            hopLimit: 3,
+            wantAck: false
+          })
+        : payload;
+
       // Canalizar a través del planificador TDMA para mitigar colisiones ALOHA
-      const okHardware = await loraTdmaScheduler.scheduleTransmission(payload, isEmergency ? 10 : 5, isEmergency);
+      const okHardware = await loraTdmaScheduler.scheduleTransmission(framedPayload, isEmergency ? 10 : 5, isEmergency);
       const hex = Array.from(payload).map(b => b.toString(16).padStart(2, '0')).join('');
       await RedAPI.injectMeshPayload(hex, true).catch(() => {});
       return okHardware;
@@ -2406,9 +2561,51 @@ class MeshRouter {
     }
   }
 
+  /**
+   * Poda proactiva de pares obsoletos según el tiempo transcurrido desde su última señal (lastSeen)
+   * y el tipo de transporte físico (WiFi: 30s, BLE: 45s, LoRa: 180s).
+   */
+  public pruneStalePeers(): void {
+    const now = Date.now();
+    let changed = false;
+
+    for (const [id, peer] of this.peers.entries()) {
+      // Si el enlace BLE físico continúa conectado a nivel GATT, preservar el nodo
+      const hwId = peer.hardwareId || id;
+      if (peer.transport === 'ble' && bluetoothTransport.isDeviceConnected(hwId)) {
+        peer.lastSeen = now;
+        continue;
+      }
+
+      // Si el enlace WiFi Direct local continúa activo en el conjunto de pares, preservar el nodo
+      if (peer.transport === 'wifi' && this.wifi?.onlinePeers.has(id)) {
+        peer.lastSeen = now;
+        continue;
+      }
+
+      const ttl = peer.transport === 'lora' ? 180_000 : (peer.transport === 'wifi' ? 30_000 : 45_000);
+      const age = now - (peer.lastSeen || 0);
+
+      if (age > ttl) {
+        console.log(`[MeshRouter] ⏱️ Par inactivo purgado de la topología: ${peer.name || id} (${peer.transport}, edad ${Math.round(age / 1000)}s)`);
+        this.peers.delete(id);
+        this.activeGateways.delete(id);
+        if (peer.canonicalId && peer.canonicalId !== id) {
+          this.peers.delete(peer.canonicalId);
+          this.activeGateways.delete(peer.canonicalId);
+        }
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      this.notifyPeersChange();
+    }
+  }
+
   public updatePeer(
     id: string,
-    transport: 'wifi' | 'ble' | 'lora',
+    transport: MeshTransport,
     rssi?: number,
     canonicalId?: string,
     name?: string,

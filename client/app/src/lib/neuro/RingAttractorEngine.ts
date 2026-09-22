@@ -14,6 +14,8 @@
  *   el atractor se aísla en memoria de trabajo inercial pura sosteniendo el rumbo con cero deriva abrupta.
  */
 
+import { TacticalCompassEngine, CompassTelemetry } from '../sensors/TacticalCompassEngine';
+
 export interface RfBearingCue {
     peerId: string;
     bearingDeg: number;
@@ -62,7 +64,10 @@ export class RingAttractorEngine {
     // Listeners reactivos
     private listeners: Set<(t: RingAttractorTelemetry) => void> = new Set();
     private motionListener: ((e: DeviceMotionEvent) => void) | null = null;
-    private orientationListener: ((e: DeviceOrientationEvent) => void) | null = null;
+    private compassUnsub: (() => void) | null = null;
+    private lastNotifyTime: number = 0;
+    private notifyScheduled: boolean = false;
+    private simInterval: any = null;
 
     // Cues de Marcación de Radiofrecuencia (AoA Radiogoniometry de Synaptic Router)
     private rfBearingCues: Map<string, RfBearingCue> = new Map();
@@ -71,6 +76,15 @@ export class RingAttractorEngine {
     private remoteKuramotoPhases: Map<string, { phaseRad: number; timestamp: number; confidence: number }> = new Map();
     private kuramotoOrderParameterR: number = 1.0;
     private swarmPhaseDeg: number = 0.0;
+
+    /**
+     * Mapea un rumbo azimutal en grados [0, 360) al espacio circular de fase [-pi, pi]
+     * SSOT: 0° (Norte) = -pi, 90° (Este) = -pi/2, 180° (Sur) = 0, 270° (Oeste) = pi/2
+     */
+    public headingDegToPhaseRad(deg: number): number {
+        const norm = ((deg % 360) + 360) % 360;
+        return (norm * Math.PI) / 180 - Math.PI;
+    }
 
     private constructor() {
         this.u = new Float64Array(this.numWedges);
@@ -89,8 +103,8 @@ export class RingAttractorEngine {
             }
         }
 
-        // Inicializar con una burbuja gaussiana centrada en el norte (0 rad / -pi a pi)
-        this.initializeBump(0.0);
+        // Inicializar con una burbuja gaussiana centrada estrictamente en el norte (0° -> -pi rad)
+        this.initializeBump(this.headingDegToPhaseRad(0.0));
     }
 
     public static getInstance(): RingAttractorEngine {
@@ -116,7 +130,7 @@ export class RingAttractorEngine {
     }
 
     /**
-     * Inicia la captura de sensores nativos (DeviceMotion para giróscopo, DeviceOrientation para anclaje).
+     * Inicia la captura de sensores nativos acoplada al SSOT TacticalCompassEngine y DeviceMotion para P-EN.
      */
     public start(): void {
         if (this.isRunning) return;
@@ -124,38 +138,37 @@ export class RingAttractorEngine {
         this.lastStepTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
         if (typeof window !== 'undefined') {
+            // 1. Integración de velocidad angular P-EN (giróscopo dinámico)
             this.motionListener = (e: DeviceMotionEvent) => {
                 if (e.rotationRate && typeof e.rotationRate.alpha === 'number' && isFinite(e.rotationRate.alpha)) {
-                    let yawRate = e.rotationRate.alpha;
-                    let screenAngle = 0;
-                    try {
-                        const screenOrientation = (window.screen as any)?.orientation;
-                        if (typeof screenOrientation?.angle === 'number') {
-                            screenAngle = screenOrientation.angle;
-                        } else if (typeof (window as any).orientation === 'number') {
-                            screenAngle = (window as any).orientation;
-                        }
-                    } catch {}
-
-                    if (screenAngle === 90 && typeof e.rotationRate.beta === 'number' && isFinite(e.rotationRate.beta)) {
-                        yawRate = e.rotationRate.beta;
-                    } else if (screenAngle === 270 && typeof e.rotationRate.beta === 'number' && isFinite(e.rotationRate.beta)) {
-                        yawRate = -e.rotationRate.beta;
-                    }
+                    // En W3C DeviceMotion, rotationRate.alpha es positivo en sentido antihorario (regla mano derecha eje Z).
+                    // Para que la velocidad angular positiva corresponda a giro horario (aumento de azimut N->E),
+                    // se invierte el signo con respecto al vector normal de la pantalla:
+                    const yawRate = -e.rotationRate.alpha;
                     this.injectAngularVelocity(yawRate);
-                }
-            };
-
-            this.orientationListener = (e: DeviceOrientationEvent) => {
-                if (typeof e.alpha === 'number' && isFinite(e.alpha) && !isNaN(e.alpha)) {
-                    this.injectExternalCue(e.alpha);
                 }
             };
 
             try {
                 window.addEventListener('devicemotion', this.motionListener, { passive: true });
-                window.addEventListener('deviceorientation', this.orientationListener, { passive: true });
             } catch {}
+
+            // 2. Anclaje sensorial canónico vía TacticalCompassEngine (compensación 3D, GPS COG fallback y anti-jitter)
+            this.compassUnsub = TacticalCompassEngine.getInstance().subscribe((telem: CompassTelemetry) => {
+                if (typeof telem.headingDeg === 'number' && isFinite(telem.headingDeg)) {
+                    // Solo es anclaje sensorial confiable si proviene de magnetómetro físico activo o GPS COG en movimiento
+                    const isReliable = telem.source === 'magnetometer' || (telem.source === 'gps_cog');
+                    this.injectExternalCue(telem.headingDeg, isReliable);
+                }
+            });
+
+            // 3. Bucle de integración temporal biofísico autónomo a 30 Hz (inmune a falta de giróscopo o reposo)
+            if (this.simInterval) clearInterval(this.simInterval);
+            this.simInterval = setInterval(() => {
+                if (this.isRunning) {
+                    this.stepSimulation();
+                }
+            }, 33);
         }
     }
 
@@ -164,14 +177,18 @@ export class RingAttractorEngine {
      */
     public stop(): void {
         this.isRunning = false;
+        if (this.simInterval) {
+            clearInterval(this.simInterval);
+            this.simInterval = null;
+        }
         if (typeof window !== 'undefined') {
             if (this.motionListener) {
                 window.removeEventListener('devicemotion', this.motionListener);
                 this.motionListener = null;
             }
-            if (this.orientationListener) {
-                window.removeEventListener('deviceorientation', this.orientationListener);
-                this.orientationListener = null;
+            if (this.compassUnsub) {
+                this.compassUnsub();
+                this.compassUnsub = null;
             }
         }
     }
@@ -198,7 +215,7 @@ export class RingAttractorEngine {
 
         // Si la señal es confiable, se inyecta como corriente externa I_ext
         if (isReliable) {
-            const cueRad = ((headingDeg % 360) * Math.PI) / 180 - Math.PI;
+            const cueRad = this.headingDegToPhaseRad(headingDeg);
             const cueGain = 0.35;
             for (let i = 0; i < this.numWedges; i++) {
                 let diff = this.thetaWedges[i] - cueRad;
@@ -208,6 +225,7 @@ export class RingAttractorEngine {
                 this.u[i] += cueGain * cueCurrent * 0.05;
             }
             this.updatePopulationVector();
+            this.notifyListeners();
         }
     }
 
@@ -221,15 +239,20 @@ export class RingAttractorEngine {
     /**
      * Paso de integración dinámica Runge-Kutta / Heun de la red de atractor continuo.
      */
-    public stepSimulation(dtSec: number): void {
+    public stepSimulation(dtSec?: number): void {
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const effectiveDt = dtSec !== undefined
+            ? dtSec
+            : (this.lastStepTime > 0 ? Math.min(0.1, Math.max(0.005, (now - this.lastStepTime) / 1000)) : 0.033);
+        this.lastStepTime = now;
+
         const N = this.numWedges;
         const omegaRad = (this.angularVelocityDps * Math.PI) / 180; // rad/s
         const du = new Float64Array(N);
 
         // 0. Sincronización de Fase de Kuramoto: dθ_i/dt = ω_i + (K/N) * sum_j sin(θ_j - θ_i)
         let kuramotoTorque = 0;
-        const now = Date.now();
-        const localPhaseRad = (this.currentHeadingDeg * Math.PI) / 180 - Math.PI;
+        const localPhaseRad = this.headingDegToPhaseRad(this.currentHeadingDeg);
 
         if (this.remoteKuramotoPhases.size > 0) {
             let sumSin = Math.sin(localPhaseRad);
@@ -272,33 +295,53 @@ export class RingAttractorEngine {
 
         const effectiveOmega = omegaRad + kuramotoTorque;
 
-        // 1. Evaluación de derivadas du_i/dt
-        for (let i = 0; i < N; i++) {
-            // Retroalimentación sináptica recurrente sum_j (W_ij * f(u_j))
-            let recurrentInput = 0;
-            for (let j = 0; j < N; j++) {
-                const r_j = Math.max(0, this.u[j]); // Activación ReLU no lineal
-                recurrentInput += this.synMatrix[i * N + j] * r_j;
+        // Sub-stepping numérico (máximo 10ms por paso) para garantizar estabilidad absoluta ante retardos de CPU
+        const maxSubDt = 0.010;
+        const numSubSteps = Math.min(10, Math.max(1, Math.ceil(effectiveDt / maxSubDt)));
+        const subDt = effectiveDt / numSubSteps;
+        const decayFactor = Math.exp(-subDt / this.tau);
+        const gainFactor = 1.0 - decayFactor;
+
+        for (let step = 0; step < numSubSteps; step++) {
+            // 1. Evaluación de entradas sinápticas
+            const totalInputs = new Float64Array(N);
+            for (let i = 0; i < N; i++) {
+                // Retroalimentación sináptica recurrente sum_j (W_ij * f(u_j))
+                let recurrentInput = 0;
+                for (let j = 0; j < N; j++) {
+                    const r_j = Math.max(0, this.u[j]); // Activación ReLU no lineal
+                    recurrentInput += this.synMatrix[i * N + j] * r_j;
+                }
+
+                // Desplazamiento asimétrico conducido por velocidad angular y acoplamiento Kuramoto (P-EN shift)
+                const prevIdx = (i - 1 + N) % N;
+                const nextIdx = (i + 1) % N;
+                const shiftInput = this.betaShift * effectiveOmega * (this.u[prevIdx] - this.u[nextIdx]);
+
+                totalInputs[i] = recurrentInput + shiftInput;
             }
 
-            // Desplazamiento asimétrico conducido por velocidad angular y acoplamiento Kuramoto (P-EN shift)
-            const prevIdx = (i - 1 + N) % N;
-            const nextIdx = (i + 1) % N;
-            const shiftInput = this.betaShift * effectiveOmega * (this.u[prevIdx] - this.u[nextIdx]);
+            // 2. Integración Exacta / Exponencial (Euler Exponencial) inmune a explosión numérica
+            let hasNaN = false;
+            for (let i = 0; i < N; i++) {
+                const nextVal = this.u[i] * decayFactor + totalInputs[i] * gainFactor;
+                if (!Number.isFinite(nextVal)) {
+                    hasNaN = true;
+                    break;
+                }
+                this.u[i] = Math.max(0, Math.min(8.0, nextVal));
+            }
 
-            // Decaimiento natural y ecuación diferencial
-            du[i] = (-this.u[i] + recurrentInput + shiftInput) / this.tau;
-        }
-
-        // 2. Actualización de potenciales de membrana con clamping biológico no-negativo
-        for (let i = 0; i < N; i++) {
-            this.u[i] = Math.max(0, this.u[i] + du[i] * dtSec);
+            if (hasNaN) {
+                this.initializeBump(this.headingDegToPhaseRad(0.0));
+                break;
+            }
         }
 
         // 3. Normalización suave para conservar la energía del atractor (prevenir explosión o extinción)
         let totalEnergy = 0;
         for (let i = 0; i < N; i++) totalEnergy += this.u[i];
-        if (totalEnergy > 0.001) {
+        if (Number.isFinite(totalEnergy) && totalEnergy > 0.001) {
             const targetEnergy = 3.5;
             const scale = targetEnergy / totalEnergy;
             // Tasa de convergencia suave (filtro pasa-bajos)
@@ -306,8 +349,9 @@ export class RingAttractorEngine {
                 this.u[i] = this.u[i] * (0.90 + 0.10 * scale);
             }
         } else {
-            // Si la burbuja se extinguió por sub-umbral, resembrar en el último rumbo
-            this.initializeBump((this.currentHeadingDeg * Math.PI) / 180 - Math.PI);
+            // Si la burbuja se extinguió por sub-umbral, resembrar en el último rumbo válido
+            const safeHeading = Number.isFinite(this.currentHeadingDeg) ? this.currentHeadingDeg : 0;
+            this.initializeBump(this.headingDegToPhaseRad(safeHeading));
         }
 
         this.updatePopulationVector();
@@ -315,7 +359,7 @@ export class RingAttractorEngine {
     }
 
     /**
-     * Decodificación geométrica del vector poblacional en el espacio circular.
+     * Decodificación geométrica del vector poblacional en el espacio circular con salvaguardas estrictas.
      */
     private updatePopulationVector(): void {
         let sumX = 0;
@@ -323,13 +367,13 @@ export class RingAttractorEngine {
         let totalU = 0;
 
         for (let i = 0; i < this.numWedges; i++) {
-            const act = this.u[i];
+            const act = Number.isFinite(this.u[i]) ? this.u[i] : 0;
             sumX += act * Math.cos(this.thetaWedges[i]);
             sumY += act * Math.sin(this.thetaWedges[i]);
             totalU += act;
         }
 
-        if (totalU > 0.0001) {
+        if (Number.isFinite(totalU) && totalU > 0.0001 && Number.isFinite(sumX) && Number.isFinite(sumY)) {
             const phaseRad = Math.atan2(sumY, sumX); // [-pi, pi]
             // Convertir fase a rumbo azimutal en grados [0, 360)
             let deg = ((phaseRad + Math.PI) * 180) / Math.PI;
@@ -339,22 +383,29 @@ export class RingAttractorEngine {
 
             const vectorMag = Math.sqrt(sumX * sumX + sumY * sumY);
             this.confidence = Math.min(1.0, Math.max(0.0, vectorMag / (totalU * 0.75)));
+        } else {
+            if (!Number.isFinite(this.currentHeadingDeg)) {
+                this.currentHeadingDeg = 0;
+            }
+            this.confidence = 0.5;
         }
     }
 
     public getTelemetry(): RingAttractorTelemetry {
-        const wedgesArray = Array.from(this.u).map(val => Math.min(1.0, Math.max(0.0, val / 1.5)));
+        const wedgesArray = Array.from(this.u).map(val => Number.isFinite(val) ? Math.min(1.0, Math.max(0.0, val / 1.5)) : 0.2);
+        const safeHeading = Number.isFinite(this.currentHeadingDeg) ? this.currentHeadingDeg : 0;
+        const safeConf = Number.isFinite(this.confidence) ? Math.round(this.confidence * 100) / 100 : 0.5;
         return {
-            headingDeg: this.currentHeadingDeg,
-            cardinal: this.degToCardinal(this.currentHeadingDeg),
-            confidence: Math.round(this.confidence * 100) / 100,
+            headingDeg: safeHeading,
+            cardinal: this.degToCardinal(safeHeading),
+            confidence: safeConf,
             wedges: wedgesArray,
             isSensoryAnchored: this.isSensoryAnchored,
-            angularVelocityDps: Math.round(this.angularVelocityDps * 10) / 10,
+            angularVelocityDps: Number.isFinite(this.angularVelocityDps) ? Math.round(this.angularVelocityDps * 10) / 10 : 0,
             driftEstimateDpm: this.isSensoryAnchored ? 0.0 : 0.45,
             rfBearings: Array.from(this.rfBearingCues.values()),
-            kuramotoOrderParameterR: Math.round(this.kuramotoOrderParameterR * 100) / 100,
-            swarmPhaseDeg: Math.round(this.swarmPhaseDeg * 10) / 10,
+            kuramotoOrderParameterR: Number.isFinite(this.kuramotoOrderParameterR) ? Math.round(this.kuramotoOrderParameterR * 100) / 100 : 1.0,
+            swarmPhaseDeg: Number.isFinite(this.swarmPhaseDeg) ? Math.round(this.swarmPhaseDeg * 10) / 10 : safeHeading,
             timestamp: Date.now()
         };
     }
@@ -389,7 +440,7 @@ export class RingAttractorEngine {
         // Estimulación suave sub-umbral en el anillo de cuñas E-PG (modulación sensorial multimodal)
         // Solo si la confianza es notable (>= 0.35)
         if (normConf >= 0.35) {
-            const cueRad = (normBearing * Math.PI) / 180 - Math.PI;
+            const cueRad = this.headingDegToPhaseRad(normBearing);
             const cueGain = 0.06 * normConf; // Ganancia atenuada para no desplazar el rumbo inercial propio
             for (let i = 0; i < this.numWedges; i++) {
                 let diff = this.thetaWedges[i] - cueRad;
@@ -421,7 +472,7 @@ export class RingAttractorEngine {
     ): void {
         if (!peerId || typeof remotePhaseByte !== 'number') return;
         const phaseDeg = (remotePhaseByte / 256) * 360;
-        const phaseRad = (phaseDeg * Math.PI) / 180 - Math.PI;
+        const phaseRad = this.headingDegToPhaseRad(phaseDeg);
         this.remoteKuramotoPhases.set(peerId.toLowerCase().trim(), {
             phaseRad,
             timestamp,
@@ -467,6 +518,23 @@ export class RingAttractorEngine {
     }
 
     private notifyListeners(): void {
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        // Throttle listener notifications to max 30 Hz (~33ms) to prevent freezing React UI thread on 120Hz sensors
+        if (now - this.lastNotifyTime < 33) {
+            if (!this.notifyScheduled) {
+                this.notifyScheduled = true;
+                setTimeout(() => {
+                    this.notifyScheduled = false;
+                    this.notifyListenersDirect();
+                }, 33);
+            }
+            return;
+        }
+        this.notifyListenersDirect();
+    }
+
+    private notifyListenersDirect(): void {
+        this.lastNotifyTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
         const telem = this.getTelemetry();
         for (const listener of this.listeners) {
             try {

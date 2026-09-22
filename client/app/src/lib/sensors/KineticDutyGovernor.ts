@@ -201,23 +201,23 @@ export class KineticDutyGovernor {
 
         if (this.isShakeBoostActive) {
             profile = "SHAKE_BOOST";
-            bleScanIntervalMs = 800;
+            bleScanIntervalMs = 6000;
             // Mitigación de brownout por caída de tensión en baterías degradadas
             loraTxPowerDbm = this.batteryLevel <= 10 ? 14 : 20;
             estimatedMeshHours = (this.batteryLevel / 100) * 12;
         } else if (this.isCharging || (this.batteryLevel > 50 && !this.isStationary)) {
             profile = "HIGH_PERFORMANCE";
-            bleScanIntervalMs = 1500;
+            bleScanIntervalMs = 7000;
             loraTxPowerDbm = 18;
             estimatedMeshHours = (this.batteryLevel / 100) * 20;
         } else if (this.batteryLevel <= 20 || (this.batteryLevel <= 40 && this.isStationary)) {
             profile = "SURVIVAL_SENTRY";
-            bleScanIntervalMs = 12000;
+            bleScanIntervalMs = 25000;
             loraTxPowerDbm = 10;
             estimatedMeshHours = (this.batteryLevel / 100) * 48; // Up to 48 hours
         } else {
             profile = "BALANCED_PATROL";
-            bleScanIntervalMs = 4000;
+            bleScanIntervalMs = 10000;
             loraTxPowerDbm = 14;
             estimatedMeshHours = (this.batteryLevel / 100) * 32;
         }

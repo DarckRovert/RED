@@ -161,7 +161,12 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
 
     const togglePlay = () => {
         const a = audioRef.current;
-        if (!a) return;
+        if (!a) {
+            if (!audioSrc) {
+                toast.info("Cargando nota de voz...");
+            }
+            return;
+        }
         if (playing) {
             a.pause();
             setPlaying(false);
@@ -169,8 +174,16 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
         } else {
             globalVoiceCoordinator.notifyPlaying(msg.id);
             a.playbackRate = playbackRate;
-            a.play().catch(e => console.warn("[VoiceMessage] Play error:", e));
-            setPlaying(true);
+            a.play()
+                .then(() => {
+                    setPlaying(true);
+                })
+                .catch(e => {
+                    console.warn("[VoiceMessage] Play error:", e);
+                    setPlaying(false);
+                    globalVoiceCoordinator.notifyStopped(msg.id);
+                    toast.error("Error al reproducir audio");
+                });
         }
     };
 
@@ -433,7 +446,10 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
                         onTimeUpdate={handleTimeUpdate}
                         onLoadedMetadata={handleLoadedMetadata}
                         onEnded={handleEnded}
-                        onError={() => setPlaying(false)}
+                        onError={() => {
+                            setPlaying(false);
+                            globalVoiceCoordinator.notifyStopped(msg.id);
+                        }}
                         style={{ display: "none" }}
                     />
                 )}

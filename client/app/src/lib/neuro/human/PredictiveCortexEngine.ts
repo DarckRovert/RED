@@ -286,6 +286,19 @@ export class PredictiveCortexEngine {
     this.notifyListeners();
   }
 
+  public updatePeerPosition(peerId: string, lat: number, lon: number, speedMps = 0, headingDeg = 0): void {
+    this.ingestPeerReport({
+      peerId,
+      lat,
+      lon,
+      alt: 0,
+      speedMps,
+      headingDeg,
+      lastUpdated: Date.now(),
+      varianceMeters: 2.0,
+    });
+  }
+
   private extrapolatePosition(lat: number, lon: number, speedMps: number, headingDeg: number, dtSec: number): { lat: number; lon: number } {
     if (speedMps <= 0.05 || dtSec <= 0) {
       return { lat, lon };

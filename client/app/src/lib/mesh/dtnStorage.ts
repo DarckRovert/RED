@@ -106,7 +106,16 @@ class DtnStorage {
       if (db) {
         const activeItems = await this.loadActiveFromDB(db, 500);
         if (activeItems.length > 0) {
-          this.cache = this.sanitizeItems(activeItems);
+          const dbItems = this.sanitizeItems(activeItems);
+          if (this.cache && this.cache.length > 0) {
+            // Fusión segura: preservar paquetes encolados concurrentemente durante la lectura de IDB
+            const mergedMap = new Map<string, DtnQueueItem>();
+            for (const item of dbItems) mergedMap.set(item.id, item);
+            for (const item of this.cache) mergedMap.set(item.id, item);
+            this.cache = Array.from(mergedMap.values());
+          } else {
+            this.cache = dbItems;
+          }
           if (this.cache.length !== activeItems.length) {
             const preservedIds = new Set(this.cache.map(c => c.id));
             activeItems.forEach(ai => {

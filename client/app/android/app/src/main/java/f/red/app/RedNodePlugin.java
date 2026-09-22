@@ -1501,19 +1501,49 @@ public class RedNodePlugin extends Plugin {
 
                 if (usbPermissionReceiver != null) {
                     try { getContext().unregisterReceiver(usbPermissionReceiver); } catch (Exception ignored) {}
+                    usbPermissionReceiver = null;
                 }
+
+                // Handler para watchdog de timeout (30 segundos) si el usuario descarta o ignora el diálogo
+                final android.os.Handler timeoutHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+                final Runnable timeoutRunnable = new Runnable() {
+                    @Override
+                    public void run() {
+                        if (usbPermissionReceiver != null) {
+                            try { getContext().unregisterReceiver(usbPermissionReceiver); } catch (Exception ignored) {}
+                            usbPermissionReceiver = null;
+                            android.util.Log.w("RedNodePlugin", "Timeout esperando respuesta al diálogo de permiso USB");
+                            call.reject("Tiempo de espera agotado para autorización de puerto USB");
+                        }
+                    }
+                };
 
                 usbPermissionReceiver = new BroadcastReceiver() {
                     @Override
                     public void onReceive(Context context, Intent intent) {
                         if (ACTION_USB_PERMISSION.equals(intent.getAction())) {
+                            timeoutHandler.removeCallbacks(timeoutRunnable);
                             try { context.unregisterReceiver(this); } catch (Exception ignored) {}
                             usbPermissionReceiver = null;
 
                             synchronized (this) {
-                                UsbDevice dev = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                                UsbDevice dev = null;
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    try {
+                                        dev = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice.class);
+                                    } catch (Exception ignored) {}
+                                }
+                                if (dev == null) {
+                                    try {
+                                        dev = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                                    } catch (Exception ignored) {}
+                                }
+
                                 boolean granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false);
-                                if (granted && dev != null) {
+                                boolean isPermitted = (granted && (dev != null || usbManager.hasPermission(usbDevice)))
+                                        || usbManager.hasPermission(usbDevice);
+
+                                if (isPermitted) {
                                     android.util.Log.i("RedNodePlugin", "Permiso USB concedido por el usuario");
                                     initUsbPort(usbManager, selectedDriver, baudRate, dataBits, stopBits, parity, call);
                                 } else {
@@ -1525,15 +1555,26 @@ public class RedNodePlugin extends Plugin {
                     }
                 };
 
-                int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_MUTABLE : 0;
-                PendingIntent permissionIntent = PendingIntent.getBroadcast(getContext(), 0, new Intent(ACTION_USB_PERMISSION), flags);
+                // 1. Intent explícito con paquete de la aplicación — mandatorio en Android 14+ para FLAG_MUTABLE
+                Intent permIntent = new Intent(ACTION_USB_PERMISSION);
+                permIntent.setPackage(getContext().getPackageName());
+
+                int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    flags |= PendingIntent.FLAG_MUTABLE;
+                }
+                PendingIntent permissionIntent = PendingIntent.getBroadcast(getContext(), 0, permIntent, flags);
                 IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
-                
+
+                // 2. RECEIVER_EXPORTED es requerido en Android 14+ porque el broadcast lo origina system_server (UID 1000)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    getContext().registerReceiver(usbPermissionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+                    getContext().registerReceiver(usbPermissionReceiver, filter, Context.RECEIVER_EXPORTED);
                 } else {
                     getContext().registerReceiver(usbPermissionReceiver, filter);
                 }
+
+                // Iniciar timeout preventivo de 30 segundos
+                timeoutHandler.postDelayed(timeoutRunnable, 30000);
 
                 usbManager.requestPermission(usbDevice, permissionIntent);
             } else {

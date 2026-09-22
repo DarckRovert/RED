@@ -17,6 +17,8 @@
  *      ante saturación de búfer DTN (> 80%).
  */
 
+import { RingAttractorEngine } from './RingAttractorEngine';
+
 export interface MushroomBodyConfig {
   totalKenyonCells: number;      // 2,500 células de Kenyon
   sparsityFactor: number;        // 0.05 (5% activas = 125 KCs activas)
@@ -491,7 +493,6 @@ export class DtnMushroomBodyEngine {
    */
   private getCurrentHeadingSafe(): number | null {
     try {
-      const { RingAttractorEngine } = require('./RingAttractorEngine');
       return RingAttractorEngine.getInstance().getTelemetry().headingDeg;
     } catch {
       return null;

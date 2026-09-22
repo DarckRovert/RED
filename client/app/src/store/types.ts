@@ -56,6 +56,8 @@ export interface PendingContactRequest {
     timestamp: number;
     avatarUrl?: string | null;
     bio?: string | null;
+    kyber_public_key?: string | null;
+    x25519_public_key?: string | null;
 }
 
 

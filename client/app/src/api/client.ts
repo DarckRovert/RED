@@ -210,7 +210,8 @@ export class RedAPIClient {
                 } else {
                     const existTs = existing.last_timestamp || 0;
                     const rustTs = rc.last_timestamp || 0;
-                    mergedMap.set(key, rustTs >= existTs ? { ...existing, ...rc } : existing);
+                    const mergedUnread = (existing.unread_count === 0) ? 0 : (rc.unread_count ?? existing.unread_count);
+                    mergedMap.set(key, rustTs >= existTs ? { ...existing, ...rc, unread_count: mergedUnread } : existing);
                 }
             }
             const merged = Array.from(mergedMap.values());
@@ -632,13 +633,15 @@ export class RedAPIClient {
             } catch (e) {
                 // Web environment or offline node fallback
             }
-        } else if (options?.msg_type === 'message_edit' && options?.target_id) {
-            this.req(`/conversations/${cleanRecipient}/messages/${options.target_id}`, {
+        } else if (options?.msg_type === 'message_edit' && (options?.target_id || options?.target_message_id)) {
+            const targetId = options.target_id || options.target_message_id;
+            this.req(`/conversations/${cleanRecipient}/messages/${targetId}`, {
                 method: 'PATCH',
                 body: JSON.stringify({ content: options.new_content || content })
             }).catch(() => {});
-        } else if (options?.msg_type === 'message_delete' && options?.target_id) {
-            this.req(`/conversations/${cleanRecipient}/messages/${options.target_id}`, {
+        } else if (options?.msg_type === 'message_delete' && (options?.target_id || options?.target_message_id)) {
+            const targetId = options.target_id || options.target_message_id;
+            this.req(`/conversations/${cleanRecipient}/messages/${targetId}`, {
                 method: 'DELETE'
             }).catch(() => {});
         } else if (options?.msg_type === 'read_receipt') {
@@ -672,35 +675,39 @@ export class RedAPIClient {
                     : 480; // Safe default MTU for BLE mesh
 
                 const mimeType = options?.mime_type || (rawMedia.startsWith('data:') ? rawMedia.substring(5, rawMedia.indexOf(';')) : 'application/octet-stream');
-                const chunks = mediaChunker.fragment(rawMedia, mimeType, optimalChunkSize);
 
-                for (const chunk of chunks) {
-                    chunk.originalMsgId = msgId;
-                    const chunkPacket = {
-                        id: `${msgId}_ck${chunk.chunkIndex}`,
-                        sender: myDid,
-                        sender_name: options?.sender_name ?? myNickname,
-                        sender_pk: options?.sender_pk ?? myPk,
-                        avatar_url: options?.avatar_url !== undefined ? options.avatar_url : myAvatar,
-                        recipient: cleanRecipient,
-                        msg_type: 'media_chunk',
-                        timestamp: Date.now() / 1000,
-                        chunk_metadata: {
-                            ...chunk,
-                            originalMsgId: msgId,
+                await mediaChunker.sendChunked(
+                    rawMedia,
+                    mimeType,
+                    peer?.transport || 'ble',
+                    async (chunk) => {
+                        chunk.originalMsgId = msgId;
+                        const chunkPacket = {
+                            id: `${msgId}_ck${chunk.chunkIndex}`,
+                            sender: myDid,
+                            sender_name: options?.sender_name ?? myNickname,
+                            sender_pk: options?.sender_pk ?? myPk,
+                            avatar_url: options?.avatar_url !== undefined ? options.avatar_url : myAvatar,
+                            recipient: cleanRecipient,
+                            msg_type: 'media_chunk',
+                            timestamp: Date.now() / 1000,
+                            chunk_metadata: {
+                                ...chunk,
+                                originalMsgId: msgId,
+                                caption: options?.caption,
+                                file_name: options?.file_name,
+                                duration_ms: options?.duration_ms,
+                                waveform: options?.waveform
+                            },
                             caption: options?.caption,
                             file_name: options?.file_name,
                             duration_ms: options?.duration_ms,
                             waveform: options?.waveform
-                        },
-                        caption: options?.caption,
-                        file_name: options?.file_name,
-                        duration_ms: options?.duration_ms,
-                        waveform: options?.waveform
-                    };
-                    const chunkBytes = new TextEncoder().encode(JSON.stringify(chunkPacket));
-                    meshRouter.send(cleanRecipient, chunkBytes).catch(() => {});
-                }
+                        };
+                        const chunkBytes = new TextEncoder().encode(JSON.stringify(chunkPacket));
+                        await meshRouter.send(cleanRecipient, chunkBytes);
+                    }
+                );
             } else {
                 const payloadStr = JSON.stringify({
                     id: msgId,
@@ -724,11 +731,11 @@ export class RedAPIClient {
         // 4. Mirror in Real-Time to Paired Companion (Web <-> Mobile Live Bridge)
         try {
             const { companionSyncEngine } = await import('../lib/mesh/companionSyncEngine');
-            if (companionSyncEngine.isLiveSessionActive()) {
+            if (companionSyncEngine.isLiveSessionActive() && !options?._skipCompanionSync && !isControlMessage) {
                 companionSyncEngine.publishLiveEvent('LIVE_MSG_SEND', {
                     recipient: cleanRecipient,
                     content,
-                    options: { ...options, id: msgId },
+                    options: { ...options, id: msgId, _skipCompanionSync: true },
                     id: msgId
                 }).catch(() => {});
             }
@@ -1080,6 +1087,19 @@ export class RedAPIClient {
                 this.setWebStore('red_web_conversations', convs);
             } catch {}
         }
+
+        // Mirror outgoing group message to paired Companion once
+        try {
+            const { companionSyncEngine } = await import('../lib/mesh/companionSyncEngine');
+            if (companionSyncEngine.isLiveSessionActive() && !options?._skipCompanionSync) {
+                companionSyncEngine.publishLiveEvent('LIVE_MSG_SEND', {
+                    recipient: groupId,
+                    content,
+                    options: { ...options, id: msgId, is_group: true, group_id: groupId, conversation_id: groupId, _skipCompanionSync: true },
+                    id: msgId
+                }).catch(() => {});
+            }
+        } catch {}
     }
 
     // ── Group Admin API — Sprint 3 (v42.0.0) ────────────────────────────────────
@@ -1484,7 +1504,13 @@ export class RedAPIClient {
         return { id: groupId, name: groupName };
     }
 
-    async addContact(identity_hash: string, display_name: string, public_key?: string | null): Promise<void> {
+    async addContact(
+        identity_hash: string,
+        display_name: string,
+        public_key?: string | null,
+        kyber_public_key?: string | null,
+        x25519_public_key?: string | null
+    ): Promise<void> {
         let cleanHash = identity_hash.trim();
         if (cleanHash.startsWith('did:red:')) cleanHash = cleanHash.replace(/^did:red:/i, '');
         if (cleanHash.includes(':') && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(cleanHash)) {
@@ -1496,7 +1522,14 @@ export class RedAPIClient {
         // 1. Save in Web local storage
         const contacts = this.getWebStore<ContactItem[]>('red_web_contacts', []);
         const existingIdx = contacts.findIndex(c => c.identity_hash === cleanHash);
-        const newContact: ContactItem = { identity_hash: cleanHash, display_name, public_key: public_key || null, online: true };
+        const newContact: ContactItem = {
+            identity_hash: cleanHash,
+            display_name,
+            public_key: public_key || null,
+            kyber_public_key: kyber_public_key || null,
+            x25519_public_key: x25519_public_key || null,
+            online: true
+        };
         if (existingIdx >= 0) {
             contacts[existingIdx] = { ...contacts[existingIdx], ...newContact };
         } else {
@@ -1505,7 +1538,7 @@ export class RedAPIClient {
         this.setWebStore('red_web_contacts', contacts);
 
         // 2. Dispatch to Native Rust node if available
-        const body = { identity_hash: cleanHash, display_name, public_key };
+        const body = { identity_hash: cleanHash, display_name, public_key, kyber_public_key, x25519_public_key };
         try {
             await this.req('/contacts', { method: 'POST', body: JSON.stringify(body) });
         } catch {}
