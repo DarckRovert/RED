@@ -12,6 +12,7 @@
  */
 
 import { unifiedPush } from '../network/UnifiedPushManager';
+import { RED_VERSION } from '../version';
 
 export interface BlindRelayMessage {
     type: 'register' | 'relay' | 'signal' | 'ping' | 'pong' | 'ack' | 'delivery' | 'signal_delivery';
@@ -221,7 +222,7 @@ export class BlindRelayTransport {
         const msg: BlindRelayMessage = {
             type: 'register',
             peer_id: this.myId,
-            version: '98.0.0',
+            version: RED_VERSION,
             push_endpoint: unifiedPush.getEndpoint() || undefined,
         };
         try {

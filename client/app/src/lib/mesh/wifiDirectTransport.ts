@@ -301,7 +301,8 @@ export class WifiDirectTransport {
         console.log('[WebRtcTransport] Network transition detected — executing proactive transport refresh');
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
 
-        // 1. Proactively reconnect MQTT Relay pool
+        // 1. Proactively reconnect Sovereign Blind Relay & MQTT Relay pools
+        blindRelay.reconnect();
         mqttRelay.reconnect();
 
         // 2. Refresh WebSocket Signaling Connection
@@ -816,10 +817,13 @@ export class WifiDirectTransport {
             try { pc.close(); } catch {}
         });
         this.peerConnections.clear();
+        this.disconnectGraceTimers.forEach(timer => clearTimeout(timer));
+        this.disconnectGraceTimers.clear();
         this.pendingCandidates.clear();
         this.onlinePeers.clear();
         this.messageListeners = [];
         this.isConnecting = false;
+        blindRelay.disconnect();
         mqttRelay.disconnect();
     }
 }

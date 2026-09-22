@@ -48,11 +48,11 @@ runTest('3. IncomingContactRequestModal: Cierra AudioContext tras reproducir ton
     assert(content.includes('setTimeout'), 'Debe temporizar el cierre tras finalizar el oscilador');
 });
 
-runTest('4. LoraTransceiverModal: Reutiliza audioCtx para decodificación y cierra en bloque finally', () => {
+runTest('4. LoraTransceiverModal: Reutiliza y cierra AudioContext en bloque finally', () => {
     const content = fs.readFileSync(path.join(componentsDir, 'LoraTransceiverModal.tsx'), 'utf8');
-    assert(content.includes('audioCtx.decodeAudioData(arrayBuffer)'), 'Debe decodificar con el audioCtx existente');
+    assert(content.includes('cleanupVocoderRecorder()'), 'Debe invocar cleanupVocoderRecorder()');
     assert(content.includes('finally'), 'Debe contener bloque finally');
-    assert(content.includes('audioCtx.close()'), 'Debe cerrar en finally');
+    assert(content.includes('activeAudioCtxRef.current.close()'), 'Debe cerrar AudioContext en limpieza');
     assert(!content.includes('new AudioContext().decodeAudioData'), 'No debe crear segundo contexto huérfano');
 });
 

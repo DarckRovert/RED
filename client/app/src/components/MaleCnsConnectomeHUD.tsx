@@ -582,6 +582,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const edgesRef = useRef<ConnectomeEdge[]>(edges);
   const filterSystemRef = useRef<"ALL" | "CX" | "MB" | "GFS" | "FB">(filterSystem);
   const gfsTelemetryRef = useRef<GiantFiberTelemetry>(gfsTelemetry);
+  const architectureModeRef = useRef<"SUBCORTICAL_MALE_CNS" | "HUMAN_NEOCORTEX" | "CONSCIOUS_SWARM_BUS">(architectureMode);
+  architectureModeRef.current = architectureMode;
 
   // Mapa de búsqueda O(1) de nodos para eliminar búsquedas lineales repetidas por arista
   const nodeMap = useMemo(() => {
@@ -646,6 +648,12 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
 
       // Suspender renderizado inmediato si la pantalla está bloqueada o la app en background
       if (typeof document !== "undefined" && document.hidden) {
+        animationId = requestAnimationFrame(render);
+        return;
+      }
+
+      // Suspender renderizado si la pestaña activa no es el Conectoma Subcortical 3D
+      if (architectureModeRef.current !== "SUBCORTICAL_MALE_CNS") {
         animationId = requestAnimationFrame(render);
         return;
       }
@@ -835,16 +843,14 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       animationId = requestAnimationFrame(render);
     };
 
-    if (architectureMode === "SUBCORTICAL_MALE_CNS") {
-      animationId = requestAnimationFrame(render);
-    }
+    animationId = requestAnimationFrame(render);
 
     return () => {
       isMounted = false;
-      cancelAnimationFrame(animationId);
       window.removeEventListener("resize", updateCanvasResolution);
+      cancelAnimationFrame(animationId);
     };
-  }, [architectureMode]);
+  }, []);
 
   // Controlador de arrastre táctil y pinch-to-zoom para navegación 3D
   const isDragging = useRef(false);

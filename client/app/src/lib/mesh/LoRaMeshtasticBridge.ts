@@ -650,7 +650,7 @@ export class LoRaMeshtasticBridge {
         if (buf[0] !== 0x94 || buf[1] !== 0xC3) return null;
 
         const len = (buf[2] << 8) | buf[3];
-        if (len < 4 || buf.length < 4 + len) return null;
+        if (len < 16 || buf.length < 4 + len) return null;
 
         const body = buf.slice(4, 4 + len);
 
