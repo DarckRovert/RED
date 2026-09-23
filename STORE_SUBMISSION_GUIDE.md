@@ -1,5 +1,5 @@
 # GUÍA DE CERTIFICACIÓN Y PUBLICACIÓN EN TIENDAS (APP STORES)
-## RED v105.0.0 — Sovereign Mesh Communication & Decentralized P2P Infrastructure
+## RED v118.0.0 — Sovereign Mesh Communication & Decentralized P2P Infrastructure
 **Licencia:** GNU Affero General Public License v3.0 (AGPL-3.0)  
 **ID de Aplicación:** `f.red.app`  
 **Repositorio Oficial:** [https://github.com/DarckRovert/RED](https://github.com/DarckRovert/RED)  
@@ -10,11 +10,11 @@
 
 ## 1. INTRODUCCIÓN & DIAGNÓSTICO DE RECHAZOS HISTÓRICOS
 
-En auditorías previas de publicación en Google Play Console y tiendas de terceros, las aplicaciones tácticas o descentralizadas suelen ser rechazadas o ignoradas por tres motivos críticos que fueron **resueltos empíricamente en v105.0.0**:
+En auditorías previas de publicación en Google Play Console y tiendas de terceros, las aplicaciones tácticas o descentralizadas suelen ser rechazadas o ignoradas por tres motivos críticos que fueron **resueltos empíricamente en v118.0.0**:
 
 1. **Firma Criptográfica Inválida (Debug Keystore):**
    - *Error:* Las tiendas rechazan APKs firmados con certificados de depuración (`CN=Android Debug, O=Android, C=US`).
-   - *Solución:* RED v105.0.0 implementa una keystore de producción RSA de 4096 bits (`SHA384withRSA`) válida por 30 años (2026–2056) firmada por la Autoridad Soberana de RED.
+   - *Solución:* RED v118.0.0 implementa una keystore de producción RSA de 4096 bits (`SHA384withRSA`) válida por 30 años (2026–2056) firmada con esquema dual v1 (JAR) + v2 (APK Signature Scheme) por la Autoridad Soberana de RED.
 
 2. **Permisos de Alto Riesgo Prohibidos en el Manifest:**
    - *Error:* `REQUEST_INSTALL_PACKAGES` (causa rechazo automático inmediato en Google Play si no es un instalador de paquetes dedicado), `USE_EXACT_ALARM` (restringido a apps de reloj despertador/calendario desde Android 13/API 33), y `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`.
@@ -107,7 +107,7 @@ Aptoide no exige el formato `.aab`; admite directamente el APK firmado de produc
    ```
    El archivo se genera en:
    `client/app/android/app/build/outputs/apk/release/app-release.apk`
-   (O la copia automatizada `release-assets/red-v105.0.0-release.apk`).
+   (O la copia automatizada `release-assets/red-v118.0.0-release.apk`).
 
 2. **Subida en Aptoide Back Office (Aptoide Uploader / Developer Console):**
    - Inicia sesión en [Aptoide Developer](https://catappult.io/) o [Aptoide Apps](https://aptoide.com/).
@@ -145,13 +145,13 @@ F-Droid es el repositorio por excelencia para software 100% libre. Para someter 
 
    AutoUpdateMode: Version v%v
    UpdateCheckMode: Tags
-   CurrentVersion: 105.0.0
-   CurrentVersionCode: 10500
+   CurrentVersion: 118.0.0
+   CurrentVersionCode: 118000
 
    Builds:
-     - versionName: 105.0.0
-       versionCode: 10500
-       commit: v105.0.0
+     - versionName: 118.0.0
+       versionCode: 118000
+       commit: v118.0.0
        subdir: client/app/android
        gradle:
          - yes

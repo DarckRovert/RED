@@ -1,6 +1,6 @@
-# 📱 RED Client SPA — Next.js 16 + Capacitor Mobile App v62.0.0
+# 📱 RED Client SPA — Next.js 16 + Capacitor Mobile App v118.0.0
 
-Plataforma de interfaz táctica soberana, gestión de estado modular con Zustand Slices, llaves biométricas universales e integración nativa con el motor de Rust (`red_mobile` y `red_node`).
+Plataforma de interfaz táctica soberana, gestión de estado modular con Zustand Slices, llaves biométricas universales, llamadas full-mesh de escuadrón, atlas conectómico somático 3D (MaleCNS) e integración nativa con el motor de Rust (`red_mobile` y `red_node`).
 
 ---
 
@@ -35,7 +35,8 @@ client/app/src/
 ├── store/
 │   ├── slices/            # Zustand Slices atómicos
 │   │   ├── authSlice.ts       # Sesión, PIN y bóveda
-│   │   ├── chatSlice.ts       # Mensajes, hilos y estados
+│   │   ├── chatSlice.ts       # Mensajes, hilos y estados E2E
+│   │   ├── voiceSlice.ts      # Llamadas full-mesh & Vocoder DSP
 │   │   ├── contactsSlice.ts   # Directorio canónico y deduplicación
 │   │   ├── emergencySlice.ts  # Triaje START y balizas SOS
 │   │   └── socialSlice.ts     # Feed P2P y canales
@@ -44,13 +45,17 @@ client/app/src/
 ├── api/                   # Cliente HTTP Axum modularizado (http://127.0.0.1:7333)
 │   ├── types.ts, core.ts, client.ts, emergency.ts, channels.ts, ai.ts, sensors.ts, economy.ts
 ├── lib/                   # Motores de dominio desacoplados
-│   ├── crypto/            # BiometricLockEngine (Huella/Rostro/WebAuthn), PqcCryptoEngine
+│   ├── crypto/            # BiometricLockEngine (Huella/Rostro/WebAuthn), PqcCryptoEngine, DuressWipeEngine
 │   ├── ai/                # LocalAIEngine (ONNX WASM), GuardianEngine (64-bit Hamming)
 │   ├── audio/             # LowBitrateVocoder, SoundMesh
+│   ├── mesh/              # LoRaTdmaSchedulerEngine, LamportMeshClockEngine, RingAttractorEngine
+│   ├── connectome/        # MaleCNS Somatic 3D Atlas, GNWT Consciousness Bus
 │   ├── sensors/           # Hardware GPS, Barómetro, Brújula WMM2025
 │   └── storage/           # DtnStorage, StateIntegrityEngine
-└── components/            # 42 Módulos tácticos y componentes UI
+└── components/            # 62 Módulos tácticos y componentes UI
     ├── AuthWall.tsx       # Teclado táctico de 6 dígitos y biométrica universal
     ├── Sidebar.tsx        # Panel de conversaciones y contactos
+    ├── MaleCnsConnectomeHUD.tsx # Visualizador somático 3D WebGL
+    ├── SquadronFullMeshCallModal.tsx # Audio full-mesh de escuadrón
     └── settings/          # Pestañas de configuración modular (PrivacyTab, MeshTab, etc.)
 ```

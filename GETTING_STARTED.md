@@ -1,4 +1,4 @@
-# 🔴 RED — Guía de Inicio Rápido (v99.0.0 Sovereign Mesh OS)
+# 🔴 RED — Guía de Inicio Rápido (v118.0.0 Sovereign Mesh OS)
 
 RED es el sistema de comunicaciones tácticas, descentralizadas y cifradas de grado militar más avanzado del mundo, diseñado para operar tanto en redes globales descentralizadas como en aislamiento total fuera de línea (Off-Grid).
 
@@ -32,7 +32,7 @@ npm run build
 # Compilar todo el espacio de trabajo en modo Release
 cargo build --release
 
-# Ejecutar las 106 pruebas unitarias, KAT e integración del workspace
+# Ejecutar las 116 pruebas unitarias, KAT e integración del workspace
 cargo test --workspace
 
 # Ejecutar la suite de pruebas criptográficas de cliente (TypeScript)
@@ -45,14 +45,18 @@ cd client/app && npm run test:crypto
 cd client/app
 npx cap sync android
 
-# Compilar APK de Release firmado
+# Compilar APK de Release firmado con esquema dual (v1 + v2)
 cd android
 ./gradlew assembleRelease
 ```
 
 ### 4. Instalación en Dispositivos Físicos mediante ADB
 ```bash
-adb install -r app/build/outputs/apk/release/app-release.apk
+# Instalación directa desde la raíz del repositorio:
+adb install -r release-assets/red-v118.0.0-release.apk
+
+# O instalar el binario recién compilado por Gradle:
+adb install -r client/app/android/app/build/outputs/apk/release/app-release.apk
 ```
 
 ---

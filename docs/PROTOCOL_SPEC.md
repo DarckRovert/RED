@@ -1,6 +1,6 @@
-# Especificación Formal de Protocolo — RED v98.0.0
+# Especificación Formal de Protocolo — RED v118.0.0
 
-Este documento define la especificación matemática y estructural de tramas de paquetes, acuerdos de clave híbridos post-cuánticos, coordinación espectral LoRa TDMA, enrutamiento geoespacial Geohash y filtros Bloom de deduplicación del ecosistema **RED**.
+Este documento define la especificación matemática y estructural de tramas de paquetes, acuerdos de clave híbridos post-cuánticos, coordinación espectral LoRa TDMA con sincronización Kuramoto y PLL Lamport, enrutamiento geoespacial Geohash y filtros Bloom de deduplicación del ecosistema **RED**.
 
 ---
 
@@ -12,7 +12,7 @@ Cada trama binaria que transita sobre la red de malla (BLE, Wi-Fi Direct, LoRa, 
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|          Magic (0x52454431 = "RED1")          |  Ver  | Flags |
+|          Magic (0x52454431 = "RED1" / 0x52454401)     |  Ver  | Flags |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |      TTL      |   Hop Count   |         Payload Length        |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -43,13 +43,14 @@ Cada trama binaria que transita sobre la red de malla (BLE, Wi-Fi Direct, LoRa, 
 ```
 
 ### Campos de la Cabecera:
-- **`Magic` (4 bytes):** Identificador constante `0x52, 0x45, 0x44, 0x31` ("RED1").
-- **`Ver` (1 byte):** Versión del protocolo (`0x62` = 98).
-- **`Flags` (1 byte):** Bits de control:
+- **`Magic` (4 bytes):** Identificador constante `0x52, 0x45, 0x44, 0x31` ("RED1") o `0x52, 0x45, 0x44, 0x01` ("RED\x01" en repetidores solares).
+- **`Ver` (1 byte):** Versión del protocolo (`0x76` = 118).
+- **`Flags` (1 byte):** Bits de control táctico:
   - `Bits 0-3`: Nivel de Prioridad (0 = Bulk, 5 = Normal, 9+ = Emergencia SOS).
-  - `Bit 4`: Requiere Acuse de Recibo Criptográfico (`ACK_REQ`).
-  - `Bit 5`: Carga útil cifrada con secreto post-cuántico (`PQ_ENC`).
-  - `Bits 6-7`: Reservados.
+  - `Bit 4`: Requiere Acuse de Recibo Criptográfico (`ACK_REQ = 0x10`).
+  - `Bit 5`: Carga útil cifrada con secreto post-cuántico (`PQ_ENC = 0x20`).
+  - `Bit 6`: Sincronización de Fase de Enjambre Kuramoto (`FLAG_KURAMOTO_SYNC = 0x40`).
+  - `Bit 7`: Reservado.
 - **`TTL` / `Hop Count` (2 bytes):** Límite de saltos (decremento monótono) y conteo acumulado.
 - **`Target Geohash` (8 bytes):** Coordenadas espaciales codificadas en base32 (ej. `6mc5...`) con relleno nulo para poda DTN.
 
@@ -80,7 +81,7 @@ sequenceDiagram
 
 ---
 
-## 3. Coordinación Espectral LoRa TDMA
+## 3. Coordinación Espectral LoRa TDMA, Clock Skew PLL & Sincronización Kuramoto
 
 Para prevenir colisiones por contienda ALOHA cuando coexisten múltiples operadores en una celda de radio:
 
@@ -89,8 +90,15 @@ Para prevenir colisiones por contienda ALOHA cuando coexisten múltiples operado
 - **Duración de Ranura ($T_S$):** $200 \text{ ms}$.
 - **Asignación Determinista (Slots 0 a 7):**
   $$S_{\text{node}} = \text{FNV-1a}(\text{DID}) \pmod 8$$
-- **Slot 8 (Baliza & Sincronización):**
-  Reservado para anuncios de reloj de red, telemetría de repetidores solares y sincronización de época.
+- **Slot 8 (Baliza, Kuramoto & PLL):**
+  Reservado para anuncios de reloj lógico Lamport, telemetría solar y vectores de fase Kuramoto:
+  $$\frac{d\theta_i}{dt} = \omega_i + \frac{K}{N} \sum_{j=1}^N \sin(\theta_j - \theta_i)$$
+  donde $K = 0.85$ es la constante de acoplamiento de enjambre.
+- **Compensación de Deriva de Reloj (Clock Skew PLL):**
+  Rastrea el desfase de osciladores de cristal (PPM) contra las balizas del Slot 8 y ajusta los tiempos de guarda entre slots:
+  - $\text{Guard} = 15\text{ ms}$ ($\text{deriva} < 20\text{ PPM}$)
+  - $\text{Guard} = 25\text{ ms}$ ($20\text{ PPM} \le \text{deriva} \le 50\text{ PPM}$)
+  - $\text{Guard} = 35\text{ ms}$ ($\text{deriva} > 50\text{ PPM}$)
 - **Slot 9 (Contienda Dinámica CSMA/CA):**
   Utilizado por nodos transitorios o sin slot fijo, con algoritmo de retroceso binario exponencial:
   $$T_{\text{backoff}} = \text{rand}(10, 50) \times 2^c \text{ ms}$$

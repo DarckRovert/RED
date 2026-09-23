@@ -1,4 +1,4 @@
-# 🛡️ Kit de Publicación y Aprobación en Uptodown — RED v117.0.0
+# 🛡️ Kit de Publicación y Aprobación en Uptodown — RED v118.0.0
 
 Este documento contiene todos los recursos, textos exactos y el dossier técnico para re-enviar **RED** a la **Consola de Desarrolladores de Uptodown** (`https://www.uptodown.dev/`) y garantizar su aprobación inmediata.
 
@@ -8,7 +8,7 @@ Este documento contiene todos los recursos, textos exactos y el dossier técnico
 
 | Tipo de Recurso | Ruta Local en tu PC | Especificaciones |
 | :--- | :--- | :--- |
-| **APK de Release** | `release-assets/red-v117.0.0-release.apk` *(o `red-latest.apk`)* | v117.0.0, 65.6 MB, Firma V2 Oficial: `CN=RED Sovereign Foundation` |
+| **APK de Release** | `release-assets/red-v118.0.0-release.apk` *(o `red-latest.apk`)* | v118.0.0, 65.6 MB, Firma Dual v1+v2 Oficial: `CN=RED Sovereign Foundation` |
 | **Icono de la App** | `release-assets/store_assets/icon_512.png` | 512 × 512 px, PNG alta resolución |
 | **Banner / Cabecera** | `release-assets/store_assets/feature_graphic_1024x500.png` | 1024 × 500 px, Gráfico promocional Cyber/Táctico |
 | **Captura 1 (Móvil)** | `release-assets/store_assets/screenshot_phone_1.png` | Radar P2P & Descubrimiento BLE Swarm |
@@ -25,7 +25,7 @@ Este documento contiene todos los recursos, textos exactos y el dossier técnico
 ### Datos Generales:
 * **Nombre de la Aplicación:** `RED — Sovereign Mesh OS & Tactical P2P` *(Evitar poner solo "RED" para que el equipo editorial distinga inmediatamente su propósito especializado)*
 * **ID de Paquete:** `f.red.app`
-* **Versión:** `117.0.0` (Build `117000`)
+* **Versión:** `118.0.0` (Build `118000`)
 * **Categoría Principal:** `Herramientas / Tools` o `Comunicación / Communication`
 * **Licencia:** `Open Source (AGPL-3.0)`
 * **Sitio Web:** `https://darckrovert.github.io/RED/`

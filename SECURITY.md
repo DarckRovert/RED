@@ -1,4 +1,4 @@
-# Política de Seguridad - RED v87.0.0
+# Política de Seguridad - RED v118.0.0
 
 ## Reporte Responsable de Vulnerabilidades
 
@@ -12,7 +12,7 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 
 ### Opción 2: Email Privado & Confidencial
 - Email: `darckrovert@gmail.com`
-- Asunto sugerido: `[SECURITY RED-v87] Vulnerability Report`
+- Asunto sugerido: `[SECURITY RED-v118] Vulnerability Report`
 
 ### Tiempo de Respuesta y SLAs
 
@@ -32,7 +32,7 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 
 ---
 
-## Prácticas de Seguridad en RED v87.0.0
+## Prácticas de Seguridad en RED v118.0.0
 
 ### Criptografía Post-Cuántica & Híbrida
 - ✅ **ML-KEM-768** (NIST FIPS 203) encapsulando secretos compartidos contra computación cuántica futura.
@@ -40,13 +40,14 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 - ✅ **ChaCha20-Poly1305 AEAD** (RFC 8439) con integridad y autenticación de datos asociados (AAD).
 - ✅ **Double Ratchet** con secreto perfecto hacia adelante (PFS) y auto-recuperación de clave (PCS).
 - ✅ **Argon2id** (OWASP 2021) para derivación robusta de claves desde PINs de coacción y PIN maestro.
+- ✅ **Shamir Secret Sharing (SSS):** Reparto de claves en umbral $k$-de-$n$ sobre campo de Galois $GF(2^8)$.
 - ✅ Verificación formal de seguridad mediante **ProVerif 2.0x**.
 
 ### Almacenamiento, Memoria & Zero-Plaintext
 - ✅ Bóveda Sled con cifrado AES-256-GCM y aborto fatal inmediato ante alteración de memoria.
 - ✅ Sanitización de memoria volátil (`zeroize`) en estructuras de claves privadas.
-- ✅ **Zero Plaintext en Disco:** Prohibido almacenar PINs en texto plano en `localStorage`. En Android residen exclusivamente en hardware TEE (Android Keystore / iOS Keychain), y en web se validan mediante hashes criptográficos salteados con memoria volátil `sessionStorage`.
-- ✅ Bóveda señuelo (*Decoy Vault*) configurable y borrado de pánico (*Panic Wipe*) en < 500ms. Erradicación total de PINs estáticos por defecto (CERO fallback 9999, CERO fallback 123456).
+- ✅ **Zero Plaintext en Disco:** Prohibido almacenar PINs en texto plano en `localStorage`. En Android residen exclusivamente en hardware TEE (Android Keystore / StrongBox), y en web se validan mediante hashes criptográficos salteados con memoria volátil `sessionStorage`.
+- ✅ **Protocolo Anti-Coacción & Panic Wipe:** `DuressWipeEngine` con sobreescritura de 3 pasadas estándar militar **DoD 5220.22-M** sobre claves en RAM y purga criptográfica completa de Sled DB en $< 500\text{ ms}$. Cero PINs estáticos por defecto (CERO fallback 9999, CERO fallback 123456).
 
 ### Comunicaciones, API Local & Red Malla
 - ✅ Enrutamiento cebolla (Onion Routing) de 3 saltos para ofuscación de metadatos de transporte.
@@ -56,6 +57,7 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 - ✅ **CORS Blindado:** Orígenes locales explícitos (`localhost`, `127.0.0.1`, `capacitor://localhost`, `https://darckrovert.github.io`). Cero `CorsLayer::permissive()` y erradicación de bypass por `x-forwarded-for`.
 - ✅ **Cero Telemetría Comercial:** Purga absoluta de SDKs publicitarios externos (Google AdMob eliminado; economía 100% soberana P2P Proof-of-Relay).
 - ✅ **Soporte Dual BLE:** Interoperabilidad transparente entre direcciones MAC de Android y UUIDs de iOS CoreBluetooth.
+- ✅ **Resiliencia Espectral LoRa:** Bucle PLL de derivación de reloj Lamport y tiempos de guarda adaptativos (15/25/35 ms) contra desincronización y ataques de repetición.
 
 ---
 
@@ -63,8 +65,8 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 
 | Versión | Lanzamiento | Fin de Soporte (EOL) | Estado |
 |---------|------------|---------------------|--------|
-| **v87.0.0** | 2026-09 | 2027-09 | 🟢 **Soporte Activo / Producción** |
-| **v86.0.0** | 2026-09 | 2027-03 | 🟡 Parches de Seguridad Críticos |
-| **v85.0.0** y anteriores | - | - | 🔴 Fin de Soporte (EOL) |
+| **v118.0.0** | 2026-09 | 2027-09 | 🟢 **Soporte Activo / Producción** |
+| **v117.0.0** | 2026-09 | 2027-03 | 🟡 Parches de Seguridad Críticos |
+| **v116.0.0** y anteriores | - | - | 🔴 Fin de Soporte (EOL) |
 
 *Solo las dos versiones mayores más recientes reciben parches de seguridad y backports.*

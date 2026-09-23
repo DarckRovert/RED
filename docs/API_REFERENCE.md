@@ -1,13 +1,14 @@
-# Referencia Oficial de API REST & SSE — RED v99.0.0
+# Referencia Oficial de API REST & SSE — RED v118.0.0
 
-El nodo nativo de **RED** expone una API HTTP/SSE de ultra-baja latencia sobre la interfaz de bucle invertido (`127.0.0.1:7333`) mediante Axum y Tokio.
+El nodo nativo de **RED** expone una API HTTP/SSE de ultra-baja latencia sobre la interfaz de bucle invertido (`127.0.0.1:7333`) mediante Axum y Tokio, con autenticación Zero-Trust (`X-API-Key`) y mitigación anti-timing.
 
 ---
 
 ## 🔒 Autenticación & CORS
 
 - **Host Local:** `http://127.0.0.1:7333` o `http://localhost:7333`
-- **Orígenes Permitidos:** `http://localhost:3000`, `capacitor://localhost`, `http://localhost`
+- **Orígenes Permitidos:** `http://localhost:3000`, `capacitor://localhost`, `http://localhost`, `https://darckrovert.github.io`
+- **Cabeceras Obligatorias:** `X-API-Key` o `Authorization: Bearer <session_token>`
 - **Control de Frecuencia:** Limitador token bucket configurable contra ráfagas no autorizadas.
 
 ---
@@ -81,7 +82,7 @@ Marca la identidad de un contacto como criptográficamente verificada tras compr
 
 ---
 
-## 👥 Grupos Tácticos P2P
+## 👥 Grupos Tácticos P2P & Canales
 
 ### `GET /api/groups` / `POST /api/groups`
 Lista o crea salas de grupo tácticas descentralizadas.
@@ -89,18 +90,24 @@ Lista o crea salas de grupo tácticas descentralizadas.
 ### `POST /api/groups/:id/send`
 Envía un mensaje de difusión a todos los miembros de un grupo.
 
-### `POST /api/groups/:id/members` / `DELETE /api/groups/:id/members/:hash`
-Gestiona la membresía y roles dentro de la sala grupal.
+### `GET /api/channels/messages` / `POST /api/channels/post`
+Publica o consulta mensajes en canales temáticos abiertos de la malla local.
 
 ---
 
-## 📡 Red P2P, Pares & Apagón (Blackout Mode)
+## 📡 Red P2P, Hardware LoRa & Apagón
 
 ### `GET /api/peers`
 Lista los nodos vecinos conectados directamente mediante TCP, BLE o Wi-Fi Direct.
 
 ### `GET /api/status`
 Estado general del nodo: estado de ejecución, conteo de pares, hash de identidad, versión y altura de la blockchain.
+
+### `GET /api/hardware/lora/ports`
+Detección automática en caliente de módulos LoRa USB conectados (CH340, CP2102, FTDI).
+
+### `GET /api/settings/lora` / `POST /api/settings/lora`
+Consulta o configura la frecuencia LoRa (915/868 MHz), ancho de banda, spreading factor y potencia TX.
 
 ### `GET /api/blackout/status` / `POST /api/blackout/mode`
 Activa el **Protocolo de Apagón**, desconectando de inmediato todos los sockets WAN para operar exclusivamente en modo radio local (mDNS, BLE Mesh, LoRa).
@@ -110,6 +117,29 @@ Inyección de tramas binarias recibidas desde antenas externas (BLE / LoRa) haci
 
 ### `GET /api/network/outbound`
 Canal SSE para que el frontend JS retransmita paquetes generados por Rust hacia el hardware de radio.
+
+---
+
+## 🔐 Seguridad, Criptografía & Anti-Coacción
+
+### `POST /api/crypto/renegotiate`
+Renegociación forzada de claves de sesión efímeras mediante intercambio Diffie-Hellman + ML-KEM-768.
+
+### `POST /api/settings/dms/ping`
+Envío de ping de vida para el interruptor del hombre muerto (Dead Man's Switch).
+
+### `POST /api/settings/dms/panic_wipe`
+Disparo del protocolo de pánico: sobreescritura de 3 pasadas de claves en memoria y purga atómica de la base de datos Sled.
+
+---
+
+## 💰 Economía P2P & Vales Criptográficos
+
+### `GET /api/p2p/wallet`
+Consulta el saldo de tokens RED y la lista de transacciones del libro mayor local.
+
+### `POST /api/p2p/voucher` / `POST /api/p2p/redeem`
+Emite o redime vales de pago firmados con Ed25519 con paridad 1:1 en Soles (PEN).
 
 ---
 
@@ -136,9 +166,6 @@ Crea o consulta alertas de búsqueda de personas vulnerables (Sistema AMBER-RED)
 
 ### `POST /api/voice/send` / `GET /api/voice/bursts`
 Transmisión de ráfagas de voz ultracomprimidas Walkie-Talkie Push-To-Talk.
-
-### `POST /api/ai/copilot` / `POST /api/ai/summarize` / `POST /api/ai/translate`
-Copiloto táctico local, resumidor inteligente de canales y traductor offline multilingüe.
 
 ---
 

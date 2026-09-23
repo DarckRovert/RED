@@ -1,26 +1,27 @@
-# 🛡️ RED OS v98.0.0 — Arquitectura Técnica & Especificación Planetaria
+# 🛡️ RED OS v118.0.0 — Arquitectura Técnica & Especificación Planetaria
 
-> Documento maestro de ingeniería de software y especificación arquitectónica de **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Describe en detalle la topología de capas, los protocolos criptográficos híbridos post-cuánticos, la coordinación espectral LoRa TDMA, el enrutamiento geoespacial Geohash DTN, la flota de repetidores solares autónomos ESP32-S3 y el catálogo consolidado de 62 módulos y modales tácticos.
+> Documento maestro de ingeniería de software y especificación arquitectónica de **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Describe en detalle la topología de 7 capas, los protocolos criptográficos híbridos post-cuánticos (ML-KEM-768), la coordinación espectral LoRa TDMA con sincronización Kuramoto y PLL de reloj Lamport, el enrutamiento geoespacial Geohash DTN, la flota de repetidores solares autónomos ESP32-S3, la capa bio-cibernética conectómica y el catálogo consolidado de 62 módulos tácticos.
 
 ---
 
 ## 📋 Índice General
 
-1. [Mapa Visual 1: Topología Global del Sistema & Conexión de Capas](#1-mapa-visual-1-topología-global-del-sistema--conexión-de-capas)
+1. [Mapa Visual 1: Topología Global del Sistema & Conexión de 7 Capas](#1-mapa-visual-1-topología-global-del-sistema--conexión-de-7-capas)
 2. [Mapa Visual 2: Flujo Criptográfico Híbrido Post-Cuántico (ML-KEM-768 + Double Ratchet)](#2-mapa-visual-2-flujo-criptográfico-híbrido-post-cuántico)
-3. [Mapa Visual 3: Autenticación Soberana, Biometría TEE/WebAuthn & Bóveda Cifrada](#3-mapa-visual-3-autenticación-soberana-biometría-teewebauthn--bóveda-cifrada)
+3. [Mapa Visual 3: Autenticación Soberana, Biometría TEE/WebAuthn & Protocolo Anti-Coacción](#3-mapa-visual-3-autenticación-soberana-biometría-teewebauthn--bóveda-cifrada)
 4. [Mapa Visual 4: Matriz de Enrutamiento Mesh Multi-Transporte & Protocolo ACKs](#4-mapa-visual-4-matriz-de-enrutamiento-mesh-multi-transporte--protocolo-acks)
 5. [Mapa Visual 5: Motor de Inteligencia Artificial Offline & Guardian Security Firewall](#5-mapa-visual-5-motor-de-inteligencia-artificial-offline--guardian-security-firewall)
 6. [Mapa Visual 6: Enrutamiento Geoespacial Geohash & Poda DTN (IndexedDB v2)](#6-mapa-visual-6-enrutamiento-geoespacial-geohash--poda-dtn)
-7. [Mapa Visual 7: Coordinación Espectral LoRa TDMA (Supertrama 2000ms & CSMA/CA)](#7-mapa-visual-7-coordinación-espectral-lora-tdma)
-8. [Mapa Visual 8: Flota de Repetidores Solares Autónomos ESP32-S3 & Hardware SX1262](#8-mapa-visual-8-flota-de-repetidores-solares-autónomos-esp32-s3)
-9. [Resumen de Componentes, Crates & Firmware del Workspace](#9-resumen-de-componentes-crates--firmware-del-workspace)
+7. [Mapa Visual 7: Coordinación Espectral LoRa TDMA (Clock Skew PLL & Sincronización Kuramoto)](#7-mapa-visual-7-coordinación-espectral-lora-tdma)
+8. [Mapa Visual 8: Capa Bio-Cibernética, Conectoma Neuronal & Reflejo de Fibra Gigante](#8-mapa-visual-8-capa-bio-cibernética-conectoma-neuronal--reflejo-de-fibra-gigante)
+9. [Mapa Visual 9: Flota de Repetidores Solares Autónomos ESP32-S3 & Hardware SX1262](#9-mapa-visual-9-flota-de-repetidores-solares-autónomos-esp32-s3)
+10. [Resumen de Componentes, Crates & Firmware del Workspace](#10-resumen-de-componentes-crates--firmware-del-workspace)
 
 ---
 
-## 1. Mapa Visual 1: Topología Global del Sistema & Conexión de Capas
+## 1. Mapa Visual 1: Topología Global del Sistema & Conexión de 7 Capas
 
-El ecosistema RED opera bajo una arquitectura desacoplada de 6 capas horizontales con aislamiento estricto de memoria y enlaces de comunicación IPC seguros:
+El ecosistema RED v118.0.0 opera bajo una arquitectura desacoplada de 7 capas horizontales con aislamiento estricto de memoria y enlaces de comunicación IPC seguros:
 
 ```mermaid
 graph TD
@@ -33,25 +34,41 @@ graph TD
     end
 
     subgraph CAPA_2_ESTADO ["2. CAPA DE GESTIÓN DE ESTADO (Zustand Slices)"]
-        Z_AUTH["authSlice.ts (Sesión & Vault)"]
-        Z_CHAT["chatSlice.ts (Mensajes & Hilos)"]
+        Z_AUTH["authSlice.ts (Sesión, PIN & Bóveda)"]
+        Z_CHAT["chatSlice.ts (Mensajes & Hilos E2E)"]
+        Z_VOICE["voiceSlice.ts (Llamadas Full-Mesh & Vocoder DSP)"]
         Z_CONTACTS["contactsSlice.ts (Directorio Canónico)"]
-        Z_EMERGENCY["emergencySlice.ts (SOS & Triaje)"]
-        Z_SOCIAL["socialSlice.ts (Feed P2P & Canales)"]
-        DISPATCHER["messageDispatcher.ts (Enrutador de Eventos)"]
+        Z_EMERGENCY["emergencySlice.ts (SOS, Triaje & Alertas)"]
+        Z_SOCIAL["socialSlice.ts (Feed P2P & Canales Malla)"]
+        DISPATCHER["messageDispatcher.ts (Enrutador Desacoplado de Eventos)"]
         
         Z_AUTH --> DISPATCHER
         Z_CHAT --> DISPATCHER
+        Z_VOICE --> DISPATCHER
         Z_CONTACTS --> DISPATCHER
         Z_EMERGENCY --> DISPATCHER
         Z_SOCIAL --> DISPATCHER
+    end
+
+    subgraph CAPA_7_BIOCIBERNETICA ["7. CAPA BIO-CIBERNÉTICA & DINÁMICA DE ENJAMBRE"]
+        CONNECTOME["MaleCnsConnectomeHUD (WebGL 3D Atlas Somático 124k)"]
+        GNWT_BUS["GlobalWorkspaceConsciousnessBus (Ignición & Inhibición)"]
+        KURAMOTO["RingAttractorEngine (Sincronización de Fase de Enjambre)"]
+        GIANT_FIBER["GiantFiberReflexEngine (Escape EMCON Silenciado < 15ms)"]
+        LAMPORT_PLL["LamportMeshClockEngine (Clock Skew PLL Tracking)"]
+        DURESS_WIPE["DuressWipeEngine (Purga Anti-Forense DoD 5220.22-M)"]
+        
+        CONNECTOME <--> GNWT_BUS
+        GNWT_BUS <--> KURAMOTO
+        KURAMOTO <--> LAMPORT_PLL
+        GIANT_FIBER --> DURESS_WIPE
     end
 
     subgraph CAPA_3_PUENTE ["3. CAPA DE PUENTE NATIVO & SERVICIOS (Android / Desktop)"]
         CAP_BRIDGE["Capacitor 8.2 Runtime"]
         JNI_PLUGIN["RedNodePlugin.java (JNI Bridge)"]
         BG_SERVICE["RedNodeService.java (Foreground Service 24/7)"]
-        SEC_STORE["SecureStoragePlugin (Android KeyStore / TEE)"]
+        SEC_STORE["SecureStoragePlugin (Android KeyStore / StrongBox TEE)"]
         
         CAP_BRIDGE --> JNI_PLUGIN
         CAP_BRIDGE --> SEC_STORE
@@ -59,10 +76,10 @@ graph TD
     end
 
     subgraph CAPA_4_SERVIDOR ["4. CAPA DE SERVIDOR LOCAL & SEGURIDAD ZERO-TRUST"]
-        AXUM_SRV["Servidor Axum (Loopback 127.0.0.1:7333)"]
-        AUTH_MW["validate_auth_async (X-API-Key Middleware)"]
-        SSE_STREAM["Server-Sent Events (/api/events & /outbound)"]
-        REST_ROUTES["Router REST (/api/messages, /contacts, etc.)"]
+        AXUM_SRV["Servidor Axum (Loopback Estricto 127.0.0.1:7333)"]
+        AUTH_MW["validate_auth_async (X-API-Key / Constant-Time Eq)"]
+        SSE_STREAM["Server-Sent Events (/api/events & /api/network/outbound)"]
+        REST_ROUTES["Router REST (/api/messages, /contacts, /hardware/lora, etc.)"]
         
         AXUM_SRV --> AUTH_MW
         AUTH_MW --> SSE_STREAM
@@ -70,11 +87,11 @@ graph TD
     end
 
     subgraph CAPA_5_RUST_CORE ["5. NÚCLEO RUST & BASE DE DATOS CIFRADA (red_core)"]
-        RUST_STORAGE["Storage Engine (Sled DB con Cifrado Simétrico)"]
-        RUST_CRYPTO["Crypto Engine (ML-KEM-768 + AES-256-GCM)"]
-        RUST_IDENTITY["Identity Manager (did:red: + Proof-of-Work)"]
-        RUST_MESH["Mesh Router (Gossipsub + Onion Routing + Kademlia)"]
-        RUST_BLOCKCHAIN["red_blockchain (PoS Validators & Mempool)"]
+        RUST_STORAGE["Storage Engine (Sled DB con Cifrado Simétrico AES-256)"]
+        RUST_CRYPTO["Crypto Engine (ML-KEM-768 + ChaCha20-Poly1305 + Double Ratchet)"]
+        RUST_IDENTITY["Identity Manager (did:red: + Hashcash Proof-of-Work)"]
+        RUST_MESH["Mesh Router (Gossipsub + Onion Routing 3-Hop + Kademlia)"]
+        RUST_BLOCKCHAIN["red_blockchain (PoS Validators, Merkle Trees & Mempool)"]
         
         RUST_STORAGE <--> RUST_CRYPTO
         RUST_CRYPTO <--> RUST_IDENTITY
@@ -83,7 +100,7 @@ graph TD
     end
 
     subgraph CAPA_6_HARDWARE ["6. CAPA DE HARDWARE & TRANSMISORES DE RADIO"]
-        BLE_RADIO["Bluetooth LE GATT (HCI Directo)"]
+        BLE_RADIO["Bluetooth LE 5.x GATT (HCI Directo)"]
         WIFI_RADIO["WiFi Direct & WebRTC P2P DataChannels"]
         TDMA_LORA["LoRa TDMA Scheduler (SX1262 915 MHz / 868 MHz)"]
         SOLAR_FLEET["Repetidores Solares Autónomos ESP32-S3"]
@@ -94,10 +111,12 @@ graph TD
     end
 
     CAPA_1_PRESENTACION <-->|"Zustand Hooks / Dispatch"| CAPA_2_ESTADO
+    CAPA_2_ESTADO <-->|"Ignición & Telemetría Sincronizada"| CAPA_7_BIOCIBERNETICA
     CAPA_2_ESTADO <-->|"HTTP REST & SSE Events"| CAPA_4_SERVIDOR
     CAPA_3_PUENTE <-->|"Carga libred_mobile.so"| CAPA_5_RUST_CORE
     CAPA_4_SERVIDOR <-->|"Async State & Tokio Channels"| CAPA_5_RUST_CORE
     CAPA_5_RUST_CORE <-->|"Controladores de Radio & Sockets"| CAPA_6_HARDWARE
+    CAPA_7_BIOCIBERNETICA <-->|"Sincronización de Slot & Deriva"| CAPA_6_HARDWARE
 ```
 
 ---
@@ -295,9 +314,9 @@ flowchart TD
 
 ---
 
-## 7. Mapa Visual 7: Coordinación Espectral LoRa TDMA
+## 7. Mapa Visual 7: Coordinación Espectral LoRa TDMA (Clock Skew PLL & Sincronización Kuramoto)
 
-El planificador `LoRaTdmaSchedulerEngine` organiza el espectro sub-GHz en supertramas periódicas de 2000 ms divididas en 10 slots de 200 ms, eliminando colisiones en concentraciones masivas de operadores:
+El planificador `LoRaTdmaSchedulerEngine` y el sintetizador `LamportMeshClockEngine` organizan el espectro sub-GHz en supertramas periódicas de 2000 ms divididas en 10 slots de 200 ms, eliminando colisiones en concentraciones masivas de operadores mediante bucles de enganche de fase (PLL) y tiempos de guarda adaptativos:
 
 ```mermaid
 gantt
@@ -316,20 +335,62 @@ gantt
     Slot 7 (FNV-1a Hash % 8)     :1400, 1600
 
     section Sincronización
-    Slot 8 (Baliza / Clock Sync) :1600, 1800
+    Slot 8 (Baliza / Kuramoto / PLL) :1600, 1800
 
     section Contienda
     Slot 9 (CSMA/CA Backoff)    :1800, 2000
 ```
 
-- **Slots 0–7 (Deterministas):** Asignados de forma matemáticamente reproducible según el DID del nodo. Cero colisiones entre nodos con slots distintos.
-- **Slot 8 (Baliza & Sincronización):** Transmisión de metadatos de sincronización temporal y topología de red.
-- **Slot 9 (Contienda Dinámica):** Acceso aleatorio mediante CSMA/CA con retroceso exponencial (*exponential backoff*) para nodos transitorios.
-- **Bypass de Emergencia SOS (Prioridad >= 9):** Interrumpe de inmediato cualquier supertrama en curso y transmite ráfagas de socorro al aire sin demoras de slot.
+- **Slots 0–7 (Deterministas):** Asignados de forma matemáticamente reproducible según el DID del nodo ($S_{\text{node}} = \text{FNV-1a}(\text{DID}) \pmod 8$). Cero colisiones entre nodos con slots distintos.
+- **Slot 8 (Baliza, Kuramoto & PLL):** Emisión de marcas de tiempo lógicas de Lamport, vectores de fase Kuramoto (`FLAG_KURAMOTO_SYNC = 0x40`) y estado espectral del enjambre.
+- **Slot 9 (Contienda Dinámica):** Acceso aleatorio mediante CSMA/CA con retroceso binario exponencial (*exponential backoff*) para nodos transitorios.
+- **Bypass de Emergencia SOS (Prioridad >= 9):** Interrumpe de inmediato cualquier supertrama en curso y transmite ráfagas de socorro al aire sin demoras de slot ($t = 0$).
+- **Bucle de Enganche de Fase (Clock Skew PLL):** Monitorea continuamente la deriva de cristal (PPM) contra las balizas del Slot 8. Aplica compensación proporcional al reloj local para neutralizar desfasajes térmicos en osciladores de cristal no compensados (TCXO).
+- **Tiempos de Guarda Adaptativos:**
+  - $\text{Guard} = 15\text{ ms}$ para derivas térmicas estables ($< 20\text{ PPM}$).
+  - $\text{Guard} = 25\text{ ms}$ para derivas moderadas ($20 - 50\text{ PPM}$).
+  - $\text{Guard} = 35\text{ ms}$ para condiciones hostiles o alta dispersión ($> 50\text{ PPM}$).
 
 ---
 
-## 8. Mapa Visual 8: Flota de Repetidores Solares Autónomos ESP32-S3
+## 8. Mapa Visual 8: Capa Bio-Cibernética, Conectoma Neuronal & Reflejo de Fibra Gigante
+
+RED v118.0.0 incorpora modelos bio-físicos computacionales inspirados en el conectoma somático completo de *Drosophila melanogaster* (124,289 neuronas y ~30 millones de conexiones sinápticas) para resolver la sincronización colectiva, la ignición atencional y el silenciamiento de pánico:
+
+```mermaid
+flowchart TD
+    subgraph ATENCION_GLOBAL ["Espacio de Trabajo Neuronal Global (GNWT)"]
+        INPUT_EVENTS["Eventos Sensoriales / Paquetes Entrantes"] --> COMPETITION["Inhibición Lateral Competitiva (θ = 0.60)"]
+        COMPETITION --> IGNITION{"¿Supera Umbral de Ignición?"}
+        IGNITION -- "Ruido Sub-Umbral" --> DECAY["Desvanecimiento Exponencial (Filtro Anti-Saturación)"]
+        IGNITION -- "Ignición Consciente" --> BROADCAST["Difusión a Toda la Malla (GNWT Consciousness Bus)"]
+        BROADCAST --> TONONI_PHI["Cálculo de Información Integrada (Φ) & Energía Libre (F)"]
+    end
+
+    subgraph SINCRONIZACION_ENJAMBRE ["Sincronizador de Fase Kuramoto (RingAttractorEngine)"]
+        BROADCAST --> ATTRACTOR["Atractor en Anillo (Ring Attractor Dynamic)"]
+        ATTRACTOR --> KURAMOTO_EQ["Ecuación de Kuramoto: dθ_i/dt = ω_i + (K/N) Σ sin(θ_j - θ_i)"]
+        KURAMOTO_EQ --> PHASE_LOCK["Bloqueo de Fase Colectivo & Estabilidad de Ranura TDMA"]
+    end
+
+    subgraph REFLEJO_ESCAPE ["Reflejo Monosináptico de Fibra Gigante (GiantFiberReflexEngine)"]
+        EW_THREAT["Amenaza EW / Detección de Inhibidor RF / Detección de Coacción"] --> LC4_LPLC2["Neuronas Visuales de Amenaza Rápida (LC4 #10042 / LPLC2 #10043)"]
+        LC4_LPLC2 --> DNP01["Interneurona Gigante Descendente (DNp01 #10001)"]
+        DNP01 --> TTMN["Motoneurona de Salto Tergotrocantéreo (TTMn #10099)"]
+        TTMN --> FAST_SILENCE["⚡ Silenciamiento EMCON / Corte de Emisiones en < 15 ms"]
+        TTMN --> DURESS_TRIGGER{"¿Disparo por PIN de Pánico?"}
+        DURESS_TRIGGER -- Sí --> DURESS_ZEROIZE["🔥 DuressWipeEngine: Sobreescritura DoD 5220.22-M 3-Pass de Claves & Sled DB"]
+    end
+```
+
+- **Visualizador Somático 3D (`MaleCnsConnectomeHUD.tsx`):** Renderizado acelerado por WebGL/Canvas del atlas conectómico somático completo (124,289 neuronas y ~30 millones de sinapsis), permitiendo trazar rutas de flujo informacional táctico en tiempo real.
+- **Teoría del Espacio de Trabajo Global (GNWT):** El bus `GlobalWorkspaceConsciousnessBus` previene que la interfaz y el enrutador colapsen ante avalanchas de alertas mediante competencia por inhibición lateral ($\theta = 0.60$), optimizando la energía libre variacional $F$ de la red.
+- **Dinámica de Atractor en Anillo & Kuramoto:** Sincroniza la frecuencia de reloj interna de los nodos mediante acoplamiento no lineal de fases, asegurando que los operadores móviles converjan en la misma supertrama sin sincronización GPS.
+- **Circuito de Escape de Fibra Gigante:** Emula el arco reflejo monosináptico de colisión para aislar la radio en menos de 15 ms ante detección de guerra electrónica o disparar la purga criptográfica anti-forense.
+
+---
+
+## 9. Mapa Visual 9: Flota de Repetidores Solares Autónomos ESP32-S3
 
 Los repetidores autónomos de campo (`firmware/esp32-repeater/`) operan de manera perpetua en crestas montañosas y techos urbanos alimentados por paneles solares de bajo costo:
 
@@ -344,7 +405,7 @@ graph TD
     MCU -->|"Control TCXO 1.8V"| SX1262
     
     subgraph REPEATER_LOGIC ["Lógica de Firmware Embebido C++"]
-        RX_IRQ["Interrupción RX LoRa"] --> READ_HEADER["Leer Cabecera RED 96 Bytes"]
+        RX_IRQ["Interrupción RX LoRa"] --> READ_HEADER["Leer Cabecera RED 96 Bytes (Magic 0x52454401)"]
         READ_HEADER --> BLOOM_CHECK{"Filtro Bloom 2048-bit: ¿Ya Procesado?"}
         BLOOM_CHECK -- "Sí (Duplicado)" --> DROP["Descartar Inmediatamente"]
         BLOOM_CHECK -- "No (Paquete Nuevo)" --> INSERT_BLOOM["Registrar Hash en Filtro Bloom"]
@@ -358,16 +419,16 @@ graph TD
 
 ---
 
-## 9. Resumen de Componentes, Crates & Firmware del Workspace
+## 10. Resumen de Componentes, Crates & Firmware del Workspace
 
 | Componente | Lenguaje / Framework | Responsabilidad Principal | Ubicación |
 |---|---|---|---|
-| **`red_core`** | Rust (1.80+) | SSOT de modelos de protocolo táctico (`red_core::protocol::tactical`), criptografía post-cuántica, enrutamiento mesh, identidades soberanas. | [core/](core/) |
-| **`red_mobile`** | Rust + JNI | Biblioteca dinámica nativa (`libred_mobile.so`) para Android con servidor Axum embebido. | [red_mobile/](red_mobile/) |
-| **`red_node`** | Rust | Binario ejecutable de escritorio (`red-node.exe`) con CLI, nodo validador y servidor local. | [node/](node/) |
-| **`red_blockchain`** | Rust | Libro mayor distribuido, consenso Proof-of-Stake, validadores y mempool de transacciones. | [blockchain/](blockchain/) |
-| **`client/app`** | Next.js 16 + React 19 | Interfaz táctica SPA (62 modales tácticos), Zustand Slices modulares, WebAuthn Passkeys, Capacitor bridge y LoRa TDMA Engine. | [client/app/](client/app/) |
-| **`firmware/esp32-repeater`** | C++ (PlatformIO / RadioLib) | Firmware para repetidores solares autónomos de campo con microcontrolador ESP32-S3 y transceptor Semtech SX1262. | [firmware/esp32-repeater/](firmware/esp32-repeater/) |
-| **`signaling`** | Node.js | Servidor de señalización WebRTC zero-knowledge y relé ciego para conexiones P2P. | [signaling/](signaling/) |
+| **`red_core`** | Rust (1.80+) | SSOT de modelos de protocolo táctico (`red_core::protocol::tactical`), criptografía post-cuántica (ML-KEM-768), enrutamiento mesh, identidades soberanas. | [core/](core/) |
+| **`red_mobile`** | Rust + JNI | Biblioteca dinámica nativa (`libred_mobile.so`) para Android con servidor Axum embebido en loopback estricto. | [red_mobile/](red_mobile/) |
+| **`red_node`** | Rust | Binario ejecutable de escritorio (`red-node.exe`) con CLI, nodo validador PoS y servidor local REST/SSE. | [node/](node/) |
+| **`red_blockchain`** | Rust | Libro mayor distribuido, consenso Proof-of-Stake, validadores, árboles de Merkle y mempool de transacciones. | [blockchain/](blockchain/) |
+| **`client/app`** | Next.js 16 + React 19 | Interfaz táctica SPA (62 modales tácticos), Zustand Slices modulares, WebAuthn Passkeys, Capacitor bridge, LoRa TDMA Engine, Conectoma MaleCNS y Kuramoto Sync. | [client/app/](client/app/) |
+| **`firmware/esp32-repeater`** | C++ (PlatformIO / RadioLib) | Firmware para repetidores solares autónomos de campo con microcontrolador ESP32-S3 y transceptor Semtech SX1262 (BOM ~$15-20 USD). | [firmware/esp32-repeater/](firmware/esp32-repeater/) |
+| **`signaling`** | Node.js | Servidor de señalización WebRTC zero-knowledge y relé ciego para conexiones P2P Web-to-Mobile. | [signaling/](signaling/) |
 | **`proofs`** | ProVerif | Modelos matemáticos formales de verificación de seguridad, secreto perfecto y anonimato. | [proofs/](proofs/) |
 | **`specs`** | TLA+ | Especificación formal del protocolo de consenso y tolerancia a fallos bizantinos. | [specs/](specs/) |

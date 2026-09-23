@@ -157,12 +157,14 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 
 ## 9. Uso de Radios LoRa, Slots TDMA & Repetidores Solares Autónomos
 
-RED v98.0.0 gestiona automáticamente la radio LoRa conectada (vía USB Serial, Bluetooth o repetidores autónomos de campo):
+RED v118.0.0 gestiona automáticamente la radio LoRa conectada (vía USB Serial, Bluetooth o repetidores autónomos de campo):
 
-1. **Operación Totalmente Transparente:** No necesitas configurar frecuencias ni tiempos de transmisión manualmente. El planificador `LoRaTdmaSchedulerEngine` sincroniza los turnos de emisión automáticamente en ranuras de 200 ms.
+1. **Operación Totalmente Transparente:** No necesitas configurar frecuencias ni tiempos de transmisión manualmente. El planificador `LoRaTdmaSchedulerEngine` sincroniza los turnos de emisión automáticamente en ranuras de 200 ms con corrección de deriva de reloj mediante `LamportMeshClockEngine` (Clock Skew PLL).
 2. **Visualización de Slot en Vivo:** Ve a *Ajustes $\rightarrow$ Red Mesh*. Verás un indicador animado que muestra el número de slot activo en el canal (0 a 9) y el slot que te corresponde según tu identidad digital.
 3. **Enrutamiento por Cuadrantes Geohash:** Si envías un mensaje a un operador distante, la app etiqueta el mensaje con el cuadrante geográfico de destino. Los repetidores solares instalados en montañas y techos retransmitirán el mensaje de salto en salto hasta entregarlo.
 4. **Emisión de Emergencia SOS (Prioridad Absoluta):** Al pulsar el botón rojo **SOS**, la app suspende de inmediato la cola de espera TDMA y transmite tu baliza de socorro en tiempo cero para garantizar tu localización y rescate.
+5. **Conectoma Somático & Sincronización Kuramoto:** En *Centro C4ISR $\rightarrow$ Conectoma Neuronal*, puedes visualizar el flujo de paquetes sobre el atlas 3D somático `MaleCnsConnectomeHUD` y monitorizar la coherencia de fase del enjambre.
+6. **Llamadas de Voz Full-Mesh de Escuadrón:** El botón de llamada grupal en canales tácticos inicia una conferencia de voz full-mesh cifrada de extremo a extremo sin servidor central (`SquadronFullMeshCallModal`), con detección de actividad de voz (VAD) y códec Vocoder a 1.2 kbps.
 
 ---
 
