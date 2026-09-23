@@ -916,17 +916,26 @@ textarea:focus {
 .scroll-container {
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch !important;
-  scroll-behavior: smooth !important;
-  overscroll-behavior-y: contain !important;
+  overscroll-behavior-y: contain;
   touch-action: pan-y !important;
-  scrollbar-width: none !important;
   min-height: 0 !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent !important;
 }
 .scroll-container > * {
-  flex-shrink: 0 !important;
+  flex-shrink: 0;
 }
 .scroll-container::-webkit-scrollbar {
-  display: none !important;
+  width: 4px !important;
+  height: 4px !important;
+  display: block !important;
+}
+.scroll-container::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+.scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18) !important;
+  border-radius: 4px !important;
 }
 
 /* ─── Universal Modal Card Scroll Helper ──────────────────────────────────── */
@@ -935,12 +944,22 @@ textarea:focus {
   max-height: calc(100vh - 32px) !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch !important;
-  scrollbar-width: none !important;
-  overscroll-behavior-y: contain !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent !important;
+  overscroll-behavior-y: contain;
   touch-action: pan-y !important;
 }
 .modal-card-scrollable::-webkit-scrollbar {
-  display: none !important;
+  width: 4px !important;
+  height: 4px !important;
+  display: block !important;
+}
+.modal-card-scrollable::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+.modal-card-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18) !important;
+  border-radius: 4px !important;
 }
 
 /* ─── Responsive Media Bubble Distribution ───────────────────────────────── */

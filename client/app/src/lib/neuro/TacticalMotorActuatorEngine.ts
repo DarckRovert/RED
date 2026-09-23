@@ -51,8 +51,8 @@ export class TacticalMotorActuatorEngine {
   private steeringError = 0.0;
   private currentMode: HapticSteeringMode = 'IDLE';
 
-  // Configuración de vibración
-  private isEnabled = true;
+  // Configuración de vibración (desactivada por defecto, opt-in táctico)
+  private isEnabled = false;
   private isStealthActive = false;
   private guidanceTarget: 'HOME' | 'GOAL' | 'DUAL_COMPASS' = 'HOME';
   private totalPulses = 0;

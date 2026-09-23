@@ -200,7 +200,7 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
         </div>
 
         {/* Body Content */}
-        <div style={{ padding: "18px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div className="scroll-container" style={{ padding: "18px", overflowY: "auto", flex: 1, minHeight: 0, WebkitOverflowScrolling: "touch", display: "flex", flexDirection: "column", gap: "16px" }}>
           
           {/* TAB 1: PARIDADES DE TRUEQUE */}
           {activeTab === 'matrix' && (

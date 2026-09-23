@@ -36,13 +36,15 @@ export const EyesFreeHapticModal: React.FC<EyesFreeHapticModalProps> = ({ isOpen
     return unregister;
   }, [isOpen, isBlackoutActive, onClose]);
 
-  // Suscripciones reactivas
+  // Suscripciones reactivas y activación explícita de vibración háptica mientras el modal está abierto
   useEffect(() => {
     if (!isOpen) return;
+    tacticalMotorActuator.setEnabled(true);
     const unSubC = ringAttractor.subscribe(setCompass);
     const unSubFb = fanShapedBody.subscribe(setFb);
     const unSubM = tacticalMotorActuator.subscribe(setMotor);
     return () => {
+      tacticalMotorActuator.setEnabled(false);
       unSubC();
       unSubFb();
       unSubM();
@@ -98,8 +100,12 @@ export const EyesFreeHapticModal: React.FC<EyesFreeHapticModalProps> = ({ isOpen
       onClick={onClose}
     >
       <div
+        className="modal-card-scrollable scroll-container"
         style={{
           width: '100%', maxWidth: '520px',
+          maxHeight: 'calc(100dvh - 32px)',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
           background: 'linear-gradient(135deg, rgba(14, 20, 42, 0.98) 0%, rgba(6, 10, 24, 0.99) 100%)',
           border: '1.5px solid rgba(0, 229, 255, 0.3)',
           boxShadow: '0 0 35px rgba(0, 229, 255, 0.15), 0 10px 40px rgba(0,0,0,0.9)',

@@ -133,8 +133,12 @@ export const PheromoneBroadcastModal: React.FC<PheromoneBroadcastModalProps> = (
       onClick={onClose}
     >
       <div
+        className="modal-card-scrollable scroll-container"
         style={{
           width: '100%', maxWidth: '480px',
+          maxHeight: 'calc(100dvh - 32px)',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
           background: 'linear-gradient(135deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)',
           border: `1.5px solid ${activeColor}60`,
           boxShadow: `0 0 35px ${activeColor}25, 0 10px 40px rgba(0,0,0,0.9)`,

@@ -130,8 +130,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 </div>
 
                 {/* Tab Content Body */}
-                <div style={{
-                    flex: 1, overflowY: "auto", padding: "24px",
+                <div className="scroll-container" style={{
+                    flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "24px",
                     display: "flex", flexDirection: "column"
                 }}>
                     {activeTab === "appearance" && <AppearanceTab />}

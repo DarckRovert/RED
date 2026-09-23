@@ -1197,7 +1197,18 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       </div>
 
       {architectureMode === "SUBCORTICAL_MALE_CNS" ? (
-        <>
+        <div
+          className="scroll-container"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            display: "flex",
+            flexDirection: "column",
+            background: "#040711"
+          }}
+        >
           {/* Visor 3D Interactivo */}
           <div
         style={{
@@ -1990,10 +2001,23 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
         </div>
       )}
 
-        </>
+        </div>
       ) : architectureMode === "HUMAN_NEOCORTEX" ? (
         /* VISTA DE NEOCORTEZA HUMANA (7 NÚCLEOS COGNITIVOS) */
-        <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "16px", background: "#050811" }}>
+        <div
+          className="scroll-container"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            padding: "16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+            background: "#050811"
+          }}
+        >
           {/* Banner de Estado Cortical Unificado */}
           <div
             style={{
@@ -2217,7 +2241,21 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
         </div>
       ) : (
         /* VISTA DE ESPACIO DE TRABAJO GLOBAL & ENJAMBRE BIO-CIBERNÉTICO (GNWT) */
-        <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "16px", background: "#050811", fontFamily: "monospace" }}>
+        <div
+          className="scroll-container"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            padding: "16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+            background: "#050811",
+            fontFamily: "monospace"
+          }}
+        >
           {/* Banner de Ignición Atencional GNWT */}
           <div
             style={{

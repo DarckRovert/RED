@@ -716,7 +716,7 @@ export default function Sidebar() {
             />
 
             {/* Main Scrollable Content */}
-            <div className="scroll-container" style={{ flex: 1, padding: isFamiliar ? "0px" : "8px 12px 28px 12px", display: "flex", flexDirection: "column", gap: isFamiliar ? "0px" : "6px" }}>
+            <div className="scroll-container" style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: isFamiliar ? "0px" : "8px 12px 28px 12px", display: "flex", flexDirection: "column", gap: isFamiliar ? "0px" : "6px" }}>
                 {activeTab === "chats" ? (
                     <ConversationList
                         filteredConvs={filteredConvs}
