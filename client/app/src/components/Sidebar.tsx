@@ -293,6 +293,8 @@ export default function Sidebar() {
             tools: [
                 { icon: "🤖", label: t('tactical_hubs.tool_copilot'), action: "aiCopilot" },
                 { icon: "🧬", label: t('tactical_hubs.tool_connectome'), action: "maleCnsConnectome" },
+                { icon: "🌌", label: t('tactical_modules.vivarium_title') || "Vivarium 3D", action: "vivarium" },
+                { icon: "🪰", label: t('tactical_modules.habitat_title') || "Hábitat 3D", action: "habitat" },
                 { icon: "👁️", label: t('tactical_hubs.tool_tactical_vision'), action: "tacticalVisionScan" },
                 { icon: "⚡", label: t('tactical_hubs.tool_c4isr_drill'), action: "c4isrEmpDrill" },
                 { icon: "🛡️", label: t('tactical_hubs.tool_guardian'), action: "guardian" },
