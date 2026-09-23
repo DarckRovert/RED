@@ -1,4 +1,4 @@
-# 🔴 RED — Guía de Inicio Rápido (v120.0.0 Sovereign Mesh OS)
+# 🔴 RED — Guía de Inicio Rápido (v121.0.0 Sovereign Mesh OS)
 
 RED es el sistema de comunicaciones tácticas, descentralizadas y cifradas de grado militar más avanzado del mundo, diseñado para operar tanto en redes globales descentralizadas como en aislamiento total fuera de línea (Off-Grid).
 
@@ -53,7 +53,7 @@ cd android
 ### 4. Instalación en Dispositivos Físicos mediante ADB
 ```bash
 # Instalación directa desde la raíz del repositorio:
-adb install -r release-assets/red-v120.0.0-release.apk
+adb install -r release-assets/red-v121.0.0-release.apk
 
 # O instalar el binario recién compilado por Gradle:
 adb install -r client/app/android/app/build/outputs/apk/release/app-release.apk

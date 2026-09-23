@@ -55,7 +55,7 @@ Si el objetivo primordial es **viralizar de inmediato, sin meses de trámites bu
 * **Cómo Publicar (5 minutos):**
   1. Ingresa a [https://catappult.io/](https://catappult.io/) o [https://es.aptoide.com/](https://es.aptoide.com/) y crea una cuenta de desarrollador gratuita con tu correo.
   2. Crea tu tienda (ejemplo: `red-sovereign`).
-  3. Sube el archivo `release-assets/red-v120.0.0-release.apk` (o `red-latest.apk`).
+  3. Sube el archivo `release-assets/red-v121.0.0-release.apk` (o `red-latest.apk`).
   4. Pega los metadatos del Kit de Tienda (Sección 4).
   5. ¡Listo! Tu app queda disponible mundialmente para descarga directa o mediante la app de Aptoide.
 
@@ -246,7 +246,7 @@ RED（Sovereign Tactical Mesh OS）是一款专为在完全断网和极端环境
 ## 📝 5. Hoja de Ruta Inmediata Recomendada
 
 1. **Paso Inmediato (Hoy mismo, 10 minutos):**
-   * Crear la cuenta en **Aptoide** ([https://catappult.io/](https://catappult.io/)) y subir `release-assets/red-v120.0.0-release.apk` (o `red-latest.apk`).
+   * Crear la cuenta en **Aptoide** ([https://catappult.io/](https://catappult.io/)) y subir `release-assets/red-v121.0.0-release.apk` (o `red-latest.apk`).
    * Enviar la ficha técnica a **Uptodown** ([https://developers.uptodown.com/](https://developers.uptodown.com/)).
 2. **Paso Comunitario (24-48 horas):**
    * Crear un canal de difusión en Telegram y subir el archivo `red-latest.apk` junto con el enlace a la landing page ([https://darckrovert.github.io/RED/](https://darckrovert.github.io/RED/)).
@@ -269,16 +269,16 @@ Para garantizar que cada versión publicada en el repositorio de GitHub se propa
 4. Guarda el secreto.
 
 ### B. Flujo Automatizado (`.github/workflows/publish-aptoide.yml`)
-* **Disparador Automático:** Cada vez que publicas un nuevo Release en GitHub (ej. `v120.0.0`), el flujo se activa, extrae las notas de lanzamiento, deriva la URL del APK binario y ejecuta el script publicador.
+* **Disparador Automático:** Cada vez que publicas un nuevo Release en GitHub (ej. `v121.0.0`), el flujo se activa, extrae las notas de lanzamiento, deriva la URL del APK binario y ejecuta el script publicador.
 * **Disparador Manual (Workflow Dispatch):** Puedes disparar una sincronización en cualquier momento desde la pestaña **Actions** > **Sync Release to Aptoide Connect** > **Run workflow** especificando la etiqueta de versión deseada.
 
 ### C. Ejecución Local Directa por Terminal (Opcional)
 Si deseas sincronizar o enviar una versión directamente desde tu máquina local sin esperar al runner de GitHub:
 ```bash
-python scripts/publish_to_aptoide.py --tag v120.0.0 --notes "Release v120.0.0: Vivarium Biocibernético 3D & Digital Twin Edition"
+python scripts/publish_to_aptoide.py --tag v121.0.0 --notes "Release v121.0.0: Hábitat Digital Biocibernético In-Silico & Ecosistema Multi-Cerebro"
 ```
 Para simular el armado del paquete sin emitir peticiones a la red:
 ```bash
-python scripts/publish_to_aptoide.py --tag v120.0.0 --dry-run
+python scripts/publish_to_aptoide.py --tag v121.0.0 --dry-run
 ```
 

@@ -1,4 +1,4 @@
-# 🍏 Guía Técnica de Integración y Despliegue en iOS — RED v120.0.0
+# 🍏 Guía Técnica de Integración y Despliegue en iOS — RED v121.0.0
 
 Este documento detalla la arquitectura de integración, configuración de permisos en `Info.plist`, enlace estático de la biblioteca nativa en Rust (`libred_mobile.a`) y compilación para iOS y iPadOS mediante Capacitor 8 y Xcode 15/16.
 

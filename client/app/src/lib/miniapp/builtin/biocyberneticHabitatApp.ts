@@ -77,7 +77,7 @@ export const biocyberneticHabitatAppBundle: RedAppBundle = {
     </div>
 
     <footer class="app-footer">
-        <span>RED Sovereign OS &middot; Mini-App Biocibernética v120.0.0</span>
+        <span>RED Sovereign OS &middot; Mini-App Biocibernética v121.0.0</span>
         <span id="footer-metrics">Fick Grid: 64x64 &middot; Tick: 60Hz &middot; STDP: Activo</span>
     </footer>
 

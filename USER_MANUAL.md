@@ -162,7 +162,7 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 
 ## 9. Uso de Radios LoRa, Slots TDMA & Repetidores Solares Autónomos
 
-RED v120.0.0 gestiona automáticamente la radio LoRa conectada (vía USB Serial, Bluetooth o repetidores autónomos de campo):
+RED v121.0.0 gestiona automáticamente la radio LoRa conectada (vía USB Serial, Bluetooth o repetidores autónomos de campo):
 
 1. **Operación Totalmente Transparente:** No necesitas configurar frecuencias ni tiempos de transmisión manualmente. El planificador `LoRaTdmaSchedulerEngine` sincroniza los turnos de emisión automáticamente en ranuras de 200 ms con corrección de deriva de reloj mediante `LamportMeshClockEngine` (Clock Skew PLL).
 2. **Visualización de Slot en Vivo:** Ve a *Ajustes $\rightarrow$ Red Mesh*. Verás un indicador animado que muestra el número de slot activo en el canal (0 a 9) y el slot que te corresponde según tu identidad digital.

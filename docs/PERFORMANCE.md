@@ -1,4 +1,4 @@
-# Métricas de Rendimiento & Baselines — RED v120.0.0
+# Métricas de Rendimiento & Baselines — RED v121.0.0
 
 Este documento formaliza las mediciones empíricas de rendimiento, latencia de algoritmos criptográficos, rendimiento de la red de malla, sincronización Kuramoto y consumo energético en dispositivos móviles reales.
 

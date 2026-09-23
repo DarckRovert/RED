@@ -1,4 +1,4 @@
-# 🛡️ Kit de Publicación y Aprobación en Uptodown — RED v120.0.0
+# 🛡️ Kit de Publicación y Aprobación en Uptodown — RED v121.0.0
 
 Este documento contiene todos los recursos, textos exactos y el dossier técnico para re-enviar **RED** a la **Consola de Desarrolladores de Uptodown** (`https://www.uptodown.dev/`) y garantizar su aprobación inmediata.
 
@@ -8,7 +8,7 @@ Este documento contiene todos los recursos, textos exactos y el dossier técnico
 
 | Tipo de Recurso | Ruta Local en tu PC | Especificaciones |
 | :--- | :--- | :--- |
-| **APK de Release** | `release-assets/red-v120.0.0-release.apk` *(o `red-latest.apk`)* | v120.0.0, 65.8 MB, Firma Dual v1+v2 Oficial: `CN=RED Sovereign Foundation` |
+| **APK de Release** | `release-assets/red-v121.0.0-release.apk` *(o `red-latest.apk`)* | v121.0.0, 69.1 MB, Firma Dual v1+v2 Oficial: `CN=RED Sovereign Foundation` |
 | **Icono de la App** | `release-assets/store_assets/icon_512.png` | 512 × 512 px, PNG alta resolución |
 | **Banner / Cabecera** | `release-assets/store_assets/feature_graphic_1024x500.png` | 1024 × 500 px, Gráfico promocional Cyber/Táctico |
 | **Captura 1 (Móvil)** | `release-assets/store_assets/screenshot_phone_1.png` | Radar P2P & Descubrimiento BLE Swarm |
@@ -79,7 +79,7 @@ CARACTERÍSTICAS PRINCIPALES:
 ```text
 Estimado equipo editorial de Uptodown:
 
-Agradecemos su revisión. Adjuntamos la versión de producción v120.0.0 de RED. La versión rechazada anteriormente (v108) era una versión preliminar desactualizada que no reflejaba la estabilidad actual del software.
+Agradecemos su revisión. Adjuntamos la versión de producción v121.0.0 de RED. La versión rechazada anteriormente (v108) era una versión preliminar desactualizada que no reflejaba la estabilidad actual del software.
 
 RED es un Sistema Operativo de Comunicaciones en Malla y Navegación Off-Grid, diseñado específicamente para funcionar SIN CONEXIÓN A INTERNET y SIN SERVIDORES mediante enlaces directos entre dispositivos (Bluetooth LE, Wi-Fi Direct y LoRa).
 
@@ -92,7 +92,7 @@ Al probar la app en una oficina o dispositivo individual (donde no hay otros nod
    - Toque "RADAR": Verá el motor de escaneo BLE buscando paquetes de radio en radiofrecuencia local.
    - Toque "COPILOTO IA": Pruebe el asistente táctico que corre en local en la CPU del teléfono sin consultar ninguna API en la nube.
    - Toque "CRIPTO / BÓVEDA": Verifique la generación criptográfica de claves post-cuánticas Kyber-768 (ML-KEM) y Shamir Secret Sharing.
-   - Toque "CONECTOMA / VIVARIUM 3D": Observe el gemelo digital en tiempo real y la arena entorrinal WebGL 3D a 60 FPS.
+   - Toque "CONECTOMA / VIVARIUM / HÁBITAT 3D": Observe el ecosistema biocibernético in-silico, el gemelo digital en tiempo real y la arena entorrinal WebGL 3D a 60 FPS.
 
 JUSTIFICACIÓN DE PERMISOS DE ANDROID:
 - Bluetooth (BLUETOOTH_SCAN, CONNECT, ADVERTISE) y Ubicación: Requeridos obligatoriamente por el sistema operativo Android para emitir y recibir tramas BLE de malla entre dispositivos cercanos sin conexión a internet.
@@ -110,7 +110,7 @@ La aplicación es completamente de código abierto bajo licencia AGPL-3.0 y cump
 2. Ve a la sección **Apps** y haz clic sobre **RED**.
 3. Cambia el estado a **Editar / Draft** (Borrador).
 4. Reemplaza el APK anterior subiendo el archivo:
-   `release-assets/red-v120.0.0-release.apk`
+   `release-assets/red-v121.0.0-release.apk`
 5. Actualiza los assets gráficos con los archivos de `release-assets/store_assets/` (Icono, Feature Graphic y Screenshots).
 6. Actualiza el título a `RED — Sovereign Mesh OS & Tactical P2P` y pega la descripción oficial.
 7. En el apartado de comentarios o notas al editor, pega las **"Notas para el Revisor"** del Punto 3.
