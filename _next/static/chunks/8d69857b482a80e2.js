@@ -114,9 +114,9 @@ ${i}`):a.includes("<html>")?a.replace("<html>",`<html>
 <head>
 ${i}
 </head>`):`${i}
-${a}`}static createBlobUrl(e){let t=new Blob([this.compileBundleToHtml(e)],{type:"text/html;charset=utf-8"});return URL.createObjectURL(t)}static revokeBlobUrl(e){if(e&&e.startsWith("blob:"))try{URL.revokeObjectURL(e)}catch{}}static exportBundle(e,a){let i=Object.keys(a).sort(),r=new TextEncoder,o="";for(let e of i)o+=`${e}:${a[e]||""}
-`;let n=Array.from((0,t.sha256)(r.encode(o))).map(e=>e.toString(16).padStart(2,"0")).join(""),s=`sha256_${n}_${i.length}`;return JSON.stringify({manifest:{...e,updatedAt:Date.now(),integrityDigest:s},files:a})}static importBundle(e){try{let a=JSON.parse(e);if(!a.manifest||!a.manifest.id||!a.files)throw Error("El archivo .redapp no tiene un manifiesto o archivos válidos.");if(a.manifest.integrityDigest){let e=Object.keys(a.files).sort(),i=new TextEncoder,r="";for(let t of e)r+=`${t}:${a.files[t]||""}
-`;let o=(0,t.sha256)(i.encode(r)),n=Array.from(o).map(e=>e.toString(16).padStart(2,"0")).join(""),s=`sha256_${n}_${e.length}`;a.manifest.integrityDigest!==s&&console.warn(`[RedAppBundleEngine] Advertencia de integridad en paquete ${a.manifest.id}`)}return a}catch(e){throw Error(`Error al procesar paquete .redapp: ${e.message}`)}}}e.s(["RedAppBundleEngine",()=>a])},19439,e=>{"use strict";var t=e.i(67034);let a={manifest:{id:"org.redmesh.bazaar",name:"RED Bazaar P2P",version:"1.0.0",description:"Mercado descentralizado de suministros y trueque con pagos Multi-Rail (PayPal, USDT, Vouchers).",author:{name:"RED Core Team",did:"did:red:0000000000000000000000000000000000000000000000000000000000000001"},icon:"🛒",category:"market",permissions:["identity","mesh_pubsub","payments","storage"],entryPoint:"index.html",createdAt:Date.now(),updatedAt:Date.now()},files:{"index.html":`<!DOCTYPE html>
+${a}`}static createBlobUrl(e){let t=new Blob([this.compileBundleToHtml(e)],{type:"text/html;charset=utf-8"});return URL.createObjectURL(t)}static revokeBlobUrl(e){if(e&&e.startsWith("blob:"))try{URL.revokeObjectURL(e)}catch{}}static exportBundle(e,a){let i=Object.keys(a).sort(),o=new TextEncoder,r="";for(let e of i)r+=`${e}:${a[e]||""}
+`;let n=Array.from((0,t.sha256)(o.encode(r))).map(e=>e.toString(16).padStart(2,"0")).join(""),s=`sha256_${n}_${i.length}`;return JSON.stringify({manifest:{...e,updatedAt:Date.now(),integrityDigest:s},files:a})}static importBundle(e){try{let a=JSON.parse(e);if(!a.manifest||!a.manifest.id||!a.files)throw Error("El archivo .redapp no tiene un manifiesto o archivos válidos.");if(a.manifest.integrityDigest){let e=Object.keys(a.files).sort(),i=new TextEncoder,o="";for(let t of e)o+=`${t}:${a.files[t]||""}
+`;let r=(0,t.sha256)(i.encode(o)),n=Array.from(r).map(e=>e.toString(16).padStart(2,"0")).join(""),s=`sha256_${n}_${e.length}`;a.manifest.integrityDigest!==s&&console.warn(`[RedAppBundleEngine] Advertencia de integridad en paquete ${a.manifest.id}`)}return a}catch(e){throw Error(`Error al procesar paquete .redapp: ${e.message}`)}}}e.s(["RedAppBundleEngine",()=>a])},19439,e=>{"use strict";var t=e.i(67034);let a={manifest:{id:"org.redmesh.bazaar",name:"RED Bazaar P2P",version:"1.0.0",description:"Mercado descentralizado de suministros y trueque con pagos Multi-Rail (PayPal, USDT, Vouchers).",author:{name:"RED Core Team",did:"did:red:0000000000000000000000000000000000000000000000000000000000000001"},icon:"🛒",category:"market",permissions:["identity","mesh_pubsub","payments","storage"],entryPoint:"index.html",createdAt:Date.now(),updatedAt:Date.now()},files:{"index.html":`<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -610,7 +610,7 @@ function calcAntenna() {
     document.getElementById('antenna-result').textContent = \`\${cm} cm / elemento\`;
 }
 
-window.addEventListener('DOMContentLoaded', init);`}},r={manifest:{id:"org.redmesh.battleship",name:"Batalla Naval P2P",version:"1.0.0",description:"Juego táctico multijugador en tiempo real por radio y Bluetooth sin conexión a internet.",author:{name:"RED Tactical Gaming",did:"did:red:0000000000000000000000000000000000000000000000000000000000000003"},icon:"🚢",category:"games",permissions:["identity","mesh_pubsub","storage"],entryPoint:"index.html",createdAt:Date.now(),updatedAt:Date.now()},files:{"index.html":`<!DOCTYPE html>
+window.addEventListener('DOMContentLoaded', init);`}},o={manifest:{id:"org.redmesh.battleship",name:"Batalla Naval P2P",version:"1.0.0",description:"Juego táctico multijugador en tiempo real por radio y Bluetooth sin conexión a internet.",author:{name:"RED Tactical Gaming",did:"did:red:0000000000000000000000000000000000000000000000000000000000000003"},icon:"🚢",category:"games",permissions:["identity","mesh_pubsub","storage"],entryPoint:"index.html",createdAt:Date.now(),updatedAt:Date.now()},files:{"index.html":`<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -790,4 +790,451 @@ function log(msg) {
     box.scrollTop = box.scrollHeight;
 }
 
-window.addEventListener('DOMContentLoaded', init);`}},o="red_installed_miniapps_v1";class n{static instance=null;apps=new Map;constructor(){this.loadFromStorage(),this.ensureBuiltinApps()}static getInstance(){return n.instance||(n.instance=new n),n.instance}loadFromStorage(){try{let e=localStorage.getItem(o);e&&JSON.parse(e).forEach(e=>this.apps.set(e.manifest.id,e))}catch(e){console.error("[RedAppRegistry] Error loading apps from storage:",e)}}saveToStorage(){try{let e=Array.from(this.apps.values());localStorage.setItem(o,JSON.stringify(e))}catch(e){console.error("[RedAppRegistry] Error saving apps to storage:",e)}}ensureBuiltinApps(){[a,i,r].forEach(e=>{let t=this.apps.get(e.manifest.id);t?(t.manifest=e.manifest,t.bundle=e,t.isBuiltin=!0):this.apps.set(e.manifest.id,{manifest:e.manifest,bundle:e,installedAt:Date.now(),lastOpenedAt:Date.now(),grantedPermissions:e.manifest.permissions,isBuiltin:!0})}),this.saveToStorage()}getAllApps(){return Array.from(this.apps.values()).sort((e,t)=>t.lastOpenedAt-e.lastOpenedAt)}getApp(e){return this.apps.get(e)}installApp(e,t){let a={manifest:e.manifest,bundle:e,installedAt:Date.now(),lastOpenedAt:Date.now(),grantedPermissions:t||e.manifest.permissions,isBuiltin:!1};return this.apps.set(e.manifest.id,a),this.saveToStorage(),a}uninstallApp(e){let t=this.apps.get(e);if(t?.isBuiltin)return console.warn("No se pueden desinstalar aplicaciones nativas del sistema."),!1;let a=this.apps.delete(e);return a&&this.saveToStorage(),a}updatePermissions(e,t){let a=this.apps.get(e);a&&(a.grantedPermissions=t,this.saveToStorage())}touchApp(e){let t=this.apps.get(e);t&&(t.lastOpenedAt=Date.now(),this.saveToStorage())}exportAppPackage(e){let a=this.apps.get(e);if(!a)return null;let i=JSON.stringify({format:"RED_APP_PACKAGE_V1",exportedAt:Date.now(),bundle:a.bundle,manifest:a.manifest}),r="u">typeof btoa?btoa(unescape(encodeURIComponent(i))):t.Buffer.from(i).toString("base64");return`RED_APP_V1:${r}`}importAppPackage(e){try{let a=e.trim();a.startsWith("RED_APP_V1:")&&(a=a.substring(11));let i="u">typeof atob?decodeURIComponent(escape(atob(a))):t.Buffer.from(a,"base64").toString("utf8"),r=JSON.parse(i);if(!r.bundle||!r.bundle.manifest||!r.bundle.manifest.id||!r.bundle.html)return{bundle:null,isValid:!1,error:"Estructura de paquete inválida o manifiesto corrupto."};let o=r.bundle.manifest;if(!o.name||!o.version)return{bundle:null,isValid:!1,error:"El manifiesto no especifica nombre o versión."};if(!/^[a-zA-Z0-9_.-]{3,64}$/.test(o.id))return{bundle:null,isValid:!1,error:"El identificador de la aplicación debe ser alfanumérico (3-64 caracteres)."};if(!/^\d+\.\d+\.\d+/.test(o.version))return{bundle:null,isValid:!1,error:"La versión de la aplicación debe seguir el formato SemVer (ej: 1.0.0)."};return{bundle:r.bundle,isValid:!0}}catch(e){return{bundle:null,isValid:!1,error:e.message||"Error al decodificar paquete de aplicación."}}}}let s=n.getInstance();e.s(["redAppRegistry",0,s],19439)},91596,77319,e=>{"use strict";var t=e.i(85067),a=e.i(69104),i=e.i(55211),r=e.i(60352),o=e.i(8901),n=e.i(13045),s=e.i(83036),l=e.i(28719);class d{iframeWindow=null;manifest;context;meshSubscriptions=new Map;storagePrefix;unsubscribeMeshRouter=null;constructor(e,t,a){this.manifest=e,this.context=t,this.iframeWindow=a||null,this.storagePrefix=`red_app_storage_${e.id}_`}setIframeWindow(e){this.iframeWindow=e}updateGrantedPermissions(e){this.context.grantedPermissions=e}setupMeshRouterListener(){this.unsubscribeMeshRouter||(this.unsubscribeMeshRouter=a.meshRouter.onLocalDelivery(e=>{try{if(!e||!e.payload)return;let t=new TextDecoder().decode(e.payload);if(!t.startsWith("{"))return;let a=JSON.parse(t);if(a.appId===this.manifest.id)if("APP_DATA"===a.type){let t=a.topic||"default";(this.meshSubscriptions.has(t)||this.meshSubscriptions.has("*"))&&this.sendEvent("mesh.message",{topic:t,from:e.sender||"unknown",payload:a.payload,timestamp:a.timestamp||e.timestamp||Date.now()})}else"APP_DATA_DIRECT"===a.type&&this.sendEvent("mesh.directMessage",{from:e.sender||"unknown",payload:a.payload,timestamp:a.timestamp||e.timestamp||Date.now()})}catch{}}))}async handleMessage(e){let t=e.data;if(t&&"RED_SDK"===t.channel&&"RED_SDK_REQUEST"===t.type){if(t.appId!==this.manifest.id)return void this.sendResponse(t.requestId,!1,void 0,"App ID mismatch");try{let e=await this.dispatchMethod(t.method,t.params);this.sendResponse(t.requestId,!0,e)}catch(e){console.error(`[RedSDKBridge] Error executing ${t.method} for ${this.manifest.id}:`,e),this.sendResponse(t.requestId,!1,void 0,e.message||"Internal error")}}}async dispatchMethod(e,d){switch(e){case"identity.getProfile":return this.requirePermission("identity"),{did:this.context.userDid,nickname:this.context.nickname,publicKey:this.context.publicKey,appId:this.manifest.id};case"identity.signData":{this.requirePermission("identity");let e=d?.data||"",t=Date.now(),a=localStorage.getItem("red_private_key")||localStorage.getItem("red_mnemonic_seed")||localStorage.getItem("red_signing_key")||`${this.context.userDid}_vault_key`,i=new TextEncoder,r=await crypto.subtle.importKey("raw",i.encode(a),{name:"HMAC",hash:"SHA-256"},!1,["sign"]),o=i.encode(`${this.context.userDid}:${t}:${e}`),n=Array.from(new Uint8Array(await crypto.subtle.sign("HMAC",r,o))).map(e=>e.toString(16).padStart(2,"0")).join("");return{signature:`ed25519_hmac_sha256:${n}`,signerDid:this.context.userDid,timestamp:t,payload:e}}case"identity.verifySignature":{let{signature:e,payload:t,timestamp:a,signerPublicKey:i}=d||{};if(!e||!t||!a)return{valid:!1,timestamp:Date.now()};try{if(e.startsWith("ed25519_hmac_sha256:")||e.startsWith("hmac_sha256:")){let r=e.startsWith("ed25519_hmac_sha256:")?"ed25519_hmac_sha256:":"hmac_sha256:",o=localStorage.getItem("red_private_key")||localStorage.getItem("red_mnemonic_seed")||localStorage.getItem("red_signing_key")||`${this.context.userDid}_vault_key`,n=new TextEncoder,s=await crypto.subtle.importKey("raw",n.encode(i||o),{name:"HMAC",hash:"SHA-256"},!1,["verify"]),l=new Uint8Array(e.slice(r.length).match(/.{1,2}/g).map(e=>parseInt(e,16))),d=n.encode(`${this.context.userDid}:${a}:${t}`);return{valid:await crypto.subtle.verify("HMAC",s,l,d),timestamp:Date.now()}}return{valid:!1,timestamp:Date.now(),reason:"unknown_signature_scheme"}}catch{return{valid:!1,timestamp:Date.now(),reason:"verification_error"}}}case"mesh.broadcast":{this.requirePermission("mesh_pubsub"),this.setupMeshRouterListener();let e=d?.topic||"default",t=d?.payload,r="u">typeof crypto&&crypto.getRandomValues?Array.from(crypto.getRandomValues(new Uint8Array(4))).map(e=>e.toString(16).padStart(2,"0")).join(""):Date.now().toString(36),o=`mesh_app_${Date.now()}_${r}`,n={type:"APP_DATA",appId:this.manifest.id,msgId:o,topic:e,payload:t,timestamp:Date.now()},s=new TextEncoder().encode(JSON.stringify(n)),l=(0,i.createPacket)(this.context.userDid,"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",s);return await a.meshRouter.broadcast((0,i.encode)(l)),{messageId:o,status:"broadcasted"}}case"mesh.subscribe":{this.requirePermission("mesh_pubsub"),this.setupMeshRouterListener();let e=d?.topic||"default";return this.meshSubscriptions.set(e,!0),{subscribed:!0,topic:e}}case"mesh.sendDirect":{this.requirePermission("mesh_direct"),this.setupMeshRouterListener();let e=d?.targetDID;if(!e)throw Error("targetDID es requerido para sendDirect.");let t={type:"APP_DATA_DIRECT",appId:this.manifest.id,target:e,payload:d?.payload,timestamp:Date.now()},i=new TextEncoder().encode(JSON.stringify(t));return{status:await a.meshRouter.send(e,i),targetDID:e}}case"payments.requestPayment":return this.requirePermission("payments"),await t.redPaymentGateway.processPayment(d,this.context.userDid);case"payments.getBalance":let c=r.Web3BridgeEngine.getInstance();return{voucherBalance:o.MonetizationEngine.getProStatus().credits,web3:c.getState()};case"storage.getItem":this.requirePermission("storage");let p=localStorage.getItem(this.storagePrefix+d?.key);return p?JSON.parse(p):null;case"storage.setItem":if(this.requirePermission("storage"),!d?.key)throw Error("Key es requerida");return localStorage.setItem(this.storagePrefix+d.key,JSON.stringify(d.value)),{success:!0};case"storage.removeItem":return this.requirePermission("storage"),localStorage.removeItem(this.storagePrefix+d?.key),{success:!0};case"storage.clear":return this.requirePermission("storage"),Object.keys(localStorage).forEach(e=>{e.startsWith(this.storagePrefix)&&localStorage.removeItem(e)}),{success:!0};case"ai.prompt":{this.requirePermission("ai");let e=d?.query||"";if(!e.trim())return{response:"Consulta vacía.",model:"RED-LocalAI-Engine",latencyMs:0};let t=Date.now();try{let a=await (0,n.queryAICopilot)(e,this.manifest.name);return{response:a.answer,model:a.source||"RED-Unified-AI",topicCategory:a.topic_category,confidence:.95,latencyMs:a.execution_time_ms||Date.now()-t}}catch(e){return console.warn("[RedSDKBridge] queryAICopilot fallback error:",e),{response:`[RED AI]: No se pudo procesar la inferencia (${e?.message||"error"}).`,model:"RED-Local-Fallback",latencyMs:Date.now()-t}}}case"sensors.getLocation":this.requirePermission("sensors");try{let e=await l.TacticalLocationEngine.getEmergencyLocation(5e3);if(e&&l.TacticalLocationEngine.isValidCoordinates(e.lat,e.lon))return{latitude:e.lat,longitude:e.lon,altitude:e.alt??null,accuracy:e.accuracy??null,timestamp:e.timestamp}}catch{}return{latitude:null,longitude:null,altitude:null,accuracy:null,timestamp:Date.now()};case"ui.showToast":{let e=String(d?.message||d||""),t=d?.type||"info";return e&&("success"===t?s.toast.success(e):"error"===t?s.toast.error(e):"warning"===t?s.toast.warning(e):s.toast.info(e)),{shown:!0}}default:throw Error(`M\xe9todo no soportado: ${e}`)}}requirePermission(e){if(!this.context.grantedPermissions.has(e))throw Error(`Permiso denegado: La aplicaci\xf3n '${this.manifest.name}' no tiene concedido el permiso '${e}'.`)}sendResponse(e,t,a,i){if(!this.iframeWindow)return;let r={channel:"RED_SDK",type:"RED_SDK_RESPONSE",requestId:e,appId:this.manifest.id,success:t,data:a,error:i};this.iframeWindow.postMessage(r,"*")}sendEvent(e,t){if(!this.iframeWindow)return;let a={channel:"RED_SDK",type:"RED_SDK_EVENT",appId:this.manifest.id,eventName:e,payload:t};this.iframeWindow.postMessage(a,"*")}destroy(){this.unsubscribeMeshRouter&&(this.unsubscribeMeshRouter(),this.unsubscribeMeshRouter=null),this.meshSubscriptions.clear(),this.iframeWindow=null}}e.s(["RedSDKBridge",()=>d],91596);var c=e.i(43476),p=e.i(71645),m=e.i(97631),u=e.i(26965),g=e.i(71164);e.s(["UniversalCheckoutModal",0,({intent:e,buyerDid:a,onClose:i,onSuccess:n})=>{let{t:l}=(0,m.useTranslation)(),d=e.supportedRails&&e.supportedRails.length>0?e.supportedRails:["paypal","web3_usdt","lightning","offgrid_voucher"],[f,b]=(0,p.useState)(d[0]),[h,x]=(0,p.useState)(!1),[y,v]=(0,p.useState)(null),[w,S]=(0,p.useState)(null);(0,p.useEffect)(()=>u.BackHandlerRegistry.register(()=>!h&&(g.TacticalAudioEngine.playTap(),i(),!0)),[h,i]);let D=o.MonetizationEngine.getProStatus().credits;r.Web3BridgeEngine.getInstance().getState();let E=async()=>{x(!0),v(null);try{let i;switch(f){case"paypal":i=await t.redPaymentGateway.executePayPalPayment(e,a);break;case"web3_usdt":i=await t.redPaymentGateway.executeWeb3Payment(e,a);break;case"lightning":i=await t.redPaymentGateway.executeLightningPayment(e,a);break;case"offgrid_voucher":i=await t.redPaymentGateway.executeOffgridVoucherPayment(e,a);break;default:throw Error("Riel de pago no soportado.")}x(!1),S(i),g.TacticalAudioEngine.playRogerBeep(),s.toast.success("✅ ¡Pago procesado y firmado criptográficamente!")}catch(e){x(!1),v(e.message||"Error al procesar el pago."),g.TacticalAudioEngine.playWarning()}},I=e=>{try{let t=document.createElement("textarea");t.value=e,t.style.position="fixed",t.style.opacity="0",document.body.appendChild(t),t.select(),document.execCommand("copy"),document.body.removeChild(t),s.toast.info("📋 Hash de transacción copiado al portapapeles.")}catch{s.toast.error("Error al copiar al portapapeles.")}};return(0,c.jsx)("div",{style:{position:"fixed",inset:0,zIndex:9999,background:"rgba(2, 4, 10, 0.90)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",display:"flex",alignItems:"center",justifyContent:"center",padding:"12px",userSelect:"none"},children:(0,c.jsxs)("div",{style:{width:"100%",maxWidth:"460px",borderRadius:"20px",overflow:"hidden",boxShadow:"0 16px 50px rgba(0,0,0,0.85), 0 0 30px rgba(0, 230, 118, 0.15)",display:"flex",flexDirection:"column",border:"1.5px solid rgba(0, 230, 118, 0.35)",background:"linear-gradient(180deg, rgba(14,16,30,0.98) 0%, rgba(8,10,18,0.99) 100%)"},children:[(0,c.jsxs)("div",{style:{padding:"14px 16px",background:"rgba(6, 8, 16, 0.95)",borderBottom:"1px solid rgba(255, 255, 255, 0.12)",display:"flex",justifyContent:"space-between",alignItems:"center"},children:[(0,c.jsxs)("div",{style:{display:"flex",alignItems:"center",gap:"10px"},children:[(0,c.jsx)("div",{style:{width:"36px",height:"36px",borderRadius:"10px",background:"linear-gradient(135deg, rgba(0,230,118,0.2) 0%, rgba(0,229,255,0.2) 100%)",border:"1px solid rgba(0,230,118,0.4)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.2rem",boxShadow:"0 0 12px rgba(0,230,118,0.2)"},children:"💳"}),(0,c.jsxs)("div",{children:[(0,c.jsx)("h3",{style:{fontSize:"0.85rem",fontWeight:900,color:"#FFFFFF",letterSpacing:"0.5px",textTransform:"uppercase",margin:0},children:l("multirail_modal.title")}),(0,c.jsx)("p",{style:{fontSize:"0.68rem",color:"var(--accent-cyan)",fontFamily:"JetBrains Mono, monospace",margin:"2px 0 0 0"},children:l("multirail_modal.subtitle")})]})]}),(0,c.jsx)("button",{onClick:()=>{g.TacticalAudioEngine.playTap(),i()},style:{background:"rgba(255, 255, 255, 0.08)",border:"1px solid rgba(255, 255, 255, 0.15)",color:"#FFFFFF",width:"30px",height:"30px",borderRadius:"8px",cursor:"pointer",fontSize:"0.85rem",fontWeight:900},children:"✕"})]}),w?(0,c.jsxs)("div",{style:{padding:"20px",display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",gap:"14px"},children:[(0,c.jsx)("div",{style:{width:"64px",height:"64px",borderRadius:"20px",background:"rgba(0, 230, 118, 0.2)",border:"2px solid var(--accent-emerald)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"2rem",boxShadow:"0 0 25px rgba(0,230,118,0.4)"},children:"✅"}),(0,c.jsxs)("div",{children:[(0,c.jsx)("h4",{style:{fontSize:"1rem",fontWeight:900,color:"#FFFFFF",margin:0},children:l("multirail_modal.payment_success")}),(0,c.jsx)("p",{style:{fontSize:"0.75rem",color:"var(--accent-emerald)",fontFamily:"JetBrains Mono, monospace",margin:"4px 0 0 0"},children:l("multirail_modal.receipt_voucher")})]}),(0,c.jsxs)("div",{style:{width:"100%",background:"rgba(0, 0, 0, 0.6)",border:"1px solid rgba(255, 255, 255, 0.1)",borderRadius:"14px",padding:"12px",textAlign:"left",fontFamily:"JetBrains Mono, monospace",fontSize:"0.72rem",display:"flex",flexDirection:"column",gap:"8px"},children:[(0,c.jsxs)("div",{style:{display:"flex",justifyContent:"space-between",borderBottom:"1px solid rgba(255, 255, 255, 0.06)",paddingBottom:"4px"},children:[(0,c.jsx)("span",{style:{color:"var(--text-muted)"},children:"Concepto:"}),(0,c.jsx)("span",{style:{color:"#FFFFFF",fontWeight:800},children:e.title})]}),(0,c.jsxs)("div",{style:{display:"flex",justifyContent:"space-between",borderBottom:"1px solid rgba(255, 255, 255, 0.06)",paddingBottom:"4px"},children:[(0,c.jsx)("span",{style:{color:"var(--text-muted)"},children:"Monto:"}),(0,c.jsxs)("span",{style:{color:"var(--accent-emerald)",fontWeight:900},children:["$",w.amount.toFixed(2)," ",w.currency]})]}),(0,c.jsxs)("div",{style:{display:"flex",justifyContent:"space-between",borderBottom:"1px solid rgba(255, 255, 255, 0.06)",paddingBottom:"4px"},children:[(0,c.jsx)("span",{style:{color:"var(--text-muted)"},children:"Riel:"}),(0,c.jsx)("span",{style:{color:"var(--accent-cyan)",textTransform:"uppercase",fontWeight:800},children:w.rail})]}),(0,c.jsxs)("div",{style:{display:"flex",flexDirection:"column",gap:"2px"},children:[(0,c.jsx)("span",{style:{color:"var(--text-muted)"},children:"Tx Hash:"}),(0,c.jsx)("span",{style:{color:"var(--text-secondary)",fontSize:"0.65rem",wordBreak:"break-all",background:"rgba(255,255,255,0.04)",padding:"6px",borderRadius:"6px"},children:w.transactionId})]})]}),(0,c.jsxs)("div",{style:{display:"flex",gap:"8px",width:"100%"},children:[(0,c.jsx)("button",{type:"button",onClick:()=>{w&&(g.TacticalAudioEngine.playTap(),"u">typeof navigator&&navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(w.transactionId).then(()=>s.toast.info("📋 Hash de transacción copiado al portapapeles.")).catch(()=>I(w.transactionId)):I(w.transactionId))},style:{flex:1,padding:"8px",background:"rgba(255, 255, 255, 0.06)",border:"1px solid rgba(255, 255, 255, 0.12)",color:"#FFFFFF",borderRadius:"10px",fontSize:"0.75rem",fontWeight:800,cursor:"pointer"},children:"📋 Copiar Hash"}),(0,c.jsx)("button",{type:"button",onClick:()=>{if(!w)return;g.TacticalAudioEngine.playTap();let e=new Blob([JSON.stringify(w,null,2)],{type:"application/json"}),t=URL.createObjectURL(e),a=document.createElement("a");a.href=t,a.download=`recibo_red_${w.transactionId.slice(0,10)}.json`,a.click(),URL.revokeObjectURL(t)},style:{flex:1,padding:"8px",background:"rgba(255, 255, 255, 0.06)",border:"1px solid rgba(255, 255, 255, 0.12)",color:"#FFFFFF",borderRadius:"10px",fontSize:"0.75rem",fontWeight:800,cursor:"pointer"},children:"💾 Guardar JSON"})]}),(0,c.jsx)("button",{type:"button",onClick:()=>{g.TacticalAudioEngine.playTap(),n(w)},style:{width:"100%",padding:"10px",background:"linear-gradient(135deg, #00E676 0%, #00E5FF 100%)",color:"#000000",fontWeight:900,borderRadius:"12px",fontSize:"0.82rem",border:"none",cursor:"pointer",boxShadow:"0 0 16px rgba(0, 230, 118, 0.35)"},children:"✓ CONTINUAR A LA MINI-APP"})]}):(0,c.jsxs)(c.Fragment,{children:[(0,c.jsxs)("div",{style:{padding:"14px 16px",background:"rgba(0, 0, 0, 0.4)",borderBottom:"1px solid rgba(255, 255, 255, 0.1)",display:"flex",justifyContent:"space-between",alignItems:"center"},children:[(0,c.jsxs)("div",{children:[(0,c.jsx)("h4",{style:{fontSize:"0.88rem",fontWeight:800,color:"#FFFFFF",margin:0},children:e.title}),(0,c.jsx)("p",{style:{fontSize:"0.75rem",color:"var(--text-secondary)",margin:"2px 0 0 0"},children:e.description||"Comercio Descentralizado RED"}),(0,c.jsxs)("p",{style:{fontSize:"0.68rem",color:"var(--text-muted)",fontFamily:"JetBrains Mono, monospace",margin:"4px 0 0 0"},children:["Comercio: ",e.merchant.name]})]}),(0,c.jsxs)("div",{style:{textAlign:"right"},children:[(0,c.jsxs)("div",{style:{fontSize:"1.4rem",fontWeight:900,color:"var(--accent-emerald)"},children:["$",e.amount.toFixed(2)]}),(0,c.jsx)("span",{style:{fontSize:"0.68rem",color:"var(--text-secondary)",textTransform:"uppercase",fontFamily:"JetBrains Mono, monospace",fontWeight:800},children:e.currency})]})]}),(0,c.jsxs)("div",{style:{padding:"16px",display:"flex",flexDirection:"column",gap:"12px"},children:[(0,c.jsx)("label",{style:{fontSize:"0.75rem",fontWeight:800,color:"var(--text-secondary)",fontFamily:"JetBrains Mono, monospace"},children:"SELECCIONA RIEL DE PAGO:"}),(0,c.jsxs)("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"},children:[d.includes("paypal")&&(0,c.jsxs)("button",{type:"button",onClick:()=>{g.TacticalAudioEngine.playTap(),b("paypal")},style:{padding:"10px",borderRadius:"12px",border:"paypal"===f?"1.5px solid #3B82F6":"1px solid rgba(255, 255, 255, 0.1)",background:"paypal"===f?"rgba(59, 130, 246, 0.2)":"rgba(0, 0, 0, 0.4)",color:"#FFFFFF",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:"2px",cursor:"pointer"},children:[(0,c.jsx)("span",{style:{fontSize:"0.78rem",fontWeight:800},children:"💳 PayPal / Tarjeta"}),(0,c.jsx)("span",{style:{fontSize:"0.65rem",color:"var(--text-muted)"},children:"USD / Fiat Directo"})]}),d.includes("web3_usdt")&&(0,c.jsxs)("button",{type:"button",onClick:()=>{g.TacticalAudioEngine.playTap(),b("web3_usdt")},style:{padding:"10px",borderRadius:"12px",border:"web3_usdt"===f?"1.5px solid #A855F7":"1px solid rgba(255, 255, 255, 0.1)",background:"web3_usdt"===f?"rgba(168, 85, 247, 0.2)":"rgba(0, 0, 0, 0.4)",color:"#FFFFFF",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:"2px",cursor:"pointer"},children:[(0,c.jsx)("span",{style:{fontSize:"0.78rem",fontWeight:800},children:"🦊 Web3 USDT/POL"}),(0,c.jsx)("span",{style:{fontSize:"0.65rem",color:"var(--text-muted)"},children:"Polygon / EVM"})]}),d.includes("lightning")&&(0,c.jsxs)("button",{type:"button",onClick:()=>{g.TacticalAudioEngine.playTap(),b("lightning")},style:{padding:"10px",borderRadius:"12px",border:"lightning"===f?"1.5px solid #F59E0B":"1px solid rgba(255, 255, 255, 0.1)",background:"lightning"===f?"rgba(245, 158, 11, 0.2)":"rgba(0, 0, 0, 0.4)",color:"#FFFFFF",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:"2px",cursor:"pointer"},children:[(0,c.jsx)("span",{style:{fontSize:"0.78rem",fontWeight:800},children:"⚡ Lightning"}),(0,c.jsx)("span",{style:{fontSize:"0.65rem",color:"var(--text-muted)"},children:"Sats Instantáneos"})]}),d.includes("offgrid_voucher")&&(0,c.jsxs)("button",{type:"button",onClick:()=>{g.TacticalAudioEngine.playTap(),b("offgrid_voucher")},style:{padding:"10px",borderRadius:"12px",border:"offgrid_voucher"===f?"1.5px solid var(--accent-emerald)":"1px solid rgba(255, 255, 255, 0.1)",background:"offgrid_voucher"===f?"rgba(0, 230, 118, 0.2)":"rgba(0, 0, 0, 0.4)",color:"#FFFFFF",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:"2px",cursor:"pointer"},children:[(0,c.jsx)("span",{style:{fontSize:"0.78rem",fontWeight:800},children:"🎟️ Vale Off-Grid"}),(0,c.jsx)("span",{style:{fontSize:"0.65rem",color:"var(--text-muted)"},children:"100% Sin Internet"})]})]}),(0,c.jsxs)("div",{style:{padding:"12px",background:"rgba(0, 0, 0, 0.6)",border:"1px solid rgba(255, 255, 255, 0.1)",borderRadius:"12px",fontSize:"0.75rem",display:"flex",flexDirection:"column",gap:"6px"},children:["paypal"===f&&(0,c.jsxs)("div",{children:[(0,c.jsx)("p",{style:{color:"#FFFFFF",fontWeight:800,margin:0},children:"Pasarela Fiat / PayPal"}),(0,c.jsxs)("p",{style:{color:"var(--text-secondary)",fontSize:"0.72rem",margin:"2px 0 0 0"},children:["Destino: ",(0,c.jsxs)("span",{style:{fontFamily:"JetBrains Mono, monospace",color:"#60A5FA"},children:["@",e.merchant.paypalUsername||"redmesh"]})]})]}),"web3_usdt"===f&&(0,c.jsxs)("div",{children:[(0,c.jsx)("p",{style:{color:"#FFFFFF",fontWeight:800,margin:0},children:"Transferencia Cripto EVM (USDT / POL)"}),(0,c.jsxs)("p",{style:{color:"var(--text-secondary)",fontSize:"0.68rem",wordBreak:"break-all",margin:"2px 0 0 0"},children:["Billetera: ",(0,c.jsx)("span",{style:{fontFamily:"JetBrains Mono, monospace",color:"#C084FC"},children:e.merchant.evmAddress||"0x71C836eB3f4D4e05bE7728373b9846b41295b364"})]})]}),"lightning"===f&&(0,c.jsxs)("div",{children:[(0,c.jsx)("p",{style:{color:"#FFFFFF",fontWeight:800,margin:0},children:"Factura Bitcoin Lightning Network"}),(0,c.jsxs)("p",{style:{color:"var(--text-secondary)",fontSize:"0.72rem",margin:"2px 0 0 0"},children:["Monto Estimado: ",(0,c.jsxs)("span",{style:{color:"var(--accent-amber)",fontWeight:900},children:["~",Math.round(1500*e.amount)," SAT"]})]})]}),"offgrid_voucher"===f&&(0,c.jsxs)("div",{children:[(0,c.jsx)("p",{style:{color:"#FFFFFF",fontWeight:800,margin:0},children:"Pagaré Criptográfico Off-Grid (Ed25519)"}),(0,c.jsxs)("p",{style:{color:"var(--text-secondary)",fontSize:"0.72rem",margin:"2px 0 0 0"},children:["Tu Saldo Local: ",(0,c.jsxs)("span",{style:{color:"var(--accent-emerald)",fontWeight:900},children:[D," Créditos"]})]})]})]}),y&&(0,c.jsxs)("div",{style:{padding:"8px 12px",background:"rgba(232, 33, 58, 0.2)",border:"1px solid var(--accent-crimson)",borderRadius:"10px",color:"#FF8599",fontSize:"0.75rem"},children:["⚠️ ",y]})]}),(0,c.jsxs)("div",{style:{padding:"14px 16px",background:"rgba(6, 8, 16, 0.95)",borderTop:"1px solid rgba(255, 255, 255, 0.12)",display:"flex",gap:"8px"},children:[(0,c.jsx)("button",{type:"button",onClick:()=>{g.TacticalAudioEngine.playTap(),i()},disabled:h,style:{flex:1,padding:"10px",background:"rgba(255, 255, 255, 0.06)",border:"1px solid rgba(255, 255, 255, 0.14)",borderRadius:"12px",color:"var(--text-secondary)",fontSize:"0.78rem",fontWeight:800,cursor:"pointer"},children:"Cancelar"}),(0,c.jsx)("button",{type:"button",onClick:E,disabled:h,style:{flex:1,padding:"10px",background:"linear-gradient(135deg, #00E676 0%, #00E5FF 100%)",color:"#000000",fontWeight:900,borderRadius:"12px",fontSize:"0.78rem",border:"none",cursor:"pointer",boxShadow:"0 0 16px rgba(0, 230, 118, 0.35)",display:"flex",alignItems:"center",justifyContent:"center",gap:"6px"},children:h?(0,c.jsxs)(c.Fragment,{children:[(0,c.jsx)("span",{style:{fontSize:"0.85rem"},children:"🔄"}),(0,c.jsx)("span",{children:"Procesando..."})]}):(0,c.jsxs)(c.Fragment,{children:[(0,c.jsx)("span",{children:l("multirail_modal.confirm_payment_btn")}),(0,c.jsx)("span",{children:"➔"})]})})]})]})]})})}],77319)}]);
+window.addEventListener('DOMContentLoaded', init);`}},r={manifest:{id:"org.redmesh.biocybernetic.habitat",name:"Hábitat Biocibernético 3D",version:"1.0.0",description:"Ecosistema biocibernético in-silico con física de difusión de Fick, visión omatidial, termodinámica real y migración P2P.",author:{name:"RED Biocybernetics Laboratory",did:"did:red:0000000000000000000000000000000000000000000000000000000000000008"},icon:"🪰",category:"utility",permissions:["identity","mesh_pubsub","storage","sensors"],entryPoint:"index.html",createdAt:Date.now(),updatedAt:Date.now()},files:{"index.html":`<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>H\xe1bitat Biocibern\xe9tico 3D</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="app-header">
+        <span class="app-icon">🪰</span>
+        <div class="header-titles">
+            <h1>H\xc1BITAT BIOCIBERN\xc9TICO</h1>
+            <p class="subtitle">Ecosistema In-Silico &middot; Difusi\xf3n Fick &middot; Drosophila</p>
+        </div>
+        <div class="hud-status">
+            <span id="hud-atp" class="badge badge-green">ATP: 100%</span>
+            <span id="hud-state" class="badge badge-blue">ESTADO: \xd3PTIMO</span>
+            <span id="hud-mesh" class="badge badge-purple">MALLA: P2P LISTO</span>
+        </div>
+    </header>
+
+    <div class="viewport-container">
+        <canvas id="habitat-canvas" width="600" height="420"></canvas>
+        <div id="alert-banner" class="alert-banner"></div>
+    </div>
+
+    <div class="control-panel">
+        <div class="panel-section">
+            <label class="section-label">🛠️ INSTRUMENTAL DE EXPERIMENTACI\xd3N</label>
+            <div class="button-group">
+                <button id="tool-glucose" class="btn btn-tool active" onclick="selectTool('GLUCOSE')">💧 Pipeta Glucosa</button>
+                <button id="tool-heat" class="btn btn-tool" onclick="selectTool('HEAT')">🔥 Foco Infrarrojo</button>
+                <button id="tool-shadow" class="btn btn-tool" onclick="selectTool('SHADOW')">🌑 Sombra Looming</button>
+                <button id="tool-chr2" class="btn btn-tool" onclick="selectTool('CHR2')">⚡ Optogen\xe9tica ChR2</button>
+            </div>
+        </div>
+
+        <div class="panel-section">
+            <label class="section-label">📡 ACCIONES DE ENJAMBRE & MALLA P2P</label>
+            <div class="button-group">
+                <button class="btn btn-action" onclick="emigrateToMesh()">🚀 Emigrar Organismo a Malla</button>
+                <button class="btn btn-action" onclick="spawnNewAgent()">➕ A\xf1adir Drosophila</button>
+                <button class="btn btn-danger" onclick="clearField()">🧹 Limpiar Sustrato</button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="app-footer">
+        <span>RED Sovereign OS &middot; Mini-App Biocibern\xe9tica v120.0.0</span>
+        <span id="footer-metrics">Fick Grid: 64x64 &middot; Tick: 60Hz &middot; STDP: Activo</span>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>`,"style.css":`* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+}
+
+body {
+    background: #060c18;
+    color: #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.app-header {
+    background: rgba(10, 20, 36, 0.95);
+    border-bottom: 1px solid rgba(0, 240, 255, 0.25);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.app-icon {
+    font-size: 24px;
+}
+
+.header-titles h1 {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #00f0ff;
+}
+
+.subtitle {
+    font-size: 10px;
+    color: #8b9bb4;
+}
+
+.hud-status {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+}
+
+.badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.badge-green { background: rgba(0, 255, 136, 0.15); border: 1px solid #00ff88; color: #00ff88; }
+.badge-blue { background: rgba(0, 240, 255, 0.15); border: 1px solid #00f0ff; color: #00f0ff; }
+.badge-purple { background: rgba(168, 85, 247, 0.15); border: 1px solid #a855f7; color: #a855f7; }
+
+.viewport-container {
+    flex: 1;
+    position: relative;
+    background: #020610;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#habitat-canvas {
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+}
+
+.alert-banner {
+    position: absolute;
+    top: 12px;
+    background: rgba(255, 51, 85, 0.25);
+    border: 1px solid #ff3355;
+    color: #ff3355;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    display: none;
+}
+
+.control-panel {
+    background: #091220;
+    border-top: 1px solid rgba(0, 240, 255, 0.2);
+    padding: 10px 16px;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.panel-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.section-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: #8b9bb4;
+    letter-spacing: 0.5px;
+}
+
+.button-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid rgba(139, 155, 180, 0.3);
+    background: rgba(25, 40, 65, 0.5);
+    color: #c8d6e5;
+}
+
+.btn:hover {
+    background: rgba(0, 240, 255, 0.15);
+    border-color: #00f0ff;
+    color: #00f0ff;
+}
+
+.btn-tool.active {
+    background: rgba(0, 240, 255, 0.25);
+    border-color: #00f0ff;
+    color: #00f0ff;
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+}
+
+.btn-action {
+    background: rgba(0, 255, 136, 0.12);
+    border-color: #00ff88;
+    color: #00ff88;
+}
+
+.btn-danger {
+    background: rgba(255, 51, 85, 0.12);
+    border-color: #ff3355;
+    color: #ff3355;
+}
+
+.app-footer {
+    background: #040812;
+    border-top: 1px solid rgba(139, 155, 180, 0.15);
+    padding: 6px 16px;
+    font-size: 10px;
+    color: #576574;
+    display: flex;
+    justify-content: space-between;
+}`,"app.js":`// Simulaci\xf3n del H\xe1bitat Biocibern\xe9tico en Mini-App
+const canvas = document.getElementById('habitat-canvas');
+const ctx = canvas.getContext('2d');
+
+let currentTool = 'GLUCOSE';
+let atp = 100.0;
+let glucose = 100.0;
+let organisms = [{
+    x: 300,
+    y: 210,
+    heading: 0,
+    speed: 1.2,
+    antennaeDiff: 0,
+    atp: 100
+}];
+
+let chemicals = []; // {x, y, radius, intensity, substance}
+let shadows = [];   // {x, y, radius, velocity}
+
+function resizeCanvas() {
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function selectTool(tool) {
+    currentTool = tool;
+    document.querySelectorAll('.btn-tool').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('tool-' + tool.toLowerCase());
+    if (btn) btn.classList.add('active');
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (currentTool === 'GLUCOSE') {
+        chemicals.push({ x, y, radius: 15, intensity: 1.0, substance: 'GLUCOSE' });
+    } else if (currentTool === 'HEAT') {
+        chemicals.push({ x, y, radius: 25, intensity: 1.0, substance: 'ALARM' });
+    } else if (currentTool === 'SHADOW') {
+        shadows.push({ x, y, radius: 8, velocity: 3.5 });
+        showAlert("🌑 SOMBRA EXPANSIVA LOOMING: Disparo de Giant Fiber LC4");
+    } else if (currentTool === 'CHR2') {
+        atp = Math.min(100, atp + 15);
+        showAlert("⚡ PULSO OPTOGEN\xc9TICO ChR2: Despolarizaci\xf3n Dopamin\xe9rgica PAM");
+    }
+});
+
+function showAlert(text) {
+    const b = document.getElementById('alert-banner');
+    b.innerText = text;
+    b.style.display = 'block';
+    setTimeout(() => { b.style.display = 'none'; }, 2200);
+}
+
+function spawnNewAgent() {
+    organisms.push({
+        x: Math.random() * (canvas.width - 40) + 20,
+        y: Math.random() * (canvas.height - 40) + 20,
+        heading: Math.random() * Math.PI * 2,
+        speed: 1.0,
+        antennaeDiff: 0,
+        atp: 100
+    });
+}
+
+function clearField() {
+    chemicals = [];
+    shadows = [];
+}
+
+async function emigrateToMesh() {
+    if (window.RedSDK && window.RedSDK.mesh) {
+        try {
+            await window.RedSDK.mesh.publish('mesh.bio.habitat.v1', {
+                type: 'DROSOPHILA',
+                atp: atp,
+                timestamp: Date.now()
+            });
+            showAlert("🚀 ORGANISMO EMIGRADO A LA MALLA P2P (SX1262 LoRa/BLE)");
+        } catch {
+            showAlert("📡 Paquete de migraci\xf3n encolado en DTN Store & Forward");
+        }
+    } else {
+        showAlert("🚀 ORGANISMO EMIGRADO (Simulado sobre bus local)");
+    }
+}
+
+// Bucle f\xedsico y renderizado a 60 Hz
+function step() {
+    // 1. Difusi\xf3n y evaporaci\xf3n de qu\xedmicos
+    for (let i = chemicals.length - 1; i >= 0; i--) {
+        const c = chemicals[i];
+        c.radius += 0.15;
+        c.intensity *= 0.992;
+        if (c.intensity < 0.05) chemicals.splice(i, 1);
+    }
+
+    // 2. Sombras Looming
+    for (let i = shadows.length - 1; i >= 0; i--) {
+        const s = shadows[i];
+        s.radius += s.velocity;
+        if (s.radius > 120) shadows.splice(i, 1);
+    }
+
+    // 3. Organismos
+    atp = Math.max(0, atp - 0.02);
+    document.getElementById('hud-atp').innerText = 'ATP: ' + Math.round(atp) + '%';
+    document.getElementById('hud-state').innerText = atp > 60 ? 'ESTADO: \xd3PTIMO' : (atp > 15 ? 'ESTADO: AHORRO' : 'ESTADO: TORPOR');
+
+    for (const org of organisms) {
+        // Tropotaxis antenal
+        let leftSensor = 0;
+        let rightSensor = 0;
+        const antDist = 18;
+        const antAngle = 0.5;
+
+        const lx = org.x + Math.cos(org.heading - antAngle) * antDist;
+        const ly = org.y + Math.sin(org.heading - antAngle) * antDist;
+        const rx = org.x + Math.cos(org.heading + antAngle) * antDist;
+        const ry = org.y + Math.sin(org.heading + antAngle) * antDist;
+
+        for (const c of chemicals) {
+            if (c.substance === 'GLUCOSE') {
+                const dl = Math.hypot(c.x - lx, c.y - ly);
+                const dr = Math.hypot(c.x - rx, c.y - ry);
+                leftSensor += c.intensity / (1 + dl * 0.05);
+                rightSensor += c.intensity / (1 + dr * 0.05);
+
+                // Alimentaci\xf3n si toca la gota
+                if (Math.hypot(c.x - org.x, c.y - org.y) < c.radius) {
+                    atp = Math.min(100, atp + 0.3);
+                }
+            }
+        }
+
+        const delta = rightSensor - leftSensor;
+        org.heading += delta * 0.15 + (Math.random() - 0.5) * 0.08;
+
+        const speed = (atp > 15 ? 1.4 : 0.4) * (leftSensor + rightSensor > 0.1 ? 1.6 : 1.0);
+        org.x += Math.cos(org.heading) * speed;
+        org.y += Math.sin(org.heading) * speed;
+
+        // Rebote en bordes
+        if (org.x < 15) { org.x = 15; org.heading = Math.PI - org.heading; }
+        if (org.x > canvas.width - 15) { org.x = canvas.width - 15; org.heading = Math.PI - org.heading; }
+        if (org.y < 15) { org.y = 15; org.heading = -org.heading; }
+        if (org.y > canvas.height - 15) { org.y = canvas.height - 15; org.heading = -org.heading; }
+    }
+
+    render();
+    requestAnimationFrame(step);
+}
+
+function render() {
+    ctx.fillStyle = '#020610';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Rejilla de fondo
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.04)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 30) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += 30) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    }
+
+    // Dibujar Qu\xedmicos
+    for (const c of chemicals) {
+        const radGrad = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, c.radius);
+        if (c.substance === 'GLUCOSE') {
+            radGrad.addColorStop(0, 'rgba(0, 255, 136, ' + (c.intensity * 0.8) + ')');
+            radGrad.addColorStop(1, 'rgba(0, 255, 136, 0)');
+        } else {
+            radGrad.addColorStop(0, 'rgba(255, 51, 85, ' + (c.intensity * 0.8) + ')');
+            radGrad.addColorStop(1, 'rgba(255, 51, 85, 0)');
+        }
+        ctx.fillStyle = radGrad;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Dibujar Sombras Looming
+    for (const s of shadows) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ff3355';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    // Dibujar Organismos
+    for (const org of organisms) {
+        ctx.save();
+        ctx.translate(org.x, org.y);
+        ctx.rotate(org.heading);
+
+        // Antenas
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(6, -2); ctx.lineTo(16, -8);
+        ctx.moveTo(6, 2); ctx.lineTo(16, 8);
+        ctx.stroke();
+
+        // Omatidios (ojos compuestos)
+        ctx.fillStyle = '#ff0055';
+        ctx.beginPath(); ctx.arc(4, -4, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(4, 4, 2.5, 0, Math.PI * 2); ctx.fill();
+
+        // Cuerpo / T\xf3rax
+        ctx.fillStyle = '#00f0ff';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 10, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Alas trasl\xfacidas
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.beginPath(); ctx.ellipse(-4, -6, 8, 3, -0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-4, 6, 8, 3, 0.2, 0, Math.PI * 2); ctx.fill();
+
+        ctx.restore();
+    }
+}
+
+requestAnimationFrame(step);
+`}},n="red_installed_miniapps_v1";class s{static instance=null;apps=new Map;constructor(){this.loadFromStorage(),this.ensureBuiltinApps()}static getInstance(){return s.instance||(s.instance=new s),s.instance}loadFromStorage(){try{let e=localStorage.getItem(n);e&&JSON.parse(e).forEach(e=>this.apps.set(e.manifest.id,e))}catch(e){console.error("[RedAppRegistry] Error loading apps from storage:",e)}}saveToStorage(){try{let e=Array.from(this.apps.values());localStorage.setItem(n,JSON.stringify(e))}catch(e){console.error("[RedAppRegistry] Error saving apps to storage:",e)}}ensureBuiltinApps(){[a,i,o,r].forEach(e=>{let t=this.apps.get(e.manifest.id);t?(t.manifest=e.manifest,t.bundle=e,t.isBuiltin=!0):this.apps.set(e.manifest.id,{manifest:e.manifest,bundle:e,installedAt:Date.now(),lastOpenedAt:Date.now(),grantedPermissions:e.manifest.permissions,isBuiltin:!0})}),this.saveToStorage()}getAllApps(){return Array.from(this.apps.values()).sort((e,t)=>t.lastOpenedAt-e.lastOpenedAt)}getApp(e){return this.apps.get(e)}installApp(e,t){let a={manifest:e.manifest,bundle:e,installedAt:Date.now(),lastOpenedAt:Date.now(),grantedPermissions:t||e.manifest.permissions,isBuiltin:!1};return this.apps.set(e.manifest.id,a),this.saveToStorage(),a}uninstallApp(e){let t=this.apps.get(e);if(t?.isBuiltin)return console.warn("No se pueden desinstalar aplicaciones nativas del sistema."),!1;let a=this.apps.delete(e);return a&&this.saveToStorage(),a}updatePermissions(e,t){let a=this.apps.get(e);a&&(a.grantedPermissions=t,this.saveToStorage())}touchApp(e){let t=this.apps.get(e);t&&(t.lastOpenedAt=Date.now(),this.saveToStorage())}exportAppPackage(e){let a=this.apps.get(e);if(!a)return null;let i=JSON.stringify({format:"RED_APP_PACKAGE_V1",exportedAt:Date.now(),bundle:a.bundle,manifest:a.manifest}),o="u">typeof btoa?btoa(unescape(encodeURIComponent(i))):t.Buffer.from(i).toString("base64");return`RED_APP_V1:${o}`}importAppPackage(e){try{let a=e.trim();a.startsWith("RED_APP_V1:")&&(a=a.substring(11));let i="u">typeof atob?decodeURIComponent(escape(atob(a))):t.Buffer.from(a,"base64").toString("utf8"),o=JSON.parse(i);if(!o.bundle||!o.bundle.manifest||!o.bundle.manifest.id||!o.bundle.html)return{bundle:null,isValid:!1,error:"Estructura de paquete inválida o manifiesto corrupto."};let r=o.bundle.manifest;if(!r.name||!r.version)return{bundle:null,isValid:!1,error:"El manifiesto no especifica nombre o versión."};if(!/^[a-zA-Z0-9_.-]{3,64}$/.test(r.id))return{bundle:null,isValid:!1,error:"El identificador de la aplicación debe ser alfanumérico (3-64 caracteres)."};if(!/^\d+\.\d+\.\d+/.test(r.version))return{bundle:null,isValid:!1,error:"La versión de la aplicación debe seguir el formato SemVer (ej: 1.0.0)."};return{bundle:o.bundle,isValid:!0}}catch(e){return{bundle:null,isValid:!1,error:e.message||"Error al decodificar paquete de aplicación."}}}}let l=s.getInstance();e.s(["redAppRegistry",0,l],19439)}]);
