@@ -18,6 +18,20 @@
  */
 
 import { RingAttractorEngine } from './RingAttractorEngine';
+import { AerDomainCode } from '../mesh/meshProtocol';
+
+export interface SynapticEligibilityTrace {
+  targetKey: string;
+  trace: number;        // [0.0 .. 1.0]
+  lastUpdated: number;
+}
+
+export interface JammingEvasionVector {
+  shouldHopChannel: boolean;
+  jammedChannels: string[];
+  optimalChannel: string;
+  highestAvoidanceScore: number;
+}
 
 export interface MushroomBodyConfig {
   totalKenyonCells: number;      // 2,500 células de Kenyon
@@ -82,6 +96,11 @@ export interface MushroomBodyTelemetry {
   ppl1AversionScore: number;      // Puntuación acumulada de aversión / peligro
   activePheromonesCount: number;
   topPheromone?: SwarmPheromone;
+  // ── Plasticidad Sináptica 3-Factores (STDP) & Evasión de Jamming ──
+  channelWeights: Record<string, number>;
+  activeTracesCount: number;
+  jammingEvasionActive: boolean;
+  recommendedChannel: string;
   lastUpdated: number;
 }
 
@@ -116,8 +135,40 @@ export class DtnMushroomBodyEngine {
   private lastStimulusActiveKcCount = 0;
   private listeners: Set<(telemetry: MushroomBodyTelemetry) => void> = new Set();
 
+  // ── Plasticidad Sináptica 3-Factores (STDP) & Guerra Electrónica (EW Jamming) ──
+  private static readonly STDP_ETA = 0.15; // Tasa de aprendizaje eta
+  private static readonly ELIGIBILITY_TAU_MS = 2000; // Constante de decaimiento tau_e = 2.0s
+  public static readonly DEFAULT_LORA_CHANNELS = [
+    'lora_ch_0', 'lora_ch_1', 'lora_ch_2', 'lora_ch_3',
+    'lora_ch_4', 'lora_ch_5', 'lora_ch_6', 'lora_ch_7'
+  ];
+
+  // Pesos sinápticos [0.05 .. 1.00] por canal / ruta (0.50 nominal)
+  private channelWeights: Map<string, number> = new Map();
+  // Huellas de elegibilidad e_ij
+  private eligibilityTraces: Map<string, SynapticEligibilityTrace> = new Map();
+  private stdpDecayInterval: ReturnType<typeof setInterval> | null = null;
+  private lastJammingAlertTime = 0;
+
   private constructor() {
+    this.initChannelWeights();
     this.hydrateState();
+    this.startStdpDecayLoop();
+  }
+
+  private initChannelWeights(): void {
+    for (const ch of DtnMushroomBodyEngine.DEFAULT_LORA_CHANNELS) {
+      if (!this.channelWeights.has(ch)) {
+        this.channelWeights.set(ch, 0.50);
+      }
+    }
+  }
+
+  private startStdpDecayLoop(): void {
+    if (this.stdpDecayInterval) return;
+    this.stdpDecayInterval = setInterval(() => {
+      this.decayEligibilityTraces(1.0);
+    }, 1000);
   }
 
   public static getInstance(): DtnMushroomBodyEngine {
@@ -641,6 +692,182 @@ export class DtnMushroomBodyEngine {
     return Array.from(this.pheromonesMap.values()).sort((a, b) => b.intensity - a.intensity);
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ── MÉTODOS DE PLASTICIDAD SINÁPTICA 3-FACTORES (STDP) & EVASIÓN DE JAMMING ──
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Factor 1 (Pre-sináptico) + Factor 2 (Post-sináptico):
+   * Registra una coincidencia temporal activando o incrementando la huella de elegibilidad e_ij.
+   */
+  public recordPrePostCoincidence(channelOrPeerId: string, postActivation = 1.0): void {
+    const key = (channelOrPeerId || '').trim().toLowerCase();
+    if (!key) return;
+    const now = Date.now();
+    const existing = this.eligibilityTraces.get(key);
+    const currentTrace = existing
+      ? existing.trace * Math.exp(-(now - existing.lastUpdated) / DtnMushroomBodyEngine.ELIGIBILITY_TAU_MS)
+      : 0;
+    const boost = typeof postActivation === 'number' && Number.isFinite(postActivation) && postActivation > 0 ? postActivation : 0;
+    const newTrace = Math.min(1.0, currentTrace + boost);
+    this.eligibilityTraces.set(key, {
+      targetKey: key,
+      trace: newTrace,
+      lastUpdated: now,
+    });
+    if (!this.channelWeights.has(key)) {
+      this.channelWeights.set(key, 0.50);
+    }
+  }
+
+  /**
+   * Factor 3 (Neuromodulador Dopaminérgico DAN PAM / PPL1):
+   * Modula la plasticidad sináptica aplicando la regla de 3 factores sobre las huellas activas:
+   * dW_ij = eta * e_ij * (DA_PAM - DA_PPL1)
+   */
+  public applyDopaminergicNeuromodulation(type: 'PAM' | 'PPL1', intensity = 0.5, specificKey?: string): void {
+    const now = Date.now();
+    const validIntensity = Math.max(0.05, Math.min(1.0, intensity));
+    const signedDopamine = type === 'PAM' ? validIntensity : -validIntensity;
+
+    // Si se especifica un canal o par objetivo, modular directamente su sinapsis compartimentada
+    if (specificKey) {
+      const key = specificKey.trim().toLowerCase();
+      const existing = this.eligibilityTraces.get(key);
+      const traceVal = existing ? Math.max(0.4, existing.trace) : 0.6;
+      this.eligibilityTraces.set(key, {
+        targetKey: key,
+        trace: traceVal,
+        lastUpdated: now,
+      });
+      const currentW = this.channelWeights.get(key) ?? 0.50;
+      const deltaW = DtnMushroomBodyEngine.STDP_ETA * traceVal * signedDopamine;
+      const newW = Math.max(0.05, Math.min(1.00, Math.round((currentW + deltaW) * 1000) / 1000));
+      this.channelWeights.set(key, newW);
+    } else {
+      // Aplicar regla de 3 factores sobre todas las huellas de elegibilidad (spray dopaminérgico difuso)
+      for (const [key, traceObj] of this.eligibilityTraces.entries()) {
+        const age = now - traceObj.lastUpdated;
+        const decayedTrace = traceObj.trace * Math.exp(-age / DtnMushroomBodyEngine.ELIGIBILITY_TAU_MS);
+        if (decayedTrace < 0.01) {
+          this.eligibilityTraces.delete(key);
+          continue;
+        }
+        traceObj.trace = decayedTrace;
+        traceObj.lastUpdated = now;
+
+        const currentW = this.channelWeights.get(key) ?? 0.50;
+        const deltaW = DtnMushroomBodyEngine.STDP_ETA * decayedTrace * signedDopamine;
+        const newW = Math.max(0.05, Math.min(1.00, Math.round((currentW + deltaW) * 1000) / 1000));
+        this.channelWeights.set(key, newW);
+      }
+    }
+
+    // Si es aversión PPL1 crítica (Jamming EW) y supera umbral, alertar a la colmena con micro-espiga AER
+    if (type === 'PPL1' && validIntensity >= 0.70 && now - this.lastJammingAlertTime > 4000) {
+      this.lastJammingAlertTime = now;
+      this.emitAerJammingSpike(specificKey || 'general_ew');
+    }
+
+    this.notifyListeners();
+  }
+
+  /**
+   * Emite una micro-espiga AER táctica indicando interferencia EW en un canal específico.
+   */
+  private emitAerJammingSpike(jammedKey: string): void {
+    try {
+      import('../mesh/meshRouter').then(({ meshRouter }) => {
+        let channelNum = 0xFF;
+        const match = jammedKey.match(/ch_(\d+)/i);
+        if (match) channelNum = parseInt(match[1], 10);
+        meshRouter.broadcastAerSpike(
+          AerDomainCode.EW_JAMMING_DETECTED,
+          0xFA,
+          channelNum
+        ).catch(() => {});
+      }).catch(() => {});
+    } catch {}
+  }
+
+  /**
+   * Decae las huellas de elegibilidad activas siguiendo la constante molecular tau_e (2.0s).
+   */
+  public decayEligibilityTraces(dtSec = 1.0): void {
+    const dtMs = dtSec * 1000;
+    for (const [key, traceObj] of this.eligibilityTraces.entries()) {
+      traceObj.trace *= Math.exp(-dtMs / DtnMushroomBodyEngine.ELIGIBILITY_TAU_MS);
+      if (traceObj.trace < 0.01) {
+        this.eligibilityTraces.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Obtiene el peso sináptico aprendido para un canal o par.
+   */
+  public getChannelWeight(channelOrPeerId: string): number {
+    const key = (channelOrPeerId || '').trim().toLowerCase();
+    return this.channelWeights.get(key) ?? 0.50;
+  }
+
+  /**
+   * Obtiene una copia de todos los pesos sinápticos aprendidos.
+   */
+  public getAllChannelWeights(): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const [k, v] of this.channelWeights.entries()) {
+      out[k] = v;
+    }
+    return out;
+  }
+
+  /**
+   * Evalúa el vector de evasión de guerra electrónica (Jamming Evasion Vector).
+   * Si un canal tiene peso < 0.30 y existe al menos otro canal con peso >= 0.40,
+   * recomienda el salto ágil de frecuencia (Frequency Agility Hopping).
+   */
+  public getJammingEvasionVector(): JammingEvasionVector {
+    const jammedChannels: string[] = [];
+    let highestAvoidanceScore = 0.0;
+    let bestWeight = -1.0;
+    let optimalChannel = DtnMushroomBodyEngine.DEFAULT_LORA_CHANNELS[0];
+
+    for (const ch of DtnMushroomBodyEngine.DEFAULT_LORA_CHANNELS) {
+      const w = this.channelWeights.get(ch) ?? 0.50;
+      if (w < 0.30) {
+        jammedChannels.push(ch);
+        const avoidance = 1.0 - w;
+        if (avoidance > highestAvoidanceScore) highestAvoidanceScore = avoidance;
+      }
+      if (w > bestWeight) {
+        bestWeight = w;
+        optimalChannel = ch;
+      }
+    }
+
+    const shouldHopChannel = jammedChannels.length > 0 && bestWeight >= 0.40;
+
+    return {
+      shouldHopChannel,
+      jammedChannels,
+      optimalChannel,
+      highestAvoidanceScore: Math.round(highestAvoidanceScore * 100) / 100,
+    };
+  }
+
+  /**
+   * Restablece los pesos sinápticos de canales al valor nominal de reposo (0.50)
+   * y purga las huellas de elegibilidad activas.
+   */
+  public resetStdpWeights(): void {
+    for (const ch of DtnMushroomBodyEngine.DEFAULT_LORA_CHANNELS) {
+      this.channelWeights.set(ch, 0.50);
+    }
+    this.eligibilityTraces.clear();
+    this.notifyListeners();
+  }
+
   /**
    * Obtiene la telemetría del sistema para inspección táctica y HUD.
    */
@@ -673,6 +900,7 @@ export class DtnMushroomBodyEngine {
 
     const activePheromones = this.getActivePheromones();
     const topPheromone = activePheromones.length > 0 ? activePheromones[0] : undefined;
+    const evasionVector = this.getJammingEvasionVector();
 
     return {
       totalKenyonCells: this.config.totalKenyonCells,
@@ -692,6 +920,10 @@ export class DtnMushroomBodyEngine {
       ppl1AversionScore: Math.round(avgPpl1 * 100) / 100,
       activePheromonesCount: activePheromones.length,
       topPheromone,
+      channelWeights: this.getAllChannelWeights(),
+      activeTracesCount: this.eligibilityTraces.size,
+      jammingEvasionActive: evasionVector.shouldHopChannel,
+      recommendedChannel: evasionVector.optimalChannel,
       lastUpdated: Date.now(),
     };
   }
@@ -776,9 +1008,15 @@ export class DtnMushroomBodyEngine {
    * Limpieza de pruebas unitarias
    */
   public destroy(): void {
+    if (this.stdpDecayInterval) {
+      clearInterval(this.stdpDecayInterval);
+      this.stdpDecayInterval = null;
+    }
     this.memoryTable.clear();
     this.peerValenceMap.clear();
     this.pheromonesMap.clear();
+    this.channelWeights.clear();
+    this.eligibilityTraces.clear();
     this.ltdEvictedTotal = 0;
     this.lastStimulusActiveKcCount = 0;
     this.listeners.clear();

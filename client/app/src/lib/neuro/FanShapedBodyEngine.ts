@@ -247,6 +247,21 @@ export class FanShapedBodyEngine {
   }
 
   /**
+   * Reconcilia las coordenadas de posición con un ancla de referencia (anclaje hipocampal / compás dual)
+   * corrigiendo la deriva inercial acumulada sin reiniciar la distancia total recorrida.
+   */
+  public reconcileCoordinates(x: number, y: number, z?: number): void {
+    if (!isFinite(x) || !isFinite(y)) return;
+    this.posX = x;
+    this.posY = y;
+    if (typeof z === 'number' && isFinite(z)) {
+      this.posZ = z;
+    }
+    this.recomputeActivationMatrix();
+    this.notifyListeners();
+  }
+
+  /**
    * Fórmula Hipsométrica ICAO para calcular el desnivel en metros entre dos presiones barométricas (hPa).
    * Δz = 44330.77 * [ (P_prev / 1013.25)^0.190263 - (P_curr / 1013.25)^0.190263 ]
    */

@@ -1,18 +1,18 @@
 /**
  * RED Sovereign Mesh — Single Source of Truth for System Version
- * Version: 118.0.0 RED Sovereign Mesh — 
+ * Version: 119.0.0 RED Sovereign Mesh — Conectoma Neuromórfico MaleCNS & Compás Bio-Cibernético Dual
  */
 
-export const RED_VERSION = "118.0.0";
-export const RED_VERSION_MAJOR = 118;
+export const RED_VERSION = "119.0.0";
+export const RED_VERSION_MAJOR = 119;
 export const RED_VERSION_MINOR = 0;
 export const RED_VERSION_PATCH = 0;
-export const RED_VERSION_CODE = 118000;
-export const RED_BUILD_CODE = 118000;
-export const RED_VERSION_NAME = "RED v118.0.0 Sovereign Mesh — ";
+export const RED_VERSION_CODE = 119000;
+export const RED_BUILD_CODE = 119000;
+export const RED_VERSION_NAME = "RED v119.0.0 Sovereign Mesh — Conectoma Neuromórfico MaleCNS & Compás Bio-Cibernético Dual";
 export const RED_BUILD_DATE = "2026-09-23";
-export const RED_PROTOCOL_VERSION = "RED/118.0-NOISE-PQC";
+export const RED_PROTOCOL_VERSION = "RED/119.0-NOISE-PQC";
 export const RED_RELEASE_CHANNEL = "stable-p2p";
 export const RED_APK_NAME = "red-latest.apk";
 export const RED_APK_CANONICAL = "red-latest.apk";
-export const RED_APK_SHA256 = "FB76A9B7A346FAF4B7EE909FB2A8A6C2601D6B176030EC7E4C52A14C881CA457";
+export const RED_APK_SHA256 = "21111C8406381A2475DAE0B366A31DDE6975993C1CDCBD82BA961FE5925E209D";

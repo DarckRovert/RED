@@ -9,6 +9,8 @@
  * 4. Poda estricta de memoria para dispositivos móviles de bajos recursos.
  */
 
+import { swarmCriticality } from '../neuro/SwarmCriticalityEngine';
+
 export interface StormGuardMetrics {
     packetsEvaluated: number;
     packetsForwarded: number;
@@ -74,6 +76,7 @@ export class BroadcastStormGuardEngine {
      * Registra que se ha escuchado este paquete en el aire procedente de un nodo vecino.
      */
     public recordPeerRelay(packetId: string): void {
+        swarmCriticality.recordPacketReceived(1);
         const existing = this.seenCache.get(packetId);
         if (existing) {
             existing.peerRelayCount++;
@@ -123,8 +126,8 @@ export class BroadcastStormGuardEngine {
         const now = Date.now();
         const existing = this.seenCache.get(packetId);
 
-        // Umbral de supresión K-counter adaptado a la densidad RF
-        const suppressionThreshold = peerCount > 15 ? 2 : peerCount > 6 ? 3 : 5;
+        // Umbral de supresión K-counter dinámico adaptado por Criticalidad Auto-Organizada (neurolib)
+        const suppressionThreshold = swarmCriticality.getAdaptiveKThreshold(peerCount);
 
         // 1. Si el nodo local ya lo retransmitió con éxito anteriormente, suprimir duplicado
         if (existing && existing.localRelayed) {
@@ -134,6 +137,12 @@ export class BroadcastStormGuardEngine {
 
         // 2. Si ya escuchamos que K vecinos lo retransmitieron, suprimir retransmisión redundante
         if (existing && existing.peerRelayCount >= suppressionThreshold) {
+            this.recordSuppression(payloadSizeBytes);
+            return { shouldRelay: false, backoffDelayMs: 0, adjustedTtl: 0 };
+        }
+
+        // 2b. Control Estocástico Homeostático ante Régimen Super-Crítico (sigma > 1.10)
+        if (!swarmCriticality.shouldRelayProbabilistic()) {
             this.recordSuppression(payloadSizeBytes);
             return { shouldRelay: false, backoffDelayMs: 0, adjustedTtl: 0 };
         }
@@ -165,6 +174,7 @@ export class BroadcastStormGuardEngine {
         const jitter = Math.floor(Math.random() * (baseMaxMs - baseMinMs + 1)) + baseMinMs;
 
         this.metrics.packetsForwarded++;
+        swarmCriticality.recordPacketRelayed(1);
         this.updateSuppressionRate();
 
         return {

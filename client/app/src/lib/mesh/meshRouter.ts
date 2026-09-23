@@ -36,6 +36,12 @@ import {
   relay,
   PQC_TYPE_KEY_ANNOUNCE,
   FLAG_KURAMOTO_SYNC,
+  FLAG_AER_SPIKE,
+  AER_MAGIC,
+  AerDomainCode,
+  AerSpikeEvent,
+  encodeAerSpikeFrame,
+  decodeAerSpikeFrame,
 } from './meshProtocol';
 
 import { RedAPI } from '../api';
@@ -57,6 +63,7 @@ import { HippocampalEpisodicEngine } from '../neuro/human/HippocampalEpisodicEng
 import { TheoryOfMindEpistemicEngine } from '../neuro/human/TheoryOfMindEpistemicEngine';
 import { PredictiveCortexEngine } from '../neuro/human/PredictiveCortexEngine';
 import { TacticalLocationEngine } from '../sensors/TacticalLocationEngine';
+import { swarmCriticality } from '../neuro/SwarmCriticalityEngine';
 
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
 const DEDUP_WINDOW_MSG_MS = 30 * 60 * 1000;       // 30m  — chat messages (reduces Map size ~95% in long sessions)
@@ -238,6 +245,7 @@ class MeshRouter {
 
   private initialized = false;
   private unsubscribeNetwork: (() => void) | null = null;
+  private aerSeq = 0;
 
   // ─── Initialization ─────────────────────────────────────────────────────────
 
@@ -698,6 +706,42 @@ class MeshRouter {
       await this.broadcast(encode(packet));
     } catch (e) {
       console.warn('[MeshRouter] Failed to broadcast Kuramoto phase sync:', e);
+    }
+  }
+
+  /**
+   * Emite una micro-espiga neuromórfica AER ultra-compacta (<14 bytes)
+   * Reduciendo el airtime en LoRa/BLE en un 90% (Brain-Cog / Loihi).
+   */
+  async broadcastAerSpike(domain: AerDomainCode, neuronId: number, value: number): Promise<boolean> {
+    try {
+      let shortIdNum = 0;
+      if (this.myIdentityHash && this.myIdentityHash.length >= 8) {
+        shortIdNum = parseInt(this.myIdentityHash.slice(0, 8), 16) >>> 0;
+      }
+      if (!shortIdNum || isNaN(shortIdNum)) {
+        shortIdNum = ((Date.now() & 0xFFFFFFFF) >>> 0);
+      }
+
+      this.aerSeq = (this.aerSeq + 1) & 0xFF;
+      const aerNonce = `aer_${shortIdNum.toString(16).padStart(8, '0')}_${this.aerSeq}`;
+      this.seenNonces.set(aerNonce, Date.now());
+
+      const spike: AerSpikeEvent = { domain, neuronId, value };
+      const frame = encodeAerSpikeFrame(shortIdNum, this.aerSeq, 5, [spike]);
+
+      synapticMeshRouter.recordAerSpikeEmitted(1);
+
+      // 1. Envío ultrarrápido vía LoRa (ranura TDMA de control)
+      const okLoRa = await this.sendViaLoRa(frame).catch(() => false);
+
+      // 2. Difusión BLE ad-hoc
+      await bluetoothTransport.send('broadcast', frame).catch(() => false);
+
+      return okLoRa;
+    } catch (e) {
+      console.warn('[MeshRouter] Failed to broadcast AER spike:', e);
+      return false;
     }
   }
 
@@ -1540,6 +1584,59 @@ class MeshRouter {
   // ─── Receiving & Relaying ───────────────────────────────────────────────────
 
   private async handleRawPacket(raw: Uint8Array, fromTransportId?: string, transportType?: MeshTransport) {
+    // 0.0 NEUROMORPHIC AER MICRO-SPIKE FAST-PATH (Magic 0xAE51)
+    if (raw && raw.length >= 14 && raw[0] === 0xAE && raw[1] === 0x51) {
+      const aerFrame = decodeAerSpikeFrame(raw);
+      if (aerFrame) {
+        const senderShortHex = aerFrame.senderShortId.toString(16).padStart(8, '0');
+        const aerNonce = `aer_${senderShortHex}_${aerFrame.seq}`;
+
+        // Deduplicación de espigas: prevenir bucles infinitos y ecos
+        if (this.seenNonces.has(aerNonce)) {
+          return;
+        }
+        this.seenNonces.set(aerNonce, Date.now());
+
+        for (const spike of aerFrame.spikes) {
+          synapticMeshRouter.recordAerSpikeReceived(spike, senderShortHex);
+
+          // Ruteo biológico instantáneo según dominio somático
+          if (spike.domain === AerDomainCode.CX_COMPASS_HEADING) {
+            const headingDeg = spike.value >= 0 && spike.value < 360 ? spike.value : ((spike.value & 0xFF) * 360 / 256);
+            synapticMeshRouter.touchPeer(senderShortHex, 75, headingDeg);
+          } else if (spike.domain === AerDomainCode.KURAMOTO_PHASE_PULSE) {
+            ringAttractor.injectRemoteKuramotoPhase(
+              senderShortHex,
+              spike.value & 0xFF,
+              Date.now(),
+              0.90
+            );
+          } else if (spike.domain === AerDomainCode.EW_JAMMING_DETECTED) {
+            console.warn(`[MeshRouter] 🛡️ Alerta AER: Interferencia EW Jamming detectada por nodo ${senderShortHex}`);
+            giantFiberReflex.triggerEscape('EW_JAMMING');
+            const targetCh = spike.value < 8 ? `lora_ch_${spike.value}` : 'lora_ch_0';
+            dtnMushroomBody.applyDopaminergicNeuromodulation('PPL1', 0.85, targetCh);
+          } else if (spike.domain === AerDomainCode.CBRN_RADIATION_ALERT) {
+            console.warn(`[MeshRouter] ☢️ Alerta AER: Salto CBRN recibido de nodo ${senderShortHex} (Nivel: ${spike.value})`);
+          }
+        }
+
+        // Reenvío Multi-Salto Neuromórfico (Relay con decaimiento de TTL)
+        if (aerFrame.ttl > 1) {
+          const relayedFrame = encodeAerSpikeFrame(
+            aerFrame.senderShortId,
+            aerFrame.seq,
+            aerFrame.ttl - 1,
+            aerFrame.spikes
+          );
+          this.sendViaLoRa(relayedFrame).catch(() => {});
+          bluetoothTransport.send('broadcast', relayedFrame).catch(() => {});
+        }
+
+        return;
+      }
+    }
+
     // 0. MULTIPATH BONDING: Intercept raw wire bonded shards (Magic 0xBD01)
     if (raw.length >= 15 && raw[0] === 0xBD && raw[1] === 0x01) {
       const reconstructed = multipathBonding.ingestShard(raw);
@@ -1648,6 +1745,16 @@ class MeshRouter {
         geohashPrefix: 'geo_mesh',
         summary: preview.slice(0, 60),
       });
+    } catch {}
+
+    // 0.0 CRITICALIDAD DE ENJAMBRE (SOC): Registrar recepción de paquete para Branching Ratio sigma
+    try {
+      swarmCriticality.recordPacketReceived(1);
+    } catch {}
+
+    // 0.0b STDP 3-FACTORES (Mushroom Body): Registrar coincidencia pre/post en canal RF activo
+    try {
+      dtnMushroomBody.recordPrePostCoincidence('lora_ch_0', 1.0);
     } catch {}
 
     // Bind packet sender to transport ID if provided
@@ -1762,6 +1869,21 @@ class MeshRouter {
         } catch {}
       }
 
+      // 0.2 NEUROMORPHIC AER SPIKE DISPATCH (MeshPacket Encapsulated)
+      if ((packet.flags & FLAG_AER_SPIKE) !== 0) {
+        try {
+          if (packet.payload.length >= 14 && packet.payload[0] === 0xAE && packet.payload[1] === 0x51) {
+            const aerFrame = decodeAerSpikeFrame(packet.payload);
+            if (aerFrame) {
+              const senderShortHex = aerFrame.senderShortId.toString(16).padStart(8, '0');
+              for (const spike of aerFrame.spikes) {
+                synapticMeshRouter.recordAerSpikeReceived(spike, senderShortHex);
+              }
+            }
+          }
+        } catch {}
+      }
+
       // 1. DELIVERY_ACK Handling
       if (payloadStr.startsWith('{') && payloadStr.includes('DELIVERY_ACK')) {
         const parsed = JSON.parse(payloadStr);
@@ -1772,6 +1894,10 @@ class MeshRouter {
 
           if (ackNonce) {
             dtnStorage.remove(ackNonce);
+            // Refuerzo PAM en STDP 3-Factores ante entrega exitosa confirmada
+            try {
+              dtnMushroomBody.applyDopaminergicNeuromodulation('PAM', 0.40, 'lora_ch_0');
+            } catch {}
             // Handle bonded packet ACK: remove parent bundle if shard was ACKed
             const bondPrefix = ackNonce.replace(/_s\d+$/, '');
             if (bondPrefix !== ackNonce) {
@@ -2211,8 +2337,9 @@ class MeshRouter {
     }
 
     // Global Cognitive Fallback A: Electronic Warfare / Jamming active in RF -> route via SoundMesh
-    if (decision.isElectronicWarfareActive && encoded.length <= 255) {
-      console.log(`[MeshRouter] 🛡️ Jamming EW Active: Routing via SoundMesh (${decision.rationale})`);
+    const jammingVector = dtnMushroomBody.getJammingEvasionVector();
+    if ((decision.isElectronicWarfareActive || jammingVector.shouldHopChannel) && encoded.length <= 255) {
+      console.log(`[MeshRouter] 🛡️ Jamming EW / Mushroom Body Avoidance Active: Routing via SoundMesh (Avoidance: ${jammingVector.highestAvoidanceScore})`);
       const ok = await SoundMeshEngine.transmitPayload(encoded);
       if (ok) {
         dtnStorage.markAttempt(packet.nonce, false);
@@ -2271,11 +2398,16 @@ class MeshRouter {
         const optimalHop = synapticMeshRouter.getOptimalNextHop(canonicalRecipient, candidateNeighbors);
         if (optimalHop && optimalHop.id !== canonicalRecipient) {
           const hopPeer = optimalHop.peer;
-          const ok = await this.sendToPeer(optimalHop.id, (hopPeer.transport as 'wifi' | 'ble' | 'lora' | 'soundmesh') || 'ble', encoded);
-          if (ok) {
-            console.log(`[MeshRouter] 🧠 Synaptic Connectome: Delivered unicast to ${canonicalRecipient.slice(0, 8)} via next-hop ${optimalHop.id.slice(0, 8)}`);
-            dtnStorage.markAttempt(packet.nonce, false);
-            return 'sent';
+          const hopWeight = synapticMeshRouter.getLink(optimalHop.id)?.weight ?? 0.30;
+          const flowAttenuation = synapticMeshRouter.calculateEffectiveFlowAttenuation([hopWeight]);
+          const isUrgent = (packet.flags & 0x01) !== 0 || packet.nonce.includes('sos') || packet.nonce.includes('cbrn');
+          if (flowAttenuation >= 0.05 || isUrgent) {
+            const ok = await this.sendToPeer(optimalHop.id, (hopPeer.transport as 'wifi' | 'ble' | 'lora' | 'soundmesh') || 'ble', encoded);
+            if (ok) {
+              console.log(`[MeshRouter] 🧠 Synaptic Connectome: Delivered unicast to ${canonicalRecipient.slice(0, 8)} via next-hop ${optimalHop.id.slice(0, 8)} (Flow: ${flowAttenuation})`);
+              dtnStorage.markAttempt(packet.nonce, false);
+              return 'sent';
+            }
           }
         }
       }
@@ -2412,7 +2544,16 @@ class MeshRouter {
       dtnStorage.markAttempt(packet.nonce, false);
     }
 
+    if (anySent) {
+      try {
+        swarmCriticality.recordPacketRelayed(1);
+      } catch {}
+    }
+
     if (!anySent) {
+      try {
+        dtnMushroomBody.applyDopaminergicNeuromodulation('PPL1', 0.35, 'lora_ch_0');
+      } catch {}
       console.log(`[MeshRouter] No reachable route — saved in persistent DTN queue for ${packet.recipient.slice(0, 8)}`);
       return 'queued';
     }

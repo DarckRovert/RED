@@ -10,6 +10,8 @@ import { johnstonOrgan, JohnstonOrganTelemetry } from "../lib/neuro/JohnstonOrga
 import { metabolicGovernor, MetabolicGovernorTelemetry } from "../lib/neuro/MetabolicNeuromorphicGovernor";
 import { opticLobe, OpticLobeTelemetry } from "../lib/neuro/OpticLobeEngine";
 import { tacticalMotorActuator, TacticalMotorActuatorTelemetry } from "../lib/neuro/TacticalMotorActuatorEngine";
+import { centralPatternGenerator, CpgLocomotionTelemetry, LegIdentifier } from "../lib/neuro/CentralPatternGeneratorEngine";
+import { swarmCriticality, SwarmCriticalityTelemetry, CriticalityPhaseState } from "../lib/neuro/SwarmCriticalityEngine";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacIcon } from "./ui/TacIcon";
@@ -26,6 +28,7 @@ import { HippocampalMemoryModal } from "./tactical/HippocampalMemoryModal";
 import { predictiveCortex } from "../lib/neuro/human/PredictiveCortexEngine";
 import { globalWorkspaceConsciousnessBus, ConsciousnessSnapshot } from "../lib/neuro/GlobalWorkspaceConsciousnessBus";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { bioCompassDualFusion, BioCompassDualTelemetry } from "../lib/neuro/BioCompassDualFusionEngine";
 
 interface Point3D {
   x: number;
@@ -68,6 +71,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const [metTelemetry, setMetTelemetry] = useState<MetabolicGovernorTelemetry>(() => metabolicGovernor.getTelemetry());
   const [opticTelemetry, setOpticTelemetry] = useState<OpticLobeTelemetry>(() => opticLobe.getTelemetry());
   const [motorTelemetry, setMotorTelemetry] = useState<TacticalMotorActuatorTelemetry>(() => tacticalMotorActuator.getTelemetry());
+  const [criticalityTelemetry, setCriticalityTelemetry] = useState<SwarmCriticalityTelemetry>(() => swarmCriticality.getTelemetry());
+  const [dualTelemetry, setDualTelemetry] = useState<BioCompassDualTelemetry>(() => bioCompassDualFusion.getTelemetry());
   const [rfBearings, setRfBearings] = useState<RfPeerBearing[]>(() => synapticMeshRouter.getAllActiveBearings());
 
   // Filtros de visualización y control de cámara 3D
@@ -242,12 +247,15 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const metTelemRef = useRef<MetabolicGovernorTelemetry>(metTelemetry);
   const opticTelemRef = useRef<OpticLobeTelemetry>(opticTelemetry);
   const motorTelemRef = useRef<TacticalMotorActuatorTelemetry>(motorTelemetry);
+  const critTelemRef = useRef<SwarmCriticalityTelemetry>(criticalityTelemetry);
+  const dualTelemRef = useRef<BioCompassDualTelemetry>(dualTelemetry);
   const rfBearingsRef = useRef<RfPeerBearing[]>(rfBearings);
   const humanRef = useRef<HumanBrainTelemetrySnapshot>(humanSnapshot);
   const consciousnessRef = useRef<ConsciousnessSnapshot>(consciousnessTelemetry);
 
   // Suscripción desacoplada a los 11 subsistemas neurobiológicos
   useEffect(() => {
+    globalWorkspaceConsciousnessBus.start();
     const unsubCx = ringAttractor.subscribe((t) => { cxTelemRef.current = t; });
     const unsubFb = fanShapedBody.subscribe((t) => { fbTelemRef.current = t; });
     const unsubSyn = synapticMeshRouter.subscribe((st) => {
@@ -260,6 +268,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     const unsubMet = metabolicGovernor.subscribe((t) => { metTelemRef.current = t; });
     const unsubOptic = opticLobe.subscribe((t) => { opticTelemRef.current = t; });
     const unsubMotor = tacticalMotorActuator.subscribe((t) => { motorTelemRef.current = t; });
+    const unsubCrit = swarmCriticality.subscribe((t) => { critTelemRef.current = t; });
+    const unsubDual = bioCompassDualFusion.subscribe((t) => { dualTelemRef.current = t; });
     const unsubConsciousness = globalWorkspaceConsciousnessBus.subscribe((t) => { consciousnessRef.current = t; });
     const unsubHuman = humanBrainOrchestrator.subscribe((t) => { humanRef.current = t; });
 
@@ -278,6 +288,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       setMetTelemetry(metTelemRef.current);
       setOpticTelemetry(opticTelemRef.current);
       setMotorTelemetry(motorTelemRef.current);
+      setCriticalityTelemetry(critTelemRef.current);
+      setDualTelemetry(dualTelemRef.current);
       setConsciousnessTelemetry(consciousnessRef.current);
       setHumanSnapshot(humanRef.current);
     }, 250);
@@ -293,6 +305,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       unsubMet();
       unsubOptic();
       unsubMotor();
+      unsubCrit();
+      unsubDual();
       unsubConsciousness();
       unsubHuman();
     };
@@ -2281,6 +2295,523 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
               </div>
               <div style={{ fontSize: "0.60rem", color: "#64748B", marginTop: "2px" }}>Consenso de fase de colmena en malla LoRa</div>
             </div>
+
+            <div style={{ padding: "10px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(168, 85, 247, 0.3)", borderRadius: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: "0.65rem", color: "#A855F7", fontWeight: 800 }}>ÍNDICE CI (ROJAS ALIAGA)</div>
+                <div style={{ fontSize: "0.55rem", color: "#C084FC", background: "rgba(168, 85, 247, 0.15)", padding: "1px 5px", borderRadius: "3px" }}>
+                  4D Multi-Teoría
+                </div>
+              </div>
+              <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#FFFFFF", marginTop: "4px" }}>
+                {((consciousnessTelemetry.ciScore ?? 0.5) * 10).toFixed(1)} <span style={{ fontSize: "0.70rem", color: "#94A3B8" }}>/ 10</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "4px", marginTop: "6px", fontSize: "0.58rem" }}>
+                <div style={{ background: "rgba(255,255,255,0.04)", padding: "2px 3px", borderRadius: "3px", textAlign: "center" }} title="Tononi Integrated Information Phi (IIT)">
+                  <span style={{ color: "#38BDF8", fontWeight: 700 }}>Φ:</span> {((consciousnessTelemetry.phiIit ?? 0.42)).toFixed(2)}
+                </div>
+                <div style={{ background: "rgba(255,255,255,0.04)", padding: "2px 3px", borderRadius: "3px", textAlign: "center" }} title="Global Workspace Broadcast Coverage (Baars/Dehaene)">
+                  <span style={{ color: "#34D399", fontWeight: 700 }}>GW:</span> {((consciousnessTelemetry.gwBroadcast ?? 0.60)).toFixed(2)}
+                </div>
+                <div style={{ background: "rgba(255,255,255,0.04)", padding: "2px 3px", borderRadius: "3px", textAlign: "center" }} title="Metzinger Sensorimotor Self-Model Accuracy">
+                  <span style={{ color: "#FBBF24", fontWeight: 700 }}>Self:</span> {((consciousnessTelemetry.selfModelAccuracy ?? 0.85)).toFixed(2)}
+                </div>
+                <div style={{ background: "rgba(255,255,255,0.04)", padding: "2px 3px", borderRadius: "3px", textAlign: "center" }} title="Perturbational Complexity Index PCI (Massimini/Koch)">
+                  <span style={{ color: "#F472B6", fontWeight: 700 }}>PCI:</span> {((consciousnessTelemetry.perturbationComplexity ?? 0.25)).toFixed(2)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Módulo Neuromórfico AER: Micro-Espigas y Economía de Airtime RF */}
+          <div style={{ padding: "12px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(52, 211, 153, 0.25)", borderRadius: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "#34D399", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>⚡ PROTOCOLO NEUROMÓRFICO AER (MICRO-ESPIGAS LPI/LPD)</span>
+                <span style={{ fontSize: "0.55rem", background: "rgba(52, 211, 153, 0.15)", color: "#34D399", padding: "1px 6px", borderRadius: "4px" }}>
+                  ~90% Airtime Ahorrado
+                </span>
+              </div>
+              <button
+                onClick={async () => {
+                  TacticalAudioEngine.playTap();
+                  await meshRouter.broadcastAerSpike(0x01 /* CX_COMPASS_HEADING */, 0, cxTelemetry.headingDeg);
+                  toast.success(`Micro-espiga AER emitida: 14 bytes (Rumbo ${cxTelemetry.headingDeg}°)`);
+                }}
+                style={{
+                  padding: "4px 10px",
+                  background: "rgba(52, 211, 153, 0.15)",
+                  border: "1px solid #34D399",
+                  borderRadius: "4px",
+                  color: "#34D399",
+                  fontSize: "0.68rem",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                DISPARAR ESPIGA AER (14B)
+              </button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", fontSize: "0.70rem" }}>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "6px 8px", borderRadius: "6px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.60rem" }}>Espigas Emitidas / Recibidas</div>
+                <div style={{ color: "#F8FAFC", fontWeight: 800, fontSize: "0.85rem", marginTop: "2px" }}>
+                  {synapticTelemetry.aerSpikesEmittedCount ?? 0} <span style={{ color: "#64748B" }}>/</span> {synapticTelemetry.aerSpikesReceivedCount ?? 0}
+                </div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "6px 8px", borderRadius: "6px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.60rem" }}>Espectro RF Ahorrado</div>
+                <div style={{ color: "#34D399", fontWeight: 800, fontSize: "0.85rem", marginTop: "2px" }}>
+                  {((synapticTelemetry.airtimeSavedBytesTotal ?? 0) / 1024).toFixed(2)} KB
+                </div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "6px 8px", borderRadius: "6px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.60rem" }}>Último Evento AER</div>
+                <div style={{ color: "#38BDF8", fontWeight: 800, fontSize: "0.75rem", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {synapticTelemetry.lastAerSpike ? `Dom 0x0${synapticTelemetry.lastAerSpike.domain} · Val ${synapticTelemetry.lastAerSpike.value}` : "En Reposo (Quiescent)"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Módulo CPG: Generador de Patrones Centrales y Marcha Trípode Hexápoda */}
+          <div style={{ padding: "12px", background: "rgba(15, 23, 42, 0.75)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "8px", display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+              <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "#10B981", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>🦗 CPG LOCOMOCIÓN HEXÁPODA (NEURO-MECH-FLY v2)</span>
+                <span style={{ fontSize: "0.55rem", background: "rgba(16, 185, 129, 0.15)", color: "#10B981", padding: "1px 6px", borderRadius: "4px" }}>
+                  {motorTelemetry.cpg?.gaitMode ?? "TRIPOD"} · {motorTelemetry.cpg?.meanFrequencyHz ?? 2.0} Hz
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <button
+                  onClick={() => {
+                    TacticalAudioEngine.playTap();
+                    centralPatternGenerator.setObstacleContact('LF', true);
+                    toast.warning("⚠️ Obstáculo inyectado en pata LF: Reflejo elevador activado (+60% fémur)");
+                    setTimeout(() => centralPatternGenerator.setObstacleContact('LF', false), 900);
+                  }}
+                  style={{
+                    padding: "4px 8px",
+                    background: "rgba(245, 158, 11, 0.15)",
+                    border: "1px solid #F59E0B",
+                    borderRadius: "4px",
+                    color: "#F59E0B",
+                    fontSize: "0.65rem",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                  title="Simula colisión en vuelo para probar el reflejo elevador de sensilias campaniformes"
+                >
+                  OBSTÁCULO LF
+                </button>
+                <button
+                  onClick={() => {
+                    TacticalAudioEngine.playTap();
+                    const frame = centralPatternGenerator.exportActuatorFrameBinary();
+                    let hex = "";
+                    for (let i = 0; i < frame.length; i++) {
+                      hex += frame[i].toString(16).padStart(2, "0").toUpperCase() + " ";
+                    }
+                    toast.success(`Trama ESP32-S3 (12B): ${hex.trim()}`);
+                  }}
+                  style={{
+                    padding: "4px 8px",
+                    background: "rgba(16, 185, 129, 0.15)",
+                    border: "1px solid #10B981",
+                    borderRadius: "4px",
+                    color: "#10B981",
+                    fontSize: "0.65rem",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                  title="Genera trama binaria compacta con CRC8 para relés robóticos ESP32-S3"
+                >
+                  TRAMA ESP32 (12B)
+                </button>
+              </div>
+            </div>
+
+            {/* Métricas clave de marcha */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px", fontSize: "0.68rem" }}>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Coherencia Trípode (R)</div>
+                <div style={{ color: (motorTelemetry.cpg?.tripodCoherenceIndex ?? 1.0) >= 0.85 ? "#10B981" : "#F59E0B", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {(((motorTelemetry.cpg?.tripodCoherenceIndex ?? 1.0)) * 100).toFixed(1)}%
+                </div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Velocidad / Sesgo</div>
+                <div style={{ color: "#38BDF8", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {((motorTelemetry.cpg?.forwardSpeedNormalized ?? 0.5) * 100).toFixed(0)}% · {motorTelemetry.cpg?.steeringBias === 0 ? "CENTRO" : (motorTelemetry.cpg?.steeringBias ?? 0) < 0 ? "BABOR" : "ESTRIBOR"}
+                </div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Ciclos de Zancada</div>
+                <div style={{ color: "#F8FAFC", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {motorTelemetry.cpg?.totalGaitCycles ?? 0}
+                </div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Reflejos Elevador/Búsqueda</div>
+                <div style={{ color: "#F59E0B", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {motorTelemetry.cpg?.elevatorReflexTriggerCount ?? 0} / {motorTelemetry.cpg?.searchingReflexTriggerCount ?? 0}
+                </div>
+              </div>
+            </div>
+
+            {/* Esquema Anatómico Hexápodo Top-Down de las 6 Patas */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 50px 1fr", gap: "6px", alignItems: "center", background: "rgba(0,0,0,0.3)", padding: "8px", borderRadius: "6px" }}>
+              {/* Lado Izquierdo: LF, LM, LH */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                {(['LF', 'LM', 'LH'] as const).map((legId) => {
+                  const leg = motorTelemetry.cpg?.legs?.[legId];
+                  const isStance = leg?.subPhase === 'STANCE';
+                  const isElevator = leg?.elevatorReflexActive;
+                  return (
+                    <div
+                      key={legId}
+                      style={{
+                        padding: "4px 6px",
+                        background: isElevator ? "rgba(245, 158, 11, 0.2)" : isStance ? "rgba(16, 185, 129, 0.12)" : "rgba(0, 229, 255, 0.12)",
+                        border: `1px solid ${isElevator ? '#F59E0B' : isStance ? 'rgba(16, 185, 129, 0.4)' : 'rgba(0, 229, 255, 0.4)'}`,
+                        borderRadius: "4px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        fontSize: "0.62rem",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                        <span style={{ fontWeight: 800, color: leg?.tripod === 'TRIPOD_A' ? '#A7F3D0' : '#BAE6FD' }}>{legId}</span>
+                        <span style={{ fontSize: "0.52rem", color: "#64748B" }}>[{leg?.tripod === 'TRIPOD_A' ? 'Trípode A' : 'Trípode B'}]</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ color: isStance ? "#10B981" : "#00E5FF", fontWeight: 700 }}>
+                          {isElevator ? "ELEVADOR" : isStance ? "APOYO" : "VUELO"}
+                        </span>
+                        <span style={{ color: "#94A3B8", fontFamily: "monospace" }}>
+                          {((leg?.normalizedPhase ?? 0) * 360).toFixed(0)}°
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Chasis Central Hexápodo */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", borderLeft: "1px dashed rgba(255,255,255,0.1)", borderRight: "1px dashed rgba(255,255,255,0.1)" }}>
+                <div style={{ fontSize: "0.50rem", color: "#64748B", textTransform: "uppercase", letterSpacing: "1px" }}>TORAX</div>
+                <div style={{ fontSize: "0.9rem", color: "#10B981", margin: "2px 0" }}>▲</div>
+                <div style={{ fontSize: "0.50rem", color: "#64748B" }}>VNC</div>
+              </div>
+
+              {/* Lado Derecho: RF, RM, RH */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                {(['RF', 'RM', 'RH'] as const).map((legId) => {
+                  const leg = motorTelemetry.cpg?.legs?.[legId];
+                  const isStance = leg?.subPhase === 'STANCE';
+                  const isElevator = leg?.elevatorReflexActive;
+                  return (
+                    <div
+                      key={legId}
+                      style={{
+                        padding: "4px 6px",
+                        background: isElevator ? "rgba(245, 158, 11, 0.2)" : isStance ? "rgba(16, 185, 129, 0.12)" : "rgba(0, 229, 255, 0.12)",
+                        border: `1px solid ${isElevator ? '#F59E0B' : isStance ? 'rgba(16, 185, 129, 0.4)' : 'rgba(0, 229, 255, 0.4)'}`,
+                        borderRadius: "4px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        fontSize: "0.62rem",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                        <span style={{ fontWeight: 800, color: leg?.tripod === 'TRIPOD_A' ? '#A7F3D0' : '#BAE6FD' }}>{legId}</span>
+                        <span style={{ fontSize: "0.52rem", color: "#64748B" }}>[{leg?.tripod === 'TRIPOD_A' ? 'Trípode A' : 'Trípode B'}]</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ color: isStance ? "#10B981" : "#00E5FF", fontWeight: 700 }}>
+                          {isElevator ? "ELEVADOR" : isStance ? "APOYO" : "VUELO"}
+                        </span>
+                        <span style={{ color: "#94A3B8", fontFamily: "monospace" }}>
+                          {((leg?.normalizedPhase ?? 0) * 360).toFixed(0)}°
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Selectores de Régimen de Locomoción */}
+            <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: "0.60rem", color: "#94A3B8", marginRight: "4px" }}>RÉGIMEN:</span>
+              {[
+                { label: "PARADA", speed: 0.0 },
+                { label: "PASO (1.5 Hz)", speed: 0.25 },
+                { label: "MARCHA (2.5 Hz)", speed: 0.5 },
+                { label: "TROTE (4.0 Hz)", speed: 1.0 },
+              ].map((m) => (
+                <button
+                  key={m.label}
+                  onClick={() => {
+                    TacticalAudioEngine.playTap();
+                    tacticalMotorActuator.setLocomotionSpeed(m.speed);
+                  }}
+                  style={{
+                    padding: "3px 7px",
+                    background: (motorTelemetry.cpg?.forwardSpeedNormalized ?? 0.5) === m.speed ? "rgba(16, 185, 129, 0.25)" : "rgba(255,255,255,0.05)",
+                    border: `1px solid ${(motorTelemetry.cpg?.forwardSpeedNormalized ?? 0.5) === m.speed ? "#10B981" : "rgba(255,255,255,0.1)"}`,
+                    borderRadius: "3px",
+                    color: (motorTelemetry.cpg?.forwardSpeedNormalized ?? 0.5) === m.speed ? "#10B981" : "#94A3B8",
+                    fontSize: "0.60rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {m.label}
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playAlarm();
+                  tacticalMotorActuator.triggerEmergencyBurst();
+                  toast.warning("🚨 Reflejo de Fibras Gigantes (GFS): Sprint de escape a 8.0 Hz activado");
+                }}
+                style={{
+                  padding: "3px 7px",
+                  background: "rgba(239, 68, 68, 0.2)",
+                  border: "1px solid #EF4444",
+                  borderRadius: "3px",
+                  color: "#EF4444",
+                  fontSize: "0.60rem",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  marginLeft: "auto",
+                }}
+              >
+                ESCAPE GFS (8 Hz)
+              </button>
+            </div>
+          </div>
+
+          {/* Criticalidad Auto-Organizada (SOC sigma ~ 1.0 & neurolib) */}
+          <div style={{ padding: "12px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(16, 185, 129, 0.25)", borderRadius: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "0.9rem" }}>🌐</span>
+                <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#10B981", letterSpacing: "0.5px" }}>
+                  CRITICALIDAD AUTO-ORGANIZADA (SOC σ ≈ 1.0 & NEUROLIB)
+                </span>
+              </div>
+              {/* Badge de Fase */}
+              <div
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "10px",
+                  fontSize: "0.62rem",
+                  fontWeight: 800,
+                  background:
+                    criticalityTelemetry.criticalityState === 'CRITICAL'
+                      ? "rgba(16, 185, 129, 0.2)"
+                      : criticalityTelemetry.criticalityState === 'SUPER_CRITICAL'
+                      ? "rgba(239, 68, 68, 0.2)"
+                      : "rgba(56, 189, 248, 0.2)",
+                  color:
+                    criticalityTelemetry.criticalityState === 'CRITICAL'
+                      ? "#10B981"
+                      : criticalityTelemetry.criticalityState === 'SUPER_CRITICAL'
+                      ? "#EF4444"
+                      : "#38BDF8",
+                  border: `1px solid ${
+                    criticalityTelemetry.criticalityState === 'CRITICAL'
+                      ? "#10B981"
+                      : criticalityTelemetry.criticalityState === 'SUPER_CRITICAL'
+                      ? "#EF4444"
+                      : "#38BDF8"
+                  }`,
+                }}
+              >
+                {criticalityTelemetry.criticalityState === 'CRITICAL'
+                  ? "CRÍTICO ÓPTIMO (σ ≈ 1.00)"
+                  : criticalityTelemetry.criticalityState === 'SUPER_CRITICAL'
+                  ? "SUPER-CRÍTICO (σ > 1.10) [TORMENTA]"
+                  : "SUB-CRÍTICO (σ < 0.90) [HIPO-ACTIVIDAD]"}
+              </div>
+            </div>
+
+            {/* Subtítulo dinámico explicativo */}
+            <div style={{ fontSize: "0.62rem", color: "#94A3B8", lineHeight: 1.3 }}>
+              {criticalityTelemetry.criticalityState === 'CRITICAL' && (
+                <span style={{ color: "#A7F3D0" }}>
+                  ✓ Estado de máxima capacidad de transmisión de Shannon. Avalanchas neuronales libres de escala P(S) ~ S^(-α).
+                </span>
+              )}
+              {criticalityTelemetry.criticalityState === 'SUPER_CRITICAL' && (
+                <span style={{ color: "#FCA5A5" }}>
+                  ⚠ Ráfagas explosivas y riesgo de tormenta de difusión. Plasticidad homeostática deprimiendo P_relay automáticamente.
+                </span>
+              )}
+              {criticalityTelemetry.criticalityState === 'SUB_CRITICAL' && (
+                <span style={{ color: "#BAE6FD" }}>
+                  ℹ Decaimiento exponencial de información. Auto-elevando P_relay hacia el atractor crítico.
+                </span>
+              )}
+            </div>
+
+            {/* Barra Visual de Branching Ratio sigma [0.0 .. 2.0] */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.58rem", color: "#64748B" }}>
+                <span>Sub-Crítico (0.0)</span>
+                <span style={{ color: "#10B981", fontWeight: 700 }}>Crítico Óptimo (1.0)</span>
+                <span>Super-Crítico (2.0+)</span>
+              </div>
+              <div style={{ height: "6px", width: "100%", background: "rgba(255,255,255,0.06)", borderRadius: "3px", position: "relative", overflow: "hidden" }}>
+                {/* Zona Crítica [0.90 - 1.10] normalizada a [45% - 55%] */}
+                <div style={{ position: "absolute", left: "45%", width: "10%", height: "100%", background: "rgba(16, 185, 129, 0.35)" }} />
+                {/* Indicador de posición de sigma */}
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${Math.min(100, Math.max(0, (criticalityTelemetry.branchingRatio / 2.0) * 100))}%`,
+                    width: "4px",
+                    height: "100%",
+                    background:
+                      criticalityTelemetry.criticalityState === 'CRITICAL'
+                        ? "#10B981"
+                        : criticalityTelemetry.criticalityState === 'SUPER_CRITICAL'
+                        ? "#EF4444"
+                        : "#38BDF8",
+                    boxShadow: "0 0 6px currentColor",
+                    transform: "translateX(-50%)",
+                    transition: "left 0.25s ease-out",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Métricas Numéricas de Teoría de Redes Complejas */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px" }}>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Branching (σ)</div>
+                <div
+                  style={{
+                    fontWeight: 800,
+                    fontSize: "0.80rem",
+                    color:
+                      criticalityTelemetry.criticalityState === 'CRITICAL'
+                        ? "#10B981"
+                        : criticalityTelemetry.criticalityState === 'SUPER_CRITICAL'
+                        ? "#EF4444"
+                        : "#38BDF8",
+                  }}
+                >
+                  {criticalityTelemetry.branchingRatio.toFixed(2)}
+                </div>
+              </div>
+
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Exp. Alfa (α)</div>
+                <div style={{ color: "#00E5FF", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {criticalityTelemetry.estimatedAlpha.toFixed(2)}
+                </div>
+              </div>
+
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>P_relay (Turrigiano)</div>
+                <div style={{ color: "#F59E0B", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {Math.round(criticalityTelemetry.relayProbability * 100)}%
+                </div>
+              </div>
+
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>K-Umbral Tormenta</div>
+                <div style={{ color: "#EC4899", fontWeight: 800, fontSize: "0.80rem" }}>
+                  K = {criticalityTelemetry.adaptiveKCounterThreshold}
+                </div>
+              </div>
+            </div>
+
+            {/* Estadísticas de Avalanchas y Tráfico en Ventana */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+              <div style={{ background: "rgba(0,0,0,0.25)", padding: "5px 7px", borderRadius: "5px", fontSize: "0.60rem" }}>
+                <span style={{ color: "#64748B" }}>Tráfico Ventana 10s: </span>
+                <span style={{ color: "#E2E8F0", fontWeight: 700 }}>
+                  In: {criticalityTelemetry.packetsInWindow} / Out: {criticalityTelemetry.packetsOutWindow}
+                </span>
+              </div>
+              <div style={{ background: "rgba(0,0,0,0.25)", padding: "5px 7px", borderRadius: "5px", fontSize: "0.60rem" }}>
+                <span style={{ color: "#64748B" }}>Avalanchas (S, T): </span>
+                <span style={{ color: "#E2E8F0", fontWeight: 700 }}>
+                  {criticalityTelemetry.totalAvalanchesCount} tot ({criticalityTelemetry.lastAvalancheSize} pkts / {criticalityTelemetry.lastAvalancheDurationMs}ms)
+                </span>
+              </div>
+            </div>
+
+            {/* Controles Tácticos de Perturbación & Reseteo */}
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  swarmCriticality.recordPacketReceived(45);
+                  toast.warning("⚡ Ráfaga super-crítica inyectada (+45 paquetes): observe autorregulación homeostática P_relay");
+                }}
+                style={{
+                  padding: "4px 8px",
+                  background: "rgba(239, 68, 68, 0.15)",
+                  border: "1px solid rgba(239, 68, 68, 0.4)",
+                  borderRadius: "4px",
+                  color: "#EF4444",
+                  fontSize: "0.60rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                PERTURBAR SUPER-CRÍTICO (+45)
+              </button>
+
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  swarmCriticality.recordPacketRelayed(0);
+                  toast.info("❄ Decaimiento sub-crítico registrado");
+                }}
+                style={{
+                  padding: "4px 8px",
+                  background: "rgba(56, 189, 248, 0.15)",
+                  border: "1px solid rgba(56, 189, 248, 0.4)",
+                  borderRadius: "4px",
+                  color: "#38BDF8",
+                  fontSize: "0.60rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                PERTURBAR SUB-CRÍTICO
+              </button>
+
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  swarmCriticality.reset();
+                  toast.success("🌿 Atractor crítico restablecido (σ = 1.0, P_relay = 100%)");
+                }}
+                style={{
+                  padding: "4px 8px",
+                  background: "rgba(16, 185, 129, 0.15)",
+                  border: "1px solid rgba(16, 185, 129, 0.4)",
+                  borderRadius: "4px",
+                  color: "#10B981",
+                  fontSize: "0.60rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  marginLeft: "auto",
+                }}
+              >
+                RESET HOMEOSTÁTICO
+              </button>
+            </div>
           </div>
 
           {/* Sincronizador de Fase Kuramoto (Colmena P2P) */}
@@ -2364,6 +2895,388 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
               </div>
             )}
           </div>
+
+          {/* STDP Tridimensional con Modulación Dopaminérgica & Evasión de Jamming EW */}
+          <div style={{ padding: "12px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(236, 72, 153, 0.25)", borderRadius: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "0.9rem" }}>🍄</span>
+                <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#F472B6", letterSpacing: "0.5px" }}>
+                  CUERPO FUNGIFORME: STDP 3-FACTORES & EVASIÓN DE JAMMING
+                </span>
+              </div>
+              <div
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "10px",
+                  fontSize: "0.62rem",
+                  fontWeight: 800,
+                  background: mbTelemetry.jammingEvasionActive ? "rgba(239, 68, 68, 0.2)" : "rgba(16, 185, 129, 0.2)",
+                  color: mbTelemetry.jammingEvasionActive ? "#EF4444" : "#10B981",
+                  border: `1px solid ${mbTelemetry.jammingEvasionActive ? '#EF4444' : '#10B981'}`,
+                }}
+              >
+                {mbTelemetry.jammingEvasionActive
+                  ? `🚨 EVASIÓN EW ACTIVA (SALTO -> ${mbTelemetry.recommendedChannel?.toUpperCase() || 'CH_1'})`
+                  : "🟢 CANALES RF ÓPTIMOS (LTP)"}
+              </div>
+            </div>
+
+            <div style={{ fontSize: "0.62rem", color: "#94A3B8", lineHeight: 1.3 }}>
+              Regla de 3 factores (Pre KC × Post MBON × DA): ΔW = η · e_ij · (DA_PAM - DA_PPL1).
+              Depresión LTD ante jamming o interferencia; consolidación LTP ante confirmaciones ACK.
+            </div>
+
+            {/* Medidores de Modulación Dopaminérgica (PAM vs PPL1) */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px" }}>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Dopamina PAM (LTP)</div>
+                <div style={{ color: "#10B981", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {(mbTelemetry.pamRewardScore ?? 0.5).toFixed(2)}
+                </div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Dopamina PPL1 (LTD)</div>
+                <div style={{ color: "#EF4444", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {(mbTelemetry.ppl1AversionScore ?? 0.0).toFixed(2)}
+                </div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Huellas Activas (e_ij)</div>
+                <div style={{ color: "#00E5FF", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {mbTelemetry.activeTracesCount ?? 0}
+                </div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Conducta MBON</div>
+                <div
+                  style={{
+                    fontWeight: 800,
+                    fontSize: "0.80rem",
+                    color: mbTelemetry.behavioralDrive === 'APPROACH' ? '#10B981' : mbTelemetry.behavioralDrive === 'AVOID' ? '#EF4444' : '#94A3B8',
+                  }}
+                >
+                  {mbTelemetry.behavioralDrive}
+                </div>
+              </div>
+            </div>
+
+            {/* Heatmap de Pesos Sinápticos por Canal LoRa (CH_0 .. CH_7) */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <div style={{ fontSize: "0.60rem", color: "#64748B", fontWeight: 700 }}>
+                CONDUCTANCIA SINÁPTICA POR CANAL RF (STDP WEIGHTS):
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: "4px" }}>
+                {Array.from({ length: 8 }).map((_, chIdx) => {
+                  const chKey = `lora_ch_${chIdx}`;
+                  const weight = mbTelemetry.channelWeights?.[chKey] ?? 0.50;
+                  const isJammed = weight < 0.30;
+                  const isOptimal = mbTelemetry.recommendedChannel === chKey;
+                  return (
+                    <div
+                      key={chKey}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "2px",
+                        padding: "4px 2px",
+                        background: isJammed ? "rgba(239, 68, 68, 0.15)" : isOptimal ? "rgba(16, 185, 129, 0.15)" : "rgba(255,255,255,0.02)",
+                        border: `1px solid ${isJammed ? '#EF4444' : isOptimal ? '#10B981' : 'rgba(255,255,255,0.06)'}`,
+                        borderRadius: "4px",
+                      }}
+                    >
+                      <span style={{ fontSize: "0.52rem", color: isOptimal ? "#10B981" : isJammed ? "#EF4444" : "#94A3B8", fontWeight: 800 }}>
+                        CH{chIdx}
+                      </span>
+                      {/* Barra de altura proporcional al peso [0.05 .. 1.0] */}
+                      <div style={{ width: "10px", height: "30px", background: "rgba(0,0,0,0.3)", borderRadius: "2px", display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
+                        <div
+                          style={{
+                            width: "100%",
+                            height: `${Math.round(weight * 100)}%`,
+                            background: isJammed ? "#EF4444" : weight >= 0.70 ? "#10B981" : "#F59E0B",
+                            transition: "height 0.3s ease-out",
+                          }}
+                        />
+                      </div>
+                      <span style={{ fontSize: "0.50rem", fontFamily: "monospace", color: "#E2E8F0" }}>
+                        {weight.toFixed(2)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Controles Tácticos STDP */}
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playAlarm();
+                  dtnMushroomBody.applyDopaminergicNeuromodulation('PPL1', 0.85, 'lora_ch_0');
+                  toast.warning("⚡ Ráfaga PPL1 inyectada: Deprimiendo CH_0 por interferencia EW (Jamming)");
+                }}
+                style={{
+                  padding: "4px 8px",
+                  background: "rgba(239, 68, 68, 0.15)",
+                  border: "1px solid rgba(239, 68, 68, 0.4)",
+                  borderRadius: "4px",
+                  color: "#EF4444",
+                  fontSize: "0.60rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                SIMULAR JAMMING EN CH_0 (PPL1)
+              </button>
+
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playRogerBeep();
+                  dtnMushroomBody.applyDopaminergicNeuromodulation('PAM', 0.50, 'lora_ch_1');
+                  toast.success("🌿 Ráfaga PAM inyectada: Consolidando CH_1 (LTP)");
+                }}
+                style={{
+                  padding: "4px 8px",
+                  background: "rgba(16, 185, 129, 0.15)",
+                  border: "1px solid rgba(16, 185, 129, 0.4)",
+                  borderRadius: "4px",
+                  color: "#10B981",
+                  fontSize: "0.60rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                RECOMPENSA ACK EN CH_1 (PAM)
+              </button>
+
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  dtnMushroomBody.resetStdpWeights();
+                  toast.info("Reiniciados pesos STDP de canales a 0.50 nominal");
+                }}
+                style={{
+                  padding: "4px 8px",
+                  background: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.15)",
+                  borderRadius: "4px",
+                  color: "#94A3B8",
+                  fontSize: "0.60rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  marginLeft: "auto",
+                }}
+              >
+                RESET STDP
+              </button>
+            </div>
+          </div>
+
+          {/* Módulo Compás Bio-Cibernético Dual (Fan-Shaped Body + Células de Rejilla Hexagonales + Anclaje Hipocampal) */}
+          <div style={{ padding: "12px", background: "rgba(15, 23, 42, 0.75)", border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "8px", display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "0.9rem" }}>🧭</span>
+                <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#00E5FF", letterSpacing: "0.5px" }}>
+                  COMPÁS BIO-CIBERNÉTICO DUAL (CX FAN-SHAPED BODY + MEC GRID CELLS)
+                </span>
+              </div>
+              <div
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "10px",
+                  fontSize: "0.62rem",
+                  fontWeight: 800,
+                  background:
+                    dualTelemetry.phaseCoherenceState === 'HARMONIC_CONSENSUS'
+                      ? "rgba(16, 185, 129, 0.2)"
+                      : dualTelemetry.phaseCoherenceState === 'NOMINAL'
+                      ? "rgba(0, 229, 255, 0.2)"
+                      : "rgba(245, 158, 11, 0.2)",
+                  color:
+                    dualTelemetry.phaseCoherenceState === 'HARMONIC_CONSENSUS'
+                      ? "#10B981"
+                      : dualTelemetry.phaseCoherenceState === 'NOMINAL'
+                      ? "#00E5FF"
+                      : "#F59E0B",
+                  border: `1px solid ${
+                    dualTelemetry.phaseCoherenceState === 'HARMONIC_CONSENSUS'
+                      ? "#10B981"
+                      : dualTelemetry.phaseCoherenceState === 'NOMINAL'
+                      ? "#00E5FF"
+                      : "#F59E0B"
+                  }`,
+                }}
+              >
+                {dualTelemetry.phaseCoherenceState === 'HARMONIC_CONSENSUS'
+                  ? `🟢 CONSENSO ARMÓNICO (${(dualTelemetry.phaseCoherence * 100).toFixed(0)}%)`
+                  : dualTelemetry.phaseCoherenceState === 'NOMINAL'
+                  ? `🔵 NOMINAL (${(dualTelemetry.phaseCoherence * 100).toFixed(0)}%)`
+                  : `⚠️ DERIVA INERCIAL (${(dualTelemetry.phaseCoherence * 100).toFixed(0)}%)`}
+              </div>
+            </div>
+
+            <div style={{ fontSize: "0.62rem", color: "#94A3B8", lineHeight: 1.3 }}>
+              Fusión Bio-Cibernética: Cinemática 16x9 del insecto (Stone et al., Nature 2017) + Teselación rómbico-hexagonal 4-escalas (Moser & Moser, Nobel 2014) + Anclaje episódico hipocampal CA3 a 0.0m de deriva.
+            </div>
+
+            {/* Cuadrícula de Métricas Principales */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px", fontSize: "0.68rem" }}>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Rumbo Fused (E-PG)</div>
+                <div style={{ color: "#00E5FF", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {dualTelemetry.headingDeg}° ({dualTelemetry.cardinal})
+                </div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Home Vector (FB)</div>
+                <div style={{ color: "#10B981", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {dualTelemetry.homeVector.distanceMeters}m · {dualTelemetry.homeVector.cardinal}
+                </div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Deriva Inercial Est.</div>
+                <div style={{ color: dualTelemetry.estimatedDriftMeters > 5 ? "#F59E0B" : "#A7F3D0", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {dualTelemetry.estimatedDriftMeters}m <span style={{ fontSize: "0.55rem", color: "#64748B" }}>({dualTelemetry.hippocampalResetsCount} resets)</span>
+                </div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.03)", padding: "5px 7px", borderRadius: "5px" }}>
+                <div style={{ color: "#94A3B8", fontSize: "0.58rem" }}>Timoneo CPG Hexápodo</div>
+                <div style={{ color: dualTelemetry.isAutonomousNavigationActive ? "#F472B6" : "#64748B", fontWeight: 800, fontSize: "0.80rem" }}>
+                  {dualTelemetry.autonomousCpgSteering} ({dualTelemetry.fusedSteeringErrorDeg > 0 ? `+${dualTelemetry.fusedSteeringErrorDeg}` : dualTelemetry.fusedSteeringErrorDeg}°)
+                </div>
+              </div>
+            </div>
+
+            {/* Visualizador de las 4 Escalas de Células de Rejilla (MEC) */}
+            <div style={{ background: "rgba(0,0,0,0.3)", padding: "8px", borderRadius: "6px", display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.62rem" }}>
+                <span style={{ color: "#E2E8F0", fontWeight: 700 }}>ACTIVACIÓN DE CÉLULAS DE REJILLA HEXAGONALES (MEC):</span>
+                <span style={{ color: "#00E5FF", fontFamily: "monospace" }}>Actividad Compuesta: {(dualTelemetry.gridCellActivity.compositeActivity * 100).toFixed(0)}%</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px" }}>
+                {dualTelemetry.gridCellActivity.modules.map((m) => (
+                  <div key={m.moduleIndex} style={{ background: "rgba(255,255,255,0.02)", padding: "4px 6px", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.55rem", color: "#94A3B8" }}>
+                      <span>M{m.moduleIndex + 1} (λ={m.scaleWavelengthMeters}m)</span>
+                      <span style={{ color: "#10B981", fontWeight: 700 }}>{(m.firingIntensity * 100).toFixed(0)}%</span>
+                    </div>
+                    <div style={{ height: "4px", width: "100%", background: "rgba(255,255,255,0.08)", borderRadius: "2px", marginTop: "3px", overflow: "hidden" }}>
+                      <div style={{ width: `${Math.round(m.firingIntensity * 100)}%`, height: "100%", background: "#00E5FF", transition: "width 0.25s ease-out" }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Controles de Simulación & Anclaje Táctico */}
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  bioCompassDualFusion.integrateMotion(5.0, dualTelemetry.headingDeg);
+                  toast.success(`Paso inercial integrado: +5.0m en rumbo ${dualTelemetry.headingDeg}°`);
+                }}
+                style={{
+                  padding: "4px 8px",
+                  background: "rgba(0, 229, 255, 0.15)",
+                  border: "1px solid rgba(0, 229, 255, 0.4)",
+                  borderRadius: "4px",
+                  color: "#00E5FF",
+                  fontSize: "0.60rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                PASO PDR (5m)
+              </button>
+
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  bioCompassDualFusion.setGuidanceGoal(0, 25);
+                  toast.info("Objetivo fijado: 25 metros al Norte (X=0m, Y=25m)");
+                }}
+                style={{
+                  padding: "4px 8px",
+                  background: "rgba(245, 158, 11, 0.15)",
+                  border: "1px solid rgba(245, 158, 11, 0.4)",
+                  borderRadius: "4px",
+                  color: "#F59E0B",
+                  fontSize: "0.60rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                FIJAR GOAL (25m N)
+              </button>
+
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playAlarm();
+                  fanShapedBody.reconcileCoordinates(dualTelemetry.currentPosition.xMeters + 8.0, dualTelemetry.currentPosition.yMeters);
+                  toast.warning("⚠️ Deriva inercial forzada (+8m de desfase cartesiano): observe alerta de coherencia");
+                }}
+                style={{
+                  padding: "4px 8px",
+                  background: "rgba(239, 68, 68, 0.15)",
+                  border: "1px solid rgba(239, 68, 68, 0.4)",
+                  borderRadius: "4px",
+                  color: "#EF4444",
+                  fontSize: "0.60rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                SIMULAR DERIVA (+8m)
+              </button>
+
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playRogerBeep();
+                  bioCompassDualFusion.correctSpatialDrift(0, 0, 0, 'BALIZA ANCLAJE TÁCTICA');
+                  toast.success("🌿 Anclaje Hipocampal CA3 ejecutado: Deriva inercial reseteada a 0.0m");
+                }}
+                style={{
+                  padding: "4px 8px",
+                  background: "rgba(16, 185, 129, 0.15)",
+                  border: "1px solid rgba(16, 185, 129, 0.4)",
+                  borderRadius: "4px",
+                  color: "#10B981",
+                  fontSize: "0.60rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                ANCLAJE HIPOCAMPAL (RESET)
+              </button>
+
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  const next = !dualTelemetry.isAutonomousNavigationActive;
+                  bioCompassDualFusion.setAutonomousNavigation(next);
+                  toast.info(`Navegación autónoma CPG ${next ? 'ACTIVADA' : 'DESACTIVADA'}`);
+                }}
+                style={{
+                  padding: "4px 8px",
+                  background: dualTelemetry.isAutonomousNavigationActive ? "rgba(244, 114, 182, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                  border: `1px solid ${dualTelemetry.isAutonomousNavigationActive ? '#F472B6' : 'rgba(255, 255, 255, 0.15)'}`,
+                  borderRadius: "4px",
+                  color: dualTelemetry.isAutonomousNavigationActive ? "#F472B6" : "#94A3B8",
+                  fontSize: "0.60rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  marginLeft: "auto",
+                }}
+              >
+                {dualTelemetry.isAutonomousNavigationActive ? '⏹ DETENER CPG' : '▶ AUTO-GUIADO CPG'}
+              </button>
+            </div>
+          </div>
+
 
           {/* Competencia Atencional y Desglose de Candidatos GNWT */}
           <div style={{ padding: "12px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(100, 116, 139, 0.3)", borderRadius: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>

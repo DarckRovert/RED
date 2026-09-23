@@ -1,5 +1,24 @@
 # Changelog
 
+## [119.0.0-conectoma-neuromorfico-malecns-y-compas-bio-cibernetico-dual] - 2026-09-23
+
+### 🧬 Conectoma Neuromórfico MaleCNS & Compás Bio-Cibernético Dual (Release Oficial v119.0.0)
+
+- **Protocolo Address-Event Representation (AER) & Micro-Espigas (14 Bytes) (`meshProtocol.ts`, `meshRouter.ts`, `SynapticMeshRouterEngine.ts`):**
+  - Implementación del paquete `PACKET_TYPES.AER_SPIKE` (`0x16`) de 14 bytes con codificación binaria optimizada para canales de radio de bajísimo ancho de banda (LoRa, BLE).
+  - Inyección directa de micro-espigas en integradores LIF para modulación sináptica Hebbiana continua sin sobrecarga JSON.
+- **Generadores de Patrones Centrales (CPG) & Marcha Trípode para Relés Robóticos (`CentralPatternGeneratorEngine.ts`, `TacticalMotorActuatorEngine.ts`):**
+  - Red neuronal de osciladores de fase no-lineales acoplados para coordinación cinemática hexápoda.
+  - Modulación dinámica de marcha trípode alternada con desfase de $180^\circ$ entre trípodes y desaceleración preventiva.
+- **Criticalidad Auto-Organizada (SOC) y Transiciones de Fase ($\sigma \approx 1.0$) (`SwarmCriticalityEngine.ts`, `BroadcastStormGuardEngine.ts`):**
+  - Regulación homeostática del branching ratio y amortiguación de avalanchas de difusión siguiendo leyes de potencia.
+- **STDP Tridimensional con Modulación Dopaminérgica para Evasión de Jamming (`DtnMushroomBodyEngine.ts`):**
+  - Plasticidad asociativa PAM/PPL1 en las 2,500 células de Kenyon con conmutación proactiva de canales RF interferidos.
+- **Compás Bio-Cibernético Dual Drosophila-Humano (`BioCompassDualFusionEngine.ts`, `FanShapedBodyEngine.ts`, `EntorhinalGridCellEngine.ts`):**
+  - Fusión de atractor de anillo E-PG y células de rejilla hexagonales entorrinales con anclaje geográfico hipocampal.
+- **Blindaje contra Reentrancia y Estabilidad Concurrente (`GlobalWorkspaceConsciousnessBus.ts`, `ConnectomeEcosystemOrchestrator.ts`):**
+  - Mutex atómico `isEvaluating`, desacoplamiento asíncrono de directivas motoras y limitación de tasa (10 Hz) garantizando 0 crashes en hardware.
+
 ## [118.0.0-blindaje-concurrente-y-resiliencia-tactica] - 2026-09-23
 
 ### 🛡️ Blindaje Concurrente, Resiliencia Táctica y Estabilidad de Malla P2P (Release Oficial v118.0.0)

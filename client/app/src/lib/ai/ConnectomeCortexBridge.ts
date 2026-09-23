@@ -26,6 +26,8 @@ import { opticLobe } from '../neuro/OpticLobeEngine';
 import { tacticalMotorActuator } from '../neuro/TacticalMotorActuatorEngine';
 import { humanBrainOrchestrator } from '../neuro/human/HumanBrainOrchestrator';
 import { globalWorkspaceConsciousnessBus, ConsciousnessSnapshot } from '../neuro/GlobalWorkspaceConsciousnessBus';
+import { swarmCriticality, SwarmCriticalityTelemetry } from '../neuro/SwarmCriticalityEngine';
+import { bioCompassDualFusion, BioCompassDualTelemetry } from '../neuro/BioCompassDualFusionEngine';
 
 export interface ConnectomeSnapshot {
   timestamp: number;
@@ -67,6 +69,12 @@ export interface ConnectomeSnapshot {
     behavioralDrive: string;
     behavioralValenceScore: number;
     activePheromonesCount: number;
+    channelWeights?: Record<string, number>;
+    activeTracesCount?: number;
+    jammingEvasionActive?: boolean;
+    recommendedChannel?: string;
+    pamRewardScore?: number;
+    ppl1AversionScore?: number;
   };
   giantFiber: {
     state: string;
@@ -102,6 +110,10 @@ export interface ConnectomeSnapshot {
     dna01Excitation: number;
     dna02Excitation: number;
     totalPulsesDispatched: number;
+    cpgGaitMode?: string;
+    cpgFrequencyHz?: number;
+    cpgTripodCoherence?: number;
+    cpgTotalCycles?: number;
   };
   tacticalEvaluation: {
     meshHealth: 'OPTIMAL' | 'DEGRADED' | 'EMCON_REFLEX' | 'CRITICAL' | 'TORPOR';
@@ -110,6 +122,8 @@ export interface ConnectomeSnapshot {
     summary: string;
   };
   consciousnessBus?: ConsciousnessSnapshot;
+  criticality?: SwarmCriticalityTelemetry;
+  bioCompassDual?: BioCompassDualTelemetry;
 }
 
 export class ConnectomeCortexBridge {
@@ -202,6 +216,12 @@ export class ConnectomeCortexBridge {
         behavioralDrive: mbTelem.behavioralDrive,
         behavioralValenceScore: mbTelem.behavioralValenceScore,
         activePheromonesCount: mbTelem.activePheromonesCount,
+        channelWeights: mbTelem.channelWeights,
+        activeTracesCount: mbTelem.activeTracesCount,
+        jammingEvasionActive: mbTelem.jammingEvasionActive,
+        recommendedChannel: mbTelem.recommendedChannel,
+        pamRewardScore: mbTelem.pamRewardScore,
+        ppl1AversionScore: mbTelem.ppl1AversionScore,
       },
       giantFiber: {
         state: gfsTelem.emconLockActive ? 'EMCON_LOCKED' : (gfsTelem.isReflexActive ? 'REFLEX_ACTIVE' : 'STANDBY'),
@@ -237,6 +257,10 @@ export class ConnectomeCortexBridge {
         dna01Excitation: motorTelem.dna01IpsilateralExcitation,
         dna02Excitation: motorTelem.dna02ContralateralExcitation,
         totalPulsesDispatched: motorTelem.totalPulsesDispatched,
+        cpgGaitMode: motorTelem.cpg?.gaitMode ?? 'QUIESCENT',
+        cpgFrequencyHz: motorTelem.cpg?.meanFrequencyHz ?? 0.0,
+        cpgTripodCoherence: motorTelem.cpg?.tripodCoherenceIndex ?? 1.0,
+        cpgTotalCycles: motorTelem.cpg?.totalGaitCycles ?? 0,
       },
       tacticalEvaluation: {
         meshHealth,
@@ -245,6 +269,8 @@ export class ConnectomeCortexBridge {
         summary,
       },
       consciousnessBus: globalWorkspaceConsciousnessBus.getSnapshot(),
+      criticality: swarmCriticality.getTelemetry(),
+      bioCompassDual: bioCompassDualFusion.getTelemetry(),
     };
   }
 
@@ -328,6 +354,20 @@ export class ConnectomeCortexBridge {
         `• **Función:** Permite desplazamiento y retorno a ciegas sin señal satelital GNSS.`;
     }
 
+    // Consulta sobre Compás Bio-Cibernético Dual (Fusión FB + MEC + Hipocampo)
+    if (/comp[aá]s.*dual|dual.*comp[aá]s|fusi[oó]n.*dual|coherencia.*fase|anclaje.*hipocamp/i.test(cleanQ)) {
+      const dual = bioCompassDualFusion.getTelemetry();
+      return `🧭 **Compás Bio-Cibernético Dual (CX Fan-Shaped Body + MEC Grid Cells)**\n\n` +
+        `• **Rumbo Fused (E-PG):** **${dual.headingDeg}° (${dual.cardinal})**\n` +
+        `• **Coherencia de Fase (C_coherence):** **${(dual.phaseCoherence * 100).toFixed(0)}%** (${dual.phaseCoherenceState})\n` +
+        `• **Deriva Inercial Estimada:** ${dual.estimatedDriftMeters} metros (Resets hipocampales: ${dual.hippocampalResetsCount})\n` +
+        `• **Posición Relativa:** X=${dual.currentPosition.xMeters}m, Y=${dual.currentPosition.yMeters}m, Z=${dual.currentPosition.zMeters}m\n` +
+        `• **Home Vector:** ${dual.homeVector.distanceMeters}m hacia ${dual.homeVector.bearingDeg}° (${dual.homeVector.cardinal})\n` +
+        `• **Error de Timoneo Fused:** ${dual.fusedSteeringErrorDeg > 0 ? `+${dual.fusedSteeringErrorDeg}°` : `${dual.fusedSteeringErrorDeg}°`} (Modo CPG: **${dual.autonomousCpgSteering}**)\n` +
+        `• **Actividad Células de Rejilla:** ${(dual.gridCellActivity.compositeActivity * 100).toFixed(0)}% (4 módulos λ=0.5m, 2m, 8m, 32m)\n` +
+        `• **Bucle Cerrado:** Modula directamente las motoneuronas DNa01/DNa02 del robot hexápodo y emite micro-espigas AER de 14 bytes.`;
+    }
+
     // Consulta sobre Zero-Bandwidth o Inferencia Activa
     if (/zero.*bandwidth|silencio.*rf|inferencia.*activa|friston|energ[ií]a.*libre|sorpresa/i.test(cleanQ)) {
       return `⚡ **Corteza Predictiva Humana (Inferencia Activa de Friston)**\n\n` +
@@ -353,6 +393,44 @@ export class ConnectomeCortexBridge {
         `• **Odometría Visual (LPTC VS):** ${s.opticLobe.translationalVelocity.toFixed(2)} m/s\n` +
         `• **Rotación Angular Visual (LPTC HS):** ${s.opticLobe.rotationalVelocityDps.toFixed(1)} °/s\n` +
         `• **Receptores Omatidiales:** 256 sensores (malla 16x16) activos`;
+    }
+
+    // Consulta sobre CPG, Locomoción Hexápoda o Relé Robótico (NeuroMechFly v2)
+    if (/cpg|marcha|tr[ií]pode|hex[aá]pod|locomoci[oó]n|neuromechfly|flygym|rel[eé].*rob[oó]tico|pata/i.test(cleanQ)) {
+      return `🦗 **Generador de Patrones Centrales (CPG & NeuroMechFly v2)**\n\n` +
+        `• **Régimen de Marcha:** **${s.motorActuator.cpgGaitMode || 'TRIPOD'}**\n` +
+        `• **Frecuencia Media de Zancada:** ${s.motorActuator.cpgFrequencyHz || 2.0} Hz\n` +
+        `• **Coherencia Trípode (Kuramoto R):** ${(((s.motorActuator.cpgTripodCoherence ?? 1.0)) * 100).toFixed(1)}%\n` +
+        `• **Ciclos de Marcha Completados:** ${s.motorActuator.cpgTotalCycles || 0}\n` +
+        `• **Modulación Bilateral DNa:** DNa01=${s.motorActuator.dna01Excitation.toFixed(2)} (Babor), DNa02=${s.motorActuator.dna02Excitation.toFixed(2)} (Estribor)\n` +
+        `• **Hardware Relé Robótico:** Tramas binarias de 12 bytes activas con CRC-8 para streaming hacia micro-controladores ESP32-S3.`;
+    }
+
+    // Consulta sobre Criticalidad Auto-Organizada (SOC), Branching Ratio o Neurolib
+    if (/critical|criticalidad|soc|branching|ramificaci[oó]n|neurolib|avalancha|transici[oó]n.*fase|tormenta.*difusi[oó]n/i.test(cleanQ)) {
+      const cr = s.criticality;
+      return `🌐 **Criticalidad Auto-Organizada de Enjambre (SOC & neurolib)**\n\n` +
+        `• **Estado de Fase Dinámico:** **${cr?.criticalityState || 'CRITICAL'}**\n` +
+        `• **Branching Ratio (σ):** **${cr?.branchingRatio.toFixed(2) || '1.00'}** (Rango Crítico Óptimo: 0.90 - 1.10)\n` +
+        `• **Exponente Libre de Escala (α):** ${cr?.estimatedAlpha.toFixed(2) || '1.50'} (P(S) ~ S^-α, valor biofísico: 1.50)\n` +
+        `• **Probabilidad de Retransmisión Homeostática (Prelay):** ${((cr?.relayProbability ?? 1.0) * 100).toFixed(0)}%\n` +
+        `• **Umbral Adaptativo K-Counter:** ${cr?.adaptiveKCounterThreshold || 3} vecinos concurrentes\n` +
+        `• **Avalanchas de Red Rastreadas:** ${cr?.totalAvalanchesCount || 0} eventos (Última: ${cr?.lastAvalancheSize || 0} paquetes, ${cr?.lastAvalancheDurationMs || 0}ms)\n` +
+        `• **Gobernanza:** Erradica tormentas de difusión ALOHA en mallas densas y previene desconexiones en mallas dispersas.`;
+    }
+
+    // Consulta sobre Mushroom Body, STDP 3-Factores y Evasión de Jamming EW
+    if (/stdp|mushroom|cuerpo.*fungiforme|dopamin|jamming|ppl1|pam|evasi[oó]n.*frecuenc|salto.*canal/i.test(cleanQ)) {
+      const mb = s.mushroomBody;
+      const evasion = mb.jammingEvasionActive ? `🚨 ACTIVA (Salto recomendado hacia **${mb.recommendedChannel || 'lora_ch_0'}**)` : '🟢 Inactiva (Canales limpios)';
+      return `🍄 **Cuerpo Fungiforme & STDP 3-Factores (Evasión de Jamming EW)**\n\n` +
+        `• **Estado de Evasión EW:** ${evasion}\n` +
+        `• **Conducta de Red (MBON):** **${mb.behavioralDrive}** (Score: ${mb.behavioralValenceScore > 0 ? `+${mb.behavioralValenceScore}` : mb.behavioralValenceScore})\n` +
+        `• **Dopamina PAM (Recompensa/LTP):** ${mb.pamRewardScore ?? 0.5}\n` +
+        `• **Dopamina PPL1 (Aversión/Jamming/LTD):** ${mb.ppl1AversionScore ?? 0.0}\n` +
+        `• **Huellas de Elegibilidad Activas (e_ij):** ${mb.activeTracesCount ?? 0}\n` +
+        `• **Engramas Memorizados DTN:** ${mb.enqueuedRecords} (Inmunizados LTP: ${mb.ltpPinnedRecords})\n` +
+        `• **Mecanismo Biofísico:** Regla de 3 factores (Pre KC × Post MBON × DA). Ante interferencia o caída de SNR, el clúster PPL1 deprime el canal y fuerza el salto ágil de frecuencia.`;
     }
 
     // Consulta sobre Háptica o Guía Ojos-Libres (DNa01/DNa02)

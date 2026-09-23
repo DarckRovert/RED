@@ -25,6 +25,7 @@
 import { fanShapedBody, FanShapedBodyTelemetry } from './FanShapedBodyEngine';
 import { giantFiberReflex, GiantFiberTelemetry } from './GiantFiberReflexEngine';
 import { ringAttractor } from './RingAttractorEngine';
+import { centralPatternGenerator, CentralPatternGeneratorEngine, CpgLocomotionTelemetry } from './CentralPatternGeneratorEngine';
 
 export type HapticSteeringMode = 'ALIGNED' | 'TURN_LEFT' | 'TURN_RIGHT' | 'EMERGENCY' | 'IDLE';
 
@@ -38,6 +39,7 @@ export interface TacticalMotorActuatorTelemetry {
   isTacticalStealthActive: boolean;
   totalPulsesDispatched: number;
   lastVibrationTimestamp: number;
+  cpg?: CpgLocomotionTelemetry;          // Telemetría de marcha trípode CPG
 }
 
 export class TacticalMotorActuatorEngine {
@@ -52,7 +54,7 @@ export class TacticalMotorActuatorEngine {
   // Configuración de vibración
   private isEnabled = true;
   private isStealthActive = false;
-  private guidanceTarget: 'HOME' | 'GOAL' = 'HOME';
+  private guidanceTarget: 'HOME' | 'GOAL' | 'DUAL_COMPASS' = 'HOME';
   private totalPulses = 0;
   private lastVibrateTime = 0;
   private minIntervalMs = 3000; // Máximo 1 pulso de guiado cada 3 segundos
@@ -61,6 +63,8 @@ export class TacticalMotorActuatorEngine {
   private isRunning = false;
   private fbUnsub: (() => void) | null = null;
   private gfsUnsub: (() => void) | null = null;
+  private cpgUnsub: (() => void) | null = null;
+  private locomotionSpeed = 0.5; // [0.0 .. 1.0] velocidad base de avance para relé robótico
   private listeners: Set<(telemetry: TacticalMotorActuatorTelemetry) => void> = new Set();
 
   private constructor() {}
@@ -76,11 +80,27 @@ export class TacticalMotorActuatorEngine {
     if (this.isRunning) return;
     this.isRunning = true;
 
-    // 1. Acoplar al Fan-Shaped Body para error de timoneo hacia Home / Goal Vector
+    // Iniciar osciladores CPG de locomoción hexápoda
+    centralPatternGenerator.start();
+    this.cpgUnsub = centralPatternGenerator.subscribe(() => {
+      this.notifyListeners();
+    });
+
+    // 1. Acoplar al Fan-Shaped Body / Compás Dual para error de timoneo hacia Home / Goal / Dual
     this.fbUnsub = fanShapedBody.subscribe((fbTelem: FanShapedBodyTelemetry) => {
-      const error = (this.guidanceTarget === 'GOAL' && fbTelem.goalVector.hasTarget)
-        ? fbTelem.goalVector.steeringErrorDeg
-        : this.computeHomeSteeringError(fbTelem);
+      let error = 0;
+      if (this.guidanceTarget === 'DUAL_COMPASS') {
+        try {
+          const { bioCompassDualFusion } = require('./BioCompassDualFusionEngine');
+          error = bioCompassDualFusion.getFusedSteeringSolution().fusedSteeringErrorDeg;
+        } catch {
+          error = fbTelem.goalVector.hasTarget ? fbTelem.goalVector.steeringErrorDeg : this.computeHomeSteeringError(fbTelem);
+        }
+      } else if (this.guidanceTarget === 'GOAL' && fbTelem.goalVector.hasTarget) {
+        error = fbTelem.goalVector.steeringErrorDeg;
+      } else {
+        error = this.computeHomeSteeringError(fbTelem);
+      }
 
       this.updateSteeringError(error);
     });
@@ -95,6 +115,11 @@ export class TacticalMotorActuatorEngine {
 
   public stop(): void {
     this.isRunning = false;
+    centralPatternGenerator.stop();
+    if (this.cpgUnsub) {
+      this.cpgUnsub();
+      this.cpgUnsub = null;
+    }
     if (this.fbUnsub) {
       this.fbUnsub();
       this.fbUnsub = null;
@@ -115,16 +140,26 @@ export class TacticalMotorActuatorEngine {
     this.notifyListeners();
   }
 
-  public setGuidanceTarget(target: 'HOME' | 'GOAL'): void {
+  public setGuidanceTarget(target: 'HOME' | 'GOAL' | 'DUAL_COMPASS'): void {
     this.guidanceTarget = target;
     const fbTelem = fanShapedBody.getTelemetry();
-    const error = (this.guidanceTarget === 'GOAL' && fbTelem.goalVector.hasTarget)
-      ? fbTelem.goalVector.steeringErrorDeg
-      : this.computeHomeSteeringError(fbTelem);
+    let error = 0;
+    if (this.guidanceTarget === 'DUAL_COMPASS') {
+      try {
+        const { bioCompassDualFusion } = require('./BioCompassDualFusionEngine');
+        error = bioCompassDualFusion.getFusedSteeringSolution().fusedSteeringErrorDeg;
+      } catch {
+        error = fbTelem.goalVector.hasTarget ? fbTelem.goalVector.steeringErrorDeg : this.computeHomeSteeringError(fbTelem);
+      }
+    } else if (this.guidanceTarget === 'GOAL' && fbTelem.goalVector.hasTarget) {
+      error = fbTelem.goalVector.steeringErrorDeg;
+    } else {
+      error = this.computeHomeSteeringError(fbTelem);
+    }
     this.updateSteeringError(error);
   }
 
-  public getGuidanceTarget(): 'HOME' | 'GOAL' {
+  public getGuidanceTarget(): 'HOME' | 'GOAL' | 'DUAL_COMPASS' {
     return this.guidanceTarget;
   }
 
@@ -168,16 +203,29 @@ export class TacticalMotorActuatorEngine {
       this.currentMode = 'IDLE';
     }
 
+    // Modulación del Generador de Patrones Centrales (CPG) de locomoción hexápoda
+    // Error angular [-180 .. +180] -> Sesgo de timoneo [-1.0 .. +1.0]
+    const turnBias = Math.max(-1.0, Math.min(1.0, this.steeringError / 90.0));
+    centralPatternGenerator.setLocomotionDrive(this.isEnabled ? this.locomotionSpeed : 0.0, turnBias);
+
     this.dispatchHapticFeedback();
     this.notifyListeners();
   }
 
   /**
-   * Dispara una ráfaga de vibración táctica de emergencia (colisión inminente / EW).
+   * Dispara una ráfaga de vibración táctica de emergencia (colisión inminente / EW)
+   * y conmuta el CPG a sprint de escape (8.0 Hz).
    */
   public triggerEmergencyBurst(): void {
     this.currentMode = 'EMERGENCY';
     this.executeVibrationPattern([200, 80, 200, 80, 200]);
+
+    // Disparar sprint de escape en el CPG durante 2 segundos
+    centralPatternGenerator.setEmergencyEscape(true);
+    setTimeout(() => {
+      centralPatternGenerator.setEmergencyEscape(false);
+    }, 2000);
+
     this.notifyListeners();
   }
 
@@ -212,6 +260,25 @@ export class TacticalMotorActuatorEngine {
     } catch {}
   }
 
+  /**
+   * Configura la velocidad de avance para relés robóticos móviles o caminadores hexápodos.
+   * @param speed [0.0 .. 1.0] 0 = detenido, 1.0 = velocidad máxima
+   */
+  public setLocomotionSpeed(speed: number): void {
+    this.locomotionSpeed = Math.max(0.0, Math.min(1.0, speed));
+    const turnBias = Math.max(-1.0, Math.min(1.0, this.steeringError / 90.0));
+    centralPatternGenerator.setLocomotionDrive(this.isEnabled ? this.locomotionSpeed : 0.0, turnBias);
+    this.notifyListeners();
+  }
+
+  public getLocomotionSpeed(): number {
+    return this.locomotionSpeed;
+  }
+
+  public getCpg(): CentralPatternGeneratorEngine {
+    return centralPatternGenerator;
+  }
+
   public getTelemetry(): TacticalMotorActuatorTelemetry {
     return {
       timestamp: Date.now(),
@@ -223,6 +290,7 @@ export class TacticalMotorActuatorEngine {
       isTacticalStealthActive: this.isStealthActive,
       totalPulsesDispatched: this.totalPulses,
       lastVibrationTimestamp: this.lastVibrateTime,
+      cpg: centralPatternGenerator.getTelemetry(),
     };
   }
 

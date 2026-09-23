@@ -30,6 +30,33 @@ export const FLAG_IS_RELAY = 0x04;      // Packet has been relayed by intermedia
 export const FLAG_PHEROMONE = 0x10;     // Bit 4: Packet carries Swarm Pheromone envelope in payload/header
 export const FLAG_PQC_ENCRYPTED = 0x20; // NIST FIPS 203 ML-KEM-768 + X25519 hybrid post-quantum encapsulation
 export const FLAG_KURAMOTO_SYNC = 0x40; // Bit 6: Sincronización de Fase de Kuramoto para TDMA y Atractor
+export const FLAG_AER_SPIKE = 0x80;     // Bit 7: Paquete de Micro-Espiga Neuromórfica AER (Address-Event Representation)
+export const AER_MAGIC = 0xAE51;        // Magic de 2 bytes para tramas AER compactas (14-42 bytes)
+
+/** Dominios Funcionales de Micro-Espigas Neuromórficas AER (Brain-Cog / Loihi) */
+export enum AerDomainCode {
+  CX_COMPASS_HEADING = 0x01,   // Brújula E-PG (azimut cuantizado [0..255])
+  CBRN_RADIATION_ALERT = 0x02, // Alerta radiológica / química instantánea
+  KURAMOTO_PHASE_PULSE = 0x03, // Pulso de oscilador biológico de Kuramoto
+  VITAL_HEART_RATE_MARCH = 0x04, // Telemetría de choque / tono vagal MARCH
+  EW_JAMMING_DETECTED = 0x05,  // Detección de perturbación de guerra electrónica
+  METABOLIC_TORPOR_STATE = 0x06, // Estado neuroendocrino / ahorro torpor
+  PHEROMONE_ALARM = 0x07       // Alarma estigmérgica biológica de enjambre
+}
+
+export interface AerSpikeEvent {
+  domain: number;   // 1 byte (AerDomainCode)
+  neuronId: number; // 1 byte (canal o id local 0-255)
+  value: number;    // 2 bytes (escalar int16 LE -32768..32767)
+}
+
+export interface AerSpikeFrame {
+  senderShortId: number; // uint32 (4 bytes)
+  seq: number;           // uint8 (1 byte)
+  ttl: number;           // uint8 (1 byte)
+  flags: number;         // uint8 (1 byte: 0x80)
+  spikes: AerSpikeEvent[];
+}
 
 /** Envelope de Feromona de Enjambre (Swarm Pheromone) para propagación estigmérgica en malla */
 export interface SwarmPheromoneEnvelope {
@@ -214,6 +241,77 @@ export function createPacket(
     nonce: generateNonce(),
     payload,
   };
+}
+
+/**
+ * Codifica una trama de micro-espigas AER ultra-compacta para LoRa / BLE.
+ * Tamaño base con 1 espiga: 2 (Magic) + 4 (ShortID) + 1 (Seq) + 1 (TTL) + 1 (Flags) + 1 (Count) + 4 (Spike) = 14 bytes.
+ */
+export function encodeAerSpikeFrame(
+  senderShortId: number,
+  seq: number,
+  ttl: number,
+  spikes: AerSpikeEvent[]
+): Uint8Array {
+  const safeCount = Math.max(1, Math.min(spikes.length, 16));
+  const totalSize = 10 + (safeCount * 4);
+  const buf = new ArrayBuffer(totalSize);
+  const view = new DataView(buf);
+
+  // Magic 2 bytes (0xAE51)
+  view.setUint16(0, AER_MAGIC, false);
+  // Sender Short ID (4 bytes, LE)
+  view.setUint32(2, (senderShortId >>> 0), true);
+  // Sequence counter (1 byte)
+  view.setUint8(6, seq & 0xFF);
+  // TTL (1 byte)
+  view.setUint8(7, Math.max(1, Math.min(20, ttl)) & 0xFF);
+  // Flags (1 byte, 0x80)
+  view.setUint8(8, FLAG_AER_SPIKE);
+  // Spikes Count (1 byte)
+  view.setUint8(9, safeCount & 0xFF);
+
+  let offset = 10;
+  for (let i = 0; i < safeCount; i++) {
+    const sp = spikes[i] || { domain: 0, neuronId: 0, value: 0 };
+    view.setUint8(offset, sp.domain & 0xFF);
+    view.setUint8(offset + 1, sp.neuronId & 0xFF);
+    view.setInt16(offset + 2, Math.max(-32768, Math.min(32767, Math.round(sp.value || 0))), true);
+    offset += 4;
+  }
+
+  return new Uint8Array(buf);
+}
+
+/**
+ * Decodifica una trama AER ultra-compacta o retorna null si es inválida o corrupta.
+ */
+export function decodeAerSpikeFrame(data: Uint8Array): AerSpikeFrame | null {
+  if (!data || data.length < 14) return null;
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+
+  const magic = view.getUint16(0, false);
+  if (magic !== AER_MAGIC) return null;
+
+  const senderShortId = view.getUint32(2, true);
+  const seq = view.getUint8(6);
+  const ttl = view.getUint8(7);
+  const flags = view.getUint8(8);
+  const count = view.getUint8(9);
+
+  if (count <= 0 || data.length < 10 + (count * 4)) return null;
+
+  const spikes: AerSpikeEvent[] = [];
+  let offset = 10;
+  for (let i = 0; i < count; i++) {
+    const domain = view.getUint8(offset);
+    const neuronId = view.getUint8(offset + 1);
+    const value = view.getInt16(offset + 2, true);
+    spikes.push({ domain, neuronId, value });
+    offset += 4;
+  }
+
+  return { senderShortId, seq, ttl, flags, spikes };
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────

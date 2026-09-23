@@ -25,6 +25,9 @@ import { johnstonOrgan, JohnstonOrganTelemetry } from './JohnstonOrganEngine';
 import { metabolicGovernor, MetabolicGovernorTelemetry } from './MetabolicNeuromorphicGovernor';
 import { opticLobe, OpticLobeTelemetry } from './OpticLobeEngine';
 import { tacticalMotorActuator, TacticalMotorActuatorTelemetry } from './TacticalMotorActuatorEngine';
+import { centralPatternGenerator, CpgLocomotionTelemetry } from './CentralPatternGeneratorEngine';
+import { swarmCriticality, SwarmCriticalityTelemetry } from './SwarmCriticalityEngine';
+import { bioCompassDualFusion, BioCompassDualTelemetry } from './BioCompassDualFusionEngine';
 
 export interface EcosystemConnectomeSnapshot {
   timestamp: number;
@@ -40,6 +43,9 @@ export interface EcosystemConnectomeSnapshot {
   metabolicGovernor: MetabolicGovernorTelemetry;
   opticLobe: OpticLobeTelemetry;
   motorActuator: TacticalMotorActuatorTelemetry;
+  cpg: CpgLocomotionTelemetry;
+  criticality: SwarmCriticalityTelemetry;
+  bioCompassDual?: BioCompassDualTelemetry;
   // Resumen sintético táctico
   tacticalSummary: string;
 }
@@ -50,6 +56,9 @@ export class ConnectomeEcosystemOrchestrator {
   private isRunning = false;
   private unsubs: Array<() => void> = [];
   private listeners: Set<(snapshot: EcosystemConnectomeSnapshot) => void> = new Set();
+  private lastNotifyTime = 0;
+  private notifyThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  public static readonly UI_THROTTLE_MS = 100;
 
   private constructor() {}
 
@@ -74,6 +83,7 @@ export class ConnectomeEcosystemOrchestrator {
     metabolicGovernor.start();
     opticLobe.start();
     tacticalMotorActuator.start();
+    swarmCriticality.start();
 
     // 2. Acoplar Johnston's Organ con Giant Fiber Reflex
     // Si Johnston Organ detecta choque extremo -> alerta y refuerzo aversivo PPL1
@@ -84,6 +94,7 @@ export class ConnectomeEcosystemOrchestrator {
           0.85,
           `Choque acústico/mecánico súbito (${joTelem.lastShockEvent.sourceType})`
         );
+        dtnMushroomBody.applyDopaminergicNeuromodulation('PPL1', 0.70, 'lora_ch_0');
       }
     });
     this.unsubs.push(unSubJo);
@@ -115,8 +126,11 @@ export class ConnectomeEcosystemOrchestrator {
       this.notifyListeners();
     });
     const unSubMotor = tacticalMotorActuator.subscribe(() => this.notifyListeners());
+    const unSubCrit = swarmCriticality.subscribe(() => this.notifyListeners());
+    bioCompassDualFusion.start();
+    const unSubDual = bioCompassDualFusion.subscribe(() => this.notifyListeners());
 
-    this.unsubs.push(unSubCompass, unSubFb, unSubMb, unSubSyn, unSubGfs, unSubOptic, unSubMotor);
+    this.unsubs.push(unSubCompass, unSubFb, unSubMb, unSubSyn, unSubGfs, unSubOptic, unSubMotor, unSubCrit, unSubDual);
     console.log('[ConnectomeOrchestrator] 🦗 Drosophila MaleCNS living organism initialized and active in background');
     this.notifyListeners();
   }
@@ -133,6 +147,10 @@ export class ConnectomeEcosystemOrchestrator {
 
   public stop(): void {
     this.isRunning = false;
+    if (this.notifyThrottleTimer) {
+      clearTimeout(this.notifyThrottleTimer);
+      this.notifyThrottleTimer = null;
+    }
     this.unsubs.forEach(u => {
       try { u(); } catch {}
     });
@@ -143,7 +161,9 @@ export class ConnectomeEcosystemOrchestrator {
     metabolicGovernor.stop();
     opticLobe.stop();
     tacticalMotorActuator.stop();
-    this.notifyListeners();
+    swarmCriticality.stop();
+    bioCompassDualFusion.stop();
+    this.dispatchSnapshot();
   }
 
   /**
@@ -159,6 +179,9 @@ export class ConnectomeEcosystemOrchestrator {
     const metabolic = metabolicGovernor.getTelemetry();
     const optic = opticLobe.getTelemetry();
     const motor = tacticalMotorActuator.getTelemetry();
+    const cpg = centralPatternGenerator.getTelemetry();
+    const criticality = swarmCriticality.getTelemetry();
+    const bioCompassDual = bioCompassDualFusion.getTelemetry();
 
     // Determinar estado de salud y régimen global del organismo
     let organismState: EcosystemConnectomeSnapshot['organismState'] = 'OPTIMAL';
@@ -185,6 +208,9 @@ export class ConnectomeEcosystemOrchestrator {
       `Red: ${synapticRouter.totalSynapses} sinapsis, ${mushroomBody.totalEnqueuedRecords} engramas MB (${mushroomBody.behavioralDrive}). ` +
       `Visión T4/T5: Flujo ${optic.translationalFlow.magnitude} m/s, Looming: ${optic.loomingThreat.isThreatDetected ? 'AMENAZA' : 'DESPEJADO'}. ` +
       `Actuador Háptico DNa: Modo ${motor.currentHapticMode}. ` +
+      `CPG Hexápodo: Modo ${cpg.gaitMode} (${cpg.meanFrequencyHz} Hz, Coherencia R=${cpg.tripodCoherenceIndex}). ` +
+      `Criticalidad SOC: Estado ${criticality.criticalityState} (σ=${criticality.branchingRatio.toFixed(2)}, α=${criticality.estimatedAlpha.toFixed(2)}, Prelay=${(criticality.relayProbability * 100).toFixed(0)}%). ` +
+      `Compás Dual: Coherencia ${(bioCompassDual.phaseCoherence * 100).toFixed(0)}% (${bioCompassDual.phaseCoherenceState}), Deriva ${bioCompassDual.estimatedDriftMeters}m, Resets ${bioCompassDual.hippocampalResetsCount}. ` +
       `Mecanorrecepción JO: ${jo.acousticEnergyLevel > 0.5 ? 'ALERTA' : 'NOMINAL'}. ` +
       `Metabolismo: ${metabolic.regime} (Batería ${metabolic.batteryPct}%, Autonomía est. ${metabolic.estimatedStandbyHours}h).`;
 
@@ -201,6 +227,9 @@ export class ConnectomeEcosystemOrchestrator {
       metabolicGovernor: metabolic,
       opticLobe: optic,
       motorActuator: motor,
+      cpg,
+      criticality,
+      bioCompassDual,
       tacticalSummary,
     };
   }
@@ -212,11 +241,35 @@ export class ConnectomeEcosystemOrchestrator {
   }
 
   private notifyListeners(): void {
+    if (!this.isRunning) return;
+    const now = Date.now();
+    const elapsed = now - this.lastNotifyTime;
+
+    if (elapsed >= ConnectomeEcosystemOrchestrator.UI_THROTTLE_MS) {
+      if (this.notifyThrottleTimer) {
+        clearTimeout(this.notifyThrottleTimer);
+        this.notifyThrottleTimer = null;
+      }
+      this.lastNotifyTime = now;
+      this.dispatchSnapshot();
+    } else if (!this.notifyThrottleTimer) {
+      this.notifyThrottleTimer = setTimeout(() => {
+        this.notifyThrottleTimer = null;
+        if (!this.isRunning) return;
+        this.lastNotifyTime = Date.now();
+        this.dispatchSnapshot();
+      }, ConnectomeEcosystemOrchestrator.UI_THROTTLE_MS - elapsed);
+    }
+  }
+
+  private dispatchSnapshot(): void {
     const snap = this.getOrganismSnapshot();
     for (const cb of this.listeners) {
       try {
         cb(snap);
-      } catch {}
+      } catch (err) {
+        console.error('[ConnectomeOrchestrator] Error en listener callback:', err);
+      }
     }
   }
 

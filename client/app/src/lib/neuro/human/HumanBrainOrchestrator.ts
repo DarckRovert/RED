@@ -268,8 +268,8 @@ export class HumanBrainOrchestrator {
     for (const listener of this.listeners) {
       try {
         listener(snapshot);
-      } catch (err) {
-        console.error('[HumanBrainOrchestrator] Error en listener callback:', err);
+      } catch (err: any) {
+        console.error('[HumanBrainOrchestrator] Error en listener callback: ' + (err && (err.stack || err.message) ? (err.stack || err.message) : String(err)));
       }
     }
   }

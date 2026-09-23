@@ -74,6 +74,7 @@ export class EntorhinalGridCellEngine {
   private lastBreadcrumbDistance = 0.0;
   private totalTraveledMeters = 0.0;
   private lastPdrDistance = 0.0;
+  private driftCorrectionOffset = 0.0;
 
   private static readonly STORAGE_BREADCRUMBS_KEY = 'red_entorhinal_breadcrumbs_v1';
 
@@ -253,11 +254,43 @@ export class EntorhinalGridCellEngine {
     this.posZ = 0.0;
     this.totalTraveledMeters = 0.0;
     this.lastBreadcrumbDistance = 0.0;
+    this.driftCorrectionOffset = 0.0;
     this.breadcrumbs = [];
     this.modulePhases = EntorhinalGridCellEngine.WAVELENGTHS.map(() => ({ x: 0.0, y: 0.0 }));
     this.dropBreadcrumb('ORIGEN TÁCTICO (DATUM 0,0,0)');
     this.persistToStorage();
     this.notifyListeners();
+  }
+
+  /**
+   * Reconcilia las coordenadas locales con un anclaje externo o engrama hipocampal
+   * alineando las fases modulares y reseteando la deriva acumulada sin perder la distancia recorrida.
+   */
+  public reconcileCoordinates(x: number, y: number, z?: number, label = 'ANCLAJE DE DERIVA'): void {
+    if (!isFinite(x) || !isFinite(y)) return;
+    this.posX = x;
+    this.posY = y;
+    if (typeof z === 'number' && isFinite(z)) {
+      this.posZ = z;
+    }
+    // Re-alinear fases modulares
+    for (let m = 0; m < EntorhinalGridCellEngine.WAVELENGTHS.length; m++) {
+      const lambda = EntorhinalGridCellEngine.WAVELENGTHS[m];
+      this.modulePhases[m].x = ((x % lambda) + lambda) % lambda;
+      this.modulePhases[m].y = ((y % lambda) + lambda) % lambda;
+    }
+    // Anular deriva inercial acumulada
+    this.driftCorrectionOffset = this.totalTraveledMeters * 0.015;
+    this.dropBreadcrumb(label);
+    this.persistToStorage();
+    this.notifyListeners();
+  }
+
+  /**
+   * Corrección de deriva espacial ejecutada por anclaje episódico hipocampal o baliza de referencia.
+   */
+  public correctSpatialDrift(referenceX: number, referenceY: number, referenceZ?: number, label?: string): void {
+    this.reconcileCoordinates(referenceX, referenceY, referenceZ, label || 'ANCLAJE HIPOCAMPAL (RESET DERIVA)');
   }
 
   public setBorderWarning(isClose: boolean): void {
@@ -289,7 +322,8 @@ export class EntorhinalGridCellEngine {
     }));
 
     const composite = modules.reduce((acc, m) => acc + m.firingIntensity, 0) / modules.length;
-    const estimatedDrift = Math.round(this.totalTraveledMeters * 0.015 * 10) / 10; // ~1.5% de deriva inercial típica
+    const rawDrift = (this.totalTraveledMeters * 0.015) - this.driftCorrectionOffset;
+    const estimatedDrift = Math.max(0.0, Math.round(rawDrift * 10) / 10);
 
     return {
       timestamp: Date.now(),

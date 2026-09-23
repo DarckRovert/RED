@@ -21,6 +21,7 @@
  */
 
 import { RingAttractorEngine } from './RingAttractorEngine';
+import { AerSpikeEvent, AerDomainCode } from '../mesh/meshProtocol';
 
 export interface RfSectorHistogram {
   sectors: number[];                 // 16 sectores circulares con media móvil LQS [0, 100]
@@ -72,6 +73,11 @@ export interface SynapticMeshTelemetry {
   lifAccumulatedCount: number;    // Paquetes no urgentes acumulados en cola sub-umbral
   // Eon Systems Optogenetic Controls
   optogeneticallySilencedPeers: string[]; // Nodos aislados ópticamente por anomalía o jamming
+  // Neuromorphic AER (Address-Event Representation) Sparse Spikes (Brain-Cog / Loihi)
+  aerSpikesEmittedCount: number;
+  aerSpikesReceivedCount: number;
+  airtimeSavedBytesTotal: number;
+  lastAerSpike?: AerSpikeEvent & { timestamp: number; senderShortId: string };
   lastUpdated: number;
 }
 
@@ -91,6 +97,8 @@ export class SynapticMeshRouterEngine {
   private static readonly PENALTY_FACTOR = 0.20;
   private static readonly DECAY_TAU_MS = 600_000;      // 10 minutos constante de tiempo
   private static readonly PASSIVE_BASELINE = 0.30;     // Peso hacia el que decaen enlaces inactivos
+  // Amortiguación homeostática antipolopolio continuo (fly-brain / Rojas Aliaga 2026)
+  private static readonly HOMEOSTATIC_ALPHA = 0.0001;
 
   // Fracción de exploración estocástica para descubrir nuevos caminos
   private static readonly EPSILON_EXPLORATION = 0.15;
@@ -116,6 +124,13 @@ export class SynapticMeshRouterEngine {
 
   // Suscriptores al bus de telemetría reactivo
   private listeners: Set<(telemetry: SynapticMeshTelemetry) => void> = new Set();
+
+  // Neuromorphic AER (Address-Event Representation) Metrics & Listeners
+  private aerSpikesEmitted = 0;
+  private aerSpikesReceived = 0;
+  private airtimeSavedBytes = 0;
+  private lastAerSpikeEvent?: AerSpikeEvent & { timestamp: number; senderShortId: string };
+  private aerListeners: Set<(spike: AerSpikeEvent, senderShortId: string) => void> = new Set();
 
   // Métricas acumuladas
   private suppressedStormsCount = 0;
@@ -239,13 +254,15 @@ export class SynapticMeshRouterEngine {
 
     if (success) {
       link.successfulDeliveries++;
-      // Recompensa modulada por calidad de enlace y latencia
+      // Recompensa modulada por calidad de enlace y latencia con amortiguación homeostática (fly-brain / Rojas Aliaga 2026)
+      // dW = eta * (r_i * r_j) - alpha * W_ij
       const rttScore = Math.max(0.1, Math.min(1.0, 500 / Math.max(50, link.rttMs)));
       const lqsScore = link.lqs / 100;
       const reward = (rttScore * 0.4 + lqsScore * 0.6);
 
-      const deltaW = SynapticMeshRouterEngine.ETA_LEARNING_RATE * reward * temporalFactor;
-      link.weight = Math.min(SynapticMeshRouterEngine.MAX_WEIGHT, link.weight + deltaW);
+      const homeostaticDamping = SynapticMeshRouterEngine.HOMEOSTATIC_ALPHA * link.weight;
+      const deltaW = (SynapticMeshRouterEngine.ETA_LEARNING_RATE * reward * temporalFactor) - homeostaticDamping;
+      link.weight = Math.min(SynapticMeshRouterEngine.MAX_WEIGHT, Math.max(SynapticMeshRouterEngine.MIN_WEIGHT, link.weight + deltaW));
 
       // Despoda si superó el umbral de restauración
       if (link.isPruned && link.weight >= SynapticMeshRouterEngine.RESTORE_THRESHOLD) {
@@ -267,6 +284,23 @@ export class SynapticMeshRouterEngine {
     this.recalculateTopology();
     this.persistToStorage();
     this.notifyListeners();
+  }
+
+  /**
+   * Calcula la atenuación de flujo efectivo y probabilidad de entrega multi-salto
+   * (Inspirado en connectome-interpreter / Yijie Yin y fly-brain / Rojas Aliaga 2026).
+   * Evalúa el decaimiento de conductancia a lo largo de un vector de pesos de ruta.
+   */
+  public calculateEffectiveFlowAttenuation(hopWeights: number[]): number {
+    if (!hopWeights || hopWeights.length === 0) return 0.0;
+    let flow = 1.0;
+    for (let i = 0; i < hopWeights.length; i++) {
+      const w = Math.max(0.01, Math.min(1.0, hopWeights[i]));
+      flow *= w;
+    }
+    // Atenuación no lineal por número de saltos (exp(-hops / 4))
+    const hopPenalty = Math.exp(-hopWeights.length / 4.0);
+    return Number((flow * hopPenalty).toFixed(4));
   }
 
   /**
@@ -416,6 +450,17 @@ export class SynapticMeshRouterEngine {
         score += 0.35; // Bonificación de enrutamiento troncal por Hub
       }
 
+      // Modulación por STDP 3-Factores del Mushroom Body (Drosophila Learning Center)
+      try {
+        const { dtnMushroomBody } = require('./DtnMushroomBodyEngine');
+        const drive = dtnMushroomBody.getPeerBehavioralDrive(cleanId);
+        if (drive.drive === 'AVOID') {
+          score -= 0.60; // Fuerte penalización si el par está marcado con aversión PPL1 (Jamming/Malicioso)
+        } else if (drive.drive === 'APPROACH') {
+          score += 0.20; // Refuerzo apetitivo PAM
+        }
+      } catch {}
+
       if (score > bestScore) {
         bestScore = score;
         bestCandidate = cand;
@@ -555,6 +600,10 @@ export class SynapticMeshRouterEngine {
       lifMembranePotentialMv: this.lifMembranePotentialMv,
       lifAccumulatedCount: this.lifPacketQueue.length,
       optogeneticallySilencedPeers: Array.from(this.optogeneticallySilencedPeers),
+      aerSpikesEmittedCount: this.aerSpikesEmitted,
+      aerSpikesReceivedCount: this.aerSpikesReceived,
+      airtimeSavedBytesTotal: this.airtimeSavedBytes,
+      lastAerSpike: this.lastAerSpikeEvent,
       lastUpdated: Date.now(),
     };
   }
@@ -565,6 +614,49 @@ export class SynapticMeshRouterEngine {
   public getLink(peerId: string): SynapticLink | undefined {
     if (!peerId) return undefined;
     return this.synapses.get(peerId.trim().toLowerCase());
+  }
+
+  /**
+   * Registra una micro-espiga AER entrante en el motor sináptico y notifica a los suscriptores.
+   */
+  public recordAerSpikeReceived(spike: AerSpikeEvent, senderShortId: string): void {
+    if (!spike) return;
+    this.aerSpikesReceived++;
+    this.airtimeSavedBytes += 82; // 96 bytes base header - 14 bytes AER frame = 82 bytes ahorrados por espiga
+    this.lastAerSpikeEvent = {
+      ...spike,
+      timestamp: Date.now(),
+      senderShortId: senderShortId || '00000000',
+    };
+
+    // Notificar suscriptores de eventos AER
+    this.aerListeners.forEach(fn => {
+      try {
+        fn(spike, senderShortId);
+      } catch (err) {
+        console.error('[SynapticMeshRouter] Error in AER listener:', err);
+      }
+    });
+
+    this.notifyListeners();
+  }
+
+  /**
+   * Registra la emisión local de una o más micro-espigas AER.
+   */
+  public recordAerSpikeEmitted(count = 1): void {
+    const validCount = Math.max(1, count);
+    this.aerSpikesEmitted += validCount;
+    this.airtimeSavedBytes += 82 * validCount;
+    this.notifyListeners();
+  }
+
+  /**
+   * Suscribe un listener a eventos de micro-espigas neuromórficas AER.
+   */
+  public onAerSpike(listener: (spike: AerSpikeEvent, senderShortId: string) => void): () => void {
+    this.aerListeners.add(listener);
+    return () => this.aerListeners.delete(listener);
   }
 
   /**
