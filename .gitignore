@@ -66,12 +66,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 rust.err
+build_log.txt
 
 # IDE / OS
 .DS_Store
 .vscode/
 .idea/
 *.swp
+*.orig
 
 # Debug artifacts / build logs (txt)
 node_trace.log
