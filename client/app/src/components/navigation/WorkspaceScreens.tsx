@@ -114,6 +114,8 @@ const TacticalGhostGpsModal  = dynamic(() => import("../modals/TacticalGhostGpsM
 const RedCyberTunnelModal    = dynamic(() => import("../modals/RedCyberTunnelModal").then(m => ({ default: m.RedCyberTunnelModal })), { ssr: false, loading: () => <AppLoader /> });
 const SovereignShieldDashboard = dynamic(() => import("../SovereignShieldDashboard"), { ssr: false, loading: () => <AppLoader /> });
 const MaleCnsConnectomeHUD    = dynamic(() => import("../MaleCnsConnectomeHUD").then(m => ({ default: m.MaleCnsConnectomeHUD })), { ssr: false, loading: () => <AppLoader /> });
+const TacticalVivariumModal   = dynamic(() => import("../tactical/TacticalVivariumModal").then(m => ({ default: m.TacticalVivariumModal })), { ssr: false, loading: () => <AppLoader /> });
+
 
 // ── TacticalTabletWorkspace ───────────────────────────────────────────────────
 // Placeholder del pane derecho en tablet cuando currentScreen === "sidebar".
@@ -589,6 +591,10 @@ export function WorkspaceScreens({ isTablet, onOpenTool }: WorkspaceScreensProps
             <MaleCnsConnectomeHUD onClose={goBack} />
           </div>
         </div>
+      )}
+
+      {currentScreen === "vivarium" && (
+        <TacticalVivariumModal onClose={goBack} />
       )}
 
       {/* ── Landing (deep-link desde notificación) ── */}

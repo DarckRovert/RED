@@ -1,5 +1,27 @@
 # Changelog
 
+## [120.0.0-vivarium-biocibernetico-3d-y-digital-twin-edition] - 2026-09-23
+
+### 🧬 Vivarium Biocibernético 3D & Gemelo Digital Táctico en Tiempo Real (Release Oficial v120.0.0)
+
+- **Motor Gráfico Tridimensional Soberano (`Vivarium3DEngine.ts`, `VivariumBiocibernetico3D.tsx`):**
+  - Espacio virtual táctico 3D acelerado por WebGL sobre Three.js para la observación, monitoreo y experimentación en tiempo real con modelos neuromórficos (MaleCNS Drosophila, Neocórtex Entorrinal y Guardián IA).
+- **Suelo Entorrinal Hexagonal Multiescala (`EntorhinalGridFloor3D.ts`):**
+  - Rejilla procedural periódica de células de rejilla MEC a 4 escalas espaciales ($\lambda_1 = 1.0, \lambda_2 = 1.42, \lambda_3 = 2.02, \lambda_4 = 2.87$) con iluminación reactiva por picos de disparo al paso de entidades.
+- **Entidades Físicas 3D y Cinemática Sincronizada con CPG (`VivariumEntities3D.ts`):**
+  - Drosophila táctica con marcha trípode alternada de 6 patas a $180^\circ$ sincronizada con los osciladores no-lineales de Kuramoto-Matsuoka.
+  - Rover táctico terrestre con antena parabólica orientable.
+  - 4 Torres de Malla LoRa perimetrales con balizas de pulso electromagnético en fase con el ciclo TDMA.
+  - Satélite LEO polar en órbita continua con cono de cobertura Geohash-4 y barrido volumétrico.
+  - Campo receptivo óptico (Looming detector) y cúpula defensiva del Guardián IA con distancia de Hamming a 64 bits.
+- **Controles Cinemáticos de Cámara e Inyección de Eventos Físicos:**
+  - 3 modos de cámara: Orbital Libre, Seguimiento 3ra Persona y Cenital (Dios).
+  - Inyección de estímulo Looming (escape reflejo GF), interferencia RF Jamming, despacho de paquetes DTN y test de fuego del Guardián IA.
+- **Localización Internacional Completa (12 Idiomas):**
+  - Integración integral de cadenas de texto y telemetría del Vivarium en `es`, `en`, `de`, `fr`, `it`, `ja`, `ko`, `pt`, `ru`, `zh`, `ar`, `qu`.
+- **Certificación Empírica en Hardware Físico Real:**
+  - Despliegue y validación en Lenovo Tab M9 (`HA2CHKZ2`) y Motorola Moto G22 (`ZT322B386P`): 0 crashes, 0 caídas, carga limpia de librería JNI `libred_mobile.so`, y enlace de malla WiFi Direct activo.
+
 ## [119.0.0-conectoma-neuromorfico-malecns-y-compas-bio-cibernetico-dual] - 2026-09-23
 
 ### 🧬 Conectoma Neuromórfico MaleCNS & Compás Bio-Cibernético Dual (Release Oficial v119.0.0)

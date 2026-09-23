@@ -734,6 +734,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
             },
             {
+                id: 'vivarium',
+                action: 'vivarium',
+                icon: '🌌',
+                title: t('tactical_modules.vivarium_title'),
+                subtitle: t('tactical_modules.vivarium_sub'),
+                badge: t('tactical_modules.vivarium_badge'),
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.3)'
+            },
+            {
                 id: 'appStore',
                 action: 'appStore',
                 icon: '🏪',

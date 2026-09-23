@@ -25,6 +25,8 @@ import { TcccMedicalTriageModal } from "./tactical/TcccMedicalTriageModal";
 import { EpistemicRadarModal } from "./tactical/EpistemicRadarModal";
 import { OfcBarterMarketModal } from "./tactical/OfcBarterMarketModal";
 import { HippocampalMemoryModal } from "./tactical/HippocampalMemoryModal";
+import dynamic from "next/dynamic";
+const TacticalVivariumModal = dynamic(() => import("./tactical/TacticalVivariumModal").then(m => ({ default: m.TacticalVivariumModal })), { ssr: false });
 import { predictiveCortex } from "../lib/neuro/human/PredictiveCortexEngine";
 import { globalWorkspaceConsciousnessBus, ConsciousnessSnapshot } from "../lib/neuro/GlobalWorkspaceConsciousnessBus";
 import { meshRouter } from "../lib/mesh/meshRouter";
@@ -103,6 +105,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const [isEpistemicRadarOpen, setIsEpistemicRadarOpen] = useState<boolean>(false);
   const [isOfcBarterOpen, setIsOfcBarterOpen] = useState<boolean>(false);
   const [isHippocampalMemoryOpen, setIsHippocampalMemoryOpen] = useState<boolean>(false);
+  const [isVivariumOpen, setIsVivariumOpen] = useState<boolean>(false);
 
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1297,6 +1300,25 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
             }}
           >
             - ZOOM
+          </button>
+
+          <button
+            onClick={() => {
+              TacticalAudioEngine.playTap();
+              setIsVivariumOpen(true);
+            }}
+            style={{
+              padding: "4px 8px",
+              borderRadius: "6px",
+              background: "rgba(0, 240, 255, 0.22)",
+              border: "1px solid #00F0FF",
+              color: "#00F0FF",
+              fontSize: "0.65rem",
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            🌌 VIVARIUM 3D
           </button>
         </div>
 
@@ -3394,6 +3416,9 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
         isOpen={isHippocampalMemoryOpen}
         onClose={() => setIsHippocampalMemoryOpen(false)}
       />
+      {isVivariumOpen && (
+        <TacticalVivariumModal onClose={() => setIsVivariumOpen(false)} />
+      )}
     </div>
   );
 }
