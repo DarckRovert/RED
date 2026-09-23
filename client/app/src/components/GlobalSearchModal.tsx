@@ -87,6 +87,8 @@ const TACTICAL_SEARCHABLE_TOOLS: TacticalSearchResult[] = [
     { id: "network", icon: "🌐", label: "Diagnóstico de Red & Malla", desc: "Topología de la malla, tabla de enrutamiento Kademlia y sockets", action: "network", keywords: ["red", "network", "malla", "kademlia", "topologia", "enrutamiento", "sockets"] },
     { id: "security", icon: "🛡️", label: "Auditoría de Seguridad & PIN", desc: "Configuración de PIN de coacción, biometría TEE y cifrado de base de datos", action: "security", keywords: ["seguridad", "security", "pin", "coaccion", "biometria", "huella", "cifrado"] },
     { id: "maleCnsConnectome", icon: "🧬", label: "Conectoma 3D MaleCNS (Drosophila)", desc: "Topología bio-neuromórfica somática 3D MaleCNS v1.0: Central Complex, Mushroom Body y Giant Fiber", action: "maleCnsConnectome", keywords: ["conectoma", "connectome", "drosophila", "malecns", "cerebro", "3d", "neuronas", "optogenetica", "lif", "neuromorfico", "sinapsis", "mushroom body", "giant fiber"] },
+    { id: "vivarium", icon: "🌌", label: "Vivarium Biocibernético 3D/2D (Hexapod)", desc: "Gemelo digital ciberfísico, cinemática 18-DOF Kuramoto-Matsuoka y puente serie", action: "vivarium", keywords: ["vivarium", "gemelo", "robot", "hexapodo", "3d", "cinematica", "kuramoto", "actuadores", "organismo", "ciberfisico"] },
+    { id: "habitat", icon: "🪰", label: "Hábitat Digital Biocibernético In-Silico", desc: "Ecosistema multi-cerebro: Difusión de Fick, visión omatidial LC4, C. elegans, hormigas y migración P2P", action: "habitat", keywords: ["habitat", "biocibernetico", "fick", "difusion", "omatidios", "elegans", "hormiga", "ant", "stdp", "alife", "quimiotaxis", "feromona"] },
 ];
 
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose }) => {

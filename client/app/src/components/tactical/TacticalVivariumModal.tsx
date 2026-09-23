@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Vivarium3DEngine, VivariumCameraMode } from "../../lib/neuro/vivarium/Vivarium3DEngine";
+import { Vivarium3DEngine, VivariumCameraMode, VivariumControlMode } from "../../lib/neuro/vivarium/Vivarium3DEngine";
 import { Vivarium2DEngine } from "../../lib/neuro/vivarium/Vivarium2DEngine";
 import { centralPatternGenerator, CpgLocomotionTelemetry } from "../../lib/neuro/CentralPatternGeneratorEngine";
 import { humanBrainOrchestrator, HumanBrainTelemetrySnapshot } from "../../lib/neuro/human/HumanBrainOrchestrator";
@@ -10,6 +10,11 @@ import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacIcon } from "../ui/TacIcon";
 import { toast } from "../Toast";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
+import { PedestrianDeadReckoningEngine, PdrState } from "../../lib/sensors/PedestrianDeadReckoningEngine";
+import { hexapodActuatorBridge, ActuatorBridgeTelemetry } from "../../lib/neuro/vivarium/HexapodActuatorBridgeEngine";
+import { kineticStress, KineticStressTelemetry } from "../../lib/sensors/KineticStressEngine";
+import { LoraSerialBridgeEngine, LoraTelemetry } from "../../lib/hardware/LoraSerialBridgeEngine";
+import { TacticalHabitatModal } from "./TacticalHabitatModal";
 
 export interface TacticalVivariumModalProps {
   onClose: () => void;
@@ -19,7 +24,9 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
   const { t } = useTranslation();
   const [renderMode, setRenderMode] = useState<"3D" | "2D">("3D");
   const [cameraMode, setCameraMode] = useState<VivariumCameraMode>("ORBITAL");
+  const [controlMode, setControlMode] = useState<VivariumControlMode>("AUTONOMOUS");
   const [isManualControl, setIsManualControl] = useState<boolean>(false);
+  const [isHabitatOpen, setIsHabitatOpen] = useState<boolean>(false);
 
   // Telemetrías Vivas
   const [cpgTelemetry, setCpgTelemetry] = useState<CpgLocomotionTelemetry>(() =>
@@ -28,6 +35,20 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
   const [humanBrainSnapshot, setHumanBrainSnapshot] = useState<HumanBrainTelemetrySnapshot | null>(null);
   const [activeSlot, setActiveSlot] = useState<number>(0);
   const [isThreatActive, setIsThreatActive] = useState<boolean>(false);
+
+  // Telemetrías Físicas Reales
+  const [pdrTelemetry, setPdrTelemetry] = useState<PdrState>(() =>
+    PedestrianDeadReckoningEngine.getInstance().getState()
+  );
+  const [actuatorTel, setActuatorTel] = useState<ActuatorBridgeTelemetry>(() =>
+    hexapodActuatorBridge.getTelemetry()
+  );
+  const [kineticStressTel, setKineticStressTel] = useState<KineticStressTelemetry>(() =>
+    kineticStress.getTelemetry()
+  );
+  const [loraTelemetry, setLoraTelemetry] = useState<LoraTelemetry>(() =>
+    LoraSerialBridgeEngine.getInstance().getTelemetry()
+  );
 
   // Referencias a contenedores de render
   const viewport3DRef = useRef<HTMLDivElement | null>(null);
@@ -84,7 +105,27 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
       setHumanBrainSnapshot(snapshot);
     });
 
-    // 4. Polling ligero de telemetría de supertrama TDMA
+    // 4. Suscripciones a Sensores Físicos y Actuación Real
+    const unsubPdr = PedestrianDeadReckoningEngine.getInstance().subscribe((s) => {
+      setPdrTelemetry(s);
+    });
+
+    const unsubActuator = hexapodActuatorBridge.subscribe((t) => {
+      setActuatorTel(t);
+    });
+
+    kineticStress.start();
+    const unsubStress = kineticStress.subscribe((t) => {
+      setKineticStressTel(t);
+    });
+
+    const loraPollTimer = setInterval(() => {
+      try {
+        setLoraTelemetry(LoraSerialBridgeEngine.getInstance().getTelemetry());
+      } catch {}
+    }, 1000);
+
+    // 5. Polling ligero de telemetría de supertrama TDMA
     const slotTimer = setInterval(() => {
       if (engine3DRef.current) {
         setActiveSlot(engine3DRef.current.stimulus.activeTdmaSlot);
@@ -92,7 +133,7 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
       }
     }, 150);
 
-    // 5. Manejo de redimensionado de ventana
+    // 6. Manejo de redimensionado de ventana
     const handleResize = () => {
       if (engine3DRef.current) engine3DRef.current.handleResize();
       if (engine2DRef.current) engine2DRef.current.handleResize();
@@ -102,8 +143,12 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
     return () => {
       window.removeEventListener("resize", handleResize);
       clearInterval(slotTimer);
+      clearInterval(loraPollTimer);
       unsubCpg();
       unsubHuman();
+      unsubPdr();
+      unsubActuator();
+      unsubStress();
       if (engine3DRef.current) {
         engine3DRef.current.dispose();
         engine3DRef.current = null;
@@ -170,13 +215,44 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
     }
   };
 
-  const handleToggleControlMode = () => {
+  const handleCycleControlMode = () => {
     TacticalAudioEngine.playTap();
-    const next = !isManualControl;
-    setIsManualControl(next);
-    if (engine3DRef.current) engine3DRef.current.setManualControl(next);
-    if (engine2DRef.current) engine2DRef.current.setManualControl(next);
-    toast.info(next ? "CONTROL MANUAL ACTIVADO (D-Pad)" : "MODO AUTÓNOMO (Biocibernético)");
+    let next: VivariumControlMode = 'AUTONOMOUS';
+    if (controlMode === 'AUTONOMOUS') next = 'MANUAL_DPAD';
+    else if (controlMode === 'MANUAL_DPAD') next = 'PDR_TWIN';
+    else next = 'AUTONOMOUS';
+
+    setControlMode(next);
+    setIsManualControl(next === 'MANUAL_DPAD');
+    if (engine3DRef.current) engine3DRef.current.setControlMode(next);
+    if (engine2DRef.current) engine2DRef.current.setControlMode(next);
+
+    if (next === 'PDR_TWIN') {
+      toast.success("MODO GEMELO PDR ACTIVADO: Sincronizado a pasos reales y brújula inercial");
+    } else if (next === 'MANUAL_DPAD') {
+      toast.info("CONTROL MANUAL ACTIVADO (D-Pad Táctico)");
+    } else {
+      toast.info("MODO AUTÓNOMO (Biocibernético CPG + Ring Attractor)");
+    }
+  };
+
+  const handleToggleActuatorStreaming = () => {
+    TacticalAudioEngine.playTap();
+    const next = !actuatorTel.isStreaming;
+    hexapodActuatorBridge.setStreaming(next);
+    if (engine3DRef.current) engine3DRef.current.setActuatorStreaming(next);
+    if (next) {
+      toast.success("PUENTE ROBÓTICO ACTIVO: Transmitiendo 18 servos vía serie USB / BLE");
+    } else {
+      toast.info("PUENTE ROBÓTICO PAUSADO");
+    }
+  };
+
+  const handleSimulateStress = () => {
+    TacticalAudioEngine.playAlert();
+    toast.error("SIMULACIÓN DE SHOCK / IMPACTO MAN-DOWN: Elevando prioridad de tráfico a FLAG_PHEROMONE");
+    const samples = Array.from({ length: 32 }, (_, i) => 9.81 + Math.sin(i * 1.25) * 5.0);
+    kineticStress.injectSyntheticMotion(samples);
   };
 
   const handleManualSteer = (turnDeg: number, speed: number) => {
@@ -190,6 +266,8 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
       style={{
         position: "fixed",
         inset: 0,
+        height: "100dvh",
+        maxHeight: "100dvh",
         zIndex: 100000,
         background: "rgba(2, 4, 10, 0.96)",
         backdropFilter: "blur(20px)",
@@ -238,8 +316,22 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
           </div>
         </div>
 
-        {/* KPIs de Telemetría Viva */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+        {/* KPIs de Telemetría Viva con Scroll Horizontal Touch */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+            whiteSpace: "nowrap",
+            flexShrink: 1,
+            minWidth: 0,
+            padding: "2px 4px",
+          }}
+        >
           <div
             style={{
               padding: "4px 10px",
@@ -249,6 +341,7 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
               fontSize: "11px",
               fontWeight: 700,
               color: "#00ff88",
+              flexShrink: 0,
             }}
           >
             CPG: {cpgTelemetry.gaitMode} ({cpgTelemetry.meanFrequencyHz.toFixed(1)} Hz)
@@ -263,6 +356,7 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
               fontSize: "11px",
               fontWeight: 700,
               color: isThreatActive ? "#ff3355" : "#00f0ff",
+              flexShrink: 0,
             }}
           >
             ÓPTICO: {isThreatActive ? "⚠️ LOOMING COLISIÓN" : "✓ PERCEPCIÓN NORMAL"}
@@ -277,37 +371,132 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
               fontSize: "11px",
               fontWeight: 700,
               color: "#ffb300",
+              flexShrink: 0,
             }}
           >
             TDMA: SLOT #{activeSlot}
           </div>
 
-          {/* Botón de Cierre */}
-          <button
-            onClick={() => {
-              TacticalAudioEngine.playTap();
-              onClose();
-            }}
+          <div
             style={{
-              background: "rgba(255, 51, 85, 0.15)",
-              border: "1px solid rgba(255, 51, 85, 0.4)",
-              color: "#ff3355",
+              padding: "4px 10px",
               borderRadius: "6px",
-              width: "32px",
-              height: "32px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
+              background: loraTelemetry.connected ? "rgba(0, 255, 136, 0.12)" : "rgba(139, 155, 180, 0.1)",
+              border: `1px solid ${loraTelemetry.connected ? "#00ff88" : "#8b9bb4"}`,
+              fontSize: "11px",
+              fontWeight: 700,
+              color: loraTelemetry.connected ? "#00ff88" : "#8b9bb4",
+              flexShrink: 0,
             }}
           >
-            <TacIcon name="x" size={18} />
-          </button>
+            LORA: {loraTelemetry.connected ? `${loraTelemetry.transportType} (${loraTelemetry.lastRssiDbm ?? -95} dBm)` : "ESCANEO RF STANDBY"}
+          </div>
+
+          <div
+            style={{
+              padding: "4px 10px",
+              borderRadius: "6px",
+              background:
+                kineticStressTel.level === "CRITICAL_SHOCK"
+                  ? "rgba(255, 51, 85, 0.25)"
+                  : kineticStressTel.level === "ELEVATED"
+                  ? "rgba(255, 179, 0, 0.15)"
+                  : "rgba(0, 255, 136, 0.1)",
+              border: `1px solid ${
+                kineticStressTel.level === "CRITICAL_SHOCK"
+                  ? "#ff3355"
+                  : kineticStressTel.level === "ELEVATED"
+                  ? "#ffb300"
+                  : "#00ff88"
+              }`,
+              fontSize: "11px",
+              fontWeight: 700,
+              color:
+                kineticStressTel.level === "CRITICAL_SHOCK"
+                  ? "#ff3355"
+                  : kineticStressTel.level === "ELEVATED"
+                  ? "#ffb300"
+                  : "#00ff88",
+              flexShrink: 0,
+            }}
+          >
+            ESTRÉS:{" "}
+            {kineticStressTel.level === "CRITICAL_SHOCK"
+              ? `🚨 CRÍTICO / SHOCK (${kineticStressTel.tremorFrequencyHz.toFixed(1)} Hz)`
+              : kineticStressTel.level === "ELEVATED"
+              ? `⚠️ ELEVADO (${kineticStressTel.tremorFrequencyHz.toFixed(1)} Hz)`
+              : "✓ NOMINAL"}
+          </div>
         </div>
+
+        {/* Botón de Cierre Pinned */}
+        <button
+          onClick={() => {
+            TacticalAudioEngine.playTap();
+            onClose();
+          }}
+          style={{
+            background: "rgba(255, 51, 85, 0.15)",
+            border: "1px solid rgba(255, 51, 85, 0.4)",
+            color: "#ff3355",
+            borderRadius: "6px",
+            width: "32px",
+            height: "32px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <TacIcon name="x" size={18} />
+        </button>
       </div>
 
       {/* ── 2. Área Central de Renderizado (Viewport 3D / 2D Persistente) ─── */}
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+        {/* Overlay HUD Táctico PDR en Tiempo Real */}
+        {controlMode === "PDR_TWIN" && (
+          <div
+            style={{
+              position: "absolute",
+              top: "16px",
+              left: "20px",
+              zIndex: 15,
+              background: "rgba(6, 12, 24, 0.92)",
+              border: "1px solid #00f0ff",
+              boxShadow: "0 0 15px rgba(0, 240, 255, 0.2)",
+              borderRadius: "8px",
+              padding: "10px 14px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "4px",
+              fontSize: "11px",
+              pointerEvents: "none",
+            }}
+          >
+            <div style={{ color: "#00f0ff", fontWeight: 800, letterSpacing: "1px" }}>
+              🚶 GEMELO DIGITAL PDR (ACELERÓMETRO + MAGNETÓMETRO)
+            </div>
+            <div>
+              Pasos Físicos Reales:{" "}
+              <span style={{ color: "#00ff88", fontWeight: 800 }}>{pdrTelemetry.totalSteps}</span>
+            </div>
+            <div>
+              Distancia Recorrida:{" "}
+              <span style={{ color: "#00ff88", fontWeight: 800 }}>{pdrTelemetry.distanceMeters.toFixed(1)} m</span>
+            </div>
+            <div>
+              Rumbo Magnético:{" "}
+              <span style={{ color: "#00f0ff", fontWeight: 800 }}>{pdrTelemetry.currentHeadingDeg}°</span>
+            </div>
+            <div>
+              Cadencia Inercial:{" "}
+              <span style={{ color: "#ffb300", fontWeight: 800 }}>{pdrTelemetry.stepFrequencyHz.toFixed(1)} Hz</span>
+            </div>
+          </div>
+        )}
+
         <div
           ref={viewport3DRef}
           style={{
@@ -367,7 +556,7 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
           </div>
         </div>
 
-        {/* Controles de Vista y Cámara flotantes */}
+        {/* Controles de Vista y Cámara flotantes con Scroll Vertical Touch si pantalla reducida */}
         <div
           style={{
             position: "absolute",
@@ -376,6 +565,12 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
             display: "flex",
             flexDirection: "column",
             gap: "8px",
+            maxHeight: "calc(100% - 32px)",
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+            zIndex: 10,
           }}
         >
           {/* Switch 3D vs 2D */}
@@ -635,47 +830,136 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
         )}
       </div>
 
-      {/* ── 3. Barra Inferior de Disparo de Estímulos Tácticos ──────────────── */}
+      {/* ── 3. Barra Inferior de Disparo de Estímulos Tácticos con Scroll Touch ─────── */}
       <div
+        className="scroll-container"
         style={{
           display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "12px 20px",
+          flexDirection: "column",
+          gap: "8px",
+          padding: "10px 16px 14px 16px",
           borderTop: "1px solid rgba(0, 240, 255, 0.2)",
-          background: "linear-gradient(0deg, rgba(6, 12, 24, 0.95) 0%, rgba(2, 6, 14, 0.85) 100%)",
-          gap: "12px",
-          flexWrap: "wrap",
+          background: "linear-gradient(0deg, rgba(6, 12, 24, 0.98) 0%, rgba(2, 6, 14, 0.90) 100%)",
+          maxHeight: "35vh",
+          overflowY: "auto",
+          minHeight: 0,
+          WebkitOverflowScrolling: "touch",
+          overscrollBehaviorY: "contain",
+          flexShrink: 0,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        {/* Fila 1: Modos y Enlaces */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+            whiteSpace: "nowrap",
+            paddingBottom: "2px",
+          }}
+        >
           <button
-            onClick={handleToggleControlMode}
+            onClick={handleCycleControlMode}
             style={{
-              background: isManualControl ? "rgba(255, 179, 0, 0.2)" : "rgba(0, 240, 255, 0.15)",
-              border: `1px solid ${isManualControl ? "#ffb300" : "#00f0ff"}`,
-              color: isManualControl ? "#ffb300" : "#00f0ff",
+              flexShrink: 0,
+              background:
+                controlMode === "PDR_TWIN"
+                  ? "rgba(0, 255, 136, 0.2)"
+                  : controlMode === "MANUAL_DPAD"
+                  ? "rgba(255, 179, 0, 0.2)"
+                  : "rgba(0, 240, 255, 0.15)",
+              border: `1px solid ${
+                controlMode === "PDR_TWIN"
+                  ? "#00ff88"
+                  : controlMode === "MANUAL_DPAD"
+                  ? "#ffb300"
+                  : "#00f0ff"
+              }`,
+              color:
+                controlMode === "PDR_TWIN"
+                  ? "#00ff88"
+                  : controlMode === "MANUAL_DPAD"
+                  ? "#ffb300"
+                  : "#00f0ff",
               borderRadius: "6px",
-              padding: "8px 14px",
+              padding: "7px 12px",
               fontSize: "11px",
               fontWeight: 800,
               cursor: "pointer",
             }}
           >
-            {isManualControl ? "🎮 MODO MANUAL ACTIVO" : "🤖 MODO AUTÓNOMO (Malla)"}
+            {controlMode === "PDR_TWIN"
+              ? "🚶 GEMELO PDR ACTIVO (Pasos Reales)"
+              : controlMode === "MANUAL_DPAD"
+              ? "🎮 CONTROL MANUAL (D-Pad)"
+              : "🤖 MODO AUTÓNOMO (Biocibernético)"}
+          </button>
+
+          <button
+            onClick={handleToggleActuatorStreaming}
+            style={{
+              flexShrink: 0,
+              background: actuatorTel.isStreaming ? "rgba(0, 255, 136, 0.2)" : "rgba(139, 155, 180, 0.12)",
+              border: `1px solid ${actuatorTel.isStreaming ? "#00ff88" : "rgba(139, 155, 180, 0.4)"}`,
+              color: actuatorTel.isStreaming ? "#00ff88" : "#8b9bb4",
+              borderRadius: "6px",
+              padding: "7px 12px",
+              fontSize: "11px",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            {actuatorTel.isStreaming ? `🦾 PUENTE ROBÓTICO TX (${actuatorTel.framesSent})` : "🦾 PUENTE ROBÓTICO OFF"}
+          </button>
+
+          <button
+            onClick={() => {
+              TacticalAudioEngine.playTap();
+              setIsHabitatOpen(true);
+            }}
+            style={{
+              flexShrink: 0,
+              background: "rgba(0, 255, 136, 0.15)",
+              border: "1px solid #00ff88",
+              color: "#00ff88",
+              borderRadius: "6px",
+              padding: "7px 12px",
+              fontSize: "11px",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            🪰 HÁBITAT FICK 3D
           </button>
         </div>
 
-        {/* Botones de Estímulos */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+        {/* Fila 2: Botones de Estímulos Tácticos */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+            whiteSpace: "nowrap",
+            paddingBottom: "2px",
+          }}
+        >
           <button
             onClick={handleInjectThreat}
             style={{
+              flexShrink: 0,
               background: "rgba(255, 51, 85, 0.15)",
               border: "1px solid #ff3355",
               color: "#ff3355",
               borderRadius: "6px",
-              padding: "8px 12px",
+              padding: "7px 12px",
               fontSize: "11px",
               fontWeight: 700,
               cursor: "pointer",
@@ -687,11 +971,12 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
           <button
             onClick={handleInjectJamming}
             style={{
+              flexShrink: 0,
               background: "rgba(255, 179, 0, 0.15)",
               border: "1px solid #ffb300",
               color: "#ffb300",
               borderRadius: "6px",
-              padding: "8px 12px",
+              padding: "7px 12px",
               fontSize: "11px",
               fontWeight: 700,
               cursor: "pointer",
@@ -703,11 +988,12 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
           <button
             onClick={handleSpawnDtnPacket}
             style={{
+              flexShrink: 0,
               background: "rgba(0, 255, 136, 0.15)",
               border: "1px solid #00ff88",
               color: "#00ff88",
               borderRadius: "6px",
-              padding: "8px 12px",
+              padding: "7px 12px",
               fontSize: "11px",
               fontWeight: 700,
               cursor: "pointer",
@@ -719,11 +1005,12 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
           <button
             onClick={handleTestGuardianFirewall}
             style={{
+              flexShrink: 0,
               background: "rgba(0, 240, 255, 0.15)",
               border: "1px solid #00f0ff",
               color: "#00f0ff",
               borderRadius: "6px",
-              padding: "8px 12px",
+              padding: "7px 12px",
               fontSize: "11px",
               fontWeight: 700,
               cursor: "pointer",
@@ -731,8 +1018,29 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
           >
             🛡️ TEST FUEGO GUARDIAN IA
           </button>
+
+          <button
+            onClick={handleSimulateStress}
+            style={{
+              flexShrink: 0,
+              background: "rgba(255, 51, 85, 0.15)",
+              border: "1px solid #ff3355",
+              color: "#ff3355",
+              borderRadius: "6px",
+              padding: "7px 12px",
+              fontSize: "11px",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            🚨 SIMULAR SHOCK (MAN-DOWN)
+          </button>
         </div>
       </div>
+
+      {isHabitatOpen && (
+        <TacticalHabitatModal onClose={() => setIsHabitatOpen(false)} />
+      )}
     </div>
   );
 };

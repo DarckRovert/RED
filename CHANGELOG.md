@@ -1,5 +1,21 @@
 # Changelog
 
+## [121.0.0-habitat-digital-biocibernetico-y-ecosistema-multi-cerebro] - 2026-09-23
+
+### 🧬 Hábitat Digital Biocibernético In-Silico & Ecosistema Multi-Cerebro (Release Oficial v121.0.0)
+
+- **Módulo 65: Hábitat Digital Biocibernético In-Silico (`org.redmesh.biocybernetic.habitat`):**
+  - Sustrato físico-químico determinista continuo de difusión y advección de Fick a 60 Hz en grilla de $64 \times 64$ con conservación de masa estricta.
+  - Divergencia morfológica y etológica real: *Drosophila* (alas batientes, marcha 18-DOF, STDP, reflejo LC4), *C. elegans* (spline vermiforme sinusoidal, klinokinesis biológica con cálculo de $dC/dt$ según Pierce-Shimomura et al., 1999) y *Ant Formicidae* (forrajeo y estigmergia continua con inyección de feromona de rastro).
+  - Ciclo de vida A-Life: reproducción por saciedad energética ($\text{ATP} > 82\%$), herencia de pesos sinápticos con mutación gaussiana Box-Muller y biodegradación orgánica de cadáveres.
+  - Instrumental táctico enriquecido: Pipeta continua Drag & Paint, Sonda mecánica Air-Puff, Haz optogenético ChR2, Barreras acústicas reflectoras Neumann y Bio-Scanner HUD interactivo.
+  - Sonificación Web Audio API nativa con 5 sintetizadores en tiempo real.
+- **Sincronización Canónica a 65 Módulos:**
+  - Sincronización SSOT en `README.md`, `ARCHITECTURE.md` (Mapa Visual 11), `client/app/README.md`, `catalogData.ts`, `LandingModuleCatalog.tsx` y `GlobalSearchModal.tsx`.
+- **Rendimiento Móvil & Hardware:**
+  - Corrección de escalado de coordenadas de pantalla a resolución nativa de canvas en `TacticalHabitatModal.tsx`.
+  - Certificación en Lenovo Tab M9 y Motorola Moto G22 (0 crashes, 0 caídas).
+
 ## [120.0.0-vivarium-biocibernetico-3d-y-digital-twin-edition] - 2026-09-23
 
 ### 🧬 Vivarium Biocibernético 3D & Gemelo Digital Táctico en Tiempo Real (Release Oficial v120.0.0)

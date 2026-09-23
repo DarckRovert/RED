@@ -1,8 +1,8 @@
-# 🛡️ RED — Sovereign Mesh OS v120.0.0
+# 🛡️ RED — Sovereign Mesh OS v121.0.0
 
 > **RED** (Red Criptográfica Off-Grid & P2P Mesh) es la plataforma de comunicaciones tácticas, descentralizadas y soberanas más avanzada del mundo. Diseñada desde su origen para operar bajo escenarios de apagón tecnológico, censura estatal, desastres naturales o denegación de servicios, RED no depende de servidores centrales, infraestructuras celulares ni conexión a Internet. Ahora con el **Modo Familiar (WhatsApp UX)** integrado, **Coordinación Espectral LoRa TDMA**, **Enrutamiento Geoespacial Geohash** y **Repetidores Solares Autónomos ESP32-S3**.
 
-[![Descargar APK Oficial RED v120.0.0](https://img.shields.io/badge/Descargar_APK_v120.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v120.0.0)
+[![Descargar APK Oficial RED v121.0.0](https://img.shields.io/badge/Descargar_APK_v121.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v121.0.0)
 [![Página Web Oficial GitHub Pages](https://img.shields.io/badge/Web_App-GitHub_Pages-38BDF8?style=for-the-badge&logo=github)](https://darckrovert.github.io/RED/)
 [![Licencia AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-purple?style=for-the-badge&logo=gnu)](https://github.com/DarckRovert/RED/blob/main/LICENSE)
 [![TypeScript Strict](https://img.shields.io/badge/TypeScript-0_Errors_Strict-00D97E?style=for-the-badge&logo=typescript)](https://github.com/DarckRovert/RED)
@@ -15,7 +15,7 @@
 
 Accede a la documentación técnica y operativa completa del proyecto:
 
-- 📖 **[Manual de Usuario Táctico (USER_MANUAL.md)](USER_MANUAL.md)**: Guía de uso paso a paso de los 8 Hubs Tácticos Consolidados y las 64 pantallas modales para operadores finales.
+- 📖 **[Manual de Usuario Táctico (USER_MANUAL.md)](USER_MANUAL.md)**: Guía de uso paso a paso de los 8 Hubs Tácticos Consolidados y las 65 pantallas modales para operadores finales.
 - ⚙️ **[Manual de Administración y Nodos (ADMIN_MANUAL.md)](ADMIN_MANUAL.md)**: Configuración de nodos de escritorio en PC, repetidores solares autónomos ESP32-S3 y telemetría de slots TDMA.
 - 📐 **[Arquitectura de Protocolos (ARCHITECTURE.md)](ARCHITECTURE.md)**: Diagramas formales de ingeniería, stack de capas, supertrama TDMA y enrutamiento Geohash.
 - 🛰️ **[Firmware de Repetidores Solares (firmware/esp32-repeater/README.md)](firmware/esp32-repeater/README.md)**: Guía de montaje de hardware de bajo costo (~$15-20 USD), esquema solar TP4056 y flasheo PlatformIO.
@@ -31,7 +31,7 @@ Accede a la documentación técnica y operativa completa del proyecto:
 2. [Arquitectura del Sistema & Mapa Visual](#arquitectura-sistema)
 3. [Autenticación Biométrica Universal & Seguridad Zero-Trust](#autenticacion-biometrica)
 4. [Conectividad Global & Red Malla Descentralizada](#conectividad-global)
-5. [Catálogo Consolidado de 64 Módulos & Pantallas Tácticas](#catalogo-modulos)
+5. [Catálogo Consolidado de 65 Módulos & Pantallas Tácticas](#catalogo-modulos)
 6. [Criptografía Post-Cuántica & Privacidad en Capas](#criptografia-post-cuantica)
 7. [Tokenomics & Proof-of-Relay](#tokenomics)
 8. [Guía de Compilación & Despliegue](#guia-compilacion)
@@ -45,9 +45,9 @@ Accede a la documentación técnica y operativa completa del proyecto:
 
 En situaciones de emergencia o denegación de red, las aplicaciones tradicionales de mensajería (WhatsApp, Telegram, Signal) fallan al depender de servidores centrales en la nube y torres de telefonía celular. **RED** rompe esta dependencia convirtiendo cada dispositivo en un **nodo de red mesh independiente** capaz de cifrar, enrutar y entregar mensajes a través de radios de hardware locales y enlazar globalmente cuando exista un puente de red.
 
-| Característica | Aplicaciones Tradicionales | RED v120.0.0 |
+| Característica | Aplicaciones Tradicionales | RED v121.0.0 |
 |---|---|---|
-| **Interfaz & UX** | Saturada y con menús dispersos | **Doble Modo Soberano: Modo Familiar (WhatsApp UX) + Modo Táctico C4ISR (8 Hubs, 64 Pantallas)** |
+| **Interfaz & UX** | Saturada y con menús dispersos | **Doble Modo Soberano: Modo Familiar (WhatsApp UX) + Modo Táctico C4ISR (8 Hubs, 65 Pantallas)** |
 | **Infraestructura** | Requiere servidores en la nube y 4G/5G | **100% Descentralizado / Zero-Server** |
 | **Operación Off-Grid** | Imposible sin Internet | **Totalmente funcional mediante BLE GATT, WiFi Direct, LoRa 915MHz y SoundMesh Ultrasónico** |
 | **Coordinación LoRa** | Acceso ALOHA caótico con colisiones masivas | **Planificador LoRa TDMA: Supertrama de 2000ms (10 slots de 200ms), FNV-1a y Bypass SOS Prioridad 9** |
@@ -77,7 +77,7 @@ Para una documentación exhaustiva de los diagramas técnicos de ingeniería, co
 ```mermaid
 graph TD
     subgraph FRONTEND ["1. Frontend SPA (Next.js 16 + React 19 + Zustand)"]
-        UI["64 Módulos & Pantallas Tácticas Consolidadas"]
+        UI["65 Módulos & Pantallas Tácticas Consolidadas"]
         STORE["Zustand Slices (Auth, Chat, Contacts, Emergency, Social)"]
         UI <--> STORE
     end
@@ -127,7 +127,7 @@ graph TD
 <a id="autenticacion-biometrica"></a>
 ## 🔐 3. Autenticación Biométrica Universal & Seguridad Zero-Trust
 
-RED v120.0.0 incorpora un guardián de hardware que vincula el chip de seguridad del dispositivo a la base de datos `sled`:
+RED v121.0.0 incorpora un guardián de hardware que vincula el chip de seguridad del dispositivo a la base de datos `sled`:
 
 1. **Soporte Biométrico Completo:**
    - **Android Nativo:** Sensor de huella dactilar, reconocimiento facial 3D/IR, escáner de iris y credenciales de dispositivo mediante `BiometricPrompt` (`USE_BIOMETRIC` + `USE_FINGERPRINT`).
@@ -151,7 +151,7 @@ RED implementa una arquitectura híbrida **Offline-to-Global Gateway** con toler
 ---
 
 <a id="catalogo-modulos"></a>
-## 🧰 5. Catálogo Consolidado de 64 Módulos & Pantallas Tácticas
+## 🧰 5. Catálogo Consolidado de 65 Módulos & Pantallas Tácticas
 
 1. **Canales Mesh Locales:** Salas temáticas abiertas con moderación por IA.
 2. **RED Social Feed P2P:** Microblogging descentralizado sin censura.
@@ -217,6 +217,7 @@ RED implementa una arquitectura híbrida **Offline-to-Global Gateway** con toler
 62. **Resguardo de Secretos Shamir:** Custodia fragmentada de claves maestras entre el escuadrón.
 63. **Conectoma Neuromórfico MaleCNS:** Atlas 3D somático de 124,289 neuronas con micro-espigas AER y plasticidad Hebbiana.
 64. **Vivarium Biocibernético 3D:** Gemelo digital WebGL interactivo en tiempo real con suelo entorrinal multiescala, marcha trípode CPG y simulación de amenazas físicas.
+65. **Hábitat Digital Biocibernético In-Silico:** Ecosistema multi-cerebro interactivo con sustrato químico de difusión continua de Fick a 60 Hz, estigmergia emergente con feromonas de rastro, quimiotaxis por klinokinesis de C. elegans, ciclo de vida A-Life evolutivo con mutación epigenética y Bio-Scanner HUD táctico.
 
 ---
 

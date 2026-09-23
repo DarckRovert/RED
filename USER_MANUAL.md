@@ -1,4 +1,4 @@
-# 📘 Manual Operativo del Usuario — RED v120.0.0 Sovereign Tactical & Familiar Edition
+# 📘 Manual Operativo del Usuario — RED v121.0.0 Sovereign Tactical & Familiar Edition
 
 Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentralizada de comunicaciones soberanas, cifradas e inmunes a fallos de infraestructura, apagones o censura.
 
@@ -10,13 +10,14 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 2. [Llaves Biométricas Universales & Passkeys](#2-llaves-biométricas-universales--passkeys)
 3. [Gestión de Seguridad, Modo Señuelo & Anti-Coacción](#3-gestión-de-seguridad-modo-señuelo--anti-coacción)
 4. [Respaldo en 1 Toque & Restauración Instantánea](#4-respaldo-en-1-toque--restauración-instantánea)
-5. [Catálogo Operativo de los 64 Módulos & Pantallas Tácticas](#5-catálogo-operativo-de-los-64-módulos--pantallas-tácticas)
+5. [Catálogo Operativo de los 65 Módulos & Pantallas Tácticas](#5-catálogo-operativo-de-los-65-módulos--pantallas-tácticas)
 6. [Tokenomics DePIN, Vales Criptográficos & Paridad PEN](#6-tokenomics-depin-vales-criptográficos--paridad-pen)
 7. [Actuadores de Hardware: Triaje START, SOS & SoundMesh](#7-actuadores-de-hardware-triaje-start-sos--soundmesh)
 8. [Uso de la Versión Web en PC & Vinculación con Celulares](#8-uso-de-la-versión-web-en-pc--vinculación-con-celulares)
 9. [Uso de Radios LoRa, Slots TDMA & Repetidores Solares Autónomos](#9-uso-de-radios-lora-slots-tdma--repetidores-solares-autónomos)
 10. [Preguntas Frecuentes & Solución de Problemas](#10-preguntas-frecuentes--solución-de-problemas)
 11. [Operación del Vivarium Biocibernético 3D & Telemetría Táctica](#11-operación-del-vivarium-biocibernético-3d--telemetría-táctica)
+12. [Operación del Hábitat Digital Biocibernético In-Silico & Experimentación](#12-operación-del-hábitat-digital-biocibernético-in-silico--experimentación)
 
 ---
 
@@ -65,7 +66,7 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 
 ---
 
-## 5. Catálogo Operativo de los 64 Módulos & Pantallas Tácticas
+## 5. Catálogo Operativo de los 65 Módulos & Pantallas Tácticas
 
 1. **Canales Mesh Locales:** Salas temáticas abiertas para operadores cercanos con moderación por IA.
 2. **RED Social Feed P2P:** Microblogging descentralizado y resistente a la censura.
@@ -130,7 +131,8 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 61. **Sigint Subterráneo:** Captación de vibraciones terrestres mediante giroscopio y acelerómetro.
 62. **Resguardo de Secretos Shamir:** Reparto de claves en fragmentos entre miembros de la escuadra.
 63. **Conectoma Neuromórfico MaleCNS:** Visualizador 3D y atlas somático de 124,289 neuronas con enrutamiento Hebbiano de micro-espigas AER.
-64. **Vivarium Biocibernético 3D:** Gemelo digital interactivo WebGL en tiempo real con suelo entorrinal hexagonal multiescala, cinemática de 6 patas sincronizada con el CPG de Kuramoto-Matsuoka, balizas LoRa y satélite orbital LEO con inyección de amenazas ópticas Looming.
+64. **Vivarium Biocibernético 3D:** Gemelo digital interactivo WebGL en tiempo real con suelo entorrinal hexagonal multiescala, cinemática de 6 patas sincronizada con el CPG de Kuramoto-Matsuoka, modo PDR Twin de navegación inercial a pasos reales, puente robótico TX 18-DOF para servos reales, detector de estrés cinético (shock/man-down), balizas LoRa y satélite orbital LEO con inyección de amenazas ópticas Looming.
+65. **Hábitat Digital Biocibernético In-Silico:** Ecosistema multi-cerebro interactivo con simulación de difusión de Fick 2D a 60 Hz (glucosa y feromonas), percepción visual omatidial de 750 facetas, tropotaxis antenal emergente de *Drosophila melanogaster*, *Caenorhabditis elegans* y colonias de hormigas, instrumental de laboratorio (pipeta de glucosa, foco térmico, sombra looming, optogenética ChR2), balance celular de ATP con letargo metabólico (torpor) y migración binaria compacta P2P en malla LoRa/BLE.
 
 ---
 
@@ -205,7 +207,44 @@ El **Vivarium Biocibernético 3D** es el gemelo digital táctico en tiempo real 
 - **TDMA Slot:** Ranura de tiempo espectral activa en la supertrama LoRa sincronizada con las balizas perimetrales.
 
 ### Barra de Acciones Tácticas & Inyección de Amenazas:
+- **`🚶 GEMELO PDR / CONTROL MANUAL / MODO AUTÓNOMO`**: Cicla el control cinemático de la Drosophila entre modo autónomo biológico (CPG + Ring Attractor), control manual por D-Pad táctico, y modo **Gemelo PDR**, en el cual la marcha y rumbo del agente 3D se sincronizan exactamente con los pasos físicos reales, cadencia y brújula inercial del operador (`PedestrianDeadReckoningEngine`).
+- **`🦾 PUENTE ROBÓTICO TX`**: Activa la transmisión en tiempo real de los 18 ángulos articulares (3-DOF por pata: Coxa, Fémur, Tibia) serializados a 60 Hz hacia robots hexápodos físicos vía conexión serie USB o enlace BLE (`HexapodActuatorBridgeEngine`).
+- **`🪰 HÁBITAT FICK 3D`**: Abre instantáneamente el modal táctico del Hábitat Biocibernético para experimentación química y ecológica.
 - **`⚡ INYECTAR AMENAZA (LOOMING)`**: Simula un objeto entrante a alta velocidad hacia la Drosophila, forzando la ignición del circuito reflejo de la Fibra Gigante (Giant Fiber, GF) y provocando un despegue y salto de evasión vertical en < 15 ms con cambio cromático de los omatidios oculares a rojo carmesí.
 - **`🛰️ INTERFERENCIA RF JAMMING`**: Inyecta ruido electromagnético en la arena, forzando la plasticidad aversiva mediada por dopamina en el Mushroom Body hacia canales de radio limpios.
 - **`📦 GENERAR PAQUETE DTN`**: Despacha un pulso de datos bio-inspirado que viaja físicamente entre el rover central, las balizas LoRa y el satélite LEO orbital.
 - **`🛡️ TEST FUEGO GUARDIAN IA`**: Evalúa la cúpula geodésica defensiva de 64-bit Hamming, simulando un intento de inyección de paquetes anómalos.
+- **`🚨 SIMULAR SHOCK (MAN-DOWN)`**: Inyecta un perfil de vibración y shock cinético agudo para disparar el motor `KineticStressEngine`, elevando la prioridad de tráfico de malla al flag de feromona (`FLAG_PHEROMONE`).
+
+---
+
+## 12. Operación del Hábitat Digital Biocibernético In-Silico & Experimentación
+
+El **Hábitat Digital Biocibernético In-Silico** (`org.redmesh.biocybernetic.habitat`) es una Mini-App soberana y modal táctico de primera clase en RED, diseñado para la cohabitación, percepción, aprendizaje, estigmergia y evolución de múltiples organismos neurofisiológicos (*Drosophila melanogaster*, *Caenorhabditis elegans* y colonias de hormigas estigmérgicas *Formicidae*).
+
+### Fundamentos Biofísicos & Divergencia de Especies:
+1. **Sustrato Químico Continuo de Fick 2D con Viento Advectivo:**
+   - Resuelve la ecuación en derivadas parciales (EDP) $\frac{\partial C}{\partial t} = D \nabla^2 C - \vec{v} \cdot \nabla C - \lambda C$ sobre una malla espacial discretizada de $64 \times 64$ celdas dual-buffer a 60 Hz para múltiples sustancias simultáneas: Glucosa (esmeralda), Feromona de Rastro Estigmérgico (ámbar dorado) y Feromona de Alarma (carmesí).
+   - Renderizado en tiempo real como campo escalar de fluidos con advección eólica e interpolación bilineal GPU sobre el Canvas táctico.
+   - Cuenta con advección upwind de primer orden y estabilidad Courant-Friedrichs-Lewy ($D_{\text{eff}} \le 0.9 \cdot \frac{h^2}{4\Delta t}$), garantizando estabilidad matemática absoluta sin divergencias.
+2. **Divergencia Biofísica por Especie:**
+   - **🪰 Drosophila melanogaster:** Marcha trípode hexápoda de 18 articulaciones acopladas al actuador robótico físico, alas oscilantes translúcidas dependientes de velocidad, ojos compuestos con 750 omatidios, aristas antenales para tropotaxis y detección de sombras inminentes (LC4/Giant Fiber) con reflejo de escape balístico $< 15$ ms. Plasticidad Hebbiana STDP tripartita (Kenyon Cells $\rightarrow$ MBONs con refuerzo dopaminérgico PAM y aversión PPL1).
+   - **🪱 Caenorhabditis elegans:** Cinemática ondulatoria sinusoidal sin patas a lo largo de una columna flexible de 10 nodos articulares ($y(s,t) = A \sin(\omega t - k \cdot s)$). Quimiotaxis por **Klinokinesis de Pierce-Shimomura et al., 1999**: las neuronas anfidiales ASEL/ASER calculan la derivada temporal $dC/dt$; si $dC/dt > 0$ se suprimen las piruetas ("long forward run"), si $dC/dt \le 0$ se dispara una pirueta estocástica de reorientación brusca (giro omega). Nocicepción térmica reversa (FLP/PVD) ante calor o alarma.
+   - **🐜 Formicidae (Hormiga):** Morfología segmentada en 3 partes (cabeza con mandíbulas móviles abiertas, mesosoma con 6 patas y gaster). Dinámica de **Estigmergia Real**: cuando forrajea y localiza glucosa, ingiere nutrientes y comienza el retorno hacia el centro/nido depositando un rastro continuo de `PHEROMONE_TRAIL` en la grilla de Fick. Otras hormigas detectan el rastro con sus antenas y lo refuerzan, formando **autopistas de forrajeo colectivas emergentes** que se disipan naturalmente al agotarse el alimento.
+3. **Ciclo de Vida Ecológico & Evolución A-Life:**
+   - **Mitosis / Oviposición por Saciedad:** Organismos que mantienen $\text{ATP} > 80\%$ y glucosa alta por más de 15 segundos se reproducen. La descendencia (Generación $N+1$) hereda la matriz sináptica del progenitor con mutación gaussiana estocástica ($\Delta W \sim \mathcal{N}(0, \sigma^2)$), permitiendo adaptación evolutiva in-silico.
+   - **Biodegradación de Biomasa:** Organismos que agotan su reserva energética fenececen; su cuerpo permanece como biomasa degradable que lentamente libera nutrientes enriqueciendo el sustrato químico.
+
+### Instrumental Táctico de Laboratorio & Bio-Scanner HUD:
+- **`💧 PIPETA GLUCOSA (Drag & Paint)`**: Permite tocar o arrastrar el dedo/ratón para trazar ríos y caminos continuos de néctar y glucosa sobre la arena.
+- **`💨 SONDA AIR-PUFF (Mecánica)`**: Pulsa sobre el sustrato para generar ondas de presión y ráfagas de aire que excitan los mecanorreceptores y provocan sobresaltos de escape en los organismos.
+- **`⚡ LÁSER ChR2 (470nm)`**: Haz fotónico azul continuo de alta precisión que despolariza selectivamente los canales Canalrodopsina-2 acoplados a las neuronas dopaminérgicas PAM al iluminar los organismos.
+- **`🚧 BARRERA ACÚSTICA & 🧹 LIMPIAR BARRERAS`**: Permite trazar paredes y obstáculos físicos con reflexión Neumann de flujo cero, permitiendo diseñar laberintos y pruebas de navegación.
+- **`🔥 FOCO TÉRMICO`**: Aplica un gradiente térmico de radiación que activa los termorreceptores aversivos.
+- **`🌑 SOMBRA LOOMING`**: Proyecta una sombra expansiva balística para evaluar el arco reflejo LC4.
+- **`🎯 BIO-SCANNER HUD (Inspección Individual)`**: Al pulsar sobre cualquier organismo en el Canvas, una retícula táctica animada `[ ]` se fija sobre él, desplegando una tarjeta flotante Cyberpunk con su especie, número de generación, barras de ATP/Glucosa, estado etológico en vivo y disparadores de estímulo directo.
+
+### Despacho Robótico, Migración P2P & Sonificación:
+- **`🦾 PUENTE ROBÓTICO TX`**: Transmite en vivo la cinemática articular 18-DOF hacia robots hexápodos reales vía USB serie o Bluetooth Low Energy (`HexapodActuatorBridgeEngine`).
+- **`🚀 EMIGRAR EN MALLA P2P`**: Serializa el genoma, estado metabólico, rumbo y pesos sinápticos cuantizados en una trama compacta de **72 bytes** transmitida por LoRa SX1262 o BLE hacia terminales vecinas.
+- **`🔊 SONIFICACIÓN NATIVA`**: Síntesis directa mediante Web Audio API (`TacticalAudioEngine`) con campanillas armónicas dopaminérgicas al alimentarse, swooshes cinéticos de escape balístico, pulsos de ráfaga de aire y arpegios de mitosis generacional.

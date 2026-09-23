@@ -10,6 +10,12 @@
 import { centralPatternGenerator, CpgLocomotionTelemetry, LegIdentifier } from '../CentralPatternGeneratorEngine';
 import { ringAttractor } from '../RingAttractorEngine';
 import { giantFiberReflex } from '../GiantFiberReflexEngine';
+import { PedestrianDeadReckoningEngine } from '../../sensors/PedestrianDeadReckoningEngine';
+import { tacticalCompass } from '../../sensors/TacticalCompassEngine';
+import { loraTdmaScheduler } from '../../mesh/LoRaTdmaSchedulerEngine';
+import { DynamicBearerGovernor } from '../../mesh/DynamicBearerGovernor';
+import { RfSigintWatchdogEngine } from '../../sensors/RfSigintWatchdogEngine';
+import { VivariumControlMode } from './Vivarium3DEngine';
 
 export class Vivarium2DEngine {
   private canvas: HTMLCanvasElement | null = null;
@@ -21,7 +27,15 @@ export class Vivarium2DEngine {
   public agentX = 0;
   public agentZ = 0;
   public agentHeading = 0; // Grados
-  public isManualControl = false;
+  public controlMode: VivariumControlMode = 'AUTONOMOUS';
+
+  public get isManualControl(): boolean {
+    return this.controlMode === 'MANUAL_DPAD';
+  }
+  public set isManualControl(v: boolean) {
+    this.controlMode = v ? 'MANUAL_DPAD' : 'AUTONOMOUS';
+  }
+
   private manualHeading = 0;
   private manualSpeed = 0;
 
@@ -84,14 +98,38 @@ export class Vivarium2DEngine {
   private tick(deltaSec: number): void {
     const cpgTel = centralPatternGenerator.getTelemetry();
 
+    // Sincronizar slot TDMA con el reloj de red LoRa
+    this.activeTdmaSlot = loraTdmaScheduler.getCurrentSlot();
+
+    // Sincronizar amenaza RF / Jamming real
+    try {
+      const isEw = DynamicBearerGovernor.getInstance().getTelemetry().isElectronicWarfareActive;
+      const sigintThreat = RfSigintWatchdogEngine.getInstance().getTelemetry().threatLevel !== 'CLEAR';
+      if (isEw || sigintThreat) {
+        this.threatActive = true;
+      }
+    } catch {}
+
     // Velocidad
     let speed = 2.0;
     if (cpgTel.gaitMode === 'ESCAPE_SPRINT') speed = 4.8;
     else if (cpgTel.gaitMode === 'QUIESCENT') speed = 0;
 
-    if (this.isManualControl) {
+    if (this.controlMode === 'MANUAL_DPAD') {
       speed = this.manualSpeed;
       this.agentHeading = this.manualHeading;
+    } else if (this.controlMode === 'PDR_TWIN') {
+      // MODO GEMELO FÍSICO PDR: Sincronización inercial con pasos reales
+      const pdrState = PedestrianDeadReckoningEngine.getInstance().getState();
+      this.agentHeading = tacticalCompass.getTelemetry().headingDeg;
+
+      if (pdrState.isTracking && pdrState.stepFrequencyHz > 0.15) {
+        speed = Math.min(3.5, Math.max(0.8, pdrState.stepFrequencyHz * 0.8));
+        centralPatternGenerator.setLocomotionDrive(Math.min(1.0, speed / 2.5), 0);
+      } else {
+        speed = 0;
+        centralPatternGenerator.setLocomotionDrive(0, 0);
+      }
     } else {
       if (this.dtnPacket) {
         const dx = this.dtnPacket.x - this.agentX;
@@ -300,15 +338,22 @@ export class Vivarium2DEngine {
     };
   }
 
-  public setManualControl(active: boolean): void {
-    this.isManualControl = active;
-    if (active) {
+  public setControlMode(mode: VivariumControlMode): void {
+    this.controlMode = mode;
+    if (mode === 'PDR_TWIN') {
+      PedestrianDeadReckoningEngine.getInstance().startTracking();
+      centralPatternGenerator.setLocomotionDrive(0, 0);
+    } else if (mode === 'MANUAL_DPAD') {
       this.manualHeading = this.agentHeading;
       this.manualSpeed = 0;
       centralPatternGenerator.setLocomotionDrive(0, 0);
     } else {
       centralPatternGenerator.setLocomotionDrive(0.65, 0);
     }
+  }
+
+  public setManualControl(active: boolean): void {
+    this.setControlMode(active ? 'MANUAL_DPAD' : 'AUTONOMOUS');
   }
 
   public setManualSteering(speed: number, headingOffsetDeg: number): void {

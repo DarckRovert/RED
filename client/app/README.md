@@ -1,6 +1,6 @@
 # 📱 RED Client SPA — Next.js 16 + Capacitor Mobile App v120.0.0
 
-Plataforma de interfaz táctica soberana (64 módulos modales), gestión de estado modular con Zustand Slices, llaves biométricas universales, llamadas full-mesh de escuadrón, atlas conectómico somático 3D (MaleCNS), Vivarium Biocibernético 3D e integración nativa con el motor de Rust (`red_mobile` y `red_node`).
+Plataforma de interfaz táctica soberana (65 módulos modales), gestión de estado modular con Zustand Slices, llaves biométricas universales, llamadas full-mesh de escuadrón, atlas conectómico somático 3D (MaleCNS), Vivarium Biocibernético 3D, Hábitat Digital Biocibernético e integración nativa con el motor de Rust (`red_mobile` y `red_node`).
 
 ---
 
@@ -51,13 +51,15 @@ client/app/src/
 │   ├── mesh/              # LoRaTdmaSchedulerEngine, LamportMeshClockEngine, RingAttractorEngine
 │   ├── connectome/        # MaleCNS Somatic 3D Atlas, GNWT Consciousness Bus
 │   ├── neuro/vivarium/    # Vivarium3DEngine, EntorhinalGridFloor3D, HexapodBody3D (Kuramoto CPG)
+│   ├── neuro/habitat/     # BiocyberneticHabitatEngine, FickDiffusionGrid, OmmatidialCompoundEye
 │   ├── sensors/           # Hardware GPS, Barómetro, Brújula WMM2025
 │   └── storage/           # DtnStorage, StateIntegrityEngine
-└── components/            # 64 Módulos tácticos y componentes UI
+└── components/            # 65 Módulos tácticos y componentes UI
     ├── AuthWall.tsx       # Teclado táctico de 6 dígitos y biométrica universal
     ├── Sidebar.tsx        # Panel de conversaciones y contactos
     ├── MaleCnsConnectomeHUD.tsx # Visualizador somático 3D WebGL
     ├── TacticalVivariumModal.tsx # Vivarium Biocibernético 3D y Gemelo Digital
+    └── tactical/TacticalHabitatModal.tsx # Hábitat Digital Biocibernético In-Silico
     ├── SquadronFullMeshCallModal.tsx # Audio full-mesh de escuadrón
     └── settings/          # Pestañas de configuración modular (PrivacyTab, MeshTab, etc.)
 ```

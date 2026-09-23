@@ -27,6 +27,7 @@ import { OfcBarterMarketModal } from "./tactical/OfcBarterMarketModal";
 import { HippocampalMemoryModal } from "./tactical/HippocampalMemoryModal";
 import dynamic from "next/dynamic";
 const TacticalVivariumModal = dynamic(() => import("./tactical/TacticalVivariumModal").then(m => ({ default: m.TacticalVivariumModal })), { ssr: false });
+const TacticalHabitatModal = dynamic(() => import("./tactical/TacticalHabitatModal").then(m => ({ default: m.TacticalHabitatModal })), { ssr: false });
 import { predictiveCortex } from "../lib/neuro/human/PredictiveCortexEngine";
 import { globalWorkspaceConsciousnessBus, ConsciousnessSnapshot } from "../lib/neuro/GlobalWorkspaceConsciousnessBus";
 import { meshRouter } from "../lib/mesh/meshRouter";
@@ -106,6 +107,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const [isOfcBarterOpen, setIsOfcBarterOpen] = useState<boolean>(false);
   const [isHippocampalMemoryOpen, setIsHippocampalMemoryOpen] = useState<boolean>(false);
   const [isVivariumOpen, setIsVivariumOpen] = useState<boolean>(false);
+  const [isHabitatOpen, setIsHabitatOpen] = useState<boolean>(false);
 
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1121,6 +1123,11 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           display: "flex",
           borderBottom: "1px solid rgba(0, 229, 255, 0.2)",
           background: "rgba(4, 7, 17, 0.95)",
+          overflowX: "auto",
+          WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+          whiteSpace: "nowrap",
         }}
       >
         <button
@@ -1130,7 +1137,9 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           }}
           style={{
             flex: 1,
-            padding: "10px",
+            minWidth: "max-content",
+            flexShrink: 0,
+            padding: "10px 14px",
             background: architectureMode === "SUBCORTICAL_MALE_CNS" ? "rgba(0, 229, 255, 0.15)" : "transparent",
             border: "none",
             borderBottom: architectureMode === "SUBCORTICAL_MALE_CNS" ? "2px solid #00E5FF" : "none",
@@ -1155,7 +1164,9 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           }}
           style={{
             flex: 1,
-            padding: "10px",
+            minWidth: "max-content",
+            flexShrink: 0,
+            padding: "10px 14px",
             background: architectureMode === "HUMAN_NEOCORTEX" ? "rgba(16, 185, 129, 0.15)" : "transparent",
             border: "none",
             borderBottom: architectureMode === "HUMAN_NEOCORTEX" ? "2px solid #10B981" : "none",
@@ -1180,7 +1191,9 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           }}
           style={{
             flex: 1,
-            padding: "10px",
+            minWidth: "max-content",
+            flexShrink: 0,
+            padding: "10px 14px",
             background: architectureMode === "CONSCIOUS_SWARM_BUS" ? "rgba(245, 158, 11, 0.15)" : "transparent",
             border: "none",
             borderBottom: architectureMode === "CONSCIOUS_SWARM_BUS" ? "2px solid #F59E0B" : "none",
@@ -1237,7 +1250,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
           style={{ width: "100%", height: "100%", display: "block" }}
         />
 
-        {/* Controles Flotantes de Cámara */}
+        {/* Controles Flotantes de Cámara con Scroll Horizontal Touch */}
         <div
           style={{
             position: "absolute",
@@ -1246,6 +1259,13 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
             display: "flex",
             gap: "6px",
             zIndex: 5,
+            maxWidth: "calc(100% - 24px)",
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+            whiteSpace: "nowrap",
+            paddingBottom: "2px",
           }}
         >
           <button
@@ -1255,6 +1275,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
               setAutoRotate(next);
             }}
             style={{
+              flexShrink: 0,
               padding: "4px 8px",
               borderRadius: "6px",
               background: autoRotate ? "rgba(0, 229, 255, 0.25)" : "rgba(0, 0, 0, 0.6)",
@@ -1273,6 +1294,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
               zoomRef.current = Math.min(1.8, zoomRef.current + 0.15);
             }}
             style={{
+              flexShrink: 0,
               padding: "4px 8px",
               borderRadius: "6px",
               background: "rgba(0, 0, 0, 0.6)",
@@ -1290,6 +1312,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
               zoomRef.current = Math.max(0.5, zoomRef.current - 0.15);
             }}
             style={{
+              flexShrink: 0,
               padding: "4px 8px",
               borderRadius: "6px",
               background: "rgba(0, 0, 0, 0.6)",
@@ -1308,6 +1331,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
               setIsVivariumOpen(true);
             }}
             style={{
+              flexShrink: 0,
               padding: "4px 8px",
               borderRadius: "6px",
               background: "rgba(0, 240, 255, 0.22)",
@@ -1319,6 +1343,26 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
             }}
           >
             🌌 VIVARIUM 3D
+          </button>
+
+          <button
+            onClick={() => {
+              TacticalAudioEngine.playTap();
+              setIsHabitatOpen(true);
+            }}
+            style={{
+              flexShrink: 0,
+              padding: "4px 8px",
+              borderRadius: "6px",
+              background: "rgba(0, 255, 136, 0.22)",
+              border: "1px solid #00FF88",
+              color: "#00FF88",
+              fontSize: "0.65rem",
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            🌿 HÁBITAT VIVO
           </button>
         </div>
 
@@ -3418,6 +3462,9 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       />
       {isVivariumOpen && (
         <TacticalVivariumModal onClose={() => setIsVivariumOpen(false)} />
+      )}
+      {isHabitatOpen && (
+        <TacticalHabitatModal onClose={() => setIsHabitatOpen(false)} />
       )}
     </div>
   );

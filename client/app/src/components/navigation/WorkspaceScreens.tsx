@@ -40,7 +40,7 @@ function AppLoader() {
   );
 }
 
-// ── Dynamic Screen Imports (62 módulos) ───────────────────────────────────────
+// ── Dynamic Screen Imports (65 módulos) ───────────────────────────────────────
 const ChatWindow             = dynamic(() => import("../ChatWindow"),            { ssr: false, loading: () => <AppLoader /> });
 const SecurityPanel          = dynamic(() => import("../SecurityPanel"),         { ssr: false, loading: () => <AppLoader /> });
 const RadarWindow            = dynamic(() => import("../RadarWindow"),           { ssr: false, loading: () => <AppLoader /> });
@@ -115,6 +115,7 @@ const RedCyberTunnelModal    = dynamic(() => import("../modals/RedCyberTunnelMod
 const SovereignShieldDashboard = dynamic(() => import("../SovereignShieldDashboard"), { ssr: false, loading: () => <AppLoader /> });
 const MaleCnsConnectomeHUD    = dynamic(() => import("../MaleCnsConnectomeHUD").then(m => ({ default: m.MaleCnsConnectomeHUD })), { ssr: false, loading: () => <AppLoader /> });
 const TacticalVivariumModal   = dynamic(() => import("../tactical/TacticalVivariumModal").then(m => ({ default: m.TacticalVivariumModal })), { ssr: false, loading: () => <AppLoader /> });
+const TacticalHabitatModal    = dynamic(() => import("../tactical/TacticalHabitatModal").then(m => ({ default: m.TacticalHabitatModal })), { ssr: false, loading: () => <AppLoader /> });
 
 
 // ── TacticalTabletWorkspace ───────────────────────────────────────────────────
@@ -595,6 +596,10 @@ export function WorkspaceScreens({ isTablet, onOpenTool }: WorkspaceScreensProps
 
       {currentScreen === "vivarium" && (
         <TacticalVivariumModal onClose={goBack} />
+      )}
+
+      {currentScreen === "habitat" && (
+        <TacticalHabitatModal onClose={goBack} />
       )}
 
       {/* ── Landing (deep-link desde notificación) ── */}

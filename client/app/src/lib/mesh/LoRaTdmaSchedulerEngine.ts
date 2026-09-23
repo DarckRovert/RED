@@ -154,6 +154,13 @@ export class LoRaTdmaSchedulerEngine {
     }
 
     /**
+     * Retorna el índice de la ranura TDMA activa en el supertrama actual [0..9]
+     */
+    public getCurrentSlot(): number {
+        return this.getCurrentSlotInfo().currentSlotIndex;
+    }
+
+    /**
      * Generador seguro de identificadores con entropía criptográfica (CSPRNG)
      */
     private generateNonce(): string {

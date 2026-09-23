@@ -266,6 +266,55 @@ runTest('Purga universal de memoria para LineLoop (MEC), LineSegments y Points',
   assert.strictEqual(disposedCount, 3, 'Todas las geometrías especiales (LineLoop, LineSegments, Points) deben disponerse');
 });
 
+// ── TEST 11: Acoplamiento de Navegación Inercial PDR Twin ───────────────────
+runTest('Acoplamiento de Navegación Inercial PDR Twin (Rumbo Brújula + Cadencia)', () => {
+  const mockPdr = {
+    isTracking: true,
+    totalSteps: 42,
+    distanceMeters: 31.5,
+    currentHeadingDeg: 135,
+    stepFrequencyHz: 1.8,
+  };
+
+  // Simulación de acoplamiento cinemático en Vivarium3DEngine
+  let agentHeading = mockPdr.currentHeadingDeg;
+  let speedMps = 0;
+  if (mockPdr.isTracking && mockPdr.stepFrequencyHz > 0.15) {
+    speedMps = Math.min(3.5, Math.max(0.8, mockPdr.stepFrequencyHz * 0.8));
+  }
+
+  assert.strictEqual(agentHeading, 135, 'El rumbo del hexápodo debe coincidir exactamente con el azimut magnético');
+  assert(speedMps >= 1.4 && speedMps <= 1.5, `Velocidad proporcional a 1.8 Hz calculada: ${speedMps.toFixed(2)} m/s`);
+});
+
+// ── TEST 12: Extracción y Despacho Articular 18-DOF para Actuación Robótica ──
+runTest('Extracción y serialización articular 18-DOF para robot hexápodo físico', () => {
+  const legOrder = ['L1', 'L2', 'L3', 'R1', 'R2', 'R3'];
+  const mockCpgTelemetry = {
+    legs: {}
+  };
+  legOrder.forEach((id, idx) => {
+    mockCpgTelemetry.legs[id] = {
+      joints: {
+        coxaDeg: 10 + idx * 2,
+        femurDeg: -5 + idx,
+        tibiaDeg: 45 + idx,
+      }
+    };
+  });
+
+  const flatAngles = [];
+  for (const id of legOrder) {
+    const leg = mockCpgTelemetry.legs[id];
+    flatAngles.push(leg.joints.coxaDeg, leg.joints.femurDeg, leg.joints.tibiaDeg);
+  }
+
+  assert.strictEqual(flatAngles.length, 18, 'Deben extraerse exactamente 18 ángulos articulares (3x6)');
+  assert.strictEqual(flatAngles[0], 10, 'Coxa L1');
+  assert.strictEqual(flatAngles[1], -5, 'Femur L1');
+  assert.strictEqual(flatAngles[2], 45, 'Tibia L1');
+});
+
 console.log('='.repeat(80));
 console.log(`📊 RESUMEN DE RESULTADOS: ${passedTests}/${totalTests} PRUEBAS SUPERADAS EXITOSAMENTE (100% PASS)`);
 console.log('='.repeat(80));

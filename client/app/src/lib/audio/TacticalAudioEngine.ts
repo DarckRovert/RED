@@ -276,6 +276,149 @@ export class TacticalAudioEngine {
         } catch {}
     }
 
+    /** Campanilla armónica dual (C6 -> G6) confirmando absorción de nutrientes y ráfaga dopaminérgica PAM (60ms) */
+    public static playDopamineChime(): void {
+        const prefs = SettingsManager.getPreferences();
+        if (!prefs.soundsEnabled) return;
+
+        const ctx = this.getContext();
+        if (!ctx) return;
+
+        try {
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(1046.5, now); // C6
+            osc.frequency.exponentialRampToValueAtTime(1567.98, now + 0.05); // G6
+
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(now);
+            osc.stop(now + 0.065);
+        } catch {}
+    }
+
+    /** Barrido de escape cinético balístico monosináptico (Giant Fiber / LC4) */
+    public static playReflexEscape(): void {
+        const prefs = SettingsManager.getPreferences();
+        if (!prefs.soundsEnabled) return;
+
+        const ctx = this.getContext();
+        if (!ctx) return;
+
+        try {
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = "triangle";
+            osc.frequency.setValueAtTime(620, now);
+            osc.frequency.exponentialRampToValueAtTime(95, now + 0.09);
+
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.095);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(now);
+            osc.stop(now + 0.1);
+        } catch {}
+    }
+
+    /** Ráfaga de aire suave / estímulo mecanosensorial (Air Puff / Tactile Poke) */
+    public static playBioPuff(): void {
+        const prefs = SettingsManager.getPreferences();
+        if (!prefs.soundsEnabled) return;
+
+        const ctx = this.getContext();
+        if (!ctx) return;
+
+        try {
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(240, now);
+            osc.frequency.exponentialRampToValueAtTime(60, now + 0.04);
+
+            gain.gain.setValueAtTime(0.09, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(now);
+            osc.stop(now + 0.05);
+        } catch {}
+    }
+
+    /** Zumbido fotónico resonante de estimulación optogenética ChR2 (470 nm) */
+    public static playOptoLaser(): void {
+        const prefs = SettingsManager.getPreferences();
+        if (!prefs.soundsEnabled) return;
+
+        const ctx = this.getContext();
+        if (!ctx) return;
+
+        try {
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(470, now);
+            osc.frequency.linearRampToValueAtTime(540, now + 0.08);
+
+            gain.gain.setValueAtTime(0.05, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(now);
+            osc.stop(now + 0.085);
+        } catch {}
+    }
+
+    /** Arpegio armónico ascendente confirmando nacimiento/mitosis generacional */
+    public static playMitosisChime(): void {
+        const prefs = SettingsManager.getPreferences();
+        if (!prefs.soundsEnabled) return;
+
+        const ctx = this.getContext();
+        if (!ctx) return;
+
+        try {
+            const now = ctx.currentTime;
+            const freqs = [523.25, 659.25, 783.99, 1046.5]; // C5 - E5 - G5 - C6
+            freqs.forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                const t0 = now + idx * 0.035;
+
+                osc.type = "triangle";
+                osc.frequency.setValueAtTime(freq, t0);
+
+                gain.gain.setValueAtTime(0.06, t0);
+                gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.06);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start(t0);
+                osc.stop(t0 + 0.065);
+            });
+        } catch {}
+    }
+
     /**
      * Cierra el AudioContext y libera los recursos de audio de la interfaz táctica.
      */

@@ -288,6 +288,26 @@ export const TacticalCommandCenter: React.FC = () => {
                 accentGlow: 'rgba(0, 229, 255, 0.25)'
             },
             {
+                id: 'vivarium',
+                action: 'vivarium',
+                icon: '🌌',
+                title: t('tactical_modules.vivarium_title'),
+                subtitle: t('tactical_modules.vivarium_sub'),
+                badge: t('tactical_modules.vivarium_badge'),
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.3)'
+            },
+            {
+                id: 'habitat',
+                action: 'habitat',
+                icon: '🪰',
+                title: t('tactical_modules.habitat_title') || 'Hábitat Biocibernético 3D',
+                subtitle: t('tactical_modules.habitat_sub') || 'Difusión Fick, Visión Omatidial LC4 y Ecosistema Multi-Cerebro',
+                badge: t('tactical_modules.habitat_badge') || 'IN-SILICO',
+                badgeColor: '#00FF88',
+                accentGlow: 'rgba(0, 255, 136, 0.3)'
+            },
+            {
                 id: 'radar',
                 action: 'radar',
                 icon: '📡',
@@ -734,16 +754,6 @@ export const TacticalCommandCenter: React.FC = () => {
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
             },
             {
-                id: 'vivarium',
-                action: 'vivarium',
-                icon: '🌌',
-                title: t('tactical_modules.vivarium_title'),
-                subtitle: t('tactical_modules.vivarium_sub'),
-                badge: t('tactical_modules.vivarium_badge'),
-                badgeColor: '#00E5FF',
-                accentGlow: 'rgba(0, 229, 255, 0.3)'
-            },
-            {
                 id: 'appStore',
                 action: 'appStore',
                 icon: '🏪',
@@ -990,7 +1000,9 @@ export const TacticalCommandCenter: React.FC = () => {
 
                 {/* Categorías de Dominios */}
                 <div style={{
-                    display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px',
+                    display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px',
+                    WebkitOverflowScrolling: 'touch',
+                    overscrollBehaviorX: 'contain',
                     scrollbarWidth: 'none', msOverflowStyle: 'none'
                 }}>
                     {domainCategories.map(cat => {
@@ -1028,7 +1040,9 @@ export const TacticalCommandCenter: React.FC = () => {
 
             {/* Grid de Módulos */}
             <div className="scroll-container" style={{
-                flex: 1, padding: '16px', overflowY: 'auto',
+                flex: 1, minHeight: 0, padding: '16px 16px 80px 16px', overflowY: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                overscrollBehaviorY: 'contain',
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
                 gap: '14px', alignContent: 'start'

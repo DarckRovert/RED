@@ -24,3 +24,4 @@ export * from './WaterPurificationEngine';
 export * from './TacticalLocationEngine';
 export * from './TacticalCompassEngine';
 export * from './TacticalGhostGpsEngine';
+export * from './KineticStressEngine';

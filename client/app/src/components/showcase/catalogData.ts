@@ -755,5 +755,41 @@ export const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
     details: "Terminal de registro en tiempo real que transmite los eventos internos de LibP2P, handshakes Bluetooth LE y operaciones de base de datos transaccional Sled directamente a la pantalla.",
     latency: "< 10ms",
     encryption: "Local Loopback"
+  },
+  {
+    id: "maleCnsConnectome",
+    name: "Conectoma 3D MaleCNS (Drosophila)",
+    category: "Núcleo de Sistema & IA Edge",
+    icon: "🧬",
+    summary: "Atlas 3D somático de 124,289 neuronas de Drosophila melanogaster con simulación bio-neuromórfica.",
+    badge: "3D Neuromorphic",
+    techStack: "MaleCNS v1.0 / Three.js / LIF AER Spikes / STDP",
+    details: "Reconstrucción tridimensional fiel del conectoma del sistema nervioso central de Drosophila melanogaster. Modela circuitos de navegación (Central Complex), aprendizaje asociativo (Mushroom Body) y reflejos de escape balístico (Giant Fiber LC4) acoplados al enrutador en malla.",
+    latency: "< 16ms (60 Hz)",
+    encryption: "Local Hardware & WebGL"
+  },
+  {
+    id: "vivarium",
+    name: "Vivarium Biocibernético 3D/2D (Hexapod Twin)",
+    category: "Núcleo de Sistema & IA Edge",
+    icon: "🌌",
+    summary: "Gemelo digital ciberfísico con marcha trípode 18-DOF Kuramoto-Matsuoka y puente serie a robot físico.",
+    badge: "Cyberphysical Twin",
+    techStack: "Kuramoto-Matsuoka CPG / Three.js / PDR Twin / ASCII-Binary TX",
+    details: "Simulación ciberfísica bio-inspirada que coordina osciladores de fase para locomoción hexápoda estable sobre terreno irregular. Permite transmitir cinemática calculada en tiempo real a robots físicos vía interfaz serie y telemetría inercial de la patrulla.",
+    latency: "< 10ms",
+    encryption: "CRC-8 / Local Stream"
+  },
+  {
+    id: "habitat",
+    name: "Hábitat Digital Biocibernético In-Silico",
+    category: "Núcleo de Sistema & IA Edge",
+    icon: "🪰",
+    summary: "Ecosistema multi-cerebro con difusión Fick, quimiotaxis, estigmergia con feromonas y selección A-Life.",
+    badge: "In-Silico Ecosystem",
+    techStack: "Fick Diffusion PDE / Klinokinesis / P2P Migration / Web Audio API",
+    details: "Ecosistema determinista a 60 Hz donde cohabitan Drosophila, C. elegans y hormigas en un sustrato químico dinámico continuo. Permite experimentación táctica en vivo con pipetas de glucosa, láseres optogenéticos, barreras acústicas y migración ecológica de genomas mediante paquetes compactos LoRa P2P.",
+    latency: "< 16.6ms (60 Hz)",
+    encryption: "SX1262 LoRa P2P (<96B)"
   }
 ];

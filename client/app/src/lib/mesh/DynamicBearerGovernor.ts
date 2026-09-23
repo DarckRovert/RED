@@ -8,6 +8,7 @@
 import { RedAPI } from '../../api';
 import { satelliteMeshGateway } from './SatelliteMeshGatewayEngine';
 import { meshRouter } from './meshRouter';
+import { kineticStress } from '../sensors/KineticStressEngine';
 
 export type TacticalBearerType = 'BLE' | 'WIFI_DIRECT' | 'LORA_RF' | 'SOUNDMESH' | 'LIFI_OPTICAL' | 'SATELLITE_LEO';
 
@@ -30,6 +31,7 @@ export interface SwarmHealthTelemetry {
     totalPacketsRouted: number;
     totalFailoversExecuted: number;
     isElectronicWarfareActive: boolean;
+    isKineticEmergencyActive: boolean;
     lastPingMs: number;
     connectedPeersCount: number;
     bearers: BearerQuality[];
@@ -283,10 +285,20 @@ export class DynamicBearerGovernor {
             totalPacketsRouted: this.totalPacketsRouted,
             totalFailoversExecuted: this.totalFailovers,
             isElectronicWarfareActive: hasJamming,
+            isKineticEmergencyActive: this.isKineticEmergencyActive(),
             lastPingMs: this.lastPingMs,
             connectedPeersCount: this.connectedPeersCount,
             bearers: bearerList,
         };
+    }
+
+    public isKineticEmergencyActive(): boolean {
+        try {
+            const tel = kineticStress.getTelemetry();
+            return tel.level === 'CRITICAL_SHOCK' || tel.isManDownActive;
+        } catch {
+            return false;
+        }
     }
 
     public recordPacketDelivery(bearer: TacticalBearerType, success: boolean, latencyMs: number = 20) {
@@ -349,6 +361,9 @@ export class DynamicBearerGovernor {
     }
 
     public applyPowerBudgetThrottle(batteryPct: number) {
+        if (this.isKineticEmergencyActive()) {
+            return; // En emergencia cinética / Man-Down, mantener máximo rendimiento de radio
+        }
         if (batteryPct <= 15 && this.primaryBearer === 'WIFI_DIRECT') {
             console.warn(`[DynamicBearerGovernor] 🔋 Batería Crítica (${batteryPct}%): Conmutando a BLE de bajo consumo`);
             this.primaryBearer = 'BLE';

@@ -366,6 +366,20 @@ export class HexapodBody3D {
     this.metabolicCore.intensity = 0.7 + Math.sin(Date.now() * pulseSpeed) * 0.3;
   }
 
+  public getFlatJointAngles(cpgTelemetry: CpgLocomotionTelemetry): number[] {
+    const legOrder: LegIdentifier[] = ['LF', 'LM', 'LH', 'RF', 'RM', 'RH'];
+    const angles: number[] = [];
+    for (const legId of legOrder) {
+      const leg = cpgTelemetry.legs[legId];
+      if (leg) {
+        angles.push(leg.joints.coxaDeg, leg.joints.femurDeg, leg.joints.tibiaDeg);
+      } else {
+        angles.push(90, 90, 90);
+      }
+    }
+    return angles;
+  }
+
   public dispose(): void {
     this.rootGroup.traverse((obj) => {
       if ((obj as THREE.Mesh).isMesh) {

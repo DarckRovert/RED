@@ -8,6 +8,7 @@ import { RedAppManifest, RedAppBundle, RedPermissionScope } from './RedSDKTypes'
 import { bazaarAppBundle } from './builtin/bazaarApp';
 import { meshWikiAppBundle } from './builtin/meshWikiApp';
 import { p2pBattleshipAppBundle } from './builtin/p2pBattleshipApp';
+import { biocyberneticHabitatAppBundle } from './builtin/biocyberneticHabitatApp';
 
 export interface InstalledAppEntry {
     manifest: RedAppManifest;
@@ -65,6 +66,7 @@ export class RedAppRegistry {
             bazaarAppBundle,
             meshWikiAppBundle,
             p2pBattleshipAppBundle,
+            biocyberneticHabitatAppBundle,
         ];
 
         builtins.forEach(bundle => {

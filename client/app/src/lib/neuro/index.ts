@@ -20,3 +20,5 @@ export * from './ConnectomeEcosystemOrchestrator';
 export * from './GlobalWorkspaceConsciousnessBus';
 export * from './BioCompassDualFusionEngine';
 export * from './human';
+export * from './vivarium';
+export * from './habitat';

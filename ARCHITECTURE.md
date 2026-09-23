@@ -1,6 +1,6 @@
 # 🛡️ RED OS v120.0.0 — Arquitectura Técnica & Especificación Planetaria
 
-> Documento maestro de ingeniería de software y especificación arquitectónica de **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Describe en detalle la topología de 7 capas, los protocolos criptográficos híbridos post-cuánticos (ML-KEM-768), la coordinación espectral LoRa TDMA con sincronización Kuramoto y PLL de reloj Lamport, el enrutamiento geoespacial Geohash DTN, la flota de repetidores solares autónomos ESP32-S3, la capa bio-cibernética conectómica, el catálogo consolidado de 64 módulos tácticos y el gemelo digital interactivo Vivarium Biocibernético 3D.
+> Documento maestro de ingeniería de software y especificación arquitectónica de **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Describe en detalle la topología de 7 capas, los protocolos criptográficos híbridos post-cuánticos (ML-KEM-768), la coordinación espectral LoRa TDMA con sincronización Kuramoto y PLL de reloj Lamport, el enrutamiento geoespacial Geohash DTN, la flota de repetidores solares autónomos ESP32-S3, la capa bio-cibernética conectómica, el catálogo consolidado de 65 módulos tácticos, el gemelo digital interactivo Vivarium Biocibernético 3D y el Hábitat Digital Biocibernético In-Silico.
 
 ---
 
@@ -17,6 +17,7 @@
 9. [Mapa Visual 9: Flota de Repetidores Solares Autónomos ESP32-S3 & Hardware SX1262](#9-mapa-visual-9-flota-de-repetidores-solares-autónomos-esp32-s3)
 10. [Resumen de Componentes, Crates & Firmware del Workspace](#10-resumen-de-componentes-crates--firmware-del-workspace)
 11. [Mapa Visual 10: Vivarium Biocibernético 3D & Gemelo Digital Táctico](#11-mapa-visual-10-vivarium-biocibernético-3d--gemelo-digital-táctico)
+12. [Mapa Visual 11: Hábitat Digital Biocibernético In-Silico & Ecosistema Multi-Cerebro A-Life](#12-mapa-visual-11-hábitat-digital-biocibernético-in-silico--ecosistema-multi-cerebro-a-life)
 
 ---
 
@@ -29,7 +30,7 @@ graph TD
     subgraph CAPA_1_PRESENTACION ["1. CAPA DE PRESENTACIÓN (Frontend UI / UX)"]
         UI_SPA["Next.js 16 SPA (Turbopack + React 19)"]
         CSS_TOKENS["Vanilla CSS Tactical Tokens (HUD Cyberpunk)"]
-        MOD_CATALOG["64 Módulos & Pantallas Tácticas Consolidadas"]
+        MOD_CATALOG["65 Módulos & Pantallas Tácticas Consolidadas"]
         UI_SPA --> CSS_TOKENS
         UI_SPA --> MOD_CATALOG
     end
@@ -54,6 +55,8 @@ graph TD
     subgraph CAPA_7_BIOCIBERNETICA ["7. CAPA BIO-CIBERNÉTICA & DINÁMICA DE ENJAMBRE"]
         CONNECTOME["MaleCnsConnectomeHUD (WebGL 3D Atlas Somático 124k)"]
         VIVARIUM_3D["Vivarium3DEngine.ts (Gemelo Digital Three.js WebGL 3D)"]
+        HABITAT_ENGINE["BiocyberneticHabitatEngine.ts (Fick PDE 2D & Estigmergia A-Life)"]
+        FICK_GRID["FickDiffusionGrid.ts (Difusión Continua 64x64 & Barreras Neumann)"]
         ENTORHINAL_GRID["EntorhinalGridFloor3D.ts (MEC Hexagonal Grid 4-Scale)"]
         CPG_HEXAPOD["HexapodBody3D.ts (6-Leg Kuramoto Tripod Kinematics)"]
         GNWT_BUS["GlobalWorkspaceConsciousnessBus (Ignición & Inhibición)"]
@@ -63,6 +66,8 @@ graph TD
         DURESS_WIPE["DuressWipeEngine (Purga Anti-Forense DoD 5220.22-M)"]
         
         CONNECTOME <--> VIVARIUM_3D
+        VIVARIUM_3D <--> HABITAT_ENGINE
+        HABITAT_ENGINE <--> FICK_GRID
         VIVARIUM_3D <--> ENTORHINAL_GRID
         VIVARIUM_3D <--> CPG_HEXAPOD
         CONNECTOME <--> GNWT_BUS
@@ -434,7 +439,7 @@ graph TD
 | **`red_mobile`** | Rust + JNI | Biblioteca dinámica nativa (`libred_mobile.so`) para Android con servidor Axum embebido en loopback estricto. | [red_mobile/](red_mobile/) |
 | **`red_node`** | Rust | Binario ejecutable de escritorio (`red-node.exe`) con CLI, nodo validador PoS y servidor local REST/SSE. | [node/](node/) |
 | **`red_blockchain`** | Rust | Libro mayor distribuido, consenso Proof-of-Stake, validadores, árboles de Merkle y mempool de transacciones. | [blockchain/](blockchain/) |
-| **`client/app`** | Next.js 16 + React 19 | Interfaz táctica SPA (64 modales tácticos, Vivarium Biocibernético 3D), Zustand Slices modulares, WebAuthn Passkeys, Capacitor bridge, LoRa TDMA Engine, Conectoma MaleCNS y Kuramoto Sync. | [client/app/](client/app/) |
+| **`client/app`** | Next.js 16 + React 19 | Interfaz táctica SPA (65 modales tácticos, Vivarium Biocibernético 3D, Hábitat Digital In-Silico), Zustand Slices modulares, WebAuthn Passkeys, Capacitor bridge, LoRa TDMA Engine, Conectoma MaleCNS y Kuramoto Sync. | [client/app/](client/app/) |
 | **`firmware/esp32-repeater`** | C++ (PlatformIO / RadioLib) | Firmware para repetidores solares autónomos de campo con microcontrolador ESP32-S3 y transceptor Semtech SX1262 (BOM ~$15-20 USD). | [firmware/esp32-repeater/](firmware/esp32-repeater/) |
 | **`signaling`** | Node.js | Servidor de señalización WebRTC zero-knowledge y relé ciego para conexiones P2P Web-to-Mobile. | [signaling/](signaling/) |
 | **`proofs`** | ProVerif | Modelos matemáticos formales de verificación de seguridad, secreto perfecto y anonimato. | [proofs/](proofs/) |
@@ -482,4 +487,64 @@ graph TD
 
     VIVARIUM_CORE <--> SUSTRATO_MEC
     VIVARIUM_CORE <--> ENTIDADES_3D
+```
+
+---
+
+## 12. Mapa Visual 11: Hábitat Digital Biocibernético In-Silico & Ecosistema Multi-Cerebro A-Life
+
+El **Hábitat Digital Biocibernético In-Silico** (`BiocyberneticHabitatEngine.ts`) implementa un sustrato de simulación biofísica continua a 60 Hz desacoplado con resolución de ecuaciones diferenciales en derivadas parciales (EDP), percepción sensorial y etología divergente de 3 especies vivas, ciclo de vida evolutivo A-Life y enlace de migración P2P:
+
+```mermaid
+graph TD
+    subgraph SUSTRATO_FICK ["Sustrato Continuo de Difusión de Fick 2D (FickDiffusionGrid.ts)"]
+        PDE_SOLVER["Solucionador Numérico EDP (∂C/∂t = D ∇²C - v·∇C - λC)"]
+        PING_PONG["Dual-Buffer Float32Array (Ping-Pong 64x64 por Sustancia)"]
+        WIND_ADV["Advección Eólica Upwind de 1er Orden (vx, vy)"]
+        BARRIERS["Barreras Acústicas Reflectoras (Condición Neumann Flujo Cero)"]
+        
+        PDE_SOLVER --> PING_PONG
+        PDE_SOLVER --> WIND_ADV
+        PDE_SOLVER --> BARRIERS
+    end
+
+    subgraph ESPECIES_DIVERGENTES ["Ecosistema Multi-Cerebro & Etología"]
+        DROSOPHILA["Drosophila: Omatidios LC4, Alas Batientes & STDP Hebbiano PAM/PPL1"]
+        C_ELEGANS["C. elegans: Columna Sinusoidal 10 Nodos & Klinokinesis Pierce-Shimomura"]
+        FORMICIDAE["Ant Colony: Mandíbulas, Forrajeo & Estigmergia PHEROMONE_TRAIL"]
+    end
+
+    subgraph CICLO_A_LIFE ["Evolución & Ciclo de Vida Ecológico In-Silico"]
+        SATIETY["Detector de Saciedad Energética (ATP > 82%)"]
+        MITOSIS["Reproducción / Oviposición Generacional (Gen N+1)"]
+        MUTATION["Mutación Epigenética Gaussiana de Pesos Sinápticos"]
+        DECAY["Biodegradación de Cadáveres en Biomasa de Nutrientes"]
+        
+        SATIETY --> MITOSIS
+        MITOSIS --> MUTATION
+        DECAY --> PDE_SOLVER
+    end
+
+    subgraph INSTRUMENTAL_HUD ["Instrumental Táctico & Bio-Scanner HUD"]
+        PIPETTE["Pipeta Continua Drag & Paint (Glucosa)"]
+        AIR_PUFF["Sonda Mecánica Air-Puff (Ondas de Choque)"]
+        OPTO_LASER["Láser Optogenético ChR2 (470 nm)"]
+        BIO_SCANNER["Bio-Scanner HUD (Retícula Animada & Telemetría Individual)"]
+        AUDIO_SYNTH["TacticalAudioEngine (Síntesis Web Audio Sub-milisegundo)"]
+    end
+
+    subgraph MALLA_P2P ["Migración Ecológica Inter-Dispositivo"]
+        P2P_PACKET["Trama de Migración Cuantizada (72 bytes / mesh.bio.habitat.v1)"]
+        LORA_BLE["Transporte de Radio LoRa SX1262 / Bluetooth LE"]
+        IMMIGRANT["Desempaquetado y Colonización de Nuevas Terminales"]
+        
+        P2P_PACKET --> LORA_BLE
+        LORA_BLE --> IMMIGRANT
+    end
+
+    SUSTRATO_FICK <--> ESPECIES_DIVERGENTES
+    ESPECIES_DIVERGENTES --> CICLO_A_LIFE
+    INSTRUMENTAL_HUD <--> ESPECIES_DIVERGENTES
+    INSTRUMENTAL_HUD <--> SUSTRATO_FICK
+    ESPECIES_DIVERGENTES <--> MALLA_P2P
 ```

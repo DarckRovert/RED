@@ -14,7 +14,7 @@ Este documento contiene todos los recursos, textos exactos y el dossier técnico
 | **Captura 1 (Móvil)** | `release-assets/store_assets/screenshot_phone_1.png` | Radar P2P & Descubrimiento BLE Swarm |
 | **Captura 2 (Móvil)** | `release-assets/store_assets/screenshot_2_mobile_swarm_health.png` | Telemetría de Enjambre, Batería & Duty-Cycle |
 | **Captura 3 (Tablet/Móvil)**| `release-assets/store_assets/screenshot_4_tablet_tactical_map.png` | Mapa Táctico GPS Offline OpenStreetMap |
-| **Captura 4 (Panorámica)**| `release-assets/store_assets/screenshot_tablet_1.png` | Centro de Mando C4ISR & 64 Módulos |
+| **Captura 4 (Panorámica)**| `release-assets/store_assets/screenshot_tablet_1.png` | Centro de Mando C4ISR & 65 Módulos |
 | **Captura 5 (Móvil)** | `release-assets/store_assets/screenshot_phone_2.png` | Brújula 3D & Azimut de Navegación |
 | **Captura 6 (Tablet)** | `release-assets/store_assets/screenshot_3_tablet_lenovo_m8.png` | Espacio de Trabajo Nodo Soberano |
 

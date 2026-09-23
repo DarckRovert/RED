@@ -70,7 +70,9 @@ export const CATALOG_TO_SCREEN_MAP: Record<string, ScreenView> = {
     health: 'health',
     nodeLogs: 'nodeLogs',
     maleCnsConnectome: 'maleCnsConnectome',
-    connectome: 'maleCnsConnectome'
+    connectome: 'maleCnsConnectome',
+    vivarium: 'vivarium',
+    habitat: 'habitat'
 };
 
 interface LandingModuleCatalogProps {

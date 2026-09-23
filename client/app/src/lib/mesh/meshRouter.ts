@@ -63,6 +63,7 @@ import { HippocampalEpisodicEngine } from '../neuro/human/HippocampalEpisodicEng
 import { TheoryOfMindEpistemicEngine } from '../neuro/human/TheoryOfMindEpistemicEngine';
 import { PredictiveCortexEngine } from '../neuro/human/PredictiveCortexEngine';
 import { TacticalLocationEngine } from '../sensors/TacticalLocationEngine';
+import { kineticStress } from '../sensors/KineticStressEngine';
 import { swarmCriticality } from '../neuro/SwarmCriticalityEngine';
 
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
@@ -438,6 +439,16 @@ class MeshRouter {
       dtnStorage.forceResetRetryTimers();
       this.flushPendingQueue(true);
     }, 1500);
+
+    // Dynamic Kinetic Stress & Man-Down Emergency Traffic Governor
+    kineticStress.start();
+    kineticStress.subscribe((tel) => {
+      if (tel.level === 'CRITICAL_SHOCK' || tel.isManDownActive) {
+        console.warn(`[MeshRouter] 🚨 KINETIC STRESS ESCALATION (${tel.level}): Flashing DTN and elevating mesh priority`);
+        dtnStorage.forceResetRetryTimers();
+        this.flushPendingQueue(true).catch(() => {});
+      }
+    });
   }
 
   public stop() {
@@ -1339,14 +1350,20 @@ class MeshRouter {
       }
     }
 
+    const stressTel = kineticStress.getTelemetry();
+    const isCriticalStress = stressTel.level === 'CRITICAL_SHOCK' || stressTel.isManDownActive;
+    if (isCriticalStress) {
+      packetFlags |= 0x10; // FLAG_PHEROMONE (escalación estigmérgica de emergencia)
+    }
+
     const packet = createPacket(this.myIdentityHash, canonicalRecipient, finalPayload, { flags: packetFlags });
 
     // Multi-Path Packet Bonding (Cauchy GF(256) 3-of-5 Erasure Coding):
-    // For large payloads (> 512 bytes) when multiple interfaces are active, dispatch bonded shards concurrently
+    // For large payloads (> 512 bytes) or critical kinetic stress/Man-Down, dispatch bonded shards concurrently
     const hasMultipleTransports = (this.peers.size > 0 && (this.wifi?.onlinePeers.size || blindRelay.isConnected || this.hasInternetAccess)) ||
                                   (this.peers.size >= 2);
 
-    if (!isBroadcast && !isProtocol && finalPayload.length > 512 && hasMultipleTransports) {
+    if (!isBroadcast && !isProtocol && (finalPayload.length > 512 || isCriticalStress) && hasMultipleTransports) {
       return this.sendBonded(canonicalRecipient, finalPayload);
     }
 
