@@ -289,13 +289,13 @@ if (typeof self !== 'undefined') {
         } else if (type === 'SUMMARIZE_CHANNEL') {
             const messages: string[] = Array.isArray(payload?.messages) ? payload.messages : [];
             const count = messages.length;
-            const sampleText = messages.slice(-8).join('\n- ');
+            const recentContext = messages.slice(-8).join('\n- ');
 
             let bullets: string[] = [];
             try {
                 const generator = await getGenerator();
                 if (generator) {
-                    const prompt = `<|im_start|>system\nResume en 2 o 3 viñetas concisas los siguientes mensajes de radio:<|im_end|>\n<|im_start|>user\n- ${sampleText}<|im_end|>\n<|im_start|>assistant\n`;
+                    const prompt = `<|im_start|>system\nResume en 2 o 3 viñetas concisas los siguientes mensajes de radio:<|im_end|>\n<|im_start|>user\n- ${recentContext}<|im_end|>\n<|im_start|>assistant\n`;
                     const out = await generator(prompt, { max_new_tokens: 120, temperature: 0.3 });
                     let genText = '';
                     if (Array.isArray(out) && out[0]?.generated_text) genText = out[0].generated_text;
