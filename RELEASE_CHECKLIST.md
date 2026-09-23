@@ -1,4 +1,4 @@
-# 📋 Lista de Verificación de Release (Release Checklist) — RED v118.0.0
+# 📋 Lista de Verificación de Release (Release Checklist) — RED v120.0.0
 
 Este documento define el protocolo formal de validación y control de calidad previo a la publicación de cualquier versión de producción de **RED**.
 
@@ -21,11 +21,11 @@ Este documento define el protocolo formal de validación y control de calidad pr
 - [x] **Auditoría AST de TypeScript:** Escaneo de archivos confirmando 0 claves literales `t()` faltantes y 0 deuda técnica (0 mocks, 0 stubs).
 
 ### Sincronización de Versión & Documentación
-- [x] Versión **`v118.0.0`** unificada en los 12 archivos maestros (`version.ts`, `build.gradle`, Cargo workspaces, service workers y documentación).
-- [x] `ARCHITECTURE.md` → Sincronizado a v118.0.0 con 7 capas, MaleCNS Connectome, Kuramoto Sync y Duress Zeroize.
-- [x] `GOVERNANCE.md` → Sincronizado a v118.0.0 con Reglas de pre-flight build hygiene y SSOT atómico.
-- [x] `CHANGELOG.md` → Entrada de v118.0.0 registrando blindaje concurrente, llamadas full-mesh y resiliencia de malla P2P.
-- [x] `SHA256SUMS.txt` → Hash `FB76A9B7A346FAF4B7EE909FB2A8A6C2601D6B176030EC7E4C52A14C881CA457` para `red-v118.0.0-release.apk` y `red-latest.apk`.
+- [x] Versión **`v120.0.0`** unificada en los 25 archivos maestros (`version.ts`, `build.gradle`, Cargo workspaces, service workers y documentación).
+- [x] `ARCHITECTURE.md` → Sincronizado a v120.0.0 con 7 capas, Vivarium Biocibernético 3D, MaleCNS Connectome, Kuramoto Sync y Duress Zeroize.
+- [x] `GOVERNANCE.md` → Sincronizado a v120.0.0 con Reglas de pre-flight build hygiene y SSOT atómico.
+- [x] `CHANGELOG.md` → Entrada de v120.0.0 registrando el Vivarium Biocibernético 3D y gemelo digital táctico.
+- [x] `SHA256SUMS.txt` → Hash `F011E9D4ACBDBF4F625FA64E5D659910FA98189AB67B9459274EF6E23B4C6F55` para `red-v120.0.0-release.apk` y `red-latest.apk`.
 
 ### Higiene del Repositorio
 - [x] **0 errores** de tipos TypeScript en la compilación de producción (`tsc --noEmit`).
@@ -36,17 +36,17 @@ Este documento define el protocolo formal de validación y control de calidad pr
 ## 🚀 2. Día de Lanzamiento (Release Day)
 
 ### Compilación y Firma de Artefactos
-- [x] **APK Android v118.0.0:** `release-assets/red-v118.0.0-release.apk` (65.6 MB) — SHA-256: `FB76A9B7A346FAF4B7EE909FB2A8A6C2601D6B176030EC7E4C52A14C881CA457`.
-- [x] **Verificación de Sumas de Comprobación:** Checksums SHA-256 publicados en `SHA256SUMS.txt` y `release-assets/RED-v118.0.0.apk.sha256`.
-- [x] **Validación en Hardware Real:** Desinstalación higiénica e instalación limpia en Motorola Moto G22 (`ZT322B386P`) y Lenovo Tab M9 (`HA2CHKZ2`). Ejecución en primer plano con 0 crashes en Logcat, telemetría de sensores en vivo (GPS, PDR, brújula magnética, radar BLE) y nodo Rust libp2p inicializado a 90 FPS.
+- [x] **APK Android v120.0.0:** `release-assets/red-v120.0.0-release.apk` (65.8 MB) — SHA-256: `F011E9D4ACBDBF4F625FA64E5D659910FA98189AB67B9459274EF6E23B4C6F55`.
+- [x] **Verificación de Sumas de Comprobación:** Checksums SHA-256 publicados en `SHA256SUMS.txt` y `release-assets/RED-v120.0.0.apk.sha256`.
+- [x] **Validación en Hardware Real:** Desinstalación higiénica e instalación limpia en Motorola Moto G22 (`ZT322B386P`) y Lenovo Tab M9 (`HA2CHKZ2`). Ejecución en primer plano con 0 crashes en Logcat, telemetría de sensores en vivo (GPS, PDR, brújula magnética, radar BLE), nodo Rust libp2p inicializado y Vivarium 3D Three.js a 60 FPS.
 
 ### Etiquetado y Despliegue Git
 - [x] Tag y Release oficial publicados en GitHub:
   ```bash
-  gh release create v118.0.0 "release-assets/red-latest.apk" "release-assets/red-v118.0.0-release.apk" "release-assets/SHA256SUMS.txt" --title "RED v118.0.0 Sovereign Mesh — Concurrent Hardening, Tactical Resilience & P2P Mesh Stability" --notes-file "release_notes_v118.0.0.md"
+  gh release create v120.0.0 "release-assets/red-latest.apk" "release-assets/red-v120.0.0-release.apk" "release-assets/SHA256SUMS.txt" --title "RED v120.0.0 — Vivarium Biocibernético 3D & Digital Twin Edition" --notes-file "release_notes_v120.0.0.md"
   ```
 - [x] Validar que GitHub Pages ([darckrovert.github.io/RED/](https://darckrovert.github.io/RED/)) responda HTTP 200.
-- [x] Publicar assets y notas de release en GitHub Releases v118.0.0 ([Releases v118.0.0](https://github.com/DarckRovert/RED/releases/tag/v118.0.0)).
+- [x] Publicar assets y notas de release en GitHub Releases v120.0.0 ([Releases v120.0.0](https://github.com/DarckRovert/RED/releases/tag/v120.0.0)).
 
 ---
 
@@ -58,7 +58,7 @@ Este documento define el protocolo formal de validación y control de calidad pr
 
 ### Procedimiento de Rollback de Emergencia
 Si se detecta una vulnerabilidad crítica o fallo fatal de desincronización en la malla:
-1. Crear rama de hotfix: `git checkout -b hotfix/v118.0.1`.
+1. Crear rama de hotfix: `git checkout -b hotfix/v120.0.1`.
 2. Aplicar el parche mínimo sin refactorizaciones cosméticas.
 3. Ejecutar la suite completa `npm run test:all` + `cargo test --workspace --all-features`.
-4. Incrementar versión a `v118.0.1` y desplegar nueva release prioritaria.
+4. Incrementar versión a `v120.0.1` y desplegar nueva release prioritaria.

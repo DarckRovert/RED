@@ -15,7 +15,7 @@
 
 Accede a la documentación técnica y operativa completa del proyecto:
 
-- 📖 **[Manual de Usuario Táctico (USER_MANUAL.md)](USER_MANUAL.md)**: Guía de uso paso a paso de los 8 Hubs Tácticos Consolidados y las 62 pantallas modales para operadores finales.
+- 📖 **[Manual de Usuario Táctico (USER_MANUAL.md)](USER_MANUAL.md)**: Guía de uso paso a paso de los 8 Hubs Tácticos Consolidados y las 64 pantallas modales para operadores finales.
 - ⚙️ **[Manual de Administración y Nodos (ADMIN_MANUAL.md)](ADMIN_MANUAL.md)**: Configuración de nodos de escritorio en PC, repetidores solares autónomos ESP32-S3 y telemetría de slots TDMA.
 - 📐 **[Arquitectura de Protocolos (ARCHITECTURE.md)](ARCHITECTURE.md)**: Diagramas formales de ingeniería, stack de capas, supertrama TDMA y enrutamiento Geohash.
 - 🛰️ **[Firmware de Repetidores Solares (firmware/esp32-repeater/README.md)](firmware/esp32-repeater/README.md)**: Guía de montaje de hardware de bajo costo (~$15-20 USD), esquema solar TP4056 y flasheo PlatformIO.
@@ -31,7 +31,7 @@ Accede a la documentación técnica y operativa completa del proyecto:
 2. [Arquitectura del Sistema & Mapa Visual](#arquitectura-sistema)
 3. [Autenticación Biométrica Universal & Seguridad Zero-Trust](#autenticacion-biometrica)
 4. [Conectividad Global & Red Malla Descentralizada](#conectividad-global)
-5. [Catálogo Consolidado de 62 Módulos & Pantallas Tácticas](#catalogo-modulos)
+5. [Catálogo Consolidado de 64 Módulos & Pantallas Tácticas](#catalogo-modulos)
 6. [Criptografía Post-Cuántica & Privacidad en Capas](#criptografia-post-cuantica)
 7. [Tokenomics & Proof-of-Relay](#tokenomics)
 8. [Guía de Compilación & Despliegue](#guia-compilacion)
@@ -47,7 +47,7 @@ En situaciones de emergencia o denegación de red, las aplicaciones tradicionale
 
 | Característica | Aplicaciones Tradicionales | RED v120.0.0 |
 |---|---|---|
-| **Interfaz & UX** | Saturada y con menús dispersos | **Doble Modo Soberano: Modo Familiar (WhatsApp UX) + Modo Táctico C4ISR (8 Hubs, 62 Pantallas)** |
+| **Interfaz & UX** | Saturada y con menús dispersos | **Doble Modo Soberano: Modo Familiar (WhatsApp UX) + Modo Táctico C4ISR (8 Hubs, 64 Pantallas)** |
 | **Infraestructura** | Requiere servidores en la nube y 4G/5G | **100% Descentralizado / Zero-Server** |
 | **Operación Off-Grid** | Imposible sin Internet | **Totalmente funcional mediante BLE GATT, WiFi Direct, LoRa 915MHz y SoundMesh Ultrasónico** |
 | **Coordinación LoRa** | Acceso ALOHA caótico con colisiones masivas | **Planificador LoRa TDMA: Supertrama de 2000ms (10 slots de 200ms), FNV-1a y Bypass SOS Prioridad 9** |
@@ -77,7 +77,7 @@ Para una documentación exhaustiva de los diagramas técnicos de ingeniería, co
 ```mermaid
 graph TD
     subgraph FRONTEND ["1. Frontend SPA (Next.js 16 + React 19 + Zustand)"]
-        UI["62 Módulos & Pantallas Tácticas Consolidadas"]
+        UI["64 Módulos & Pantallas Tácticas Consolidadas"]
         STORE["Zustand Slices (Auth, Chat, Contacts, Emergency, Social)"]
         UI <--> STORE
     end
@@ -151,7 +151,7 @@ RED implementa una arquitectura híbrida **Offline-to-Global Gateway** con toler
 ---
 
 <a id="catalogo-modulos"></a>
-## 🧰 5. Catálogo Consolidado de 62 Módulos & Pantallas Tácticas
+## 🧰 5. Catálogo Consolidado de 64 Módulos & Pantallas Tácticas
 
 1. **Canales Mesh Locales:** Salas temáticas abiertas con moderación por IA.
 2. **RED Social Feed P2P:** Microblogging descentralizado sin censura.
@@ -215,6 +215,8 @@ RED implementa una arquitectura híbrida **Offline-to-Global Gateway** con toler
 60. **Bóveda de Trueque P2P:** Intercambio descentralizado de suministros y recursos en crisis.
 61. **Sigint Subterráneo:** Análisis de señales acústicas y vibraciones de suelo.
 62. **Resguardo de Secretos Shamir:** Custodia fragmentada de claves maestras entre el escuadrón.
+63. **Conectoma Neuromórfico MaleCNS:** Atlas 3D somático de 124,289 neuronas con micro-espigas AER y plasticidad Hebbiana.
+64. **Vivarium Biocibernético 3D:** Gemelo digital WebGL interactivo en tiempo real con suelo entorrinal multiescala, marcha trípode CPG y simulación de amenazas físicas.
 
 ---
 
@@ -320,6 +322,12 @@ RED Sovereign Mesh OS integra principios de computación bio-inspirada y dinámi
 4. **Emulación SNN & Optogenética ([eonsystemspbc/fly-brain](https://github.com/eonsystemspbc/fly-brain) & [Eon Systems PBC](https://github.com/eonsystemspbc)):**
    - Paradigmas de computación bio-silicio neuromórfica y dinámica de potenciales Leaky Integrate-and-Fire (LIF).
    - Búfer acumulador de eventos para reducir el consumo RF hasta un 65% en radios LoRa y herramientas de control optogenético (silenciamiento no destructivo NpHR de nodos anómalos y estimulación de sondeo ChR2 a 10Hz).
+
+5. **Vivarium Biocibernético 3D & Gemelo Digital Táctico (`Vivarium3DEngine.ts`, `VivariumBiocibernetico3D.tsx`):**
+   - Espacio tridimensional virtual acelerado por WebGL (Three.js) para la experimentación táctica en tiempo real con modelos neuromórficos emulados.
+   - Suelo entorrinal periódico hexagonal multiescala (4 escalas biológicas de células de rejilla MEC: $\lambda_1 = 1.0, \lambda_2 = 1.42, \lambda_3 = 2.02, \lambda_4 = 2.87$).
+   - Cinemática biomecánica de 6 patas sincronizada al CPG de osciladores de fase acoplados de Kuramoto-Matsuoka en marcha trípode alternada ($180^\circ$).
+   - Balizas LoRa perimetrales sincronizadas con la supertrama TDMA, satélite LEO orbital polar con footprint Geohash-4 e inyector de estímulo óptico Looming para activación en < 15 ms del circuito reflejo de escape Giant Fiber.
 
 ---
 

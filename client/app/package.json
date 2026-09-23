@@ -126,6 +126,7 @@
     "test:swarm-criticality": "node scripts/test-swarm-criticality-soc.js",
     "test:stdp-jamming": "node scripts/test-stdp-mushroom-body-jamming.js",
     "test:bio-compass": "node scripts/test-bio-compass-dual-fusion.js",
+    "test:vivarium": "node scripts/test-tactical-vivarium-resilience.js",
     "test:all": "node -e \"const fs=require('fs'); const {execSync}=require('child_process'); const tests=fs.readdirSync('scripts').filter(f=>f.startsWith('test-')&&(f.endsWith('.js')||f.endsWith('.mjs'))); let failed=0; for(const t of tests){ try { execSync('node scripts/'+t, {stdio:'inherit'}); } catch(e){ failed++; } } if(failed>0) process.exit(1);\"",
     "prepare": "node scripts/setup_git_hooks.js",
     "postinstall": "node scripts/copy-wasm.js",

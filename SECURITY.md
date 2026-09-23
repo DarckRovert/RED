@@ -1,4 +1,4 @@
-# Política de Seguridad - RED v118.0.0
+# Política de Seguridad - RED v120.0.0
 
 ## Reporte Responsable de Vulnerabilidades
 
@@ -12,7 +12,7 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 
 ### Opción 2: Email Privado & Confidencial
 - Email: `darckrovert@gmail.com`
-- Asunto sugerido: `[SECURITY RED-v118] Vulnerability Report`
+- Asunto sugerido: `[SECURITY RED-v120] Vulnerability Report`
 
 ### Tiempo de Respuesta y SLAs
 
@@ -32,7 +32,7 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 
 ---
 
-## Prácticas de Seguridad en RED v118.0.0
+## Prácticas de Seguridad en RED v120.0.0
 
 ### Criptografía Post-Cuántica & Híbrida
 - ✅ **ML-KEM-768** (NIST FIPS 203) encapsulando secretos compartidos contra computación cuántica futura.
@@ -65,8 +65,8 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 
 | Versión | Lanzamiento | Fin de Soporte (EOL) | Estado |
 |---------|------------|---------------------|--------|
-| **v118.0.0** | 2026-09 | 2027-09 | 🟢 **Soporte Activo / Producción** |
-| **v117.0.0** | 2026-09 | 2027-03 | 🟡 Parches de Seguridad Críticos |
-| **v116.0.0** y anteriores | - | - | 🔴 Fin de Soporte (EOL) |
+| **v120.0.0** | 2026-09 | 2027-09 | 🟢 **Soporte Activo / Producción** |
+| **v119.0.0** | 2026-09 | 2027-03 | 🟡 Parches de Seguridad Críticos |
+| **v118.0.0** y anteriores | - | - | 🔴 Fin de Soporte (EOL) |
 
 *Solo las dos versiones mayores más recientes reciben parches de seguridad y backports.*

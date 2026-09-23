@@ -1,4 +1,4 @@
-# Especificación Formal de Protocolo — RED v118.0.0
+# Especificación Formal de Protocolo — RED v120.0.0
 
 Este documento define la especificación matemática y estructural de tramas de paquetes, acuerdos de clave híbridos post-cuánticos, coordinación espectral LoRa TDMA con sincronización Kuramoto y PLL Lamport, enrutamiento geoespacial Geohash y filtros Bloom de deduplicación del ecosistema **RED**.
 

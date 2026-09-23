@@ -16,6 +16,7 @@ Este manual está dirigido a operadores de nodos, desarrolladores e integradores
 8. [Despliegue de Repetidores Solares Autónomos ESP32-S3 (Heltec LoRa 32 V3)](#8-despliegue-de-repetidores-solares-autónomos-esp32-s3)
 9. [Monitoreo de Telemetría TDMA & Métricas Espectrales en MeshTab](#9-monitoreo-de-telemetría-tdma--métricas-espectrales-en-meshtab)
 10. [Políticas de Poda Espacial Geohash en Enrutamiento DTN](#10-políticas-de-poda-espacial-geohash-en-enrutamiento-dtn)
+11. [Arquitectura del Vivarium Biocibernético 3D & Motor WebGL](#11-arquitectura-del-vivarium-biocibernético-3d--motor-webgl)
 
 ---
 
@@ -200,3 +201,24 @@ Para optimizar el almacenamiento y el ancho de banda en redes desconectadas:
    - **Longitud 4 (~39 km):** Utilizada para enrutamiento regional interurbano y filtrado de huellas satelitales LEO.
    - **Longitud 6 (~1.2 km):** Utilizada para distribución táctica local en el área de operaciones.
 3. **Criterio de Aceptación:** Las mulas móviles descartan paquetes cuyo prefijo Geohash de destino no coincida con los primeros caracteres de su vector de desplazamiento planeado (`GeohashSpatialRouting.shouldCarrierAcceptPacket`).
+
+---
+
+<a id="11-arquitectura-del-vivarium-biocibernético-3d--motor-webgl"></a>
+## 🧠 11. Arquitectura del Vivarium Biocibernético 3D & Motor WebGL
+
+El **Vivarium Biocibernético 3D** (`Vivarium3DEngine.ts`) opera como un entorno de simulación física y gemelo digital táctico desacoplado del hilo principal de JavaScript:
+
+### Componentes Clave:
+1. **Motor Gráfico WebGL (`Three.js`):**
+   - **Render Loop Adaptativo:** Utiliza `requestAnimationFrame` condicionado por un sentinel de visibilidad de componente (`isActive`). Si la ventana modal se cierra o minimiza, el bucle se detiene inmediatamente liberando ciclos de GPU.
+   - **Purga Recursiva de Memoria (`dispose()`):** Implementa el desensamblado forzado de geometrías (`geometry.dispose()`), texturas y materiales (`material.dispose()`) tanto para `Mesh`, como para `LineLoop` (Rejilla MEC), `LineSegments` (rayos y retículas) y `Points` (partículas), garantizando 0 fugas de memoria en cambios de vista.
+2. **Suelo Entorrinal Multiescala (`EntorhinalGridFloor3D.ts`):**
+   - Estructura procedural basada en las 4 razones de escala geométrica biológica de células de rejilla MEC ($\lambda_1=1.0, \lambda_2=1.42, \lambda_3=2.02, \lambda_4=2.87$).
+   - Detección de paso por picos de disparo (firing fields) mediante coordenadas euclidianas $(x, z)$ con simetría de $60^\circ$ e iluminación estocástica de vértices.
+3. **Cinemática Kuramoto-Matsuoka de 6 Patas (`HexapodBody3D.ts`):**
+   - Cinemática directa e inversa de 3 articulaciones por pata: Coxa (eje yaw), Fémur (eje pitch) y Tibia (eje pitch).
+   - Coordinación de Trípode A (L1, R2, L3) y Trípode B (R1, L2, R3) con desfase exacto de $\pi$ radianes ($180^\circ$).
+4. **Resiliencia en Dispositivos Móviles de Bajo Consumo:**
+   - Shaders simplificados (`MeshBasicMaterial` / `MeshLambertMaterial`) sin sombras proyectadas en tiempo real para mantener 60 FPS estables en GPUs PowerVR GE8320 (MediaTek Helio G37) y Mali-G52.
+   - Límite perimétrico de arena a radio de 16.8 metros con reflexión azimutal de entidades para evitar desbordamientos de coordenadas de coma flotante.

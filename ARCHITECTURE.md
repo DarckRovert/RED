@@ -1,6 +1,6 @@
-# 🛡️ RED OS v118.0.0 — Arquitectura Técnica & Especificación Planetaria
+# 🛡️ RED OS v120.0.0 — Arquitectura Técnica & Especificación Planetaria
 
-> Documento maestro de ingeniería de software y especificación arquitectónica de **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Describe en detalle la topología de 7 capas, los protocolos criptográficos híbridos post-cuánticos (ML-KEM-768), la coordinación espectral LoRa TDMA con sincronización Kuramoto y PLL de reloj Lamport, el enrutamiento geoespacial Geohash DTN, la flota de repetidores solares autónomos ESP32-S3, la capa bio-cibernética conectómica y el catálogo consolidado de 62 módulos tácticos.
+> Documento maestro de ingeniería de software y especificación arquitectónica de **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Describe en detalle la topología de 7 capas, los protocolos criptográficos híbridos post-cuánticos (ML-KEM-768), la coordinación espectral LoRa TDMA con sincronización Kuramoto y PLL de reloj Lamport, el enrutamiento geoespacial Geohash DTN, la flota de repetidores solares autónomos ESP32-S3, la capa bio-cibernética conectómica, el catálogo consolidado de 64 módulos tácticos y el gemelo digital interactivo Vivarium Biocibernético 3D.
 
 ---
 
@@ -16,19 +16,20 @@
 8. [Mapa Visual 8: Capa Bio-Cibernética, Conectoma Neuronal & Reflejo de Fibra Gigante](#8-mapa-visual-8-capa-bio-cibernética-conectoma-neuronal--reflejo-de-fibra-gigante)
 9. [Mapa Visual 9: Flota de Repetidores Solares Autónomos ESP32-S3 & Hardware SX1262](#9-mapa-visual-9-flota-de-repetidores-solares-autónomos-esp32-s3)
 10. [Resumen de Componentes, Crates & Firmware del Workspace](#10-resumen-de-componentes-crates--firmware-del-workspace)
+11. [Mapa Visual 10: Vivarium Biocibernético 3D & Gemelo Digital Táctico](#11-mapa-visual-10-vivarium-biocibernético-3d--gemelo-digital-táctico)
 
 ---
 
 ## 1. Mapa Visual 1: Topología Global del Sistema & Conexión de 7 Capas
 
-El ecosistema RED v118.0.0 opera bajo una arquitectura desacoplada de 7 capas horizontales con aislamiento estricto de memoria y enlaces de comunicación IPC seguros:
+El ecosistema RED v120.0.0 opera bajo una arquitectura desacoplada de 7 capas horizontales con aislamiento estricto de memoria y enlaces de comunicación IPC seguros:
 
 ```mermaid
 graph TD
     subgraph CAPA_1_PRESENTACION ["1. CAPA DE PRESENTACIÓN (Frontend UI / UX)"]
         UI_SPA["Next.js 16 SPA (Turbopack + React 19)"]
         CSS_TOKENS["Vanilla CSS Tactical Tokens (HUD Cyberpunk)"]
-        MOD_CATALOG["62 Módulos & Pantallas Tácticas Consolidadas"]
+        MOD_CATALOG["64 Módulos & Pantallas Tácticas Consolidadas"]
         UI_SPA --> CSS_TOKENS
         UI_SPA --> MOD_CATALOG
     end
@@ -52,12 +53,18 @@ graph TD
 
     subgraph CAPA_7_BIOCIBERNETICA ["7. CAPA BIO-CIBERNÉTICA & DINÁMICA DE ENJAMBRE"]
         CONNECTOME["MaleCnsConnectomeHUD (WebGL 3D Atlas Somático 124k)"]
+        VIVARIUM_3D["Vivarium3DEngine.ts (Gemelo Digital Three.js WebGL 3D)"]
+        ENTORHINAL_GRID["EntorhinalGridFloor3D.ts (MEC Hexagonal Grid 4-Scale)"]
+        CPG_HEXAPOD["HexapodBody3D.ts (6-Leg Kuramoto Tripod Kinematics)"]
         GNWT_BUS["GlobalWorkspaceConsciousnessBus (Ignición & Inhibición)"]
         KURAMOTO["RingAttractorEngine (Sincronización de Fase de Enjambre)"]
         GIANT_FIBER["GiantFiberReflexEngine (Escape EMCON Silenciado < 15ms)"]
         LAMPORT_PLL["LamportMeshClockEngine (Clock Skew PLL Tracking)"]
         DURESS_WIPE["DuressWipeEngine (Purga Anti-Forense DoD 5220.22-M)"]
         
+        CONNECTOME <--> VIVARIUM_3D
+        VIVARIUM_3D <--> ENTORHINAL_GRID
+        VIVARIUM_3D <--> CPG_HEXAPOD
         CONNECTOME <--> GNWT_BUS
         GNWT_BUS <--> KURAMOTO
         KURAMOTO <--> LAMPORT_PLL
@@ -355,7 +362,7 @@ gantt
 
 ## 8. Mapa Visual 8: Capa Bio-Cibernética, Conectoma Neuronal & Reflejo de Fibra Gigante
 
-RED v118.0.0 incorpora modelos bio-físicos computacionales inspirados en el conectoma somático completo de *Drosophila melanogaster* (124,289 neuronas y ~30 millones de conexiones sinápticas) para resolver la sincronización colectiva, la ignición atencional y el silenciamiento de pánico:
+RED v120.0.0 incorpora modelos bio-físicos computacionales inspirados en el conectoma somático completo de *Drosophila melanogaster* (124,289 neuronas y ~30 millones de conexiones sinápticas) para resolver la sincronización colectiva, la ignición atencional y el silenciamiento de pánico:
 
 ```mermaid
 flowchart TD
@@ -427,8 +434,52 @@ graph TD
 | **`red_mobile`** | Rust + JNI | Biblioteca dinámica nativa (`libred_mobile.so`) para Android con servidor Axum embebido en loopback estricto. | [red_mobile/](red_mobile/) |
 | **`red_node`** | Rust | Binario ejecutable de escritorio (`red-node.exe`) con CLI, nodo validador PoS y servidor local REST/SSE. | [node/](node/) |
 | **`red_blockchain`** | Rust | Libro mayor distribuido, consenso Proof-of-Stake, validadores, árboles de Merkle y mempool de transacciones. | [blockchain/](blockchain/) |
-| **`client/app`** | Next.js 16 + React 19 | Interfaz táctica SPA (62 modales tácticos), Zustand Slices modulares, WebAuthn Passkeys, Capacitor bridge, LoRa TDMA Engine, Conectoma MaleCNS y Kuramoto Sync. | [client/app/](client/app/) |
+| **`client/app`** | Next.js 16 + React 19 | Interfaz táctica SPA (64 modales tácticos, Vivarium Biocibernético 3D), Zustand Slices modulares, WebAuthn Passkeys, Capacitor bridge, LoRa TDMA Engine, Conectoma MaleCNS y Kuramoto Sync. | [client/app/](client/app/) |
 | **`firmware/esp32-repeater`** | C++ (PlatformIO / RadioLib) | Firmware para repetidores solares autónomos de campo con microcontrolador ESP32-S3 y transceptor Semtech SX1262 (BOM ~$15-20 USD). | [firmware/esp32-repeater/](firmware/esp32-repeater/) |
 | **`signaling`** | Node.js | Servidor de señalización WebRTC zero-knowledge y relé ciego para conexiones P2P Web-to-Mobile. | [signaling/](signaling/) |
 | **`proofs`** | ProVerif | Modelos matemáticos formales de verificación de seguridad, secreto perfecto y anonimato. | [proofs/](proofs/) |
 | **`specs`** | TLA+ | Especificación formal del protocolo de consenso y tolerancia a fallos bizantinos. | [specs/](specs/) |
+
+---
+
+## 11. Mapa Visual 10: Vivarium Biocibernético 3D & Gemelo Digital Táctico
+
+El **Vivarium Biocibernético 3D** (`Vivarium3DEngine.ts`) unifica los modelos neuronales, osciladores CPG y la topología física de red en un gemelo digital interactivo WebGL (Three.js):
+
+```mermaid
+graph TD
+    subgraph VIVARIUM_CORE ["Motor Tridimensional Soberano (Vivarium3DEngine.ts)"]
+        SCENE["Three.js Scene + Orthographic/Perspective Camera"]
+        RENDERER["WebGLRenderer (Pixel Ratio acotado <= 2, ToneMapping ACES)"]
+        LOOP["Adaptative Render Loop (requestAnimationFrame con Visibilidad Activa)"]
+        DISPOSE["Garbage Collector Recursivo (Geometries, Materials, Textures)"]
+        
+        SCENE --> RENDERER
+        RENDERER --> LOOP
+        LOOP --> DISPOSE
+    end
+
+    subgraph SUSTRATO_MEC ["Suelo Entorrinal Multiescala (EntorhinalGridFloor3D.ts)"]
+        GRID_SCALES["4 Razones de Escala MEC (lambda: 1.0, 1.42, 2.02, 2.87)"]
+        HEX_CELLS["Células Procedurales Hexagonales (Simetría 60 grados en X-Z)"]
+        FIRING_PEAKS["Picos de Disparo Luminosos al Paso de Entidades"]
+        
+        GRID_SCALES --> HEX_CELLS
+        HEX_CELLS --> FIRING_PEAKS
+    end
+
+    subgraph ENTIDADES_3D ["Cinemática & Actuadores Biológicos (HexapodBody3D.ts & VivariumEntities3D.ts)"]
+        CPG_OSC["Central Pattern Generator (Kuramoto-Matsuoka Delta phi = pi)"]
+        TRIPOD["Marcha Trípode Alternada (Trípode A vs Trípode B en 6 Patas 3-DOF)"]
+        FLY_REFLEX["Circuito Reflejo Giant Fiber (Escape Balístico < 15ms ante Looming)"]
+        ROVER_NODE["Terminal / Rover Terrestre con Baliza P2P"]
+        LORA_TOWERS["4 Torres de Baliza LoRa Perimetrales (Slots TDMA)"]
+        LEO_SAT["Satélite LEO Orbital (Footprint Cónico Geohash-4)"]
+        
+        CPG_OSC --> TRIPOD
+        FLY_REFLEX --> TRIPOD
+    end
+
+    VIVARIUM_CORE <--> SUSTRATO_MEC
+    VIVARIUM_CORE <--> ENTIDADES_3D
+```

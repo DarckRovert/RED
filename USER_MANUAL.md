@@ -10,12 +10,13 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 2. [Llaves Biométricas Universales & Passkeys](#2-llaves-biométricas-universales--passkeys)
 3. [Gestión de Seguridad, Modo Señuelo & Anti-Coacción](#3-gestión-de-seguridad-modo-señuelo--anti-coacción)
 4. [Respaldo en 1 Toque & Restauración Instantánea](#4-respaldo-en-1-toque--restauración-instantánea)
-5. [Catálogo Operativo de los 62 Módulos & Pantallas Tácticas](#5-catálogo-operativo-de-los-62-módulos--pantallas-tácticas)
+5. [Catálogo Operativo de los 64 Módulos & Pantallas Tácticas](#5-catálogo-operativo-de-los-64-módulos--pantallas-tácticas)
 6. [Tokenomics DePIN, Vales Criptográficos & Paridad PEN](#6-tokenomics-depin-vales-criptográficos--paridad-pen)
 7. [Actuadores de Hardware: Triaje START, SOS & SoundMesh](#7-actuadores-de-hardware-triaje-start-sos--soundmesh)
 8. [Uso de la Versión Web en PC & Vinculación con Celulares](#8-uso-de-la-versión-web-en-pc--vinculación-con-celulares)
 9. [Uso de Radios LoRa, Slots TDMA & Repetidores Solares Autónomos](#9-uso-de-radios-lora-slots-tdma--repetidores-solares-autónomos)
 10. [Preguntas Frecuentes & Solución de Problemas](#10-preguntas-frecuentes--solución-de-problemas)
+11. [Operación del Vivarium Biocibernético 3D & Telemetría Táctica](#11-operación-del-vivarium-biocibernético-3d--telemetría-táctica)
 
 ---
 
@@ -64,7 +65,7 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 
 ---
 
-## 5. Catálogo Operativo de los 62 Módulos & Pantallas Tácticas
+## 5. Catálogo Operativo de los 64 Módulos & Pantallas Tácticas
 
 1. **Canales Mesh Locales:** Salas temáticas abiertas para operadores cercanos con moderación por IA.
 2. **RED Social Feed P2P:** Microblogging descentralizado y resistente a la censura.
@@ -128,6 +129,8 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 60. **Bóveda de Trueque:** Catálogo de recursos offline para intercambio en emergencias.
 61. **Sigint Subterráneo:** Captación de vibraciones terrestres mediante giroscopio y acelerómetro.
 62. **Resguardo de Secretos Shamir:** Reparto de claves en fragmentos entre miembros de la escuadra.
+63. **Conectoma Neuromórfico MaleCNS:** Visualizador 3D y atlas somático de 124,289 neuronas con enrutamiento Hebbiano de micro-espigas AER.
+64. **Vivarium Biocibernético 3D:** Gemelo digital interactivo WebGL en tiempo real con suelo entorrinal hexagonal multiescala, cinemática de 6 patas sincronizada con el CPG de Kuramoto-Matsuoka, balizas LoRa y satélite orbital LEO con inyección de amenazas ópticas Looming.
 
 ---
 
@@ -157,7 +160,7 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 
 ## 9. Uso de Radios LoRa, Slots TDMA & Repetidores Solares Autónomos
 
-RED v118.0.0 gestiona automáticamente la radio LoRa conectada (vía USB Serial, Bluetooth o repetidores autónomos de campo):
+RED v120.0.0 gestiona automáticamente la radio LoRa conectada (vía USB Serial, Bluetooth o repetidores autónomos de campo):
 
 1. **Operación Totalmente Transparente:** No necesitas configurar frecuencias ni tiempos de transmisión manualmente. El planificador `LoRaTdmaSchedulerEngine` sincroniza los turnos de emisión automáticamente en ranuras de 200 ms con corrección de deriva de reloj mediante `LamportMeshClockEngine` (Clock Skew PLL).
 2. **Visualización de Slot en Vivo:** Ve a *Ajustes $\rightarrow$ Red Mesh*. Verás un indicador animado que muestra el número de slot activo en el canal (0 a 9) y el slot que te corresponde según tu identidad digital.
@@ -178,3 +181,31 @@ El sistema operativo permite hasta 5 intentos. Si el sensor se bloquea o no reco
 
 **¿Cómo sé si mi mensaje fue entregado en la malla?**
 Cuando el destinatario recibe y desencripta el paquete, su nodo emite un acuse de recibo criptográfico (`DELIVERY_ACK`). Tu mensaje pasará del estado `Enviado` (un check) a `Entregado` (doble check neón) automáticamente.
+
+---
+
+## 11. Operación del Vivarium Biocibernético 3D & Telemetría Táctica
+
+El **Vivarium Biocibernético 3D** es el gemelo digital táctico en tiempo real de RED, diseñado para la supervisión y experimentación con los modelos bio-neuromórficos de la red (MaleCNS, Neocórtex y Guardián IA).
+
+### Cómo Acceder:
+1. Abre el **Centro de Comando C4ISR** desde la pestaña táctica o el menú superior.
+2. Pulsa el botón **`CONECTOMA`** o **`VIVARIUM 3D`** en la barra de herramientas superior derecha.
+3. El motor gráfico WebGL iniciará instantáneamente renderizando la arena entorrinal a 60 FPS.
+
+### Modos de Visualización y Controles de Cámara:
+- **3D WebGL vs 2D Radar:** Alterna entre la perspectiva tridimensional inmersiva y la proyección cenital de radar táctico bidimensional.
+- **Orbital Libre:** Arrastra con un dedo (o ratón) para rotar la cámara $360^\circ$ alrededor del centro de la arena. Pellizca (Pinch-to-zoom) o usa los botones `+` / `-` para regular la distancia orbital.
+- **Seguimiento 3ra Persona:** Fija la cámara detrás de la Drosophila táctica siguiendo automáticamente sus rumbos y elevaciones.
+- **Cenital (Dios):** Vista ortogonal perpendicular para supervisión geoespacial de cuadrantes y balizas LoRa.
+
+### Telemetría Bio-Cibernética en Vivo:
+- **CPG (Central Pattern Generator):** Monitor de osciladores no-lineales de Kuramoto-Matsuoka que coordinan la marcha trípode alternada de 6 patas a $180^\circ$. Muestra la frecuencia de batimiento y ciclo en hercios (Hz).
+- **Óptico / Percepción:** Estado del lóbulo óptico y detector de aproximación balística (*Looming Threat*). Indica si el campo receptivo detecta aproximaciones peligrosas.
+- **TDMA Slot:** Ranura de tiempo espectral activa en la supertrama LoRa sincronizada con las balizas perimetrales.
+
+### Barra de Acciones Tácticas & Inyección de Amenazas:
+- **`⚡ INYECTAR AMENAZA (LOOMING)`**: Simula un objeto entrante a alta velocidad hacia la Drosophila, forzando la ignición del circuito reflejo de la Fibra Gigante (Giant Fiber, GF) y provocando un despegue y salto de evasión vertical en < 15 ms con cambio cromático de los omatidios oculares a rojo carmesí.
+- **`🛰️ INTERFERENCIA RF JAMMING`**: Inyecta ruido electromagnético en la arena, forzando la plasticidad aversiva mediada por dopamina en el Mushroom Body hacia canales de radio limpios.
+- **`📦 GENERAR PAQUETE DTN`**: Despacha un pulso de datos bio-inspirado que viaja físicamente entre el rover central, las balizas LoRa y el satélite LEO orbital.
+- **`🛡️ TEST FUEGO GUARDIAN IA`**: Evalúa la cúpula geodésica defensiva de 64-bit Hamming, simulando un intento de inyección de paquetes anómalos.

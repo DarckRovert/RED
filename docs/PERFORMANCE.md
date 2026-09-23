@@ -1,4 +1,4 @@
-# Métricas de Rendimiento & Baselines — RED v118.0.0
+# Métricas de Rendimiento & Baselines — RED v120.0.0
 
 Este documento formaliza las mediciones empíricas de rendimiento, latencia de algoritmos criptográficos, rendimiento de la red de malla, sincronización Kuramoto y consumo energético en dispositivos móviles reales.
 
@@ -60,6 +60,8 @@ Mediciones registradas en hardware de prueba durante ciclos de 24 horas continua
 | Módulo / Función | Dispositivo de Prueba | Rendimiento Medido | SLA / Límite |
 |---|---|---|---|
 | **Renderizado Conectoma MaleCNS** | Lenovo Tab M9 (Helio G80) | `58–60 FPS` estables | $\ge 30\text{ FPS}$ |
+| **Vivarium Biocibernético 3D** | Lenovo Tab M9 (Helio G80) | `59–60 FPS` (WebGL Three.js) | $\ge 30\text{ FPS}$ |
+| **Cinemática CPG Kuramoto (6 Patas)** | Moto G22 (Helio G37) | `0.45 ms` por ciclo de paso | $< 2.0\text{ ms}$ |
 | **Convergencia Kuramoto (20 nodos)** | Simulación WebWorker | `< 120 ms` a $\Delta\theta < 0.05$ | $< 500\text{ ms}$ |
 | **Cálculo Clock Skew PLL** | Moto G22 (Helio G37) | `0.18 ms` por supertrama | $< 2.0\text{ ms}$ |
 | **Reflejo de Fibra Gigante (EMCON)** | Moto G22 (Helio G37) | `11.4 ms` de disparo a silencio | $< 15.0\text{ ms}$ |
