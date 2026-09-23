@@ -1445,7 +1445,7 @@ class LocalAIEngineClass {
         }
 
         // 1. Nivel 1: Inferencia prioritaria vía Endpoint Soberano
-        const sampleText = messages.slice(-10).join('\n- ');
+        const recentContext = messages.slice(-10).join('\n- ');
         const sovereignSummary = await this.callSovereignLlm([
             {
                 role: 'system',
@@ -1453,7 +1453,7 @@ class LocalAIEngineClass {
             },
             {
                 role: 'user',
-                content: `- ${sampleText}`
+                content: `- ${recentContext}`
             }
         ], { temperature: 0.2, max_tokens: 200 });
 
@@ -1495,7 +1495,7 @@ class LocalAIEngineClass {
             if (this.generatorPipeline) {
                 const generator = await this.getGenerator();
                 const output = await this.withTimeout(
-                    generator(`Summarize: ${sampleText}`, { max_new_tokens: 100 }),
+                    generator(`Summarize: ${recentContext}`, { max_new_tokens: 100 }),
                     6000,
                     'Channel Summarize'
                 );

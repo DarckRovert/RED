@@ -226,9 +226,10 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
 
                     <div style={{ display: "flex", flexDirection: "column", gap: "10px", textAlign: "left", width: "100%" }}>
                         {[
-                            { icon: "🔒", title: "Cifrado Militar E2E", desc: "Protocolo Noise + Ed25519 sin servidores intermediarios." },
+                            { icon: "🔒", title: "Cifrado Militar E2E", desc: "Protocolo Noise + Ed25519 + Kyber-768 sin servidores intermediarios." },
                             { icon: "🌐", title: "Malla Autocurativa", desc: "Los mensajes saltan de dispositivo en dispositivo por BLE y Wi-Fi." },
-                            { icon: "⚡", title: "Resistente a Apagones", desc: "Funciona en catástrofes, zonas remotas y sin acceso a internet." }
+                            { icon: "⚡", title: "Resistente a Apagones", desc: "Funciona en catástrofes, zonas remotas y sin acceso a internet." },
+                            { icon: "🧭", title: "Operatividad Standalone", desc: "Brújula 3D, IA local, mapas offline y bóveda PQC disponibles de inmediato." }
                         ].map((feat, idx) => (
                             <div key={idx} style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "10px 12px", borderRadius: "10px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--glass-border)" }}>
                                 <span style={{ fontSize: "1.2rem" }}>{feat.icon}</span>

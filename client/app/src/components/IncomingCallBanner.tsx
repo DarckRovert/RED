@@ -18,6 +18,63 @@ export function IncomingCallBanner() {
 
     const isVideo = incomingCall?.callType === 'video';
 
+    const handleAccept = () => {
+        if (!incomingCall) return;
+        TacticalAudioEngine.playRogerBeep();
+        CallRingtoneEngine.stop();
+        // Unlock Web Audio synchronously on user gesture to bypass browser/WebView autoplay restrictions
+        try {
+            CallRingtoneEngine.unlockAudioContext();
+        } catch {}
+
+        const callerId = incomingCall.callerHash;
+        const callType = incomingCall.callType || 'video';
+        const offer = incomingCall.offer;
+        const callId = incomingCall.callId || (() => {
+            const rand = typeof crypto !== 'undefined' && crypto.getRandomValues
+                ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+                : Date.now().toString(36);
+            return `call_${Date.now()}_${rand}`;
+        })();
+        
+        setActiveCallType(callType);
+        useRedStore.setState({
+            activeConversationId: callerId,
+            activeCallPeer: callerId,
+            activeCallOffer: offer,
+            activeCallId: callId,
+            incomingCall: null,
+            activeCallSignal: null,
+            callSignalQueue: [] // Clear old stale queue on call accept
+        });
+        navigate("call", callerId);
+    };
+
+    const handleReject = async () => {
+        TacticalAudioEngine.playTap();
+        CallRingtoneEngine.stop();
+        if (incomingCall) {
+            try {
+                callHistory.addRecord({
+                    peerHash: incomingCall.callerHash,
+                    peerName: incomingCall.callerName || "Contacto P2P",
+                    direction: "MISSED",
+                    callType: incomingCall.callType || "audio",
+                    timestamp: Date.now(),
+                    durationSeconds: 0,
+                });
+                await RedAPI.sendMessage(incomingCall.callerHash, JSON.stringify({
+                    hangup: true,
+                    callId: incomingCall.callId,
+                    timestamp: Date.now()
+                }), {
+                    msg_type: "webrtc_signal"
+                });
+            } catch {}
+        }
+        setIncomingCall(null);
+    };
+
     // ── Tactical Web Audio Ringtone & Vibration via CallRingtoneEngine ────────
     React.useEffect(() => {
         if (!incomingCall || currentScreen === 'call') {
@@ -53,60 +110,6 @@ export function IncomingCallBanner() {
     }, [incomingCall, currentScreen]);
 
     if (!incomingCall || currentScreen === 'call') return null;
-
-    const handleAccept = () => {
-        TacticalAudioEngine.playRogerBeep();
-        CallRingtoneEngine.stop();
-        // Unlock Web Audio synchronously on user gesture to bypass browser/WebView autoplay restrictions
-        try {
-            CallRingtoneEngine.unlockAudioContext();
-        } catch {}
-
-        const callerId = incomingCall.callerHash;
-        const callType = incomingCall.callType || 'video';
-        const offer = incomingCall.offer;
-        const callId = incomingCall.callId || (() => {
-            const rand = typeof crypto !== 'undefined' && crypto.getRandomValues
-                ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
-                : Date.now().toString(36);
-            return `call_${Date.now()}_${rand}`;
-        })();
-        
-        setActiveCallType(callType);
-        useRedStore.setState({
-            activeConversationId: callerId,
-            activeCallPeer: callerId,
-            activeCallOffer: offer,
-            activeCallId: callId,
-            incomingCall: null,
-            activeCallSignal: null,
-            callSignalQueue: [] // Clear old stale queue on call accept
-        });
-        navigate("call", callerId);
-    };
-
-    const handleReject = async () => {
-        TacticalAudioEngine.playTap();
-        CallRingtoneEngine.stop();
-        try {
-            callHistory.addRecord({
-                peerHash: incomingCall.callerHash,
-                peerName: incomingCall.callerName || "Contacto P2P",
-                direction: "MISSED",
-                callType: incomingCall.callType || "audio",
-                timestamp: Date.now(),
-                durationSeconds: 0,
-            });
-            await RedAPI.sendMessage(incomingCall.callerHash, JSON.stringify({
-                hangup: true,
-                callId: incomingCall.callId,
-                timestamp: Date.now()
-            }), {
-                msg_type: "webrtc_signal"
-            });
-        } catch {}
-        setIncomingCall(null);
-    };
 
 
     return (

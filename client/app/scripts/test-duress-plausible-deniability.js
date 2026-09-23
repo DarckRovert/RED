@@ -13,8 +13,10 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
+const pkgVersion = require('../package.json').version;
+
 console.log("================================================================================");
-console.log("🛡️  SUITE: ANTI-FORENSIC PLAUSIBLE DENIABILITY & SILENT ZEROIZE (v117.0.0)");
+console.log(`🛡️  SUITE: ANTI-FORENSIC PLAUSIBLE DENIABILITY & SILENT ZEROIZE (v${pkgVersion})`);
 console.log("================================================================================\n");
 
 let totalTests = 0;

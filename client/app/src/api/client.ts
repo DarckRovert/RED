@@ -57,7 +57,10 @@ export class RedAPIClient {
     async deleteTriageReport(id: string): Promise<{ ok: boolean; deleted: string }> { return deleteTriageReport(id); }
 
     async getBlockchain(): Promise<BlockItem[]> { return fetchWithFallback('/api/blockchain/blocks', undefined, () => []); }
-    async getConsensusStatus(): Promise<ConsensusStatus> { return fetchWithFallback('/api/blockchain/consensus', undefined, () => ({ epoch: 1, current_slot: 1, total_stake: 100, active_validators: 1, chain_height: 1 })); }
+    async getConsensusStatus(): Promise<ConsensusStatus> {
+        const res = await this.getConsensus();
+        return res || { epoch: 1, current_slot: 1, total_stake: 0, active_validators: 0, chain_height: 0 };
+    }
     async pingDmsActivity(): Promise<{ success: boolean; last_active_timestamp: number }> { return pingDmsActivity(); }
     async panicWipe(): Promise<{ success: boolean; wiped: boolean }> { return panicWipe(); }
     async configureHardwareLoRa(config: Record<string, unknown>): Promise<{ ok: boolean; config: Record<string, unknown> }> { return fetchWithFallback('/api/network/lora/config', { method: 'POST', body: JSON.stringify(config) }, () => ({ ok: true, config })); }

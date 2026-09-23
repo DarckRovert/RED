@@ -209,7 +209,7 @@ function TacticalTabletWorkspace({ onOpenTool }: TacticalTabletWorkspaceProps) {
         }}>
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#00E676", boxShadow: "0 0 8px #00E676", display: "inline-block" }} />
           <span style={{ fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-emerald)", fontWeight: 700 }}>
-            NODO SOBERANO · {identity?.short_id || "OFFLINE"} · ED25519 / SLED
+            {t("tablet.sovereign_node")} · {identity?.short_id || "OFFLINE"} · ED25519 / SLED
           </span>
         </div>
       </div>
@@ -262,7 +262,7 @@ function TacticalTabletWorkspace({ onOpenTool }: TacticalTabletWorkspaceProps) {
           }}>
             <TacIcon name="users" size={14} color="#00E5FF" />
             <span style={{ fontSize: "0.74rem", fontFamily: "JetBrains Mono, monospace", color: "#E0E6ED" }}>
-              MALLA P2P: <strong style={{ color: "#00E5FF" }}>{peerCount} NODOS</strong>
+              {t("tablet.p2p_mesh")}: <strong style={{ color: "#00E5FF" }}>{peerCount} {t("tablet.nodes")}</strong>
             </span>
           </div>
 
@@ -273,7 +273,7 @@ function TacticalTabletWorkspace({ onOpenTool }: TacticalTabletWorkspaceProps) {
           }}>
             <TacIcon name="satellite" size={14} color={satAos ? "#00E676" : "#8696A0"} />
             <span style={{ fontSize: "0.74rem", fontFamily: "JetBrains Mono, monospace", color: satAos ? "#00E676" : "#8696A0" }}>
-              SAT LEO: {satAos ? "AOS ACTIVO" : "STANDBY"}
+              {t("tablet.sat_leo")}: {satAos ? t("tablet.aos_active") : t("tablet.standby")}
             </span>
           </div>
 
@@ -284,7 +284,7 @@ function TacticalTabletWorkspace({ onOpenTool }: TacticalTabletWorkspaceProps) {
             color: "#00E5FF", fontWeight: 900, fontSize: "0.82rem",
             display: "flex", alignItems: "center", gap: "6px",
           }}>
-            <span>ENTRAR</span>
+            <span>{t("tablet.enter")}</span>
             <TacIcon name="chevron-right" size={14} color="#00E5FF" />
           </div>
         </div>
@@ -355,7 +355,7 @@ function TacticalTabletWorkspace({ onOpenTool }: TacticalTabletWorkspaceProps) {
         }}>
           <TacIcon name="lock" size={16} color="var(--accent-cyan)" />
           <div>
-            <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>CIFRADO POST-CUÁNTICO</div>
+            <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>{t("tablet.pqc_cipher")}</div>
             <div style={{ fontSize: "0.74rem", fontWeight: 700, color: "#FFFFFF" }}>AES-256-GCM + Kyber</div>
           </div>
         </div>
@@ -367,7 +367,7 @@ function TacticalTabletWorkspace({ onOpenTool }: TacticalTabletWorkspaceProps) {
         }}>
           <TacIcon name="radio" size={16} color="var(--accent-emerald)" />
           <div>
-            <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>ENLACE DE RADIO</div>
+            <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>{t("tablet.radio_link")}</div>
             <div style={{ fontSize: "0.74rem", fontWeight: 700, color: "#FFFFFF" }}>TDMA LoRa + BLE MESH</div>
           </div>
         </div>
@@ -379,8 +379,8 @@ function TacticalTabletWorkspace({ onOpenTool }: TacticalTabletWorkspaceProps) {
         }}>
           <TacIcon name="shield" size={16} color="var(--accent-amber)" />
           <div>
-            <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>INTEGRIDAD DE BÓVEDA</div>
-            <div style={{ fontSize: "0.74rem", fontWeight: 700, color: "#FFFFFF" }}>SLED AIR-GAP ACTIVO</div>
+            <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>{t("tablet.vault_integrity")}</div>
+            <div style={{ fontSize: "0.74rem", fontWeight: 700, color: "#FFFFFF" }}>{t("tablet.sled_airgap")}</div>
           </div>
         </div>
       </div>

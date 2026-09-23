@@ -14,8 +14,10 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
+const pkgVersion = require('../package.json').version;
+
 console.log("================================================================================");
-console.log("⏱️  SUITE: LORA TDMA CLOCK SKEW PLL & ADAPTIVE GUARD TIMES (v117.0.0)");
+console.log(`⏱️  SUITE: LORA TDMA CLOCK SKEW PLL & ADAPTIVE GUARD TIMES (v${pkgVersion})`);
 console.log("================================================================================\n");
 
 let totalTests = 0;

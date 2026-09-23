@@ -583,7 +583,6 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const filterSystemRef = useRef<"ALL" | "CX" | "MB" | "GFS" | "FB">(filterSystem);
   const gfsTelemetryRef = useRef<GiantFiberTelemetry>(gfsTelemetry);
   const architectureModeRef = useRef<"SUBCORTICAL_MALE_CNS" | "HUMAN_NEOCORTEX" | "CONSCIOUS_SWARM_BUS">(architectureMode);
-  architectureModeRef.current = architectureMode;
 
   // Mapa de búsqueda O(1) de nodos para eliminar búsquedas lineales repetidas por arista
   const nodeMap = useMemo(() => {
@@ -614,6 +613,10 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   useEffect(() => {
     gfsTelemetryRef.current = gfsTelemetry;
   }, [gfsTelemetry]);
+
+  useEffect(() => {
+    architectureModeRef.current = architectureMode;
+  }, [architectureMode]);
 
   // Bucle de Renderizado 3D en Canvas (Optimizado con caché de dimensiones y gobernador térmico)
   useEffect(() => {

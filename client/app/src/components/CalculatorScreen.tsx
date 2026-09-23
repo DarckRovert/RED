@@ -28,24 +28,6 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
     const [waitingForOperand, setWaitingForOperand] = useState(false);
     const [awaitingUnlock, setAwaitingUnlock] = useState(false);
 
-    // Registro LIFO de retroceso físico / Esc
-    useEffect(() => {
-        const unregister = BackHandlerRegistry.register(() => {
-            if (display !== "0" || equation !== "" || prevValue !== null) {
-                clearAll();
-                TacticalAudioEngine.playTap();
-                return true;
-            }
-            if (currentScreen === "calculator") {
-                TacticalAudioEngine.playTap();
-                goBack();
-                return true;
-            }
-            return false;
-        });
-        return unregister;
-    }, [display, equation, prevValue, currentScreen, goBack]);
-
     // Haptic & piezo feedback sutil
     const triggerHaptic = () => {
         TacticalAudioEngine.playTap();
@@ -63,6 +45,24 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
         setOperator(null);
         setWaitingForOperand(false);
     };
+
+    // Registro LIFO de retroceso físico / Esc
+    useEffect(() => {
+        const unregister = BackHandlerRegistry.register(() => {
+            if (display !== "0" || equation !== "" || prevValue !== null) {
+                clearAll();
+                TacticalAudioEngine.playTap();
+                return true;
+            }
+            if (currentScreen === "calculator") {
+                TacticalAudioEngine.playTap();
+                goBack();
+                return true;
+            }
+            return false;
+        });
+        return unregister;
+    }, [display, equation, prevValue, currentScreen, goBack]);
 
     const inputDigit = (digit: string) => {
         triggerHaptic();

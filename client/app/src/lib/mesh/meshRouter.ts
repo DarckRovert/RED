@@ -1328,6 +1328,7 @@ class MeshRouter {
 
     // Enqueue original unified packet in persistent DTN store-and-forward queue
     const originalPacket = createPacket(this.myIdentityHash, canonicalRecipient, payload);
+    originalPacket.nonce = baseNonce;
     dtnStorage.enqueue(originalPacket, 5);
 
     const blePeers = Array.from(this.peers.entries()).filter(([_, p]) => p.transport === 'ble');
@@ -1722,8 +1723,8 @@ class MeshRouter {
       if (payloadStr.startsWith('{') && (payloadStr.includes('SWARM_PHEROMONE') || payloadStr.includes('"pheromone"'))) {
         try {
           const parsed = JSON.parse(payloadStr);
-          const ph = parsed.type === 'SWARM_PHEROMONE' ? parsed.pheromone : parsed.pheromone;
-          if (ph && ph.type) {
+          const ph = (parsed.type === 'SWARM_PHEROMONE' && parsed.pheromone) ? parsed.pheromone : (parsed.pheromone || parsed);
+          if (ph && ph.type && ph.type !== 'SWARM_PHEROMONE') {
             dtnMushroomBody.ingestPheromone({
               id: ph.id || `ph_${ph.type.toLowerCase()}_${Date.now()}`,
               type: ph.type,
@@ -1771,10 +1772,19 @@ class MeshRouter {
 
           if (ackNonce) {
             dtnStorage.remove(ackNonce);
+            // Handle bonded packet ACK: remove parent bundle if shard was ACKed
+            const bondPrefix = ackNonce.replace(/_s\d+$/, '');
+            if (bondPrefix !== ackNonce) {
+              dtnStorage.remove(bondPrefix);
+            }
             console.log(`[MeshRouter] ✅ Received DELIVERY_ACK for nonce ${ackNonce.slice(0, 8)} — cleared from DTN storage`);
           }
           if (ackMessageId && ackMessageId !== ackNonce) {
             dtnStorage.remove(ackMessageId);
+            const bondPrefixMsg = ackMessageId.replace(/_s\d+$/, '');
+            if (bondPrefixMsg !== ackMessageId) {
+              dtnStorage.remove(bondPrefixMsg);
+            }
           }
 
           // Update local conversation store message status to 'Delivered'

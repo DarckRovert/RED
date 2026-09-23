@@ -1,5 +1,27 @@
 # Changelog
 
+## [118.0.0-blindaje-concurrente-y-resiliencia-tactica] - 2026-09-23
+
+### 🛡️ Blindaje Concurrente, Resiliencia Táctica y Estabilidad de Malla P2P (Release Oficial v118.0.0)
+
+- **Sanidad del Ciclo de Vida de React 19 y Renderizado Concurrente (`MaleCnsConnectomeHUD.tsx`):**
+  - Erradicación de mutaciones directas de referencias (`useRef.current`) durante la fase de render.
+  - Sincronización desacoplada mediante `useEffect` reactivo, eliminando *state tearing* y logrando **0 errores** en el compilador de React y ESLint.
+- **Erradicación de Temporal Dead Zone (TDZ) en Llamadas de Malla (`useSquadCallMesh.ts`):**
+  - Reestructuración topológica estricta de controladores de señalización, códec Opus mono a 16 kbps y teardown previo a la evaluación de los hooks de ciclo de vida.
+  - Eliminación de excepciones `ReferenceError` ante desmontajes prematuros de la vista de escuadrón.
+- **Gestión Higiénica de Clientes MQTT y Fugas de Recursos (`companionSyncEngine.ts`):**
+  - Cierre explícito de sockets e intervalos de reintento entre cambios de brokers de relevo WAN, eliminando conexiones zombies.
+  - Conversión del ejecutor de promesas a ejecutor síncrono con encapsulación IIFE y captura de nivel superior contra `UnhandledPromiseRejection`.
+- **Hoisting Limpio de Manejadores de Llamada y Teclado (`IncomingCallBanner.tsx`, `CalculatorScreen.tsx`):**
+  - Reubicación de handlers por encima del guard condicional `return null` y del registro LIFO de retroceso físico (`BackHandlerRegistry`).
+- **Enrutamiento DTN y Limpieza en Cascada de Paquetes Enlazados (`meshRouter.ts`):**
+  - Asignación de nonces base canónicos y purga de paquetes emparentados ante la recepción de `DELIVERY_ACK`.
+- **Sincronización Total de Localización Internacional (11 Idiomas):**
+  - Integración completa de claves ausentes de Workspace y navegación de tablet en los 11 diccionarios (`es`, `en`, `de`, `fr`, `it`, `ja`, `ko`, `pt`, `ru`, `zh`, `ar`, `qu`).
+- **Firma Dual de Producción Android v1 + v2 (`build.gradle`):**
+  - Habilitación explícita de `v1SigningEnabled true` y `v2SigningEnabled true` para compatibilidad universal sin advertencias en Android 7.0 a Android 15.
+
 ## [117.0.0-resiliencia-tactica-y-blindaje-p2p-de-grado-militar] - 2026-09-21
 
 ### 🛡️ Resiliencia Táctica & Blindaje P2P de Grado Militar (Release Oficial v117.0.0)

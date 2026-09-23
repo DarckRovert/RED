@@ -92,10 +92,7 @@ function getRandomBytes(len: number): Uint8Array {
     const buf = new Uint8Array(len);
     const c = (typeof window !== 'undefined' && window.crypto) || (globalThis as any)?.crypto;
     if (c?.getRandomValues) return c.getRandomValues(buf);
-    for (let i = 0; i < len; i++) {
-        buf[i] = Math.floor(Math.random() * 256) ^ ((Date.now() + i * 0x9e3779b9) & 0xFF);
-    }
-    return buf;
+    throw new Error('WebCrypto getRandomValues no disponible en este entorno para generación de entropía segura');
 }
 
 async function generateEcdhKeyPair(): Promise<CryptoKeyPair> {
@@ -761,16 +758,116 @@ class CompanionSyncEngineClass {
 
         onProgress?.("Conectando con el relé seguro…");
 
-        return new Promise<boolean>(async (resolve, reject) => {
-            let activeClient: SimpleMqttClient | null = null;
-            let isResolved = false;
+        return new Promise<boolean>((resolve, reject) => {
+            (async () => {
+                let activeClient: SimpleMqttClient | null = null;
+                let isResolved = false;
 
-            const timeout = setTimeout(() => {
-                if (!isResolved) {
-                    isResolved = true;
-                    if (activeClient) activeClient.close();
-                    // Fallback P2P local si expira el tiempo de relé WAN
-                    const finishLocal = async () => {
+                const timeout = setTimeout(() => {
+                    if (!isResolved) {
+                        isResolved = true;
+                        if (activeClient) activeClient.close();
+                        // Fallback P2P local si expira el tiempo de relé WAN
+                        const finishLocal = async () => {
+                            const aesKeyHex = await exportAesKeyHex(aesKey);
+                            this.activeSession = {
+                                sessionId,
+                                aesKeyHex,
+                                brokerUrl: "p2p-direct-local",
+                                isMobileHost: true,
+                                pairedAt: Date.now()
+                            };
+                            this.liveAesKey = aesKey;
+                            if (typeof window !== "undefined") {
+                                localStorage.setItem('red_companion_active_session', JSON.stringify(this.activeSession));
+                            }
+                            resolve(true);
+                        };
+                        finishLocal().catch(() => reject(new Error("Tiempo de espera agotado")));
+                    }
+                }, 30000);
+
+                try {
+                    for (const brokerUrl of brokersToTry) {
+                        if (isResolved) break;
+                        let client: SimpleMqttClient | null = null;
+                        let retryInterval: any = null;
+                        try {
+                            onProgress?.(`Conectando al relé…`);
+                            client = new SimpleMqttClient(brokerUrl);
+                            activeClient = client;
+                            await new Promise<void>((res, rej) => client!.connect(res, rej));
+
+                            if (isResolved) {
+                                client.close();
+                                break;
+                            }
+
+                            client.subscribe(ackTopic);
+
+                            onProgress?.("Transmitiendo cápsula cifrada al navegador…");
+                            client.publish(vaultTopic, vaultMessage);
+
+                            retryInterval = setInterval(() => {
+                                if (isResolved || !client || !client.isConnected) {
+                                    if (retryInterval) clearInterval(retryInterval);
+                                    return;
+                                }
+                                client.publish(vaultTopic, vaultMessage);
+                            }, 1500);
+
+                            const currentClient = client;
+                            currentClient.onMessage(async (topic, payloadStr) => {
+                                if (isResolved) return;
+                                if (topic === ackTopic) {
+                                    try {
+                                        const msg = JSON.parse(payloadStr);
+                                        if (msg.type === "red_companion_ack" || msg.status === "success") {
+                                            isResolved = true;
+                                            clearTimeout(timeout);
+                                            if (retryInterval) clearInterval(retryInterval);
+
+                                            const aesKeyHex = await exportAesKeyHex(aesKey);
+                                            const activeSession: ActiveCompanionSession = {
+                                                sessionId,
+                                                aesKeyHex,
+                                                brokerUrl,
+                                                isMobileHost: true,
+                                                pairedAt: Date.now()
+                                            };
+                                            this.activeSession = activeSession;
+                                            this.liveAesKey = aesKey;
+                                            localStorage.setItem('red_companion_active_session', JSON.stringify(activeSession));
+
+                                            this.liveClient = currentClient;
+                                            currentClient.subscribe(liveTopic);
+                                            this.setupLiveMessageListener(currentClient, liveTopic, aesKey);
+                                            this.startKeepalive(currentClient);
+
+                                            resolve(true);
+                                        }
+                                    } catch {}
+                                }
+                            });
+
+                            await new Promise<void>(res => setTimeout(res, 3500));
+                            if (isResolved) break;
+
+                            // Si este broker no respondió a tiempo, liberar recursos antes del siguiente
+                            if (retryInterval) clearInterval(retryInterval);
+                            currentClient.close();
+                            if (activeClient === currentClient) activeClient = null;
+                        } catch (e) {
+                            if (retryInterval) clearInterval(retryInterval);
+                            if (client) client.close();
+                            if (activeClient === client) activeClient = null;
+                            console.warn(`[CompanionEngine] Error en broker ${brokerUrl}:`, e);
+                        }
+                    }
+
+                    if (!activeClient && !isResolved) {
+                        isResolved = true;
+                        clearTimeout(timeout);
                         const aesKeyHex = await exportAesKeyHex(aesKey);
                         this.activeSession = {
                             sessionId,
@@ -780,96 +877,17 @@ class CompanionSyncEngineClass {
                             pairedAt: Date.now()
                         };
                         this.liveAesKey = aesKey;
-                        if (typeof window !== "undefined") {
-                            localStorage.setItem('red_companion_active_session', JSON.stringify(this.activeSession));
-                        }
+                        localStorage.setItem('red_companion_active_session', JSON.stringify(this.activeSession));
                         resolve(true);
-                    };
-                    finishLocal().catch(() => reject(new Error("Tiempo de espera agotado")));
-                }
-            }, 30000);
-
-            for (const brokerUrl of brokersToTry) {
-                if (isResolved) break;
-                try {
-                    onProgress?.(`Conectando al relé…`);
-                    const client = new SimpleMqttClient(brokerUrl);
-                    await new Promise<void>((res, rej) => client.connect(res, rej));
-
-                    if (isResolved) {
-                        client.close();
-                        break;
                     }
-
-                    activeClient = client;
-                    client.subscribe(ackTopic);
-
-                    onProgress?.("Transmitiendo cápsula cifrada al navegador…");
-                    client.publish(vaultTopic, vaultMessage);
-
-                    const retryInterval = setInterval(() => {
-                        if (isResolved || !client.isConnected) {
-                            clearInterval(retryInterval);
-                            return;
-                        }
-                        client.publish(vaultTopic, vaultMessage);
-                    }, 1500);
-
-                    client.onMessage(async (topic, payloadStr) => {
-                        if (isResolved) return;
-                        if (topic === ackTopic) {
-                            try {
-                                const msg = JSON.parse(payloadStr);
-                                if (msg.type === "red_companion_ack" || msg.status === "success") {
-                                    isResolved = true;
-                                    clearTimeout(timeout);
-                                    clearInterval(retryInterval);
-
-                                    const aesKeyHex = await exportAesKeyHex(aesKey);
-                                    const activeSession: ActiveCompanionSession = {
-                                        sessionId,
-                                        aesKeyHex,
-                                        brokerUrl,
-                                        isMobileHost: true,
-                                        pairedAt: Date.now()
-                                    };
-                                    this.activeSession = activeSession;
-                                    this.liveAesKey = aesKey;
-                                    localStorage.setItem('red_companion_active_session', JSON.stringify(activeSession));
-
-                                    this.liveClient = client;
-                                    client.subscribe(liveTopic);
-                                    this.setupLiveMessageListener(client, liveTopic, aesKey);
-                                    this.startKeepalive(client);
-
-                                    resolve(true);
-                                }
-                            } catch {}
-                        }
-                    });
-
-                    await new Promise<void>(res => setTimeout(res, 3500));
-                    if (isResolved) break;
-                } catch (e) {
-                    console.warn(`[CompanionEngine] Error en broker ${brokerUrl}:`, e);
+                } catch (fatalErr) {
+                    clearTimeout(timeout);
+                    if (!isResolved) {
+                        isResolved = true;
+                        reject(fatalErr);
+                    }
                 }
-            }
-
-            if (!activeClient && !isResolved) {
-                isResolved = true;
-                clearTimeout(timeout);
-                const aesKeyHex = await exportAesKeyHex(aesKey);
-                this.activeSession = {
-                    sessionId,
-                    aesKeyHex,
-                    brokerUrl: "p2p-direct-local",
-                    isMobileHost: true,
-                    pairedAt: Date.now()
-                };
-                this.liveAesKey = aesKey;
-                localStorage.setItem('red_companion_active_session', JSON.stringify(this.activeSession));
-                resolve(true);
-            }
+            })();
         });
     }
 
