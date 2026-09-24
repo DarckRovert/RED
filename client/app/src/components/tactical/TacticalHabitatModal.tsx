@@ -24,7 +24,6 @@ import {
   BiocyberneticHabitat3DEngine,
   HabitatCameraMode,
 } from '../../lib/neuro/habitat';
-import { hexapodActuatorBridge } from '../../lib/neuro/vivarium/HexapodActuatorBridgeEngine';
 import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
 import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
 import { connectomeBioBridge } from '../../lib/neuro/ConnectomeBioBridge';
