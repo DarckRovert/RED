@@ -2195,22 +2195,54 @@ export class BiocyberneticHabitat3DEngine {
     this.thoughtBubbles3D.clear();
     this.sugarMegaCrystal.dispose();
     this.playfulLaserMesh.dispose();
-    this.ambientSpores.geometry.dispose();
-    (this.ambientSpores.material as THREE.Material).dispose();
+
+    if (this.ambientSpores) {
+      this.scene.remove(this.ambientSpores);
+      this.ambientSpores.geometry.dispose();
+      (this.ambientSpores.material as THREE.Material).dispose();
+    }
+
     this.barrierMeshes.forEach((m) => {
       this.scene.remove(m);
       m.geometry.dispose();
       (m.material as THREE.Material).dispose();
     });
     this.barrierMeshes.clear();
-    this.selectionReticle.traverse((obj) => {
-      if ((obj as THREE.Mesh).isMesh) {
-        const m = obj as THREE.Mesh;
-        m.geometry.dispose();
-        if (Array.isArray(m.material)) m.material.forEach((mat) => mat.dispose());
-        else m.material.dispose();
-      }
-    });
+
+    const disposeHierarchy = (root?: THREE.Object3D | null) => {
+      if (!root) return;
+      this.scene.remove(root);
+      root.traverse((obj) => {
+        const anyObj = obj as unknown as { geometry?: THREE.BufferGeometry; material?: THREE.Material | THREE.Material[] };
+        if (anyObj.geometry) anyObj.geometry.dispose();
+        if (anyObj.material) {
+          if (Array.isArray(anyObj.material)) {
+            anyObj.material.forEach((mat: THREE.Material) => mat.dispose());
+          } else {
+            anyObj.material.dispose();
+          }
+        }
+      });
+    };
+
+    disposeHierarchy(this.treeOfLifeGroup);
+    disposeHierarchy(this.nectarSpringsGroup);
+    disposeHierarchy(this.myceliumNetworkGroup);
+    disposeHierarchy(this.celestialDome);
+    disposeHierarchy(this.tacticalChessTable);
+    disposeHierarchy(this.nestMound);
+    disposeHierarchy(this.toolVfxGroup);
+    disposeHierarchy(this.selectionReticle);
+    disposeHierarchy(this.groundMesh);
+    disposeHierarchy(this.perimeterWall);
+    if (this.auroraMesh) {
+      this.scene.remove(this.auroraMesh);
+      this.auroraMesh.geometry.dispose();
+      (this.auroraMesh.material as THREE.Material).dispose();
+      this.auroraMesh = null;
+    }
+
     this.chemicalTexture.dispose();
   }
 }
+
