@@ -203,7 +203,7 @@ const NEW_TRANSLATIONS = {
     "tablet.updater_title": "Atualizador OTA",
     "tablet.updater_sub": "DISTRIBUIÇÃO ASSINADA P2P",
     "tablet.c4isr_title": "Central de Comando C4ISR",
-    "tablet.c4isr_sub": "MATRIZ DE 62 MÓDULOS OPERACIONAIS & SENSORES",
+    "tablet.c4isr_sub": "MATRIZ DE 65 MÓDULOS OPERACIONAIS & SENSORES",
     "tablet.appstore_title": "Loja de Apps P2P",
     "tablet.appstore_sub": "MINI-APPS EM SANDBOX",
     "tablet.browser_title": "Hiper-Navegador P2P",

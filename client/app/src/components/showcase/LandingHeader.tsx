@@ -32,7 +32,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
         { id: "bento", label: "Pilares" },
         { id: "matrix-comparison", label: "Benchmark" },
         { id: "live-mesh-demo", label: "Malla en Vivo" },
-        { id: "modules", label: "62 Módulos" },
+        { id: "modules", label: "65 Módulos" },
         { id: "deployment", label: "Despliegue" },
         { id: "architecture", label: "Arquitectura" },
         { id: "contribute", label: "Contribuir" },
@@ -45,7 +45,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
         { id: "hardware", label: "Hardware Real" },
         { id: "scenarios", label: "Escenarios" },
         { id: "live-mesh-demo", label: "Malla en Vivo" },
-        { id: "modules", label: "62 Módulos" },
+        { id: "modules", label: "65 Módulos" },
         { id: "architecture", label: "Arquitectura" },
         { id: "faq", label: "FAQ" },
     ];

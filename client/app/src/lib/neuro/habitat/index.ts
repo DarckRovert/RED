@@ -9,3 +9,6 @@ export * from './PersistentSynapticPlasticityEngine';
 export * from './HabitatMeshBridgeEngine';
 export * from './BiocyberneticHabitatEngine';
 export * from './BiocyberneticHabitat3DEngine';
+export * from './AutonomousHabitatChessEngine';
+export * from './AutonomousLifelongLearningEngine';
+export * from './BiocyberneticEdenParadiseEngine';

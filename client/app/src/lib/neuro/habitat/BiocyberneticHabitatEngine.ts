@@ -26,6 +26,9 @@ import { hexapodActuatorBridge } from '../vivarium/HexapodActuatorBridgeEngine';
 import { TacticalAudioEngine } from '../../audio/TacticalAudioEngine';
 import { connectomeBioBridge } from '../ConnectomeBioBridge';
 import { giantFiberReflex } from '../GiantFiberReflexEngine';
+import { autonomousHabitatChess, AutonomousHabitatChessEngine, ChessMove } from './AutonomousHabitatChessEngine';
+import { biocyberneticEdenParadise, BiocyberneticEdenParadiseEngine, EdenParadiseTelemetry } from './BiocyberneticEdenParadiseEngine';
+import { autonomousLifelongLearning, AutonomousLifelongLearningEngine, LifelongLearningTelemetry } from './AutonomousLifelongLearningEngine';
 
 /**
  * Normaliza un ángulo en radianes al rango canónico [0, 2π)
@@ -43,7 +46,38 @@ export function shortestAngleDiff(target: number, current: number): number {
   return Math.atan2(Math.sin(target - current), Math.cos(target - current));
 }
 
-export type OrganismSpecies = 'DROSOPHILA' | 'C_ELEGANS' | 'ANT';
+export type OrganismSpecies = 'DROSOPHILA' | 'C_ELEGANS' | 'ANT' | 'HUMAN_NEOCORTEX' | 'GRAVITY_SENTINEL';
+
+export type OrganismMood =
+  | 'HUNGRY'
+  | 'CURIOUS'
+  | 'VIGILANT'
+  | 'ENERGETIC'
+  | 'PLAYFUL'
+  | 'ZEN'
+  | 'COMPETITIVE'
+  | 'SERENITY'
+  | 'TRANSCENDENCE'
+  | 'DREAMING';
+
+export interface SugarRaceState {
+  isActive: boolean;
+  targetX: number;
+  targetY: number;
+  timeRemainingSec: number;
+  winnerSpecies: OrganismSpecies | null;
+  winnerName: string | null;
+  announcement: string;
+}
+
+export interface CognitiveThoughtEntry {
+  id: string;
+  species: OrganismSpecies;
+  name: string;
+  thought: string;
+  mood: OrganismMood;
+  timestamp: number;
+}
 
 export interface HabitatOrganism {
   id: string;
@@ -71,6 +105,20 @@ export interface HabitatOrganism {
   behaviorState: string;
   wingFlapPhase: number;
   nestExitCooldownSec: number;
+  // Cognición, emociones y entretenimiento L9
+  currentThought: string;
+  thoughtTimerSec: number;
+  mood: OrganismMood;
+  personality: string;
+  altitudeMeters: number;
+  laserChaseTarget: { x: number; y: number } | null;
+  acrobaticTimerSec: number;
+  pettedTimerSec: number;
+  // Sabiduría y Aprendizaje Permanente en el Paraíso
+  wisdomLevel: number;
+  curiosityScore: number;
+  isDreaming: boolean;
+  sleepReplayTicks: number;
 }
 
 export type HabitatToolType =
@@ -129,7 +177,26 @@ export interface HabitatTelemetry {
     drosophila: number;
     cElegans: number;
     ant: number;
+    humanNeocortex: number;
+    gravitySentinel: number;
   };
+  sugarRace: SugarRaceState;
+  recentThoughts: CognitiveThoughtEntry[];
+  chessMatch: {
+    isActive: boolean;
+    isPaused: boolean;
+    whiteSpecies: OrganismSpecies;
+    blackSpecies: OrganismSpecies;
+    whiteName: string;
+    blackName: string;
+    currentTurn: 'w' | 'b';
+    winner: 'w' | 'b' | 'draw' | null;
+    moveCount: number;
+    lastMoveSan: string | null;
+    fen: string;
+  };
+  edenParadise: EdenParadiseTelemetry;
+  lifelongLearning: LifelongLearningTelemetry;
 }
 
 export class BiocyberneticHabitatEngine {
@@ -164,6 +231,19 @@ export class BiocyberneticHabitatEngine {
 
   private telemetryListeners: Set<(t: HabitatTelemetry) => void> = new Set();
 
+  private sugarRace: SugarRaceState = {
+    isActive: false,
+    targetX: 0,
+    targetY: 0,
+    timeRemainingSec: 0,
+    winnerSpecies: null,
+    winnerName: null,
+    announcement: 'Ecosistema en equilibrio simbiótico.',
+  };
+  private recentThoughts: CognitiveThoughtEntry[] = [];
+  private laserChaseGlobalTarget: { x: number; y: number } | null = null;
+  private laserChaseTimerSec = 0;
+
   private constructor() {
     this.diffusionGrid = new FickDiffusionGrid(
       BiocyberneticHabitatEngine.ARENA_DIAMETER_METERS,
@@ -172,10 +252,12 @@ export class BiocyberneticHabitatEngine {
     );
     this.meshBridge = HabitatMeshBridgeEngine.getInstance();
 
-    // Iniciar con un ecosistema inicial balanceado
+    // Iniciar con un ecosistema inicial balanceado con TODAS las inteligencias del proyecto
     this.spawnOrganism('DROSOPHILA', -1.5, 0, 0, true);
-    this.spawnOrganism('C_ELEGANS', 1.5, -1.0, Math.PI * 0.5, false);
-    this.spawnOrganism('ANT', 0, 1.5, Math.PI, false);
+    this.spawnOrganism('HUMAN_NEOCORTEX', 0.6, -1.8, Math.PI * 0.75, false);
+    this.spawnOrganism('GRAVITY_SENTINEL', 0, 0, -Math.PI * 0.5, false);
+    this.spawnOrganism('C_ELEGANS', 1.8, -0.8, Math.PI * 0.5, false);
+    this.spawnOrganism('ANT', -0.6, 1.6, Math.PI * 0.25, false);
   }
 
   public static getInstance(): BiocyberneticHabitatEngine {
@@ -282,12 +364,40 @@ export class BiocyberneticHabitatEngine {
       });
     }
 
+    let defaultThought = 'Observando el biodomo...';
+    let defaultMood: OrganismMood = 'CURIOUS';
+    let personality = 'Explorador';
+    let initialAltitude = 0;
+
+    if (species === 'DROSOPHILA') {
+      defaultThought = 'Buscando néctar dulce con marcha trípode 🍓';
+      defaultMood = 'HUNGRY';
+      personality = 'Ágil y Glotona';
+    } else if (species === 'HUMAN_NEOCORTEX') {
+      defaultThought = 'Cartografiando celdas entorrinales y minimizando energía libre 🧠';
+      defaultMood = 'CURIOUS';
+      personality = 'Estratega Epistémico';
+    } else if (species === 'GRAVITY_SENTINEL') {
+      defaultThought = 'Escaneo de perímetro: Malla cuántica segura al 100% 🛸';
+      defaultMood = 'VIGILANT';
+      personality = 'Guardián Autónomo';
+      initialAltitude = 1.8;
+    } else if (species === 'C_ELEGANS') {
+      defaultThought = 'Ondulación quimiosensorial plácida con 302 neuronas 🐛';
+      defaultMood = 'ZEN';
+      personality = 'Explorador Zen';
+    } else if (species === 'ANT') {
+      defaultThought = '¡Por la colonia! Rastreando senderos de feromonas 🐜';
+      defaultMood = 'ENERGETIC';
+      personality = 'Obrera Leal';
+    }
+
     const org: HabitatOrganism = {
       id,
       species,
       x,
       y,
-      z: 0,
+      z: initialAltitude,
       headingRad,
       speedMps: 0,
       generation: 1,
@@ -307,6 +417,18 @@ export class BiocyberneticHabitatEngine {
       behaviorState: 'FORAGING',
       wingFlapPhase: 0,
       nestExitCooldownSec: 0,
+      currentThought: defaultThought,
+      thoughtTimerSec: 2.0 + Math.random() * 3.0,
+      mood: defaultMood,
+      personality,
+      altitudeMeters: initialAltitude,
+      laserChaseTarget: null,
+      acrobaticTimerSec: 0,
+      pettedTimerSec: 0,
+      wisdomLevel: 5.0,
+      curiosityScore: 0.85,
+      isDreaming: false,
+      sleepReplayTicks: 0,
     };
 
     this.organisms.set(id, org);
@@ -343,6 +465,111 @@ export class BiocyberneticHabitatEngine {
       }
     }
 
+    // 3.1 Actualización del Gran Torneo de Glucosa (Sugar Grand Prix)
+    if (this.sugarRace.isActive) {
+      this.sugarRace.timeRemainingSec -= dt;
+      const centerOffset = BiocyberneticHabitatEngine.ARENA_RADIUS_METERS;
+      if (!this.sugarRace.winnerSpecies) {
+        // Inyectar faro continuo de glucosa dorada en la posición objetivo
+        const goalGridX = this.sugarRace.targetX + centerOffset;
+        const goalGridY = this.sugarRace.targetY + centerOffset;
+        this.diffusionGrid.injectChemical(goalGridX, goalGridY, 4.0 * dt, 'GLUCOSE');
+
+        // Evaluar victoria por proximidad al Mega-Cristal (< 0.75m)
+        for (const org of this.organisms.values()) {
+          if (org.isDecomposing) continue;
+          const distToGoal = Math.hypot(org.x - this.sugarRace.targetX, org.y - this.sugarRace.targetY);
+          if (distToGoal < 0.75) {
+            this.sugarRace.winnerSpecies = org.species;
+            const winnerTitle = this.getSpeciesDisplayName(org.species);
+            this.sugarRace.winnerName = winnerTitle;
+            this.sugarRace.announcement = `🏆 ¡${winnerTitle.toUpperCase()} HA ALCANZADO EL MEGA-CRISTAL! Victoria para su arquitectura.`;
+            org.metabolism.ingestNutrient(1.0);
+            org.plasticity.injectDopamine(25.0);
+            org.mood = 'COMPETITIVE';
+            org.currentThought = '¡VICTORIA! ¡Conquisté el Mega-Cristal dorado para mi especie! 🏆✨';
+            TacticalAudioEngine.playRogerBeep();
+            TacticalAudioEngine.playDopamineChime();
+            break;
+          }
+        }
+      }
+
+      if (this.sugarRace.timeRemainingSec <= 0) {
+        this.sugarRace.isActive = false;
+        if (!this.sugarRace.winnerSpecies) {
+          this.sugarRace.announcement = '🏁 El Gran Torneo concluyó por tiempo límite. Empate técnico.';
+        }
+      }
+    }
+
+    // 3.2 Temporizador de Puntero Láser Juguetón
+    if (this.laserChaseTimerSec > 0) {
+      this.laserChaseTimerSec -= dt;
+      if (this.laserChaseTimerSec <= 0) {
+        this.laserChaseGlobalTarget = null;
+        for (const org of this.organisms.values()) {
+          org.laserChaseTarget = null;
+        }
+      }
+    }
+
+    // 3.3 Simulación de Partidas Autónomas de Ajedrez Táctico In-Silico
+    const chessMove = autonomousHabitatChess.update(dt);
+    if (chessMove && autonomousHabitatChess.lastThought) {
+      this.recentThoughts.unshift(autonomousHabitatChess.lastThought);
+      if (this.recentThoughts.length > 8) {
+        this.recentThoughts.pop();
+      }
+      TacticalAudioEngine.playTap();
+    }
+
+    // 3.4 Paraíso Biocibernético & Aprendizaje Permanente L9
+    biocyberneticEdenParadise.update(dt, this.diffusionGrid);
+    const circadian = biocyberneticEdenParadise.getCircadianState();
+
+    let sanctuaryOrganismsCount = 0;
+    let dreamingOrganismsCount = 0;
+
+    for (const org of this.organisms.values()) {
+      if (org.isDecomposing) continue;
+
+      const inSanctuary = biocyberneticEdenParadise.isInTreeOfLifeSanctuary(org.x, org.y);
+      if (inSanctuary) {
+        sanctuaryOrganismsCount++;
+        org.metabolism.ingestNutrient(0.06 * dt);
+        org.satietyTimerSec = Math.min(10.0, org.satietyTimerSec + dt * 2.0);
+
+        if (!circadian.isDaytime || org.speedMps < 0.15) {
+          org.isDreaming = true;
+          dreamingOrganismsCount++;
+          org.mood = 'TRANSCENDENCE';
+          org.sleepReplayTicks += dt;
+        } else {
+          org.mood = 'SERENITY';
+          org.isDreaming = false;
+        }
+
+        if (org.thoughtTimerSec <= 0.1 && Math.random() < 0.3) {
+          org.currentThought = autonomousLifelongLearning.generateLearningReflection(org.species, org.id);
+          org.thoughtTimerSec = 6.0 + Math.random() * 4.0;
+        }
+      } else {
+        const closestSpring = biocyberneticEdenParadise.getClosestSpring(org.x, org.y);
+        if (closestSpring && closestSpring.dist <= closestSpring.spring.radiusMeters) {
+          org.metabolism.ingestNutrient(0.12 * dt);
+          org.plasticity.injectDopamine(1.8 * dt);
+          org.mood = 'SERENITY';
+          org.isDreaming = false;
+        } else {
+          org.isDreaming = false;
+        }
+      }
+    }
+
+    biocyberneticEdenParadise.setSanctuaryOrganismsCount(sanctuaryOrganismsCount);
+    autonomousLifelongLearning.update(dt, !circadian.isDaytime || sanctuaryOrganismsCount > 0, dreamingOrganismsCount);
+
     // 4. Actualizar organismos
     const centerOffset = BiocyberneticHabitatEngine.ARENA_RADIUS_METERS;
 
@@ -366,6 +593,21 @@ export class BiocyberneticHabitatEngine {
         continue;
       }
 
+      // 4.0.1 Gestión de Acrobacias y Caricias Afectivas
+      if (org.acrobaticTimerSec > 0) {
+        org.acrobaticTimerSec -= dt;
+      }
+      if (org.pettedTimerSec > 0) {
+        org.pettedTimerSec -= dt;
+      }
+
+      // 4.0.2 Actualización Dinámica de Pensamientos Cognitivos Vivos
+      org.thoughtTimerSec -= dt;
+      if (org.thoughtTimerSec <= 0) {
+        this.generateLivingThought(org);
+        org.thoughtTimerSec = 3.5 + Math.random() * 3.5;
+      }
+
       const gridX = org.x + centerOffset;
       const gridY = org.y + centerOffset;
 
@@ -386,7 +628,29 @@ export class BiocyberneticHabitatEngine {
       let turnRateRadPerSec = 0;
       let targetSpeed = 0.8;
 
-      if (org.species === 'DROSOPHILA') {
+      if (this.sugarRace.isActive && org.species !== 'GRAVITY_SENTINEL') {
+        // En el Gran Torneo, todas las inteligencias terrestres se apresuran competitivamente a la meta
+        const dx = this.sugarRace.targetX - org.x;
+        const dy = this.sugarRace.targetY - org.y;
+        const targetAngle = Math.atan2(dy, dx);
+        const diff = shortestAngleDiff(targetAngle, org.headingRad);
+        turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 4.5);
+        targetSpeed = 1.85 * org.metabolism.getLocomotionFactor();
+        org.behaviorState = 'RACE_COMPETITIVE_SPRINT';
+      } else if (org.laserChaseTarget && org.species !== 'GRAVITY_SENTINEL') {
+        // Persecución juguetona del puntero láser
+        const dx = org.laserChaseTarget.x - org.x;
+        const dy = org.laserChaseTarget.y - org.y;
+        const targetAngle = Math.atan2(dy, dx);
+        const diff = shortestAngleDiff(targetAngle, org.headingRad);
+        turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 5.0);
+        targetSpeed = 1.6 * org.metabolism.getLocomotionFactor();
+        org.behaviorState = 'PLAYFUL_LASER_CHASE';
+      } else if (org.acrobaticTimerSec > 0) {
+        turnRateRadPerSec = 16.0; // Giro acrobático vertiginoso 360°
+        targetSpeed = 2.2;
+        org.behaviorState = 'ACROBATIC_BARREL_ROLL';
+      } else if (org.species === 'DROSOPHILA') {
         // ── DROSOPHILA MELANOGASTER: Omatidios, Tripod Gait & STDP Hebbiano ──
         const antennalSample = this.diffusionGrid.sampleAntennaPair(
           gridX,
@@ -686,6 +950,112 @@ export class BiocyberneticHabitatEngine {
             org.speedMps = 1.35;
             org.behaviorState = 'UNLOADED_FORAGING_OUTWARD';
             TacticalAudioEngine.playDopamineChime();
+          }
+        }
+      } else if (org.species === 'GRAVITY_SENTINEL') {
+        // ── GRAVITY AI SENTINEL: Dron Autónomo de Vigilancia y Comentarista Soberano ──
+        org.altitudeMeters = 1.8 + 0.25 * Math.sin(this.simTimeSec * 1.8);
+        org.z = org.altitudeMeters;
+
+        if (this.sugarRace.isActive) {
+          // Si el Gran Torneo está activo, vuela sobre la meta como árbitro/comentarista
+          const dx = this.sugarRace.targetX - org.x;
+          const dy = this.sugarRace.targetY - org.y;
+          const distToGoal = Math.hypot(dx, dy);
+          if (distToGoal > 0.4) {
+            const targetAngle = Math.atan2(dy, dx);
+            const diff = shortestAngleDiff(targetAngle, org.headingRad);
+            turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 4.2);
+            targetSpeed = 1.8;
+          } else {
+            targetSpeed = 0.3;
+            turnRateRadPerSec = 0.8; // Giro panorámico de observación
+          }
+          org.behaviorState = 'RACE_REFEREE_OVERWATCH';
+        } else if (org.laserChaseTarget) {
+          // Persigue el puntero láser juguetonamente
+          const dx = org.laserChaseTarget.x - org.x;
+          const dy = org.laserChaseTarget.y - org.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 0.3) {
+            const targetAngle = Math.atan2(dy, dx);
+            const diff = shortestAngleDiff(targetAngle, org.headingRad);
+            turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 5.0);
+            targetSpeed = 2.2;
+          } else {
+            targetSpeed = 0.2;
+          }
+          org.behaviorState = 'LASER_INSPECTION_HOVER';
+        } else {
+          // Patrulla orbital suave o seguimiento de la mosca líder
+          const leader = this.getLeader();
+          if (leader && leader.id !== org.id) {
+            const dx = leader.x - org.x;
+            const dy = leader.y - org.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 2.5) {
+              const targetAngle = Math.atan2(dy, dx);
+              const diff = shortestAngleDiff(targetAngle, org.headingRad);
+              turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 2.5);
+              targetSpeed = 1.4;
+            } else {
+              turnRateRadPerSec = 0.5; // Órbita suave
+              targetSpeed = 0.6;
+            }
+          } else {
+            // Patrulla perimétrica
+            turnRateRadPerSec = 0.35 + 0.1 * Math.sin(this.simTimeSec * 0.5);
+            targetSpeed = 1.0;
+          }
+          org.behaviorState = 'SENTINEL_PATROL_SCAN';
+        }
+
+      } else if (org.species === 'HUMAN_NEOCORTEX') {
+        // ── HUMAN NEOCORTEX AVATAR: Navegación Epistémica y Mapeo Entorrinal ──
+        org.z = 0;
+        const currentC = this.diffusionGrid.sample(gridX, gridY, 'GLUCOSE');
+        if (currentC > 0.05) {
+          const ingested = Math.min(currentC * 0.3, 0.2 * dt);
+          org.metabolism.ingestNutrient(ingested);
+        }
+
+        if (this.sugarRace.isActive) {
+          // En el Torneo, corre activamente hacia la meta
+          const dx = this.sugarRace.targetX - org.x;
+          const dy = this.sugarRace.targetY - org.y;
+          const distToGoal = Math.hypot(dx, dy);
+          if (distToGoal > 0.25) {
+            const targetAngle = Math.atan2(dy, dx);
+            const diff = shortestAngleDiff(targetAngle, org.headingRad);
+            turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 4.0);
+            targetSpeed = 1.7;
+          } else {
+            targetSpeed = 0.1;
+          }
+          org.behaviorState = 'RACE_COMPETITIVE_SPRINT';
+        } else if (org.laserChaseTarget) {
+          const dx = org.laserChaseTarget.x - org.x;
+          const dy = org.laserChaseTarget.y - org.y;
+          const targetAngle = Math.atan2(dy, dx);
+          const diff = shortestAngleDiff(targetAngle, org.headingRad);
+          turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 3.5);
+          targetSpeed = 1.4;
+          org.behaviorState = 'ACTIVE_INFERENCE_INSPECT';
+        } else {
+          // Exploración guiada por curiosidad epistémica (minimizar entropía)
+          const nearestPeer = this.getNearestOrganismOfSpecies(org.x, org.y, 'DROSOPHILA', org.id);
+          if (nearestPeer && nearestPeer.dist > 1.2 && nearestPeer.dist < 3.5) {
+            const dx = nearestPeer.org.x - org.x;
+            const dy = nearestPeer.org.y - org.y;
+            const targetAngle = Math.atan2(dy, dx);
+            const diff = shortestAngleDiff(targetAngle, org.headingRad);
+            turnRateRadPerSec = Math.sign(diff) * 1.5;
+            targetSpeed = 0.85;
+            org.behaviorState = 'SOCIAL_THEORY_OF_MIND';
+          } else {
+            turnRateRadPerSec = (Math.random() - 0.5) * 1.2;
+            targetSpeed = 0.75;
+            org.behaviorState = 'ENTORHINAL_GRID_MAPPING';
           }
         }
       }
@@ -1006,9 +1376,263 @@ export class BiocyberneticHabitatEngine {
         return 0.32;
       case 'C_ELEGANS':
         return 0.22;
+      case 'HUMAN_NEOCORTEX':
+        return 0.35;
+      case 'GRAVITY_SENTINEL':
+        return 0.45;
       default:
         return 0.30;
     }
+  }
+
+  public getSpeciesDisplayName(species: OrganismSpecies): string {
+    switch (species) {
+      case 'DROSOPHILA':
+        return 'Drosophila (Mosca)';
+      case 'GRAVITY_SENTINEL':
+        return 'Dron Gravity AI';
+      case 'HUMAN_NEOCORTEX':
+        return 'Neocorteza Humana';
+      case 'C_ELEGANS':
+        return 'C. elegans (Gusano)';
+      case 'ANT':
+        return 'Hormiga Obrera';
+      default:
+        return 'Organismo';
+    }
+  }
+
+  public generateLivingThought(org: HabitatOrganism): void {
+    let thought = '';
+    let mood: OrganismMood = 'CURIOUS';
+
+    if (this.sugarRace.isActive) {
+      mood = 'COMPETITIVE';
+      if (org.species === 'DROSOPHILA') {
+        thought = '¡El Gran Torneo! ¡Marcha a máxima frecuencia por el cristal! 🏆';
+      } else if (org.species === 'GRAVITY_SENTINEL') {
+        thought = '🎙️ [CRÓNICA AI]: ¡Competidores aproximándose a coordenadas meta! 📢';
+      } else if (org.species === 'HUMAN_NEOCORTEX') {
+        thought = 'Calculando trayectoria óptima bayesiana hacia el premio 🏁';
+      } else if (org.species === 'ANT') {
+        thought = '¡Carga de velocidad máxima por la Reina y el nido! 🐜⚡';
+      } else if (org.species === 'C_ELEGANS') {
+        thought = 'Ondulación acelerada hacia la vibración del cristal 🐛💨';
+      }
+    } else if (org.pettedTimerSec > 0) {
+      mood = 'PLAYFUL';
+      if (org.species === 'DROSOPHILA') thought = '¡Bzzzz! ¡Eso hace cosquillas en mis antenas! ✨💖';
+      else if (org.species === 'GRAVITY_SENTINEL') thought = 'Caricia recibida. Ronroneo iónico modulado en 440 Hz 🛸💖';
+      else if (org.species === 'HUMAN_NEOCORTEX') thought = 'Sincronía interoceptiva y afecto registrados en la ínsula 🧠💖';
+      else if (org.species === 'ANT') thought = '¡Antenas batiendo de alegría! Agradecimiento obrero 🐜💖';
+      else if (org.species === 'C_ELEGANS') thought = 'Ondulación suave y relajada... liberando serotonina 🐛💖';
+    } else if (org.laserChaseTarget) {
+      mood = 'PLAYFUL';
+      if (org.species === 'DROSOPHILA') thought = '¡Un fotón brillante! ¿Es optogenética o juego? ¡A por él! ⚡';
+      else if (org.species === 'GRAVITY_SENTINEL') thought = 'Punto de referencia detectado. Fijando haz de escaneo 🎯';
+      else if (org.species === 'HUMAN_NEOCORTEX') thought = 'Atención selectiva focalizada en el estímulo luminoso 💡';
+      else if (org.species === 'ANT') thought = '¿Qué es esta luz danzante? Investigando con mandíbulas 🔍';
+      else if (org.species === 'C_ELEGANS') thought = 'Sintiendo fotones... ondulando hacia el destello 🐛✨';
+    } else {
+      const atp = org.metabolism.getTelemetry().atpLevel;
+      if (atp < 0.3) {
+        mood = 'HUNGRY';
+        thought = org.species === 'DROSOPHILA'
+          ? 'ATP bajo... Mis 124,289 neuronas necesitan glucosa urgente ⚠️'
+          : org.species === 'GRAVITY_SENTINEL'
+          ? 'Batería en 28%. Modo de bajo consumo activo 🔋'
+          : org.species === 'HUMAN_NEOCORTEX'
+          ? 'Glucemia en declive: priorizando fuentes energéticas 🍞'
+          : 'Buscando nutrientes en el sustrato... 🌾';
+      } else if (org.behaviorState.includes('FEEDING') || org.behaviorState.includes('GLUCOSE')) {
+        mood = 'HUNGRY';
+        thought = org.species === 'DROSOPHILA'
+          ? '¡Sacarosa pura bajo mis patas! Absorbiendo y liberando dopamina 🍓'
+          : org.species === 'ANT'
+          ? '¡Cristal de glucosa localizado! Fragmentando para llevar al nido 🐜'
+          : org.species === 'C_ELEGANS'
+          ? 'Quimiotaxis cumplida. Disfrutando del gradiente azucarado 🍯'
+          : 'Asimilando energía bioquímica para la red ⚡';
+      } else {
+        mood = Math.random() < 0.5 ? 'CURIOUS' : 'ZEN';
+        if (org.species === 'DROSOPHILA') {
+          const flyThoughts = [
+            'Brújula E-PG centrada en rumbo 180°. Navegando sin deriva 🧭',
+            'Limpiando mis alas translúcidas con las patas traseras ✨',
+            'Sintiendo corrientes de aire con el órgano de Johnston 🍃',
+            'Marcha trípode sincronizada a 2.4 Hz. Todo en orden 🪰',
+          ];
+          thought = flyThoughts[Math.floor(Math.random() * flyThoughts.length)];
+        } else if (org.species === 'GRAVITY_SENTINEL') {
+          const sentinelThoughts = [
+            'Malla soberana RED: 0 vulnerabilidades. Cero telemetry leaks 🛡️',
+            'Escaneando firmas biológicas del biodomo... 100% vitalidad 🛸',
+            'Propulsores en resonancia armónica. Altura de crucero estable 📡',
+            'Listo para mediar en el próximo Gran Torneo de Glucosa 🏆',
+          ];
+          thought = sentinelThoughts[Math.floor(Math.random() * sentinelThoughts.length)];
+        } else if (org.species === 'HUMAN_NEOCORTEX') {
+          const humanThoughts = [
+            'Minimizando energía libre de Friston: predicción del entorno confirmada 🧠',
+            'Memoria episódica en CA3 activa: reconociendo patrones previos 📖',
+            'Teoría de la mente activa: observando la cooperación de las hormigas 🐜',
+            'Rejilla entorrinal hexagonal proyectada en las coordenadas locales 🗺️',
+          ];
+          thought = humanThoughts[Math.floor(Math.random() * humanThoughts.length)];
+        } else if (org.species === 'C_ELEGANS') {
+          const wormThoughts = [
+            'Ondulando en armonía sinusoidal continua con el sustrato 🌊',
+            'Klinokinesis en calma. Las 302 neuronas están felices 🧘',
+            'Temperatura ambiental perfecta para la cutícula translúcida 🐛',
+          ];
+          thought = wormThoughts[Math.floor(Math.random() * wormThoughts.length)];
+        } else if (org.species === 'ANT') {
+          const antThoughts = [
+            '¡Trabajo en equipo! La estigmergia es la clave de la inteligencia 🐜',
+            'Trazando rastro de feromona para guiar a las demás hermanas 🛤️',
+            'Mandíbulas afiladas y listas para cualquier tarea comunitaria ⚙️',
+          ];
+          thought = antThoughts[Math.floor(Math.random() * antThoughts.length)];
+        }
+      }
+    }
+
+    org.currentThought = thought;
+    org.mood = mood;
+
+    // Registrar en el historial de pensamientos recientes (ring buffer de 8 entradas)
+    this.recentThoughts.unshift({
+      id: org.id,
+      species: org.species,
+      name: this.getSpeciesDisplayName(org.species),
+      thought,
+      mood,
+      timestamp: Date.now(),
+    });
+    if (this.recentThoughts.length > 8) {
+      this.recentThoughts.pop();
+    }
+  }
+
+  public startSugarRace(): void {
+    const angle = Math.random() * Math.PI * 2;
+    const r = 2.5 + Math.random() * 4.0;
+    const targetX = Math.cos(angle) * r;
+    const targetY = Math.sin(angle) * r;
+
+    this.sugarRace = {
+      isActive: true,
+      targetX,
+      targetY,
+      timeRemainingSec: 25.0,
+      winnerSpecies: null,
+      winnerName: null,
+      announcement: '🏆 ¡EL GRAN TORNEO DE GLUCOSA HA COMENZADO! Todas las inteligencias van por el Mega-Cristal.',
+    };
+
+    // Alertar y motivar a todos los organismos
+    for (const org of this.organisms.values()) {
+      org.mood = 'COMPETITIVE';
+      org.thoughtTimerSec = 0.1;
+      org.laserChaseTarget = null;
+    }
+
+    TacticalAudioEngine.playRogerBeep();
+  }
+
+  public cancelSugarRace(): void {
+    this.sugarRace.isActive = false;
+    this.sugarRace.announcement = 'Gran Torneo finalizado.';
+  }
+
+  public triggerPlayfulLaser(x: number, y: number): void {
+    this.laserChaseGlobalTarget = { x, y };
+    this.laserChaseTimerSec = 8.0;
+
+    for (const org of this.organisms.values()) {
+      if (Math.hypot(org.x - x, org.y - y) <= 8.0) {
+        org.laserChaseTarget = { x, y };
+        org.mood = 'PLAYFUL';
+        org.thoughtTimerSec = 0.2;
+      }
+    }
+  }
+
+  public triggerNectarShower(): void {
+    const count = 10;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const r = Math.random() * 7.5;
+      const x = Math.cos(angle) * r + BiocyberneticHabitatEngine.ARENA_RADIUS_METERS;
+      const y = Math.sin(angle) * r + BiocyberneticHabitatEngine.ARENA_RADIUS_METERS;
+      this.diffusionGrid.injectChemical(x, y, 4.0, 'GLUCOSE');
+    }
+
+    for (const org of this.organisms.values()) {
+      org.mood = 'ENERGETIC';
+      org.metabolism.ingestNutrient(0.25);
+    }
+
+    TacticalAudioEngine.playDopamineChime();
+  }
+
+  public triggerAcrobaticWind(): void {
+    this.triggerAirPuff(0, 0, 1.0);
+    for (const org of this.organisms.values()) {
+      org.acrobaticTimerSec = 2.5;
+      org.mood = 'PLAYFUL';
+    }
+    TacticalAudioEngine.playRogerBeep();
+  }
+
+  public petOrganism(id: string): string {
+    const org = this.organisms.get(id);
+    if (!org) return 'Organismo no encontrado.';
+
+    org.pettedTimerSec = 4.0;
+    org.mood = 'PLAYFUL';
+    org.plasticity.injectDopamine(10.0);
+    this.generateLivingThought(org);
+
+    TacticalAudioEngine.playDopamineChime();
+
+    if (org.species === 'DROSOPHILA') return '¡Acariciaste a Drosophila! Sus antenas vibran y libera dopamina ✨🪰';
+    if (org.species === 'GRAVITY_SENTINEL') return '¡Acariciaste al Dron Gravity AI! Sus propulsores ronronean con afecto 🛸💖';
+    if (org.species === 'HUMAN_NEOCORTEX') return '¡Sincronía empática con el Avatar Humano! Resonancia en la ínsula 🧠💖';
+    if (org.species === 'C_ELEGANS') return '¡Acariciaste a C. elegans! Ondula en espirales de alegría 🐛✨';
+    return '¡Acariciaste a la Hormiga Obrera! Bate sus antenas con júbilo 🐜💖';
+  }
+
+  public feedOrganismTreat(id: string): string {
+    const org = this.organisms.get(id);
+    if (!org) return 'Organismo no encontrado.';
+
+    org.metabolism.ingestNutrient(1.0);
+    org.plasticity.injectDopamine(15.0);
+    org.mood = 'HUNGRY';
+    this.generateLivingThought(org);
+
+    TacticalAudioEngine.playDopamineChime();
+    return `🍰 ¡Alimentaste a ${this.getSpeciesDisplayName(org.species)} con néctar puro! ATP restablecido al 100%.`;
+  }
+
+  public talkToOrganism(id: string): string {
+    const org = this.organisms.get(id);
+    if (!org) return 'Organismo no disponible.';
+    this.generateLivingThought(org);
+    return `"${org.currentThought}"`;
+  }
+
+  public getSugarRaceState(): SugarRaceState {
+    return this.sugarRace;
+  }
+
+  public getLaserChaseTarget(): { x: number; y: number } | null {
+    return this.laserChaseTimerSec > 0 ? this.laserChaseGlobalTarget : null;
+  }
+
+  public getRecentThoughts(): CognitiveThoughtEntry[] {
+    return this.recentThoughts;
   }
 
   public getNearestOrganismOfSpecies(
@@ -1075,12 +1699,16 @@ export class BiocyberneticHabitatEngine {
     let drosophilaCount = 0;
     let cElegansCount = 0;
     let antCount = 0;
+    let humanNeocortexCount = 0;
+    let gravitySentinelCount = 0;
 
     for (const org of this.organisms.values()) {
       if (org.isDecomposing) continue;
       if (org.species === 'DROSOPHILA') drosophilaCount++;
       else if (org.species === 'C_ELEGANS') cElegansCount++;
       else if (org.species === 'ANT') antCount++;
+      else if (org.species === 'HUMAN_NEOCORTEX') humanNeocortexCount++;
+      else if (org.species === 'GRAVITY_SENTINEL') gravitySentinelCount++;
     }
 
     return {
@@ -1102,8 +1730,86 @@ export class BiocyberneticHabitatEngine {
         drosophila: drosophilaCount,
         cElegans: cElegansCount,
         ant: antCount,
+        humanNeocortex: humanNeocortexCount,
+        gravitySentinel: gravitySentinelCount,
       },
+      sugarRace: this.sugarRace,
+      recentThoughts: this.recentThoughts,
+      chessMatch: {
+        isActive: autonomousHabitatChess.isMatchActive,
+        isPaused: autonomousHabitatChess.isPaused,
+        whiteSpecies: autonomousHabitatChess.whiteSpecies,
+        blackSpecies: autonomousHabitatChess.blackSpecies,
+        whiteName: autonomousHabitatChess.whiteName,
+        blackName: autonomousHabitatChess.blackName,
+        currentTurn: autonomousHabitatChess.currentTurn,
+        winner: autonomousHabitatChess.winner,
+        moveCount: autonomousHabitatChess.moveHistory.length,
+        lastMoveSan: autonomousHabitatChess.moveHistory.length > 0 ? autonomousHabitatChess.moveHistory[autonomousHabitatChess.moveHistory.length - 1].san : null,
+        fen: autonomousHabitatChess.exportToFen(),
+      },
+      edenParadise: biocyberneticEdenParadise.getTelemetry(),
+      lifelongLearning: autonomousLifelongLearning.getTelemetry(),
     };
+  }
+
+  /**
+   * Métodos de Control del Ajedrez Táctico In-Silico
+   */
+  public startChessMatch(
+    whiteSpecies: OrganismSpecies = 'HUMAN_NEOCORTEX',
+    blackSpecies: OrganismSpecies = 'GRAVITY_SENTINEL',
+    whiteName: string = 'Neocórtex Alpha',
+    blackName: string = 'Sentinel Aegis-1'
+  ): void {
+    autonomousHabitatChess.startNewMatch(whiteSpecies, blackSpecies, whiteName, blackName);
+  }
+
+  public toggleChessMatch(): void {
+    if (!autonomousHabitatChess.isMatchActive) {
+      autonomousHabitatChess.startNewMatch();
+    } else {
+      autonomousHabitatChess.isPaused = !autonomousHabitatChess.isPaused;
+    }
+  }
+
+  public pauseChessMatch(): void {
+    autonomousHabitatChess.isPaused = true;
+  }
+
+  public resumeChessMatch(): void {
+    autonomousHabitatChess.isPaused = false;
+  }
+
+  public getChessEngine(): AutonomousHabitatChessEngine {
+    return autonomousHabitatChess;
+  }
+
+  /**
+   * Métodos de Control del Paraíso Biocibernético & Clima Edénico
+   */
+  public triggerAuroraBorealis(): void {
+    biocyberneticEdenParadise.triggerAuroraBorealis();
+  }
+
+  public triggerNectarDew(): void {
+    biocyberneticEdenParadise.triggerNectarDew(this.diffusionGrid);
+  }
+
+  public triggerSerotoninBreeze(): void {
+    biocyberneticEdenParadise.triggerSerotoninBreeze(this.diffusionGrid);
+  }
+
+  public triggerMeditationRepose(): void {
+    biocyberneticEdenParadise.triggerMeditationRepose();
+  }
+
+  public getEdenParadiseEngine(): BiocyberneticEdenParadiseEngine {
+    return biocyberneticEdenParadise;
+  }
+
+  public getLifelongLearningEngine(): AutonomousLifelongLearningEngine {
+    return autonomousLifelongLearning;
   }
 }
 

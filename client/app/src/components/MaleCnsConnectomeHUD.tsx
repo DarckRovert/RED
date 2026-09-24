@@ -34,6 +34,7 @@ import { meshRouter } from "../lib/mesh/meshRouter";
 import { bioCompassDualFusion, BioCompassDualTelemetry } from "../lib/neuro/BioCompassDualFusionEngine";
 import { biocyberneticHabitat, HabitatTelemetry } from "../lib/neuro/habitat/BiocyberneticHabitatEngine";
 import { connectomeBioBridge } from "../lib/neuro/ConnectomeBioBridge";
+import { Connectome3DMultiBrainEngine, ConnectomeRaycastHit } from "../lib/neuro/Connectome3DMultiBrainEngine";
 
 interface Point3D {
   x: number;
@@ -65,6 +66,9 @@ export interface MaleCnsConnectomeHUDProps {
 
 export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const viewport3DRef = useRef<HTMLDivElement | null>(null);
+  const engine3DRef = useRef<Connectome3DMultiBrainEngine | null>(null);
+  const [selected3DNode, setSelected3DNode] = useState<ConnectomeRaycastHit | null>(null);
 
   // Estados de telemetría de los 7 subsistemas bio-neuromórficos
   const [cxTelemetry, setCxTelemetry] = useState<RingAttractorTelemetry>(() => ringAttractor.getTelemetry());
@@ -653,242 +657,39 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     architectureModeRef.current = architectureMode;
   }, [architectureMode]);
 
-  // Bucle de Renderizado 3D en Canvas (Optimizado con caché de dimensiones y gobernador térmico)
+  // ── Inicialización y Ciclo de Vida del Motor Gráfico 3D WebGL Multi-Cerebro (Three.js) ──
   useEffect(() => {
-    let animationId: number;
-    let pulseT = 0;
-    let lastRenderTime = 0;
-    let isMounted = true;
+    const engine = new Connectome3DMultiBrainEngine();
+    engine3DRef.current = engine;
 
-    // Caché de dimensiones para erradicar el Layout Reflow Thrashing de getBoundingClientRect() en cada fotograma
-    const updateCanvasResolution = () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const rawDpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-      const dpr = Math.min(rawDpr, 1.5);
-      const targetW = Math.max(300, Math.floor((rect.width || 500) * dpr));
-      const targetH = Math.max(200, Math.floor((rect.height || 320) * dpr));
-      if (canvas.width !== targetW || canvas.height !== targetH) {
-        canvas.width = targetW;
-        canvas.height = targetH;
+    if (viewport3DRef.current) {
+      engine.attach(viewport3DRef.current);
+      engine.setMode(architectureMode);
+      engine.setAutoRotate(autoRotate);
+    }
+
+    engine.setOnSelect((hit) => {
+      setSelected3DNode(hit);
+      if (hit) {
+        TacticalAudioEngine.playTap();
       }
-    };
-
-    updateCanvasResolution();
-    window.addEventListener("resize", updateCanvasResolution, { passive: true });
-
-    const isTouchDevice = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
-    const minFrameDeltaMs = isTouchDevice ? 30 : 16; // 33 FPS en móviles (Helio G37 / PowerVR) vs 60 FPS en PC
-
-    const render = (currentTime: number = 0) => {
-      if (!isMounted) return;
-
-      // Suspender renderizado inmediato si la pantalla está bloqueada o la app en background
-      if (typeof document !== "undefined" && document.hidden) {
-        animationId = requestAnimationFrame(render);
-        return;
-      }
-
-      // Suspender renderizado si la pestaña activa no es el Conectoma Subcortical 3D
-      if (architectureModeRef.current !== "SUBCORTICAL_MALE_CNS") {
-        animationId = requestAnimationFrame(render);
-        return;
-      }
-
-      // Gobernador térmico: limitar tasa de refresco en GPUs móviles para erradicar thermal throttling
-      const elapsed = currentTime - lastRenderTime;
-      if (elapsed < minFrameDeltaMs) {
-        animationId = requestAnimationFrame(render);
-        return;
-      }
-      lastRenderTime = currentTime;
-
-      const canvas = canvasRef.current;
-      if (!canvas) {
-        animationId = requestAnimationFrame(render);
-        return;
-      }
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        animationId = requestAnimationFrame(render);
-        return;
-      }
-
-      const currentEdges = edgesRef.current;
-      const currentNodes = nodesRef.current;
-      const filterSystem = filterSystemRef.current;
-      const currentGfs = gfsTelemetryRef.current;
-
-      const width = canvas.width;
-      const height = canvas.height;
-      const cx = width / 2;
-      const cy = height / 2;
-      const rawDpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-      const dpr = Math.min(rawDpr, 1.5);
-
-      ctx.clearRect(0, 0, width, height);
-
-      // Fondo cibernético con cuadrícula de profundidad
-      ctx.fillStyle = "#040711";
-      ctx.fillRect(0, 0, width, height);
-
-      // Si autoRotate está activo, rotar azimutalmente usando ref (0 re-renders de React)
-      if (autoRotateRef.current) {
-        const currentRotY = Number.isFinite(rotYRef.current) ? rotYRef.current : 0;
-        rotYRef.current = (currentRotY + 0.006) % (Math.PI * 2);
-      }
-
-      pulseT = (pulseT + 0.04) % (Math.PI * 2);
-
-      try {
-        // Proyección 3D con Near-Clipping Plane y validación numérica estricta
-        const project = (p: Point3D): { x: number; y: number; zDepth: number; visible: boolean } => {
-          const rotY = Number.isFinite(rotYRef.current) ? rotYRef.current : 0;
-          const rotX = Number.isFinite(rotXRef.current) ? rotXRef.current : 0.3;
-          const zoom = Number.isFinite(zoomRef.current) && zoomRef.current > 0 ? zoomRef.current : 1.0;
-
-          // Rotación Y
-          const cosY = Math.cos(rotY);
-          const sinY = Math.sin(rotY);
-          const px = Number.isFinite(p.x) ? p.x : 0;
-          const py = Number.isFinite(p.y) ? p.y : 0;
-          const pz = Number.isFinite(p.z) ? p.z : 0;
-
-          const x1 = px * cosY - pz * sinY;
-          const z1 = px * sinY + pz * cosY;
-
-          // Rotación X
-          const cosX = Math.cos(rotX);
-          const sinX = Math.sin(rotX);
-          const y2 = py * cosX - z1 * sinX;
-          const z2 = py * sinX + z1 * cosX;
-
-          // Perspectiva con Near-Clipping Plane (evitar división por 0 o valores detrás de cámara)
-          const fov = 380;
-          const denom = fov + z2;
-          if (denom <= 20) {
-            return { x: cx, y: cy, zDepth: z2, visible: false };
-          }
-
-          const scale = (fov / denom) * zoom * dpr;
-          if (!Number.isFinite(scale) || scale <= 0) {
-            return { x: cx, y: cy, zDepth: z2, visible: false };
-          }
-
-          const projX = cx + x1 * scale;
-          const projY = cy - y2 * scale;
-
-          if (!Number.isFinite(projX) || !Number.isFinite(projY)) {
-            return { x: cx, y: cy, zDepth: z2, visible: false };
-          }
-
-          return {
-            x: projX,
-            y: projY,
-            zDepth: z2,
-            visible: true,
-          };
-        };
-
-        // 1. Dibujar Aristas Sinápticas (Axones con búsqueda O(1))
-        const nodeMap = nodeMapRef.current;
-        currentEdges.forEach((edge) => {
-          if (filterSystem !== "ALL" && edge.system !== filterSystem) return;
-
-          const srcNode = nodeMap.get(edge.from);
-          const dstNode = nodeMap.get(edge.to);
-          if (!srcNode || !dstNode) return;
-
-          const p1 = project(srcNode.pos);
-          const p2 = project(dstNode.pos);
-
-          if (!p1.visible || !p2.visible) return;
-
-          let strokeColor = "rgba(0, 229, 255, 0.2)";
-          if (edge.system === "FB") strokeColor = "rgba(255, 214, 0, 0.3)";
-          if (edge.system === "MB") strokeColor = "rgba(179, 136, 255, 0.25)";
-          if (edge.system === "GFS") strokeColor = currentGfs.emconLockActive ? "rgba(255, 51, 85, 0.6)" : "rgba(255, 145, 0, 0.35)";
-
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.strokeStyle = strokeColor;
-          ctx.lineWidth = Math.max(0.5, (edge.weight || 0.5) * 1.5 * dpr);
-          ctx.stroke();
-
-          // Pulso de potencial de acción dinámico a lo largo del axón
-          const pulseOffset = (pulseT + (edge.from.length + edge.to.length) * 0.3) % 1;
-          const px = p1.x + (p2.x - p1.x) * pulseOffset;
-          const py = p1.y + (p2.y - p1.y) * pulseOffset;
-
-          if (Number.isFinite(px) && Number.isFinite(py)) {
-            ctx.beginPath();
-            ctx.arc(px, py, Math.max(1, 2 * dpr), 0, Math.PI * 2);
-            ctx.fillStyle = edge.system === "GFS" ? "#FF3355" : edge.system === "FB" ? "#FFD600" : "#00E5FF";
-            ctx.fill();
-          }
-        });
-
-        // 2. Dibujar Nodos Neuronales (Somas y Glomérulos) con proyección en una sola pasada
-        const sortedNodes: { node: ConnectomeNode; proj: ReturnType<typeof project> }[] = [];
-        for (let i = 0; i < currentNodes.length; i++) {
-          const n = currentNodes[i];
-          if (filterSystem !== "ALL" && n.system !== filterSystem) continue;
-          const p = project(n.pos);
-          if (p.visible) {
-            sortedNodes.push({ node: n, proj: p });
-          }
-        }
-        sortedNodes.sort((a, b) => b.proj.zDepth - a.proj.zDepth);
-
-        for (let i = 0; i < sortedNodes.length; i++) {
-          const { node, proj } = sortedNodes[i];
-          if (!Number.isFinite(proj.x) || !Number.isFinite(proj.y)) continue;
-
-          const rawActivity = Number.isFinite(node.activity) ? Math.max(0, Math.min(1, node.activity)) : 0.3;
-          const rawSize = Number.isFinite(node.size) && node.size > 0 ? node.size : 3;
-          const glowRadius = Math.max(1, rawSize * (1 + rawActivity * 0.8) * dpr);
-
-          if (!Number.isFinite(glowRadius) || glowRadius <= 0) continue;
-
-          // Resplandor externo ultrarrápido con halo alfa (elimina el costoso createRadialGradient en móvil)
-          let glowColor = "rgba(0, 229, 255, 0.25)";
-          if (node.color) {
-            if (node.color.startsWith("#")) {
-              glowColor = node.color.length === 7 ? `${node.color}33` : node.color;
-            } else if (node.color.startsWith("rgba")) {
-              glowColor = node.color.replace(/[\d.]+\)$/, "0.25)");
-            } else if (node.color.startsWith("rgb(")) {
-              glowColor = node.color.replace("rgb(", "rgba(").replace(")", ", 0.25)");
-            }
-          }
-          ctx.beginPath();
-          ctx.arc(proj.x, proj.y, glowRadius * 1.6, 0, Math.PI * 2);
-          ctx.fillStyle = glowColor;
-          ctx.fill();
-
-          // Núcleo del soma
-          ctx.beginPath();
-          ctx.arc(proj.x, proj.y, Math.max(1, rawSize * dpr), 0, Math.PI * 2);
-          ctx.fillStyle = "#FFFFFF";
-          ctx.fill();
-        }
-      } catch (renderErr) {
-        console.warn('[ConnectomeHUD] Error durante renderizado de frame:', renderErr);
-      }
-
-      animationId = requestAnimationFrame(render);
-    };
-
-    animationId = requestAnimationFrame(render);
+    });
 
     return () => {
-      isMounted = false;
-      window.removeEventListener("resize", updateCanvasResolution);
-      cancelAnimationFrame(animationId);
+      engine.dispose();
+      engine3DRef.current = null;
     };
   }, []);
+
+  // Sincronización reactiva del modo arquitectónico 3D
+  useEffect(() => {
+    engine3DRef.current?.setMode(architectureMode);
+  }, [architectureMode]);
+
+  // Sincronización reactiva de auto-rotación 3D
+  useEffect(() => {
+    engine3DRef.current?.setAutoRotate(autoRotate);
+  }, [autoRotate]);
 
   // Controlador de arrastre táctil y pinch-to-zoom para navegación 3D
   const isDragging = useRef(false);
@@ -1228,45 +1029,61 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
         </button>
       </div>
 
-      {architectureMode === "SUBCORTICAL_MALE_CNS" ? (
-        <div
-          className="scroll-container"
-          style={{
-            flex: 1,
-            minHeight: 0,
-            overflowY: "auto",
-            WebkitOverflowScrolling: "touch",
-            display: "flex",
-            flexDirection: "column",
-            background: "#040711"
-          }}
-        >
-          {/* Visor 3D Interactivo */}
-          <div
+      {/* ── VISOR 3D WEBGL MULTI-CEREBRO UNIFICADO (Drosophila + Neocortex Humano + GNWT Swarm) ── */}
+      <div
         style={{
           position: "relative",
           width: "100%",
-          height: "320px",
-          background: "#040711",
+          height: "clamp(320px, 38vh, 480px)",
+          minHeight: "300px",
+          background: "#02040a",
+          borderBottom: "1px solid rgba(0, 229, 255, 0.25)",
+          flexShrink: 0,
           cursor: isDraggingUI ? "grabbing" : "grab",
-          touchAction: "none",
         }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        onMouseDown={() => setIsDraggingUI(true)}
+        onMouseUp={() => setIsDraggingUI(false)}
+        onTouchStart={() => setIsDraggingUI(true)}
+        onTouchEnd={() => setIsDraggingUI(false)}
       >
-        <canvas
-          ref={canvasRef}
-          width={500}
-          height={320}
-          style={{ width: "100%", height: "100%", display: "block" }}
+        <div
+          ref={viewport3DRef}
+          style={{
+            width: "100%",
+            height: "100%",
+            position: "absolute",
+            inset: 0,
+            overflow: "hidden",
+            touchAction: "none",
+          }}
         />
 
-        {/* Controles Flotantes de Cámara con Scroll Horizontal Touch */}
+        {/* Badge Táctico de Arquitectura 3D Activa */}
+        <div
+          style={{
+            position: "absolute",
+            top: "10px",
+            left: "12px",
+            zIndex: 10,
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            background: "rgba(3, 7, 18, 0.88)",
+            border: "1px solid rgba(0, 229, 255, 0.35)",
+            borderRadius: "6px",
+            padding: "4px 8px",
+            backdropFilter: "blur(6px)",
+            pointerEvents: "none",
+          }}
+        >
+          <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#00E5FF", letterSpacing: "0.5px" }}>
+            {architectureMode === "SUBCORTICAL_MALE_CNS" && "🪰 MALE-CNS v1.0 • 3D WEBGL (139k Neuronas)"}
+            {architectureMode === "HUMAN_NEOCORTEX" && "🧠 NEOCORTEZA HUMANA • 3D WEBGL (7 Núcleos)"}
+            {architectureMode === "CONSCIOUS_SWARM_BUS" && "🌐 GNWT COGNITIVE SWARM • 3D WEBGL HYPERGRAPH"}
+          </span>
+        </div>
+
+        {/* Controles Flotantes de Cámara 3D (Giro, Zoom, Reset, Submódulos) */}
         <div
           style={{
             position: "absolute",
@@ -1274,24 +1091,21 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
             left: "12px",
             display: "flex",
             gap: "6px",
-            zIndex: 5,
+            zIndex: 10,
             maxWidth: "calc(100% - 24px)",
             overflowX: "auto",
             WebkitOverflowScrolling: "touch",
             scrollbarWidth: "none",
-            msOverflowStyle: "none",
             whiteSpace: "nowrap",
-            paddingBottom: "2px",
           }}
         >
           <button
             onClick={() => {
               const next = !autoRotate;
-              autoRotateRef.current = next;
               setAutoRotate(next);
+              engine3DRef.current?.setAutoRotate(next);
             }}
             style={{
-              flexShrink: 0,
               padding: "4px 8px",
               borderRadius: "6px",
               background: autoRotate ? "rgba(0, 229, 255, 0.25)" : "rgba(0, 0, 0, 0.6)",
@@ -1307,10 +1121,9 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
 
           <button
             onClick={() => {
-              zoomRef.current = Math.min(1.8, zoomRef.current + 0.15);
+              engine3DRef.current?.resetCamera();
             }}
             style={{
-              flexShrink: 0,
               padding: "4px 8px",
               borderRadius: "6px",
               background: "rgba(0, 0, 0, 0.6)",
@@ -1320,109 +1133,147 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
               cursor: "pointer",
             }}
           >
-            + ZOOM
+            🎯 REINICIAR VISTA
           </button>
 
-          <button
-            onClick={() => {
-              zoomRef.current = Math.max(0.5, zoomRef.current - 0.15);
-            }}
-            style={{
-              flexShrink: 0,
-              padding: "4px 8px",
-              borderRadius: "6px",
-              background: "rgba(0, 0, 0, 0.6)",
-              border: "1px solid rgba(255, 255, 255, 0.15)",
-              color: "#FFFFFF",
-              fontSize: "0.65rem",
-              cursor: "pointer",
-            }}
-          >
-            - ZOOM
-          </button>
+          {architectureMode === "SUBCORTICAL_MALE_CNS" && (
+            <>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  setIsVivariumOpen(true);
+                }}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: "6px",
+                  background: "rgba(0, 240, 255, 0.22)",
+                  border: "1px solid #00F0FF",
+                  color: "#00F0FF",
+                  fontSize: "0.65rem",
+                  fontWeight: 900,
+                  cursor: "pointer",
+                }}
+              >
+                🔬 VIVARIUM 3D
+              </button>
 
-          <button
-            onClick={() => {
-              TacticalAudioEngine.playTap();
-              setIsVivariumOpen(true);
-            }}
-            style={{
-              flexShrink: 0,
-              padding: "4px 8px",
-              borderRadius: "6px",
-              background: "rgba(0, 240, 255, 0.22)",
-              border: "1px solid #00F0FF",
-              color: "#00F0FF",
-              fontSize: "0.65rem",
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            🌌 VIVARIUM 3D
-          </button>
-
-          <button
-            onClick={() => {
-              TacticalAudioEngine.playTap();
-              setIsHabitatOpen(true);
-            }}
-            style={{
-              flexShrink: 0,
-              padding: "4px 8px",
-              borderRadius: "6px",
-              background: "rgba(0, 255, 136, 0.22)",
-              border: "1px solid #00FF88",
-              color: "#00FF88",
-              fontSize: "0.65rem",
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            🌿 HÁBITAT VIVO
-          </button>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  setIsHabitatOpen(true);
+                }}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: "6px",
+                  background: "rgba(0, 255, 136, 0.22)",
+                  border: "1px solid #00FF88",
+                  color: "#00FF88",
+                  fontSize: "0.65rem",
+                  fontWeight: 900,
+                  cursor: "pointer",
+                }}
+              >
+                🌿 HÁBITAT FICK 3D
+              </button>
+            </>
+          )}
         </div>
 
-        {/* Selector de Subsistema Filtrado */}
-        <div
-          style={{
-            position: "absolute",
-            top: "10px",
-            right: "12px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "4px",
-            zIndex: 5,
-          }}
-        >
-          {(["ALL", "CX", "FB", "MB", "GFS"] as const).map((sys) => (
-            <button
-              key={sys}
-              onClick={() => {
-                TacticalAudioEngine.playTap();
-                setFilterSystem(sys);
-              }}
-              style={{
-                padding: "3px 8px",
-                borderRadius: "6px",
-                background: filterSystem === sys ? "rgba(0, 229, 255, 0.3)" : "rgba(0, 0, 0, 0.6)",
-                border: filterSystem === sys ? "1px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.1)",
-                color: filterSystem === sys ? "#00E5FF" : "#94A3B8",
-                fontSize: "0.62rem",
-                fontWeight: 900,
-                cursor: "pointer",
-                textAlign: "right",
-              }}
-            >
-              {sys === "ALL" && "🌐 COMPLETO"}
-              {sys === "CX" && "🧭 CENTRAL COMPLEX"}
-              {sys === "FB" && "📐 FAN-SHAPED BODY"}
-              {sys === "MB" && "🍄 MUSHROOM BODY"}
-              {sys === "GFS" && "⚡ GIANT FIBER"}
-            </button>
-          ))}
-        </div>
+        {/* Selector de Filtros en Drosophila Mode */}
+        {architectureMode === "SUBCORTICAL_MALE_CNS" && (
+          <div
+            style={{
+              position: "absolute",
+              top: "10px",
+              right: "12px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "4px",
+              zIndex: 10,
+            }}
+          >
+            {(["ALL", "CX", "FB", "MB", "GFS"] as const).map((sys) => (
+              <button
+                key={sys}
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  setFilterSystem(sys);
+                }}
+                style={{
+                  padding: "3px 8px",
+                  borderRadius: "6px",
+                  background: filterSystem === sys ? "rgba(0, 229, 255, 0.3)" : "rgba(0, 0, 0, 0.6)",
+                  border: filterSystem === sys ? "1px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.1)",
+                  color: filterSystem === sys ? "#00E5FF" : "#94A3B8",
+                  fontSize: "0.62rem",
+                  fontWeight: 900,
+                  cursor: "pointer",
+                  textAlign: "right",
+                }}
+              >
+                {sys === "ALL" && "🌐 COMPLETO"}
+                {sys === "CX" && "🧭 CENTRAL COMPLEX"}
+                {sys === "FB" && "📐 FAN-SHAPED BODY"}
+                {sys === "MB" && "🍄 MUSHROOM BODY"}
+                {sys === "GFS" && "⚡ GIANT FIBER"}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Card Flotante de Inspección Táctica (Raycasting Interactivo) */}
+        {selected3DNode && (
+          <div
+            style={{
+              position: "absolute",
+              top: "10px",
+              right: architectureMode === "SUBCORTICAL_MALE_CNS" ? "140px" : "12px",
+              maxWidth: "280px",
+              background: "rgba(4, 8, 20, 0.95)",
+              border: "1px solid #00E5FF",
+              boxShadow: "0 0 20px rgba(0, 229, 255, 0.3)",
+              borderRadius: "8px",
+              padding: "10px 12px",
+              zIndex: 20,
+              fontSize: "0.72rem",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+              <span style={{ color: "#00E5FF", fontWeight: 800 }}>{selected3DNode.name}</span>
+              <button
+                onClick={() => setSelected3DNode(null)}
+                style={{ background: "transparent", border: "none", color: "#94A3B8", cursor: "pointer", fontSize: "12px" }}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ color: "#E2E8F0", fontSize: "0.68rem", marginBottom: "4px" }}>
+              SUBSISTEMA: <span style={{ color: "#00FF88", fontWeight: 700 }}>{selected3DNode.system}</span>
+            </div>
+            <div style={{ color: "#94A3B8", fontSize: "0.65rem", marginBottom: "6px", lineHeight: "1.3" }}>
+              {selected3DNode.details}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", color: "#64748B", fontSize: "0.62rem" }}>
+              <span>ID: {selected3DNode.id}</span>
+              <span>POS: ({selected3DNode.position.x.toFixed(1)}, {selected3DNode.position.y.toFixed(1)}, {selected3DNode.position.z.toFixed(1)})</span>
+            </div>
+          </div>
+        )}
       </div>
 
+      {architectureMode === "SUBCORTICAL_MALE_CNS" ? (
+        <div
+          className="scroll-container"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            display: "flex",
+            flexDirection: "column",
+            background: "#040711"
+          }}
+        >
       {/* Grid de Métricas Bio-Neuromórficas en Vivo */}
       <div
         style={{

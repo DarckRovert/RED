@@ -11,7 +11,7 @@
  *   5. Overlays globales: ToastProvider, IncomingCallBanner, FloatingCallPIP,
  *      BiometricShieldOverlay, IncomingContactRequestModal, LiveStreamViewer
  *
- * El enrutamiento de las 62 pantallas modulares está delegado a WorkspaceScreens.
+ * El enrutamiento de las 65 pantallas modulares está delegado a WorkspaceScreens.
  * Añadir un nuevo módulo = editar SOLO WorkspaceScreens.tsx (un lugar, no dos).
  */
 
@@ -73,7 +73,7 @@ function FullScreenTacticalLoader() {
 
 // ── Shell-level Dynamic Imports ───────────────────────────────────────────────
 // Solo componentes que pertenecen al shell (overlays, nav, auth).
-// Los 62 módulos de pantalla viven en WorkspaceScreens.tsx.
+// Los 65 módulos de pantalla viven en WorkspaceScreens.tsx.
 const MainNavigationShell         = dynamic(() => import("../components/navigation/MainNavigationShell").then(m => ({ default: m.MainNavigationShell })), { ssr: false, loading: () => <AppLoader /> });
 const StatusHeader                = dynamic(() => import("../components/StatusHeader"),               { ssr: false, loading: () => <div style={{ height: 44 }} /> });
 const AuthWall                    = dynamic(() => import("../components/AuthWall"),                   { ssr: false, loading: () => <FullScreenTacticalLoader /> });
@@ -155,6 +155,12 @@ export default function AppRouter() {
         const urlLayout = urlParams.get("layout") || (urlParams.get("tablet") === "true" ? "tablet" : null);
         if (urlLayout === "tablet") { setIsTablet(true); return; }
         if (urlLayout === "mobile") { setIsTablet(false); return; }
+
+        // En pantallas de escritorio panorámicas (>= 1024px), siempre priorizar layout expandido
+        if (window.innerWidth >= 1024) {
+          setIsTablet(true);
+          return;
+        }
 
         const storePref = useRedStore.getState().preferences?.layoutMode;
         const localLayout = localStorage.getItem("red_layout_mode");

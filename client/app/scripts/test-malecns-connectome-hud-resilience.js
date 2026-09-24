@@ -86,19 +86,25 @@ assert(hudCode.includes('unsubGfs();'), 'Debe limpiar suscripción de GFS');
 assert(hudCode.includes('unsubMb();'), 'Debe limpiar suscripción de MB');
 console.log('  ✅ [PASS] 4. Suscripción Reactiva Cuádruple y Limpieza de Ciclo de Vida');
 
-// TEST 5: Filtrado de Subsistemas (ALL / CX / MB / GFS)
-console.log('  Testing 5: Aislamiento visual por subsistema biológico...');
-assert(hudCode.includes('filterSystem === "ALL" || n.system === filterSystem') || hudCode.includes('filterSystem !== "ALL" && n.system !== filterSystem'), 'Debe filtrar nodos por subsistema');
-assert(hudCode.includes('filterSystem !== "ALL" && edge.system !== filterSystem'), 'Debe filtrar axones por subsistema');
-console.log('  ✅ [PASS] 5. Aislamiento Visual por Subsistema (ALL, CX, MB, GFS)');
+// TEST 5: Integración del Motor Gráfico 3D WebGL Multi-Cerebro (Three.js)
+console.log('  Testing 5: Aislamiento visual y motor 3D WebGL (MaleCNS, Neocortex, GNWT)...');
+const enginePath = path.resolve(__dirname, '../src/lib/neuro/Connectome3DMultiBrainEngine.ts');
+assert(fs.existsSync(enginePath), 'Connectome3DMultiBrainEngine.ts debe existir');
+const engineCode = fs.readFileSync(enginePath, 'utf8');
 
-// TEST 6: Control de Rotación, Drag y Zoom
+assert(hudCode.includes('Connectome3DMultiBrainEngine'), 'HUD debe inicializar Connectome3DMultiBrainEngine');
+assert(hudCode.includes('setMode(architectureMode)'), 'HUD debe sincronizar el modo arquitectónico');
+assert(engineCode.includes('buildSubcorticalFlyConnectome3D'), 'Motor debe construir MaleCNS en 3D');
+assert(engineCode.includes('buildHumanNeocortex3D'), 'Motor debe construir Neocorteza Humana en 3D');
+assert(engineCode.includes('buildConsciousSwarmHypergraph3D'), 'Motor debe construir Espacio Global GNWT en 3D');
+console.log('  ✅ [PASS] 5. Aislamiento Visual y Motor 3D WebGL Multi-Cerebro (MaleCNS, Neocortex, GNWT)');
+
+// TEST 6: Control de Rotación, Órbita Esférica y Límites Cinemáticos
 console.log('  Testing 6: Control táctil de órbita 3D y límites angulares...');
 assert(hudCode.includes('autoRotate'), 'Debe soportar alternancia de autorrotación');
-assert(hudCode.includes('Math.max(-1.2, Math.min(1.2, currentRotX + dy *') || hudCode.includes('Math.max(-1.2, Math.min(1.2, rotXRef.current + dy *'), 'Rotación X debe estar acotada a [-1.2, 1.2]');
-assert(hudCode.includes('zoomRef.current = Math.min(1.8, zoomRef.current + 0.15)'), 'Zoom debe tener límite superior seguro (1.8)');
-assert(hudCode.includes('zoomRef.current = Math.max(0.5, zoomRef.current - 0.15)'), 'Zoom debe tener límite inferior seguro (0.5)');
-console.log('  ✅ [PASS] 6. Control Táctil de Órbita 3D, Clamping Angular y Límites de Zoom');
+assert(engineCode.includes('updateCameraFromSpherical'), 'Motor debe proyectar cámara en coordenadas esféricas');
+assert(engineCode.includes('clamp'), 'Motor debe limitar el radio y la inclinación angular');
+console.log('  ✅ [PASS] 6. Control Táctil de Órbita 3D, Clamping Angular y Coordenadas Esféricas');
 
 // TEST 7: Estimulación Sináptica Interactiva
 console.log('  Testing 7: Estimulación sináptica interactiva con retroalimentación acústica...');
@@ -107,10 +113,12 @@ assert(hudCode.includes('TacticalAudioEngine.playRogerBeep()'), 'Debe reproducir
 assert(hudCode.includes('ringAttractor.injectAngularVelocity(45)'), 'Debe inyectar estímulo angular al CX');
 console.log('  ✅ [PASS] 7. Estimulación Sináptica Interactiva y Audio-Feedback Táctico');
 
-// TEST 8: Ordenamiento de Profundidad (Z-Sorting) para Renderizado
-console.log('  Testing 8: Algoritmo de Pintor (Z-Sorting) para profundidad visual...');
-assert(hudCode.includes('b.proj.zDepth - a.proj.zDepth'), 'Debe ordenar nodos por profundidad Z');
-console.log('  ✅ [PASS] 8. Algoritmo de Pintor (Z-Sorting) para Oclusión Correcta');
+// TEST 8: Pipeline de Renderizado 3D WebGL y Buffer de Profundidad Hardware
+console.log('  Testing 8: Pipeline de Renderizado 3D WebGL y Raycasting...');
+assert(engineCode.includes('WebGLRenderer'), 'Motor debe instanciar WebGLRenderer acelerado por GPU');
+assert(engineCode.includes('Raycaster'), 'Motor debe integrar Raycaster para interacción táctil');
+assert(hudCode.includes('selected3DNode'), 'HUD debe mostrar tarjeta táctica ante selección de nodo 3D');
+console.log('  ✅ [PASS] 8. Pipeline 3D WebGL Hardware y Raycasting Interactivo');
 
 // TEST 9: Intercepción Jerárquica Atrás (BackHandlerRegistry)
 console.log('  Testing 9: Integración con BackHandlerRegistry LIFO...');

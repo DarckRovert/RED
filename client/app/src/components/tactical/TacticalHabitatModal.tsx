@@ -23,6 +23,8 @@ import {
   HabitatOrganism,
   BiocyberneticHabitat3DEngine,
   HabitatCameraMode,
+  OrganismMood,
+  SugarRaceState,
 } from '../../lib/neuro/habitat';
 import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
 import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
@@ -40,6 +42,7 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
   const [toolIntensity, setToolIntensity] = useState<number>(1.0);
   const [bannerAlert, setBannerAlert] = useState<string | null>(null);
   const [selectedOrganismId, setSelectedOrganismId] = useState<string | null>(null);
+  const [showChessHUD, setShowChessHUD] = useState<boolean>(false);
 
   const viewport3DRef = useRef<HTMLDivElement | null>(null);
   const engine3DRef = useRef<BiocyberneticHabitat3DEngine | null>(null);
@@ -219,6 +222,106 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
     triggerAlert('🧹 Barreras acústicas eliminadas');
   };
 
+  // ── Actividades Lúdicas, Mini-Juegos y Coexistencia Multicerebral ─────────────
+  const handleStartSugarRace = () => {
+    TacticalAudioEngine.playTap();
+    biocyberneticHabitat.startSugarRace();
+    triggerAlert('🏆 ¡GRAN TORNEO DE GLUCOSA INICIADO! Todas las inteligencias van por el Mega-Cristal.');
+  };
+
+  const handleCancelSugarRace = () => {
+    TacticalAudioEngine.playTap();
+    biocyberneticHabitat.cancelSugarRace();
+    triggerAlert('🏁 Torneo de Glucosa concluido.');
+  };
+
+  const handleTriggerNectarShower = () => {
+    TacticalAudioEngine.playTap();
+    biocyberneticHabitat.triggerNectarShower();
+    triggerAlert('🍯 ¡LLUVIA DE NÉCTAR! 10 gotas dulces sembradas en la arena.');
+  };
+
+  const handleTriggerAcrobaticWind = () => {
+    TacticalAudioEngine.playTap();
+    biocyberneticHabitat.triggerAcrobaticWind();
+    triggerAlert('💨 RÁFAGA ACROBÁTICA: ¡Giros 360° y evasiones en curso!');
+  };
+
+  const handleToggleChessMatch = () => {
+    TacticalAudioEngine.playTap();
+    biocyberneticHabitat.toggleChessMatch();
+    setShowChessHUD(true);
+    triggerAlert('♟️ MESA DE AJEDREZ TÁCTICO: Simulación cognitiva autónoma activa');
+  };
+
+  const handleResetChessMatch = () => {
+    TacticalAudioEngine.playTap();
+    biocyberneticHabitat.startChessMatch();
+    triggerAlert('🔄 Nueva partida de ajedrez inicializada');
+  };
+
+  const handleSwitchChessCompetitors = () => {
+    TacticalAudioEngine.playTap();
+    const chess = biocyberneticHabitat.getChessEngine();
+    if (chess.whiteSpecies === 'HUMAN_NEOCORTEX') {
+      biocyberneticHabitat.startChessMatch('DROSOPHILA', 'ANT', 'Fly-124k', 'Obrera-42');
+      triggerAlert('🔀 Duelo Biológico: Drosophila vs Formicidae');
+    } else if (chess.whiteSpecies === 'DROSOPHILA') {
+      biocyberneticHabitat.startChessMatch('GRAVITY_SENTINEL', 'C_ELEGANS', 'Sentinel Aegis-1', 'Nematodo-302');
+      triggerAlert('🔀 Duelo Cyber-Helminth: Gravity Sentinel vs C. elegans');
+    } else {
+      biocyberneticHabitat.startChessMatch('HUMAN_NEOCORTEX', 'GRAVITY_SENTINEL', 'Neocórtex Alpha', 'Sentinel Aegis-1');
+      triggerAlert('🔀 Duelo Cumbre: Neocórtex Humano vs Gravity Sentinel');
+    }
+  };
+
+  const handlePetOrganism = (id: string) => {
+    const msg = biocyberneticHabitat.petOrganism(id);
+    triggerAlert(msg);
+  };
+
+  const handleFeedTreat = (id: string) => {
+    const msg = biocyberneticHabitat.feedOrganismTreat(id);
+    triggerAlert(msg);
+  };
+
+  const handleTalkToOrganism = (id: string) => {
+    TacticalAudioEngine.playTap();
+    const thought = biocyberneticHabitat.talkToOrganism(id);
+    triggerAlert(`🗣️ Pensamiento: ${thought}`);
+  };
+
+  const handleTriggerAurora = () => {
+    biocyberneticHabitat.triggerAuroraBorealis();
+    triggerAlert('🌌 AURORA BOREAL: Resonancia armónica Solfeggio 432/528 Hz activada en el cielo');
+  };
+
+  const handleTriggerNectarDew = () => {
+    biocyberneticHabitat.triggerNectarDew();
+    triggerAlert('💧 ROCÍO CELESTIAL: 10 micro-gotas de néctar y serotonina dispersadas');
+  };
+
+  const handleTriggerSerotoninBreeze = () => {
+    biocyberneticHabitat.triggerSerotoninBreeze();
+    triggerAlert('🍃 BRISA DE SEROTONINA: Estado de sosiego y paz inducido en el hábitat');
+  };
+
+  const handleTriggerMeditation = () => {
+    biocyberneticHabitat.triggerMeditationRepose();
+    triggerAlert('🧘 HORA DE MEDITACIÓN: Consolidación de memoria episódica en sueño REM');
+  };
+
+  const handleFocusSpecies = (species: OrganismSpecies) => {
+    TacticalAudioEngine.playTap();
+    const all = biocyberneticHabitat.getAllOrganisms().filter((o) => o.species === species && !o.isDecomposing);
+    if (all.length > 0) {
+      setSelectedOrganismId(all[0].id);
+      triggerAlert(`🎯 ENFOQUE: ${biocyberneticHabitat.getSpeciesDisplayName(species)} seleccionado.`);
+    } else {
+      handleSpawnOrganism(species);
+    }
+  };
+
   // ── Gestión Táctil & Puntero (Drag & Paint, Air-Puff & Bio-Scanner) ───────────
   const getCanvasCoords = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -273,6 +376,7 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
       biocyberneticHabitat.triggerAirPuff(worldX, worldY, toolIntensity);
     } else if (selectedTool === 'OPTOGENETIC_LASER') {
       biocyberneticHabitat.applyOptogeneticLaser(worldX, worldY, 1.2 * toolIntensity);
+      biocyberneticHabitat.triggerPlayfulLaser(worldX, worldY);
     } else {
       biocyberneticHabitat.applyToolAt(worldX, worldY);
     }
@@ -293,6 +397,7 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
       }
     } else if (selectedTool === 'OPTOGENETIC_LASER') {
       biocyberneticHabitat.applyOptogeneticLaser(worldX, worldY, 1.2 * toolIntensity);
+      biocyberneticHabitat.triggerPlayfulLaser(worldX, worldY);
     }
   };
 
@@ -359,18 +464,20 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
         const glucose = biocyberneticHabitat.diffusionGrid.getBuffer('GLUCOSE');
         const trail = biocyberneticHabitat.diffusionGrid.getBuffer('PHEROMONE_TRAIL');
         const alarm = biocyberneticHabitat.diffusionGrid.getBuffer('ALARM_PHEROMONE');
+        const serotonin = biocyberneticHabitat.diffusionGrid.getBuffer('SEROTONIN');
 
         for (let i = 0; i < 4096; i++) {
           const g = glucose[i];
           const t = trail[i];
           const a = alarm[i];
+          const s = serotonin ? serotonin[i] || 0 : 0;
 
           const pIdx = i * 4;
-          // Glucosa (Verde esmeralda), Trail (Ámbar dorado), Alarma (Violeta/Carmesí)
-          data[pIdx] = Math.min(255, Math.floor(a * 180 + t * 240));
-          data[pIdx + 1] = Math.min(255, Math.floor(g * 240 + t * 180));
-          data[pIdx + 2] = Math.min(255, Math.floor(a * 220 + g * 110));
-          data[pIdx + 3] = Math.min(210, Math.floor((g * 1.5 + t * 2.2 + a * 2.5) * 110));
+          // Glucosa (Verde esmeralda), Trail (Ámbar dorado), Alarma (Carmesí), Serotonina (Violeta/Cian celestial)
+          data[pIdx] = Math.min(255, Math.floor(a * 180 + t * 240 + s * 140));
+          data[pIdx + 1] = Math.min(255, Math.floor(g * 240 + t * 180 + s * 80));
+          data[pIdx + 2] = Math.min(255, Math.floor(a * 220 + g * 110 + s * 250));
+          data[pIdx + 3] = Math.min(220, Math.floor((g * 1.5 + t * 2.2 + a * 2.5 + s * 2.0) * 110));
         }
 
         oCtx.putImageData(imgData, 0, 0);
@@ -488,6 +595,192 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
     ctx.textBaseline = 'middle';
     ctx.fillText('🐜 NIDO', 0, nestRadiusPx + 11);
     ctx.restore();
+
+    // 6.2 Mesa de Ajedrez Táctico Central en 2D
+    const chessTableX = centerX + 0.0 * scale;
+    const chessTableY = centerY + 1.2 * scale;
+    const tableRadiusPx = 0.7 * scale;
+
+    ctx.save();
+    ctx.translate(chessTableX, chessTableY);
+
+    // Pedestal circular
+    ctx.fillStyle = 'rgba(8, 20, 36, 0.85)';
+    ctx.strokeStyle = '#00f0ff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, tableRadiusPx, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Tablero 8x8 en miniatura
+    const tbSize = tableRadiusPx * 1.2;
+    const tbCell = tbSize / 8;
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        ctx.fillStyle = (r + c) % 2 === 0 ? 'rgba(30, 58, 95, 0.8)' : 'rgba(7, 17, 30, 0.8)';
+        ctx.fillRect(-tbSize / 2 + c * tbCell, -tbSize / 2 + r * tbCell, tbCell, tbCell);
+      }
+    }
+
+    // Icono y texto
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('♟️', 0, 0);
+
+    ctx.font = '800 8px monospace';
+    ctx.fillStyle = '#00f0ff';
+    ctx.fillText('MESA AJEDREZ', 0, tableRadiusPx + 10);
+    ctx.restore();
+
+    // 6.3 Mega-Cristal de Glucosa del Gran Torneo en 2D
+    const sugarRace = biocyberneticHabitat.getSugarRaceState();
+    if (sugarRace && sugarRace.isActive) {
+      const gX = centerX + sugarRace.targetX * scale;
+      const gY = centerY + sugarRace.targetY * scale;
+
+      ctx.save();
+      ctx.translate(gX, gY);
+
+      // Halo pulsante dorado
+      const pulseR = 22 + Math.sin(Date.now() * 0.007) * 5;
+      const grad = ctx.createRadialGradient(0, 0, 4, 0, 0, pulseR);
+      grad.addColorStop(0, 'rgba(255, 215, 0, 0.9)');
+      grad.addColorStop(0.5, 'rgba(255, 170, 0, 0.35)');
+      grad.addColorStop(1, 'rgba(255, 215, 0, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, pulseR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Diamante Octaédrico dorado
+      ctx.fillStyle = '#ffd700';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, -13);
+      ctx.lineTo(11, 0);
+      ctx.lineTo(0, 13);
+      ctx.lineTo(-11, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Etiqueta del Torneo
+      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = '#ffd700';
+      ctx.textAlign = 'center';
+      ctx.fillText(`🏆 MEGA-CRISTAL [${Math.ceil(sugarRace.timeRemainingSec)}s]`, 0, -16);
+      ctx.restore();
+    }
+
+    // 6.4 Paraíso Biocibernético en 2D: Árbol de la Vida, Manantiales & Micelio
+    const edenParadise = biocyberneticHabitat.getEdenParadiseEngine();
+
+    // Red Micelial 2D
+    ctx.save();
+    ctx.strokeStyle = 'rgba(168, 85, 247, 0.35)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([3, 5]);
+    for (const hypha of edenParadise.myceliumHyphae) {
+      const fromNode = edenParadise.myceliumNodes.find(n => n.id === hypha.fromId);
+      const toNode = edenParadise.myceliumNodes.find(n => n.id === hypha.toId);
+      if (fromNode && toNode) {
+        ctx.beginPath();
+        ctx.moveTo(centerX + fromNode.x * scale, centerY + fromNode.y * scale);
+        ctx.lineTo(centerX + toNode.x * scale, centerY + toNode.y * scale);
+        ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // 3 Manantiales de Néctar Cristalino 2D
+    for (const spring of edenParadise.nectarSprings) {
+      const spX = centerX + spring.x * scale;
+      const spY = centerY + spring.y * scale;
+      const spR = spring.radiusMeters * scale;
+
+      ctx.save();
+      ctx.translate(spX, spY);
+
+      // Halo concéntrico de agua bioluminiscente
+      const spGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, spR);
+      spGrad.addColorStop(0, 'rgba(0, 240, 255, 0.45)');
+      spGrad.addColorStop(0.7, 'rgba(168, 85, 247, 0.25)');
+      spGrad.addColorStop(1, 'rgba(0, 240, 255, 0)');
+      ctx.fillStyle = spGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, spR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Borde del manantial
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, spR * 0.7, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.font = '8px monospace';
+      ctx.fillStyle = '#a855f7';
+      ctx.textAlign = 'center';
+      ctx.fillText(spring.name.split(' ')[0], 0, spR * 0.7 + 10);
+      ctx.restore();
+    }
+
+    // Árbol de la Vida Cuántico 2D (Centro)
+    const treeRadiusPx = edenParadise.treeOfLife.radiusMeters * scale;
+    ctx.save();
+    ctx.translate(centerX, centerY);
+
+    const treeGrad = ctx.createRadialGradient(0, 0, 4, 0, 0, treeRadiusPx);
+    treeGrad.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
+    treeGrad.addColorStop(0.6, 'rgba(0, 240, 255, 0.15)');
+    treeGrad.addColorStop(1, 'rgba(16, 185, 129, 0)');
+    ctx.fillStyle = treeGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, treeRadiusPx, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🌳', 0, -2);
+
+    ctx.font = '800 8.5px monospace';
+    ctx.fillStyle = '#10b981';
+    ctx.fillText('ÁRBOL DE LA VIDA', 0, treeRadiusPx + 11);
+    ctx.restore();
+
+    // 6.3 Puntero Láser Juguetón en 2D
+    const laserChase = biocyberneticHabitat.getLaserChaseTarget();
+    if (laserChase) {
+      const lX = centerX + laserChase.x * scale;
+      const lY = centerY + laserChase.y * scale;
+
+      ctx.save();
+      ctx.translate(lX, lY);
+
+      // Anillo concéntrico pulsante cian
+      const ringR = 12 + Math.sin(Date.now() * 0.012) * 4;
+      ctx.strokeStyle = '#00ffcc';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#00ffcc';
+      ctx.beginPath();
+      ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.font = 'bold 8px monospace';
+      ctx.fillStyle = '#00ffcc';
+      ctx.textAlign = 'center';
+      ctx.fillText('🎯 LÁSER', 0, ringR + 10);
+      ctx.restore();
+    }
 
     // 7. Organismos Vivos con Morfología Específica
     const organisms = biocyberneticHabitat.getAllOrganisms();
@@ -647,9 +940,152 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
           ctx.moveTo(2, side * 3);  ctx.lineTo(8, side * 11);
           ctx.stroke();
         }
+
+      } else if (org.species === 'GRAVITY_SENTINEL') {
+        // ── Morfología Dron Centinela Cuántico Gravity AI ──
+        // 4 Brazos de propulsión
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.0;
+        const armLen = 11;
+        ctx.beginPath();
+        ctx.moveTo(-armLen, -armLen); ctx.lineTo(armLen, armLen);
+        ctx.moveTo(-armLen, armLen);  ctx.lineTo(armLen, -armLen);
+        ctx.stroke();
+
+        // Góndolas de propulsores iónicos con pulso cian
+        const rotorR = 4.0;
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.4)';
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 1.2;
+        [[-armLen, -armLen], [armLen, armLen], [-armLen, armLen], [armLen, -armLen]].forEach(([rx, ry]) => {
+          ctx.beginPath();
+          ctx.arc(rx, ry, rotorR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        });
+
+        // Chasis central aerodinámico blindado
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Ojo óptico sensorial cuántico central
+        ctx.fillStyle = '#00e5ff';
+        ctx.beginPath();
+        ctx.arc(2.5, 0, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Cono de escaneo hacia adelante
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.15)';
+        ctx.beginPath();
+        ctx.moveTo(3, 0);
+        ctx.lineTo(24, -10);
+        ctx.lineTo(24, 10);
+        ctx.closePath();
+        ctx.fill();
+
+      } else if (org.species === 'HUMAN_NEOCORTEX') {
+        // ── Morfología Avatar Neocortical Cognitivo ──
+        // Anillo hexagonal entorrinal base
+        ctx.strokeStyle = 'rgba(52, 211, 153, 0.6)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (i * Math.PI) / 3;
+          const hx = Math.cos(a) * 12;
+          const hy = Math.sin(a) * 12;
+          if (i === 0) ctx.moveTo(hx, hy);
+          else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        // Torso biomecánico esmeralda
+        ctx.fillStyle = '#064e3b';
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 8.5, 5.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Cabeza y visor cibernético
+        ctx.fillStyle = '#042f2e';
+        ctx.beginPath();
+        ctx.arc(6.5, 0, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Cerebro neocortical pulsante
+        ctx.fillStyle = '#34d399';
+        ctx.beginPath();
+        ctx.arc(6.5, 0, 3.0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Vector de atención epistémica
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(9, 0);
+        ctx.lineTo(19, 0);
+        ctx.stroke();
       }
 
       ctx.restore();
+
+      // 7.1 Bocadillo de Pensamiento Táctico en 2D
+      if (org.currentThought && (org.id === selectedOrganismId || org.mood === 'COMPETITIVE' || org.mood === 'PLAYFUL')) {
+        ctx.save();
+        ctx.translate(px, py - 22);
+
+        const moodEmoji =
+          org.mood === 'COMPETITIVE'
+            ? '🏆'
+            : org.mood === 'PLAYFUL'
+            ? '⚡'
+            : org.mood === 'HUNGRY'
+            ? '🍓'
+            : org.mood === 'ZEN'
+            ? '🧘'
+            : '🔍';
+
+        const bubbleText = `${moodEmoji} ${org.currentThought}`;
+        ctx.font = '9.5px monospace';
+        const textWidth = ctx.measureText(bubbleText).width;
+        const bW = Math.max(60, textWidth + 12);
+        const bH = 16;
+
+        ctx.fillStyle = 'rgba(6, 14, 28, 0.92)';
+        ctx.strokeStyle =
+          org.species === 'GRAVITY_SENTINEL'
+            ? '#38bdf8'
+            : org.species === 'HUMAN_NEOCORTEX'
+            ? '#34d399'
+            : org.species === 'DROSOPHILA'
+            ? '#00e5ff'
+            : org.species === 'C_ELEGANS'
+            ? '#2dd4bf'
+            : '#fbbf24';
+        ctx.lineWidth = 1.2;
+
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(-bW / 2, -bH, bW, bH, 4);
+        } else {
+          ctx.rect(-bW / 2, -bH, bW, bH);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(bubbleText, 0, -bH / 2);
+        ctx.restore();
+      }
 
       // 8. Retícula Táctica del Bio-Scanner si está seleccionado
       if (org.id === selectedOrganismId) {
@@ -796,7 +1232,7 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
               flexShrink: 0,
             }}
           >
-            POBLACIÓN: {telemetry.organismCount} (🪰 {telemetry.speciesBreakdown.drosophila} | 🪱 {telemetry.speciesBreakdown.cElegans} | 🐜 {telemetry.speciesBreakdown.ant})
+            POBLACIÓN: {telemetry.organismCount} (🪰 {telemetry.speciesBreakdown.drosophila} | 🧠 {telemetry.speciesBreakdown.humanNeocortex || 0} | 🛸 {telemetry.speciesBreakdown.gravitySentinel || 0} | 🪱 {telemetry.speciesBreakdown.cElegans} | 🐜 {telemetry.speciesBreakdown.ant})
           </div>
         </div>
 
@@ -824,6 +1260,113 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
           ✕ CERRAR
         </button>
       </div>
+
+      {/* ── Coexistencia Multicerebral: 5 Inteligencias Vivas en Simbiosis ────── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '6px 16px',
+          background: 'rgba(4, 9, 20, 0.95)',
+          borderBottom: '1px solid rgba(0, 240, 255, 0.15)',
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+          flexShrink: 0,
+        }}
+      >
+        <span style={{ fontSize: '10px', fontWeight: 800, color: '#38bdf8', flexShrink: 0 }}>
+          ⚡ 5 INTELIGENCIAS:
+        </span>
+        {[
+          { species: 'DROSOPHILA' as OrganismSpecies, icon: '🪰', label: 'MaleCNS v1.0', count: telemetry.speciesBreakdown.drosophila, color: '#00f0ff' },
+          { species: 'HUMAN_NEOCORTEX' as OrganismSpecies, icon: '🧠', label: 'Neocortex Humano', count: telemetry.speciesBreakdown.humanNeocortex || 0, color: '#34d399' },
+          { species: 'GRAVITY_SENTINEL' as OrganismSpecies, icon: '🛸', label: 'Gravity Sentinel IA', count: telemetry.speciesBreakdown.gravitySentinel || 0, color: '#38bdf8' },
+          { species: 'C_ELEGANS' as OrganismSpecies, icon: '🪱', label: 'C. elegans (302N)', count: telemetry.speciesBreakdown.cElegans, color: '#2dd4bf' },
+          { species: 'ANT' as OrganismSpecies, icon: '🐜', label: 'Formicidae Colonia', count: telemetry.speciesBreakdown.ant, color: '#fbbf24' },
+        ].map((item) => (
+          <button
+            key={item.species}
+            onClick={() => handleFocusSpecies(item.species)}
+            style={{
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              background: selectedOrganism?.species === item.species ? `${item.color}25` : 'rgba(15, 23, 42, 0.65)',
+              border: `1px solid ${selectedOrganism?.species === item.species ? item.color : 'rgba(148, 163, 184, 0.2)'}`,
+              color: selectedOrganism?.species === item.species ? item.color : '#cbd5e1',
+              cursor: 'pointer',
+              fontSize: '10px',
+              fontWeight: 700,
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span>{item.icon}</span>
+            <span>{item.label}</span>
+            <span
+              style={{
+                fontSize: '9px',
+                padding: '1px 5px',
+                borderRadius: '10px',
+                background: 'rgba(255,255,255,0.08)',
+                color: item.color,
+                fontWeight: 800,
+              }}
+            >
+              {item.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Banner Dorado del Gran Torneo de Glucosa (Live HUD) ──────────────── */}
+      {telemetry.sugarRace && telemetry.sugarRace.isActive && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 16px',
+            background: 'linear-gradient(90deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15), rgba(245, 158, 11, 0.25))',
+            borderBottom: '1px solid #ffd700',
+            boxShadow: '0 0 20px rgba(255, 215, 0, 0.2)',
+            flexShrink: 0,
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            <span style={{ fontSize: '18px' }}>🏆</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: '#ffd700', fontWeight: 800, fontSize: '11px', letterSpacing: '0.8px' }}>
+                GRAN TORNEO DE GLUCOSA &middot; TIEMPO: {Math.ceil(telemetry.sugarRace.timeRemainingSec)}s
+              </div>
+              <div style={{ color: '#fef3c7', fontSize: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {telemetry.sugarRace.announcement}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={handleCancelSugarRace}
+            style={{
+              flexShrink: 0,
+              background: 'rgba(239, 68, 68, 0.2)',
+              border: '1px solid #ef4444',
+              color: '#ef4444',
+              borderRadius: '5px',
+              padding: '4px 10px',
+              fontSize: '10px',
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            🏁 CANCELAR TORNEO
+          </button>
+        </div>
+      )}
 
       {/* ── Contenedor Scrollable Principal (Canvas Viewport + Instrumental) ──────── */}
       <div
@@ -963,11 +1506,10 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
               ref={viewport3DRef}
               style={{
                 width: '100%',
-                maxWidth: '960px',
+                maxWidth: '100%',
                 height: '100%',
-                minHeight: '400px',
-                maxHeight: 'min(68vh, 600px)',
-                aspectRatio: '16/10',
+                minHeight: '440px',
+                maxHeight: 'min(78vh, 850px)',
                 borderRadius: '8px',
                 overflow: 'hidden',
                 border: '1px solid rgba(0, 240, 255, 0.35)',
@@ -988,7 +1530,7 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
               onPointerCancel={handleCanvasPointerUp}
               style={{
                 maxWidth: '100%',
-                maxHeight: 'min(62vh, 560px)',
+                maxHeight: 'min(74vh, 760px)',
                 width: 'auto',
                 height: 'auto',
                 aspectRatio: '720/560',
@@ -1001,31 +1543,55 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
             />
           )}
 
-          {/* ── Bio-Scanner HUD Card Flotante (Inspección Individual) ─────────── */}
+          {/* ── Bio-Scanner HUD Card Flotante (Inspección Individual Multicerebro) ─────────── */}
           {selectedOrganism && (
             <div
               style={{
                 position: 'absolute',
-                bottom: '24px',
-                left: '24px',
-                background: 'rgba(6, 12, 24, 0.94)',
-                border: '1px solid #00f0ff',
-                boxShadow: '0 0 20px rgba(0, 240, 255, 0.25)',
-                borderRadius: '8px',
+                bottom: '20px',
+                left: '20px',
+                background: 'rgba(6, 12, 24, 0.95)',
+                border: `1px solid ${
+                  selectedOrganism.species === 'GRAVITY_SENTINEL'
+                    ? '#38bdf8'
+                    : selectedOrganism.species === 'HUMAN_NEOCORTEX'
+                    ? '#34d399'
+                    : selectedOrganism.species === 'DROSOPHILA'
+                    ? '#00f0ff'
+                    : selectedOrganism.species === 'C_ELEGANS'
+                    ? '#2dd4bf'
+                    : '#fbbf24'
+                }`,
+                boxShadow: '0 0 25px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 240, 255, 0.2)',
+                borderRadius: '10px',
                 padding: '12px 14px',
-                width: '280px',
+                width: '320px',
+                maxWidth: 'calc(100% - 40px)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
                 zIndex: 30,
+                backdropFilter: 'blur(10px)',
               }}
             >
+              {/* Encabezado */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: '#00f0ff', fontWeight: 800, fontSize: '11px' }}>
-                  {selectedOrganism.species === 'DROSOPHILA' && '🪰 DROSOPHILA'}
-                  {selectedOrganism.species === 'C_ELEGANS' && '🪱 C. ELEGANS'}
-                  {selectedOrganism.species === 'ANT' && '🐜 ANT FORMIDAE'}
-                  {' '}[GEN {selectedOrganism.generation}]
+                <span style={{ color: '#00f0ff', fontWeight: 800, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>
+                    {selectedOrganism.species === 'DROSOPHILA' && '🪰'}
+                    {selectedOrganism.species === 'HUMAN_NEOCORTEX' && '🧠'}
+                    {selectedOrganism.species === 'GRAVITY_SENTINEL' && '🛸'}
+                    {selectedOrganism.species === 'C_ELEGANS' && '🪱'}
+                    {selectedOrganism.species === 'ANT' && '🐜'}
+                  </span>
+                  <span>
+                    {selectedOrganism.species === 'DROSOPHILA' && 'DROSOPHILA (MaleCNS v1.0)'}
+                    {selectedOrganism.species === 'HUMAN_NEOCORTEX' && 'NEOCORTEX HUMANO'}
+                    {selectedOrganism.species === 'GRAVITY_SENTINEL' && 'GRAVITY SENTINEL IA'}
+                    {selectedOrganism.species === 'C_ELEGANS' && 'C. ELEGANS (302N)'}
+                    {selectedOrganism.species === 'ANT' && 'FORMICIDAE OBRERA'}
+                  </span>
+                  <span style={{ color: '#94a3b8', fontSize: '9px' }}>[G{selectedOrganism.generation}]</span>
                 </span>
                 <button
                   onClick={() => setSelectedOrganismId(null)}
@@ -1042,66 +1608,199 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
                 </button>
               </div>
 
-              <div style={{ fontSize: '10px', color: '#c8d6e5' }}>
-                ESTADO: <span style={{ color: '#00ff88', fontWeight: 700 }}>{selectedOrganism.behaviorState}</span>
+              {/* Mood & Personalidad */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '9.5px' }}>
+                <span
+                  style={{
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    background: 'rgba(0, 240, 255, 0.12)',
+                    border: '1px solid rgba(0, 240, 255, 0.3)',
+                    color: '#00f0ff',
+                    fontWeight: 700,
+                  }}
+                >
+                  ÁNIMO:{' '}
+                  {selectedOrganism.mood === 'COMPETITIVE' && '🏆 COMPETITIVO'}
+                  {selectedOrganism.mood === 'PLAYFUL' && '⚡ JUGUETÓN'}
+                  {selectedOrganism.mood === 'HUNGRY' && '🍓 HAMBRIENTO'}
+                  {selectedOrganism.mood === 'ZEN' && '🧘 ZEN'}
+                  {selectedOrganism.mood === 'CURIOUS' && '🔍 CURIOSO'}
+                  {selectedOrganism.mood === 'ENERGETIC' && '🔥 ENÉRGICO'}
+                  {selectedOrganism.mood === 'VIGILANT' && '⚠️ VIGILANTE'}
+                  {selectedOrganism.mood === 'SERENITY' && '🌿 SERENIDAD EDÉNICA'}
+                  {selectedOrganism.mood === 'TRANSCENDENCE' && '🌌 TRANSCENDENCIA'}
+                  {selectedOrganism.mood === 'DREAMING' && '💤 SUEÑO REM REPARADOR'}
+                </span>
+                <span
+                  style={{
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    background: 'rgba(168, 85, 247, 0.12)',
+                    border: '1px solid rgba(168, 85, 247, 0.3)',
+                    color: '#c084fc',
+                    fontWeight: 700,
+                  }}
+                >
+                  {selectedOrganism.personality}
+                </span>
+                <span style={{ color: '#64748b', marginLeft: 'auto', fontSize: '9px' }}>
+                  {selectedOrganism.behaviorState}
+                </span>
               </div>
 
-              {/* Barra ATP */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#8b9bb4', marginBottom: '2px' }}>
-                  <span>ATP CELULAR</span>
-                  <span>{Math.round(selectedOrganism.metabolism.getTelemetry().atpLevel * 100)}%</span>
+              {/* Bocadillo de Pensamiento en Vivo */}
+              <div
+                style={{
+                  background: 'rgba(15, 23, 42, 0.85)',
+                  border: '1px solid rgba(56, 189, 248, 0.25)',
+                  borderRadius: '6px',
+                  padding: '7px 10px',
+                  fontSize: '10px',
+                  lineHeight: '1.35',
+                  color: '#f1f5f9',
+                }}
+              >
+                <div style={{ fontSize: '8.5px', color: '#38bdf8', fontWeight: 800, marginBottom: '2px' }}>
+                  💭 PENSAMIENTO EN TIEMPO REAL:
                 </div>
-                <div style={{ width: '100%', height: '5px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      width: `${Math.round(selectedOrganism.metabolism.getTelemetry().atpLevel * 100)}%`,
-                      height: '100%',
-                      background: '#00ff88',
-                    }}
-                  />
+                <div style={{ fontStyle: 'italic' }}>
+                  "{selectedOrganism.currentThought || 'Sintetizando gradiente epigenético y tensores sinápticos...'}"
                 </div>
               </div>
 
-              {/* Botones de Acción Directa sobre el Organismo */}
-              <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+              {/* Barras de Energía y Metabolismo */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5px', color: '#8b9bb4', marginBottom: '2px' }}>
+                    <span>ATP CELULAR</span>
+                    <span>{Math.round(selectedOrganism.metabolism.getTelemetry().atpLevel * 100)}%</span>
+                  </div>
+                  <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${Math.round(selectedOrganism.metabolism.getTelemetry().atpLevel * 100)}%`,
+                        height: '100%',
+                        background: '#00ff88',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5px', color: '#8b9bb4', marginBottom: '2px' }}>
+                    <span>GLUCOSA</span>
+                    <span>{Math.round(selectedOrganism.metabolism.getTelemetry().glucoseLevel * 100)}%</span>
+                  </div>
+                  <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${Math.round(selectedOrganism.metabolism.getTelemetry().glucoseLevel * 100)}%`,
+                        height: '100%',
+                        background: '#ffd700',
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de Acción Afectiva, Social y Mecánica */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', marginTop: '2px' }}>
+                <button
+                  onClick={() => handleFeedTreat(selectedOrganism.id)}
+                  style={{
+                    background: 'rgba(255, 215, 0, 0.15)',
+                    border: '1px solid #ffd700',
+                    color: '#ffd700',
+                    borderRadius: '4px',
+                    padding: '4px',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  🍰 NÉCTAR
+                </button>
+                <button
+                  onClick={() => handlePetOrganism(selectedOrganism.id)}
+                  style={{
+                    background: 'rgba(244, 63, 94, 0.15)',
+                    border: '1px solid #f43f5e',
+                    color: '#f43f5e',
+                    borderRadius: '4px',
+                    padding: '4px',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  💖 ACARICIAR
+                </button>
+                <button
+                  onClick={() => handleTalkToOrganism(selectedOrganism.id)}
+                  style={{
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    border: '1px solid #38bdf8',
+                    color: '#38bdf8',
+                    borderRadius: '4px',
+                    padding: '4px',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  🗣️ CONVERSAR
+                </button>
                 <button
                   onClick={() => {
-                    selectedOrganism.plasticity.injectDopamine(1.0);
+                    selectedOrganism.plasticity.injectDopamine(2.0);
                     TacticalAudioEngine.playOptoLaser();
                     triggerAlert(`⚡ ChR2: Refuerzo dopaminérgico inyectado a ${selectedOrganism.id.slice(-6)}`);
                   }}
                   style={{
-                    flex: 1,
-                    background: 'rgba(0, 240, 255, 0.2)',
+                    background: 'rgba(0, 240, 255, 0.15)',
                     border: '1px solid #00f0ff',
                     color: '#00f0ff',
                     borderRadius: '4px',
                     padding: '4px',
                     fontSize: '9px',
-                    fontWeight: 800,
+                    fontWeight: 700,
                     cursor: 'pointer',
                   }}
                 >
-                  ⚡ ESTÍMULO ChR2
+                  ⚡ ChR2
                 </button>
                 <button
                   onClick={() => {
                     biocyberneticHabitat.triggerAirPuff(selectedOrganism.x, selectedOrganism.y, 1.2);
                   }}
                   style={{
-                    flex: 1,
-                    background: 'rgba(255, 179, 0, 0.2)',
-                    border: '1px solid #ffb300',
-                    color: '#ffb300',
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    border: '1px solid #ffffff',
+                    color: '#ffffff',
                     borderRadius: '4px',
                     padding: '4px',
                     fontSize: '9px',
-                    fontWeight: 800,
+                    fontWeight: 700,
                     cursor: 'pointer',
                   }}
                 >
                   💨 AIR PUFF
+                </button>
+                <button
+                  onClick={() => handleSelectCameraMode('FOLLOW_AGENT')}
+                  style={{
+                    background: 'rgba(52, 211, 153, 0.15)',
+                    border: '1px solid #34d399',
+                    color: '#34d399',
+                    borderRadius: '4px',
+                    padding: '4px',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  🎥 SEGUIR 3D
                 </button>
               </div>
             </div>
@@ -1257,7 +1956,221 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
             </button>
           </div>
 
-          {/* Fila 2: Actuación Robótica, Migración P2P & Generación */}
+          {/* Fila 2: Ludoteca & Mini-Juegos Interactivos */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              overflowX: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              whiteSpace: 'nowrap',
+              paddingBottom: '2px',
+            }}
+          >
+            <span style={{ fontSize: '10px', fontWeight: 800, color: '#ffd700', marginRight: '4px', flexShrink: 0 }}>
+              🎮 LUDOTECA:
+            </span>
+
+            <button
+              onClick={telemetry.sugarRace?.isActive ? handleCancelSugarRace : handleStartSugarRace}
+              style={{
+                flexShrink: 0,
+                background: telemetry.sugarRace?.isActive ? 'rgba(255, 215, 0, 0.35)' : 'rgba(245, 158, 11, 0.18)',
+                border: `1px solid ${telemetry.sugarRace?.isActive ? '#ffd700' : 'rgba(245, 158, 11, 0.5)'}`,
+                color: '#ffd700',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                fontSize: '11px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: telemetry.sugarRace?.isActive ? '0 0 12px rgba(255, 215, 0, 0.4)' : 'none',
+              }}
+            >
+              {telemetry.sugarRace?.isActive ? '🏁 DETENER TORNEO GLUCOSA' : '🏆 GRAN TORNEO DE GLUCOSA'}
+            </button>
+
+            <button
+              onClick={() => handleSelectTool('OPTOGENETIC_LASER')}
+              style={{
+                flexShrink: 0,
+                background: selectedTool === 'OPTOGENETIC_LASER' ? 'rgba(0, 255, 204, 0.3)' : 'rgba(0, 255, 204, 0.12)',
+                border: `1px solid ${selectedTool === 'OPTOGENETIC_LASER' ? '#00ffcc' : 'rgba(0, 255, 204, 0.4)'}`,
+                color: '#00ffcc',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                fontSize: '11px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              🎯 PUNTERO LÁSER (Chase)
+            </button>
+
+            <button
+              onClick={handleTriggerNectarShower}
+              style={{
+                flexShrink: 0,
+                background: 'rgba(251, 191, 36, 0.18)',
+                border: '1px solid #fbbf24',
+                color: '#fbbf24',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                fontSize: '11px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              🍯 LLUVIA DE NÉCTAR (+10 Dulces)
+            </button>
+
+            <button
+              onClick={handleTriggerAcrobaticWind}
+              style={{
+                flexShrink: 0,
+                background: 'rgba(56, 189, 248, 0.18)',
+                border: '1px solid #38bdf8',
+                color: '#38bdf8',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                fontSize: '11px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              💨 RÁFAGA ACROBÁTICA (360°)
+            </button>
+
+            <button
+              onClick={handleToggleChessMatch}
+              style={{
+                flexShrink: 0,
+                background: telemetry.chessMatch?.isActive ? 'rgba(0, 240, 255, 0.3)' : 'rgba(0, 240, 255, 0.15)',
+                border: `1px solid ${telemetry.chessMatch?.isActive ? '#00f0ff' : 'rgba(0, 240, 255, 0.4)'}`,
+                color: '#00f0ff',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                fontSize: '11px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: telemetry.chessMatch?.isActive ? '0 0 12px rgba(0, 240, 255, 0.4)' : 'none',
+              }}
+            >
+              ♟️ AJEDREZ TÁCTICO IN-SILICO {telemetry.chessMatch?.isActive ? (telemetry.chessMatch.isPaused ? '(PAUSADO)' : '(EN CURSO)') : ''}
+            </button>
+          </div>
+
+          {/* Fila 3: Paraíso Edénico, Clima Celestial & Sabiduría L9 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              overflowX: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              whiteSpace: 'nowrap',
+              paddingBottom: '2px',
+            }}
+          >
+            <span style={{ fontSize: '10px', fontWeight: 800, color: '#10b981', marginRight: '4px', flexShrink: 0 }}>
+              🌿 PARAÍSO EDÉNICO:
+            </span>
+
+            <button
+              onClick={handleTriggerAurora}
+              style={{
+                flexShrink: 0,
+                background: 'rgba(0, 240, 255, 0.2)',
+                border: '1px solid #00f0ff',
+                color: '#00f0ff',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                fontSize: '11px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              🌌 AURORA BOREAL (432/528Hz)
+            </button>
+
+            <button
+              onClick={handleTriggerNectarDew}
+              style={{
+                flexShrink: 0,
+                background: 'rgba(52, 211, 153, 0.2)',
+                border: '1px solid #34d399',
+                color: '#34d399',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                fontSize: '11px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              💧 ROCÍO CELESTIAL
+            </button>
+
+            <button
+              onClick={handleTriggerSerotoninBreeze}
+              style={{
+                flexShrink: 0,
+                background: 'rgba(168, 85, 247, 0.2)',
+                border: '1px solid #a855f7',
+                color: '#a855f7',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                fontSize: '11px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              🍃 BRISA SEROTONINA
+            </button>
+
+            <button
+              onClick={handleTriggerMeditation}
+              style={{
+                flexShrink: 0,
+                background: 'rgba(236, 72, 153, 0.2)',
+                border: '1px solid #ec4899',
+                color: '#ec4899',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                fontSize: '11px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              🧘 MEDITACIÓN & SUEÑO REM
+            </button>
+
+            <div
+              style={{
+                flexShrink: 0,
+                background: 'rgba(15, 23, 42, 0.8)',
+                border: '1px solid rgba(16, 185, 129, 0.4)',
+                borderRadius: '6px',
+                padding: '6px 10px',
+                fontSize: '10px',
+                color: '#6ee7b7',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <span>{telemetry.edenParadise?.circadian?.isDaytime ? '☀️ DÍA SOLAR' : '🌙 NOCHE BOREAL'}</span>
+              <span>•</span>
+              <span>SABIDURÍA: Lv.{telemetry.lifelongLearning?.overallWisdomIndex ?? 10}</span>
+              {telemetry.lifelongLearning?.isDreamReplayActive && (
+                <span style={{ color: '#c084fc', animation: 'pulse 1.5s infinite' }}>💤 REPLAY ACTIVO</span>
+              )}
+            </div>
+          </div>
+
+          {/* Fila 3: Actuación Robótica, Migración P2P & Generación */}
           <div
             style={{
               display: 'flex',
@@ -1326,6 +2239,40 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
             </button>
 
             <button
+              onClick={() => handleSpawnOrganism('HUMAN_NEOCORTEX')}
+              style={{
+                flexShrink: 0,
+                background: 'rgba(52, 211, 153, 0.15)',
+                border: '1px solid #34d399',
+                color: '#34d399',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              ➕ 🧠 NEOCORTEX HUMANO
+            </button>
+
+            <button
+              onClick={() => handleSpawnOrganism('GRAVITY_SENTINEL')}
+              style={{
+                flexShrink: 0,
+                background: 'rgba(56, 189, 248, 0.15)',
+                border: '1px solid #38bdf8',
+                color: '#38bdf8',
+                borderRadius: '6px',
+                padding: '7px 12px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              ➕ 🛸 GRAVITY SENTINEL
+            </button>
+
+            <button
               onClick={() => handleSpawnOrganism('C_ELEGANS')}
               style={{
                 flexShrink: 0,
@@ -1360,6 +2307,164 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
             </button>
           </div>
         </div>
+
+        {/* Modal / Card Flotante de Ajedrez Táctico In-Silico */}
+        {showChessHUD && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '60px',
+              right: '20px',
+              width: '320px',
+              background: 'rgba(8, 15, 29, 0.95)',
+              border: '1px solid #00f0ff',
+              borderRadius: '10px',
+              padding: '14px',
+              boxShadow: '0 0 24px rgba(0, 240, 255, 0.3)',
+              zIndex: 30,
+              backdropFilter: 'blur(10px)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: '#00f0ff', letterSpacing: '0.5px' }}>
+                ♟️ MESA DE AJEDREZ IN-SILICO
+              </span>
+              <button
+                onClick={() => setShowChessHUD(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  padding: '0 4px',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.5)', padding: '6px 10px', borderRadius: '6px', marginBottom: '10px' }}>
+              <div style={{ fontSize: '10px', color: '#fff', fontWeight: 700 }}>
+                ♔ {telemetry.chessMatch?.whiteName || 'Blancas'}
+                <div style={{ fontSize: '8px', color: '#94a3b8', fontFamily: 'monospace' }}>{telemetry.chessMatch?.whiteSpecies}</div>
+              </div>
+              <span style={{ color: '#ff3355', fontWeight: 900, fontSize: '11px' }}>VS</span>
+              <div style={{ fontSize: '10px', color: '#ffd700', fontWeight: 700, textAlign: 'right' }}>
+                ♚ {telemetry.chessMatch?.blackName || 'Negras'}
+                <div style={{ fontSize: '8px', color: '#94a3b8', fontFamily: 'monospace' }}>{telemetry.chessMatch?.blackSpecies}</div>
+              </div>
+            </div>
+
+            {/* Mini Tablero 8x8 */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '10px' }}>
+              <div style={{ border: '2px solid #00f0ff', borderRadius: '4px', overflow: 'hidden' }}>
+                {biocyberneticHabitat.getChessEngine().board.map((row, r) => (
+                  <div key={r} style={{ display: 'flex' }}>
+                    {row.map((piece, c) => {
+                      const isWhitePiece = piece && piece === piece.toUpperCase();
+                      const UNICODE_PIECES: Record<string, string> = {
+                        'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
+                        'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
+                      };
+                      return (
+                        <div
+                          key={c}
+                          style={{
+                            width: 26,
+                            height: 26,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 16,
+                            background: (r + c) % 2 === 0 ? '#1e293b' : '#0f172a',
+                            color: isWhitePiece ? '#ffffff' : '#ffd700',
+                            userSelect: 'none',
+                          }}
+                        >
+                          {piece ? (UNICODE_PIECES[piece] || piece) : ''}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '10px', fontFamily: 'monospace' }}>
+              <span style={{ color: telemetry.chessMatch?.currentTurn === 'w' ? '#00ff88' : '#ffd700', fontWeight: 800 }}>
+                TURNO: {telemetry.chessMatch?.currentTurn === 'w' ? 'BLANCAS' : 'NEGRAS'}
+              </span>
+              <span style={{ color: '#94a3b8' }}>
+                JUGADAS: {telemetry.chessMatch?.moveCount || 0}
+              </span>
+            </div>
+
+            {/* Botones de Control */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+              <button
+                onClick={handleToggleChessMatch}
+                style={{
+                  flex: 1,
+                  background: 'rgba(0, 240, 255, 0.2)',
+                  border: '1px solid #00f0ff',
+                  color: '#00f0ff',
+                  borderRadius: '5px',
+                  padding: '6px',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                {telemetry.chessMatch?.isPaused ? '▶️ REANUDAR' : '⏸️ PAUSAR'}
+              </button>
+              <button
+                onClick={handleResetChessMatch}
+                style={{
+                  flex: 1,
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: '#fff',
+                  borderRadius: '5px',
+                  padding: '6px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                🔄 REINICIAR
+              </button>
+              <button
+                onClick={handleSwitchChessCompetitors}
+                style={{
+                  flex: 1,
+                  background: 'rgba(176, 38, 255, 0.2)',
+                  border: '1px solid #b026ff',
+                  color: '#b026ff',
+                  borderRadius: '5px',
+                  padding: '6px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                🔀 DUELO
+              </button>
+            </div>
+
+            {/* Pensamiento de la IA en tiempo real */}
+            {biocyberneticHabitat.getChessEngine().lastThought && (
+              <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '6px', borderLeft: '3px solid #ffd700' }}>
+                <div style={{ fontSize: '9px', fontWeight: 800, color: '#ffd700', marginBottom: '2px' }}>
+                  💭 {biocyberneticHabitat.getChessEngine().lastThought?.name}:
+                </div>
+                <div style={{ fontSize: '10px', color: '#c8d6e5', fontStyle: 'italic', lineHeight: 1.3 }}>
+                  "{biocyberneticHabitat.getChessEngine().lastThought?.thought}"
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

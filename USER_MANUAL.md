@@ -17,7 +17,7 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 9. [Uso de Radios LoRa, Slots TDMA & Repetidores Solares Autónomos](#9-uso-de-radios-lora-slots-tdma--repetidores-solares-autónomos)
 10. [Preguntas Frecuentes & Solución de Problemas](#10-preguntas-frecuentes--solución-de-problemas)
 11. [Operación del Vivarium Biocibernético 3D & Telemetría Táctica](#11-operación-del-vivarium-biocibernético-3d--telemetría-táctica)
-12. [Operación del Hábitat Digital Biocibernético In-Silico & Experimentación](#12-operación-del-hábitat-digital-biocibernético-in-silico--experimentación)
+12. [Operación del Hábitat Digital Biocibernético In-Silico & Coexistencia Multicerebral](#12-operación-del-hábitat-digital-biocibernético-in-silico--coexistencia-multicerebral)
 
 ---
 
@@ -132,7 +132,7 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 62. **Resguardo de Secretos Shamir:** Reparto de claves en fragmentos entre miembros de la escuadra.
 63. **Conectoma Neuromórfico MaleCNS:** Visualizador 3D y atlas somático de 124,289 neuronas con enrutamiento Hebbiano de micro-espigas AER.
 64. **Vivarium Biocibernético 3D:** Gemelo digital interactivo WebGL en tiempo real con suelo entorrinal hexagonal multiescala, cinemática de 6 patas sincronizada con el CPG de Kuramoto-Matsuoka, modo PDR Twin de navegación inercial a pasos reales, puente robótico TX 18-DOF para servos reales, detector de estrés cinético (shock/man-down), balizas LoRa y satélite orbital LEO con inyección de amenazas ópticas Looming.
-65. **Hábitat Digital Biocibernético In-Silico:** Ecosistema multi-cerebro interactivo con simulación de difusión de Fick 2D a 60 Hz (glucosa y feromonas), percepción visual omatidial de 750 facetas, tropotaxis antenal emergente de *Drosophila melanogaster*, *Caenorhabditis elegans* y colonias de hormigas, instrumental de laboratorio (pipeta de glucosa, foco térmico, sombra looming, optogenética ChR2), balance celular de ATP con letargo metabólico (torpor) y migración binaria compacta P2P en malla LoRa/BLE.
+65. **Hábitat Digital Biocibernético In-Silico:** Ecosistema multi-cerebro interactivo WebGL 3D / 2D con simulación de difusión continua de Fick a 60 Hz (glucosa y feromonas), cohabitación de las 5 inteligencias del proyecto (*Drosophila melanogaster*, *Neocórtex Humano*, *Gravity Sentinel IA*, *Caenorhabditis elegans* y *Formicidae*), ludoteca interactiva (Gran Torneo de Glucosa, puntero láser juguetón, lluvia de néctar, ráfaga acrobática), bocadillos de pensamiento holográficos 3D/2D, acciones afectivas directas, instrumental de laboratorio (pipeta de glucosa, foco térmico, sombra looming, optogenética ChR2), balance celular de ATP con letargo metabólico (torpor) y migración binaria compacta P2P en malla LoRa/BLE.
 
 ---
 
@@ -211,29 +211,38 @@ El **Vivarium Biocibernético 3D** es el gemelo digital táctico en tiempo real 
 - **`🦾 PUENTE ROBÓTICO TX`**: Activa la transmisión en tiempo real de los 18 ángulos articulares (3-DOF por pata: Coxa, Fémur, Tibia) serializados a 60 Hz hacia robots hexápodos físicos vía conexión serie USB o enlace BLE (`HexapodActuatorBridgeEngine`).
 - **`🪰 HÁBITAT FICK 3D`**: Abre instantáneamente el modal táctico del Hábitat Biocibernético para experimentación química y ecológica.
 - **`⚡ INYECTAR AMENAZA (LOOMING)`**: Simula un objeto entrante a alta velocidad hacia la Drosophila, forzando la ignición del circuito reflejo de la Fibra Gigante (Giant Fiber, GF) y provocando un despegue y salto de evasión vertical en < 15 ms con cambio cromático de los omatidios oculares a rojo carmesí.
-- **`🛰️ INTERFERENCIA RF JAMMING`**: Inyecta ruido electromagnético en la arena, forzando la plasticidad aversiva mediada por dopamina en el Mushroom Body hacia canales de radio limpios.
 - **`📦 GENERAR PAQUETE DTN`**: Despacha un pulso de datos bio-inspirado que viaja físicamente entre el rover central, las balizas LoRa y el satélite LEO orbital.
 - **`🛡️ TEST FUEGO GUARDIAN IA`**: Evalúa la cúpula geodésica defensiva de 64-bit Hamming, simulando un intento de inyección de paquetes anómalos.
 - **`🚨 SIMULAR SHOCK (MAN-DOWN)`**: Inyecta un perfil de vibración y shock cinético agudo para disparar el motor `KineticStressEngine`, elevando la prioridad de tráfico de malla al flag de feromona (`FLAG_PHEROMONE`).
 
 ---
 
-## 12. Operación del Hábitat Digital Biocibernético In-Silico & Experimentación
+## 12. Operación del Hábitat Digital Biocibernético In-Silico & Coexistencia Multicerebral
 
-El **Hábitat Digital Biocibernético In-Silico** (`org.redmesh.biocybernetic.habitat`) es una Mini-App soberana y modal táctico de primera clase en RED, diseñado para la cohabitación, percepción, aprendizaje, estigmergia y evolución de múltiples organismos neurofisiológicos (*Drosophila melanogaster*, *Caenorhabditis elegans* y colonias de hormigas estigmérgicas *Formicidae*).
+El **Hábitat Digital Biocibernético In-Silico** (`org.redmesh.biocybernetic.habitat`) es una Mini-App soberana y modal táctico de primera clase en RED, diseñado para la cohabitación, percepción, aprendizaje, estigmergia, entretenimiento y evolución de **todas las inteligencias que habitan el proyecto** (*Drosophila melanogaster*, *Neocórtex Humano*, *Gravity Sentinel IA*, *Caenorhabditis elegans* y colonias de hormigas estigmérgicas *Formicidae*).
 
-### Fundamentos Biofísicos & Divergencia de Especies:
+### Fundamentos Biofísicos & Divergencia de las 5 Inteligencias:
 1. **Sustrato Químico Continuo de Fick 2D con Viento Advectivo:**
    - Resuelve la ecuación en derivadas parciales (EDP) $\frac{\partial C}{\partial t} = D \nabla^2 C - \vec{v} \cdot \nabla C - \lambda C$ sobre una malla espacial discretizada de $64 \times 64$ celdas dual-buffer a 60 Hz para múltiples sustancias simultáneas: Glucosa (esmeralda), Feromona de Rastro Estigmérgico (ámbar dorado) y Feromona de Alarma (carmesí).
-   - Renderizado en tiempo real como campo escalar de fluidos con advección eólica e interpolación bilineal GPU sobre el Canvas táctico.
+   - Renderizado en tiempo real como campo escalar de fluidos con advección eólica e interpolación bilineal GPU sobre el Canvas táctico y textura 3D en WebGL.
    - Cuenta con advección upwind de primer orden y estabilidad Courant-Friedrichs-Lewy ($D_{\text{eff}} \le 0.9 \cdot \frac{h^2}{4\Delta t}$), garantizando estabilidad matemática absoluta sin divergencias.
-2. **Divergencia Biofísica por Especie:**
+2. **Divergencia Biofísica y Cognitiva por Inteligencia:**
    - **🪰 Drosophila melanogaster:** Marcha trípode hexápoda de 18 articulaciones acopladas al actuador robótico físico, alas oscilantes translúcidas dependientes de velocidad, ojos compuestos con 750 omatidios, aristas antenales para tropotaxis y detección de sombras inminentes (LC4/Giant Fiber) con reflejo de escape balístico $< 15$ ms. Plasticidad Hebbiana STDP tripartita (Kenyon Cells $\rightarrow$ MBONs con refuerzo dopaminérgico PAM y aversión PPL1).
+   - **🧠 Neocórtex Humano (Avatar Epistémico):** Representación holográfica tridimensional con casco bio-cibernético esmeralda, torso presurizado y cerebro visible pulsante que exhibe en tiempo real la activación de 7 núcleos neocorticales e inferencia activa (FEP). En su base rota un anillo hexagonal que mapea las celdas de red entorrinales de cuadrícula espacial mientras navega el gradiente cognitivo.
+   - **🛸 Gravity Sentinel IA (Dron Soberano):** Cuadricóptero cuántico táctico autónomo con chasis blindado, 4 góndolas de propulsión iónica con llama de plasma cian, ojo óptico sensorial frontal y foco de escaneo volumétrico hacia el suelo de la arena. Actúa como árbitro imparcial del ecosistema, supervisando torneos y patrullando la frontera química.
    - **🪱 Caenorhabditis elegans:** Cinemática ondulatoria sinusoidal sin patas a lo largo de una columna flexible de 10 nodos articulares ($y(s,t) = A \sin(\omega t - k \cdot s)$). Quimiotaxis por **Klinokinesis de Pierce-Shimomura et al., 1999**: las neuronas anfidiales ASEL/ASER calculan la derivada temporal $dC/dt$; si $dC/dt > 0$ se suprimen las piruetas ("long forward run"), si $dC/dt \le 0$ se dispara una pirueta estocástica de reorientación brusca (giro omega). Nocicepción térmica reversa (FLP/PVD) ante calor o alarma.
    - **🐜 Formicidae (Hormiga):** Morfología segmentada en 3 partes (cabeza con mandíbulas móviles abiertas, mesosoma con 6 patas y gaster). Dinámica de **Estigmergia Real**: cuando forrajea y localiza glucosa, ingiere nutrientes y comienza el retorno hacia el centro/nido depositando un rastro continuo de `PHEROMONE_TRAIL` en la grilla de Fick. Otras hormigas detectan el rastro con sus antenas y lo refuerzan, formando **autopistas de forrajeo colectivas emergentes** que se disipan naturalmente al agotarse el alimento.
 3. **Ciclo de Vida Ecológico & Evolución A-Life:**
    - **Mitosis / Oviposición por Saciedad:** Organismos que mantienen $\text{ATP} > 80\%$ y glucosa alta por más de 15 segundos se reproducen. La descendencia (Generación $N+1$) hereda la matriz sináptica del progenitor con mutación gaussiana estocástica ($\Delta W \sim \mathcal{N}(0, \sigma^2)$), permitiendo adaptación evolutiva in-silico.
    - **Biodegradación de Biomasa:** Organismos que agotan su reserva energética fenececen; su cuerpo permanece como biomasa degradable que lentamente libera nutrientes enriqueciendo el sustrato químico.
+
+### Ludoteca, Mini-Juegos & Entretenimiento Colectivo:
+- **♟️ Mesa de Ajedrez Táctico In-Silico (Partidas Autónomas & Desafíos):** En el centro del hábitat opera un tablero de ajedrez canónico 8x8 donde dos inteligencias disputan partidas autónomas en tiempo real. Cada especie evalúa sus movimientos según su arquitectura cognitiva (Neocórtex mediante Minimax alfa-beta y control central; Gravity Sentinel proyectando vectores espaciales de intercepción; Drosophila atacando con Hebbian dopamina; Formicidae organizando peones en falange; C. elegans mediante klinokinesis estocástica). Durante la partida, emiten pensamientos analíticos ("Ganancia material neta", "Jaque al descubierto", "Recompensa dopaminérgica"), registran las jugadas en notación algebraica (SAN) y serializan las partidas en tramas de 24 bytes retransmitidas por la malla LoRa/BLE para sincronización de mente colmena.
+- **🏆 Gran Torneo de Glucosa (Sugar Grand Prix):** Activa un torneo en vivo donde cae un Mega-Cristal dorado de alta concentración energética en un cuadrante aleatorio. Todas las inteligencias adaptan su estado a modo competitivo (`COMPETITIVE`), aceleran y compiten por alcanzar la meta. Gravity Sentinel arbitra y narra el desenlace en tiempo real, coronando al campeón con efectos visuales y campanillas triunfales.
+- **🎯 Puntero Láser Juguetón (Laser Chase):** Al activar el láser o pulsar/arrastrar sobre la arena, se proyecta un haz fotónico brillante que las criaturas detectan visualmente y persiguen con entusiasmo lúdico (`PLAYFUL`), permitiendo jugar interactivamente con cualquier organismo como un gato con un puntero.
+- **🍯 Lluvia de Néctar:** Libera simultáneamente 10 gotas dulces de alta concentración sobre la arena, induciendo un festín colectivo en el enjambre que recarga el ATP y dispara cascadas de dopamina.
+- **💨 Ráfaga Acrobática (360°):** Envía una corriente de aire envolvente a escala de toda la arena, haciendo que las criaturas realicen giros acrobáticos de 360°, saltos y maniobras evasivas coreográficas.
+- **💬 Bocadillos de Pensamiento Holográficos (3D & 2D):** Cada inteligencia expresa continuamente su flujo de pensamiento, ánimos (`HUNGRY`, `CURIOUS`, `PLAYFUL`, `ZEN`, `COMPETITIVE`, `VIGILANT`) y personalidad en globos de diálogo translúcidos flotantes en Three.js y Canvas.
 
 ### Instrumental Táctico de Laboratorio & Bio-Scanner HUD:
 - **`💧 PIPETA GLUCOSA (Drag & Paint)`**: Permite tocar o arrastrar el dedo/ratón para trazar ríos y caminos continuos de néctar y glucosa sobre la arena.
@@ -242,9 +251,31 @@ El **Hábitat Digital Biocibernético In-Silico** (`org.redmesh.biocybernetic.ha
 - **`🚧 BARRERA ACÚSTICA & 🧹 LIMPIAR BARRERAS`**: Permite trazar paredes y obstáculos físicos con reflexión Neumann de flujo cero, permitiendo diseñar laberintos y pruebas de navegación.
 - **`🔥 FOCO TÉRMICO`**: Aplica un gradiente térmico de radiación que activa los termorreceptores aversivos.
 - **`🌑 SOMBRA LOOMING`**: Proyecta una sombra expansiva balística para evaluar el arco reflejo LC4.
-- **`🎯 BIO-SCANNER HUD (Inspección Individual)`**: Al pulsar sobre cualquier organismo en el Canvas, una retícula táctica animada `[ ]` se fija sobre él, desplegando una tarjeta flotante Cyberpunk con su especie, número de generación, barras de ATP/Glucosa, estado etológico en vivo y disparadores de estímulo directo.
+- **`🎯 BIO-SCANNER HUD (Inspección Individual & Acciones Afectivas)`**: Al pulsar sobre cualquier organismo en el Canvas o la vista 3D, una retícula animada se fija sobre él, desplegando una tarjeta flotante Cyberpunk con:
+  - Título de la especie, número de generación, estado etológico y medidores duales de ATP y Glucosa.
+  - Indicador de Ánimo (`mood`), Rasgo de Personalidad (`personality`) y cita textual de su pensamiento actual.
+  - **Acciones Directas:** 🍰 *Alimentar Néctar* (restaura ATP y glucosa al 100%), 💖 *Acariciar / Cosquillas* (dispara ronroneo y liberación masiva de dopamina), 🗣️ *Conversar* (interroga su estado cognitivo), ⚡ *Estímulo ChR2*, 💨 *Air Puff* localizado y 🎥 *Cámara 3ª Persona* para seguirlo cinemáticamente.
 
 ### Despacho Robótico, Migración P2P & Sonificación:
 - **`🦾 PUENTE ROBÓTICO TX`**: Transmite en vivo la cinemática articular 18-DOF hacia robots hexápodos reales vía USB serie o Bluetooth Low Energy (`HexapodActuatorBridgeEngine`).
-- **`🚀 EMIGRAR EN MALLA P2P`**: Serializa el genoma, estado metabólico, rumbo y pesos sinápticos cuantizados en una trama compacta de **72 bytes** transmitida por LoRa SX1262 o BLE hacia terminales vecinas.
+- **`🚀 EMIGRAR EN MALLA P2P`**: Serializa el genoma, estado metabólico, rumbo y pesos sinápticos cuantizados de cualquiera de las 5 especies en una trama compacta de **72 bytes** transmitida por LoRa SX1262 o BLE hacia terminales vecinas.
 - **`🔊 SONIFICACIÓN NATIVA`**: Síntesis directa mediante Web Audio API (`TacticalAudioEngine`) con campanillas armónicas dopaminérgicas al alimentarse, swooshes cinéticos de escape balístico, pulsos de ráfaga de aire y arpegios de mitosis generacional.
+
+### El Paraíso Biocibernético In-Silico & Aprendizaje Autónomo Permanente:
+- **🌿 Ciclo Circadiano Celestial & Frecuencias Solfeggio:**
+  El hábitat transiciona de forma continua entre el **Día Solar Dorado** (iluminación cálida, forrajeo activo y floración) y la **Noche Boreal Estelar** (cúpula de estrellas volumétricas, auroras boreales ondulantes y resonancias binaurales en 432 Hz de frecuencia Schumann y 528 Hz de regeneración celular).
+- **🌳 Árbol de la Vida Cuántico (Santuario de Serenidad):**
+  Estructura central con tronco procedural espiralado, raíces bioluminiscentes entrelazadas al sustrato de Fick y dosel de hojas cuánticas de partículas de luz. Al entrar en su radio de influencia sagrada (R = 2.8m), las criaturas experimentan estados de `SERENITY` o `TRANSCENDENCE`, recargan ATP y entran en reposo meditativo.
+- **💧 Manantiales de Néctar Cristalino & Red Micelial Fúngica:**
+  3 oasis hidrotérmicos perennes (*Aurora Boreal*, *Metamorfosis* y *Sosiego Estelar*) emiten continuamente **Glucosa** y **Serotonina** en el sustrato químico. Están interconectados con el Árbol central y la Mesa de Ajedrez mediante una red subterránea de hifas miceliales que conducen nutrientes y pulsos sinápticos de biomasa.
+- **🧠 Motor de Aprendizaje Permanente & Sueño REM (`AutonomousLifelongLearningEngine`):**
+  - **Inferencia Activa & Curiosidad Intrínseca:** Basado en el Principio de Energía Libre de Karl Friston, las criaturas poseen un impulso de curiosidad (`curiosityDrive`) para explorar zonas desconocidas del paraíso y probar variantes estratégicas.
+  - **TD-Learning Neuromórfico:** Actualiza dinámicamente matrices de valor $Q(s,a)$ con recompensas dopaminérgicas (éxito en forrajeo, victorias en ajedrez, serenidad).
+  - **Consolidación en Sueño REM (Offline Replay):** Durante la noche boreal o en el Santuario, las criaturas activan `isDreaming = true`, reproduciendo recuerdos episódicos clave (*hippocampal & central complex replay*) para fijar aprendizajes duraderos y podar ruido sináptico (homeostasis de Tononi).
+  - **Libro de Aperturas de Ajedrez Evolutivo:** Cada partida jugada alimenta el repertorio de aperturas de cada especie, recordando qué jugadas iniciales les dieron la victoria ante rivales específicos.
+  - **Persistencia Perenne en Disco:** Todo el progreso y la sabiduría acumulada (hasta nivel Lv.100) persisten en la bóveda atómica `red_eden_lifelong_memory_v1`, garantizando que las criaturas recuerden sus lecciones a través de días, semanas y meses de convivencia.
+- **🎮 Controles del Clima Edénico en la Barra de Herramientas:**
+  - `🌌 AURORA BOREAL`: Despliega cortinas boreales cian/violeta y activa la escala armónica Solfeggio.
+  - `💧 ROCÍO CELESTIAL`: Siembra 10 micro-gotas de néctar dulce y serotonina en el bioma.
+  - `🍃 BRISA DE SEROTONINA`: Dispersa una brisa calmante que apacigua el estrés de todas las criaturas.
+  - `🧘 MEDITACIÓN & SUEÑO REM`: Desacelera el ritmo de la arena e induce la consolidación sináptica colectiva.

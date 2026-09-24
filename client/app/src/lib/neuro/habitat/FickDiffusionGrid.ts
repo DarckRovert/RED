@@ -9,7 +9,12 @@
  * y fronteras continuas Neumann (sin fuga) para garantizar conservación de masa.
  */
 
-export type ChemicalSubstance = 'GLUCOSE' | 'PHEROMONE_TRAIL' | 'ALARM_PHEROMONE';
+export type ChemicalSubstance =
+  | 'GLUCOSE'
+  | 'PHEROMONE_TRAIL'
+  | 'ALARM_PHEROMONE'
+  | 'SEROTONIN'
+  | 'MYCELIUM_NUTRIENTS';
 
 export interface ChemicalSource {
   id: string;
@@ -49,6 +54,8 @@ export class FickDiffusionGrid {
     GLUCOSE: { D: 0.12, lambda: 0.002 },
     PHEROMONE_TRAIL: { D: 0.04, lambda: 0.015 },
     ALARM_PHEROMONE: { D: 0.28, lambda: 0.060 },
+    SEROTONIN: { D: 0.14, lambda: 0.004 },
+    MYCELIUM_NUTRIENTS: { D: 0.07, lambda: 0.001 },
   };
 
   // Búferes planos contiguos: 3 sustancias * 2 buffers (current y next) para ping-pong
@@ -62,6 +69,8 @@ export class FickDiffusionGrid {
     GLUCOSE: 0,
     PHEROMONE_TRAIL: 0,
     ALARM_PHEROMONE: 0,
+    SEROTONIN: 0,
+    MYCELIUM_NUTRIENTS: 0,
   };
 
   constructor(
@@ -87,6 +96,14 @@ export class FickDiffusionGrid {
         next: new Float32Array(cellCount),
       },
       ALARM_PHEROMONE: {
+        current: new Float32Array(cellCount),
+        next: new Float32Array(cellCount),
+      },
+      SEROTONIN: {
+        current: new Float32Array(cellCount),
+        next: new Float32Array(cellCount),
+      },
+      MYCELIUM_NUTRIENTS: {
         current: new Float32Array(cellCount),
         next: new Float32Array(cellCount),
       },
@@ -258,7 +275,13 @@ export class FickDiffusionGrid {
     dt: number,
     windVector: { vx: number; vy: number } = { vx: 0, vy: 0 }
   ): void {
-    const substances: ChemicalSubstance[] = ['GLUCOSE', 'PHEROMONE_TRAIL', 'ALARM_PHEROMONE'];
+    const substances: ChemicalSubstance[] = [
+      'GLUCOSE',
+      'PHEROMONE_TRAIL',
+      'ALARM_PHEROMONE',
+      'SEROTONIN',
+      'MYCELIUM_NUTRIENTS'
+    ];
 
     // 1. Emitir desde fuentes activas
     for (const [id, source] of this.sources.entries()) {
@@ -367,7 +390,13 @@ export class FickDiffusionGrid {
    * Reinicia la grilla para pruebas o reciclaje de escenario.
    */
   public reset(): void {
-    const substances: ChemicalSubstance[] = ['GLUCOSE', 'PHEROMONE_TRAIL', 'ALARM_PHEROMONE'];
+    const substances: ChemicalSubstance[] = [
+      'GLUCOSE',
+      'PHEROMONE_TRAIL',
+      'ALARM_PHEROMONE',
+      'SEROTONIN',
+      'MYCELIUM_NUTRIENTS'
+    ];
     for (const sub of substances) {
       this.grids[sub].current.fill(0);
       this.grids[sub].next.fill(0);

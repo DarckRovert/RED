@@ -76,9 +76,9 @@ runTest('5.1 HumanBrainOrchestrator: Gobernador de cadencia (UI_THROTTLE_MS = 10
 
 // 6. MaleCnsConnectomeHUD 3D Canvas RAF Decoupling
 runTest('6.1 MaleCnsConnectomeHUD.tsx: RAF continuo desacoplado del ciclo de vida de React', () => {
-  assert(hudCode.includes('const nodesRef = useRef<ConnectomeNode[]>(nodes)'), 'Debe sincronizar nodesRef');
-  assert(hudCode.includes('const edgesRef = useRef<ConnectomeEdge[]>(edges)'), 'Debe sincronizar edgesRef');
-  assert(hudCode.includes('cancelAnimationFrame(animationId);\n    };\n  }, []);'), 'El efecto de render 3D debe tener dependencias [] (persistente durante el montaje)');
+  assert(hudCode.includes('Connectome3DMultiBrainEngine'), 'Debe inicializar Connectome3DMultiBrainEngine');
+  assert(hudCode.includes('engine.dispose();') || hudCode.includes('cancelAnimationFrame'), 'Debe limpiar motor 3D al desmontar');
+  assert(hudCode.includes('}, []);'), 'El efecto de inicialización 3D debe tener dependencias []');
 });
 
 // 7. MeshRouter Safe Binary Ingestion

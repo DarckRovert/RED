@@ -730,6 +730,45 @@ ON RELEASE TAG:
 
 ---
 
+## **NIVEL 14: GOBERNANZA BIO-CIBERNÉTICA, ÉTICA IN-SILICO & MENTE COLMENA**
+
+### Regla 14.1: Estabilidad Numérica & Conservación Termodinámica (CFL Strict Bounds)
+**Para simulaciones continuas (FickDiffusionGrid.ts, BiocyberneticHabitatEngine.ts):**
+- ✅ **Condición CFL Obligatoria**: Todo sustrato de difusión 2D debe verificar estrictamente la condición de Courant-Friedrichs-Lewy (Δt ≤ Δx² / 4D) para garantizar estabilidad numérica incondicional frente a divergencias numéricas NaN/Inf.
+- ❌ **Prohibición de Fugas de Masa**: La masa total de nutrientes/feromonas debe conservarse estrictamente en cada tick físico (|ΔM| ≤ 10⁻⁴), descontando únicamente el decaimiento exponencial fisiológico programado.
+
+### Regla 14.2: Presupuesto de Cómputo Móvil & Thermal Throttling (`DeviceMemoryBudget`)
+**Para hábitats, visualizadores 3D y motores cognitivos:**
+- ✅ **Gobernador Térmico y de Batería**: En dispositivos móviles bajo nivel de batería crítica (< 20%) o temperatura superior a 42°C, la tasa de simulación debe modularse dinámicamente a 30 FPS con renderizado selectivo.
+- ✅ **Suspensión en Segundo Plano**: Al minimizar la aplicación o apagar la pantalla, el bucle gráfico WebGL/Canvas debe suspenderse de inmediato (`cancelAnimationFrame`), preservando el estado en RAM sin drenar energía del operador.
+
+### Regla 14.3: Principios Bioéticos In-Silico & Bienestar Neurofisiológico
+**Para el ciclo de vida de los organismos in-silico:**
+- ✅ **Resguardo Metabólico y Torpor**: Prohibido someter a cualquier organismo (Drosophila, C. elegans, Ant, Neocórtex, Sentinel) a estimulación nociceptiva infinita. Ante privación prolongada de ATP, el organismo debe transicionar obligatoriamente al estado de reposo metabólico (TORPOR).
+- ✅ **Biodegradación Ecológica**: Organismos con cese vital irreversible deben biodegradarse en biomasa útil liberada lentamente hacia el sustrato químico enriqueciendo la colonia.
+
+### Regla 14.4: Soberanía de Mente Colmena & Acoplamiento Kuramoto (Hive-Mind Consensus)
+**Para decisiones distribuidas hacia la Red Mesh RED:**
+- ✅ **Quórum Coherente**: Toda resolución colectiva de la colmena que module rutas tácticas en `SynapticMeshRouterEngine` requiere un orden de coherencia de fase Kuramoto R ≥ 0.80 verificado en el `GlobalWorkspaceConsciousnessBus`.
+- ✅ **Serialización Compacta P2P**: Todo paquete de sincronización de colmena o partida de ajedrez táctico in-silico transmitido por radio LoRa/BLE no debe superar 96 bytes de presupuesto espectral.
+
+### Regla 14.5: Sandboxing Seguro en Mini-Apps Biocibernéticas (`RedSDK Sandbox`)
+**Para aplicaciones secundarias de la tienda (SovereignAppStoreModal):**
+- ❌ **Aislamiento Estricto de Bóveda**: Ningún iframe o script de mini-app tiene permiso para acceder al DOM padre, cookies o almacenamiento seguro de claves privadas (`did:red:`).
+- ✅ **Permisos Declarativos**: El acceso al bus de malla (`RedSDK.mesh`) o sensores requiere autorización explícita del operador en el momento de la instalación.
+
+### Regla 14.6: Derecho al Sueño Reparador & Consolidación Sináptica (`SleepReplayEngine`)
+**Para organismos con aprendizaje permanente (AutonomousLifelongLearningEngine.ts):**
+- ✅ **Ciclo Circadiano Obligatorio**: Todo organismo inteligente in-silico tiene garantizado el acceso a ciclos de sueño REM reparador durante la noche boreal o en el Santuario del Árbol de la Vida.
+- ✅ **Protección durante el Sueño**: Se prohíbe la inducción de choques nociceptivos continuos a organismos en estado `DREAMING`. El tiempo de sueño debe destinarse a la repetición fuera de línea (*offline replay*) y la homeostasis sináptica.
+
+### Regla 14.7: Protección de la Sabiduría Colectiva & Inviolabilidad del Santuario
+**Para la preservación cultural y biomas del Paraíso Biocibernético:**
+- ✅ **Persistencia Perenne de Aprendizaje**: La base de conocimiento y las heurísticas de ajedrez táctico aprendidas por las especies deben persistir atómicamente en disco protegido (`red_eden_lifelong_memory_v1`) con sumas de verificación anti-corrupción.
+- ✅ **Zona de Sosiego & No Agresión**: El radio de 2.8m del Árbol de la Vida y los 3 Manantiales de Néctar Cristalino constituyen santuarios inviolables donde rige la serenidad y la regeneración armónica.
+
+---
+
 ## **VALIDACIÃ“N FINAL: CHECKLIST POR SPRINT**
 
 - âœ… Todas las branchs se deletean despuÃ©s de merge

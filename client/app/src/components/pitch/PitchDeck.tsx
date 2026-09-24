@@ -484,11 +484,11 @@ export const PitchDeck: React.FC = () => {
             )
         },
 
-        // SLIDE 6: 62 MÓDULOS TÁCTICOS
+        // SLIDE 6: 65 MÓDULOS TÁCTICOS
         {
             id: 6,
             tag: "EL ECOSISTEMA INTEGRAL",
-            title: "Mucho Más que un Chat: 62 Módulos",
+            title: "Mucho Más que un Chat: 65 Módulos",
             subtitle: "Un sistema operativo táctico integral para supervivencia, logística, respuesta médica y coordinación civil.",
             tagColor: "#38BDF8",
             tagBorder: "rgba(56, 189, 248, 0.4)",

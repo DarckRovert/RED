@@ -115,9 +115,10 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
 
     return (
         <section id="modules" style={{ padding: "70px 0 80px", position: "relative" }}>
-          {/* Secondary Anchor for #modules57 / #modules62 */}
+          {/* Secondary Anchor for #modules57 / #modules62 / #modules65 */}
           <div id="modules57" style={{ position: "absolute", top: 0, left: 0, height: 1, width: 1, pointerEvents: "none" }} />
           <div id="modules62" style={{ position: "absolute", top: 0, left: 0, height: 1, width: 1, pointerEvents: "none" }} />
+          <div id="modules65" style={{ position: "absolute", top: 0, left: 0, height: 1, width: 1, pointerEvents: "none" }} />
 
           <div style={{ textAlign: "center", marginBottom: "36px" }}>
             <span
@@ -133,13 +134,13 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
                 letterSpacing: "1.2px"
               }}
             >
-              SUITE OPERATIVA COMPLETA • 62 MÓDULOS ACTIVOS EN 6 PILARES
+              SUITE OPERATIVA COMPLETA • 65 MÓDULOS ACTIVOS EN 6 PILARES
             </span>
             <h2 style={{ fontSize: "clamp(28px, 4.2vw, 42px)", fontWeight: 900, color: "#FFF", marginTop: "14px", marginBottom: "12px", letterSpacing: "-0.6px" }}>
               Catálogo de Módulos Tácticos & Resiliencia
             </h2>
             <p style={{ fontSize: "16px", color: "#94A3B8", maxWidth: "860px", margin: "0 auto", lineHeight: 1.65 }}>
-              Explora los 62 subsistemas integrados de RED OS: interoperabilidad ATAK CoT v2.0, planificador LoRa TDMA anti-colisiones, enrutamiento geoespacial Geohash DTN, repetidores solares autónomos ESP32-S3, pasarela satelital LEO, criptografía híbrida Post-Cuántica ML-KEM-768 y visor CAD vectorial 4K.
+              Explora los 65 subsistemas integrados de RED OS: interoperabilidad ATAK CoT v2.0, planificador LoRa TDMA anti-colisiones, enrutamiento geoespacial Geohash DTN, repetidores solares autónomos ESP32-S3, pasarela satelital LEO, criptografía híbrida Post-Cuántica ML-KEM-768, atlas somático MaleCNS 3D, Vivarium y Hábitat Biocibernético.
             </p>
           </div>
 

@@ -104,7 +104,7 @@ export const LandingHardwareGallery: React.FC<LandingHardwareGalleryProps> = ({ 
             fieldNotes: [
                 'Proyección de vector de rumbo azimutal de 45° con orientación continua en la cartografía.',
                 'Marcado de puntos tácticos seleccionados, waypoints de patrulla y fijación de objetivos.',
-                'Matriz operativa de 62 módulos con acceso directo a Ecosonda, CoT y Sismógrafo.'
+                'Matriz operativa de 65 módulos con acceso directo a Ecosonda, CoT y Sismógrafo.'
             ],
             tacticalSpecs: [
                 { label: 'Fijación Satelital', value: 'GPS FIJADO (±20m) • En tiempo real' },

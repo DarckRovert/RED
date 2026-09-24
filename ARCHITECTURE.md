@@ -1,4 +1,4 @@
-# 🛡️ RED OS v121.0.0 — Arquitectura Técnica & Especificación Planetaria
+# 🛡️ RED OS v122.0.0 — Arquitectura Técnica & Especificación Planetaria
 
 > Documento maestro de ingeniería de software y especificación arquitectónica de **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Describe en detalle la topología de 7 capas, los protocolos criptográficos híbridos post-cuánticos (ML-KEM-768), la coordinación espectral LoRa TDMA con sincronización Kuramoto y PLL de reloj Lamport, el enrutamiento geoespacial Geohash DTN, la flota de repetidores solares autónomos ESP32-S3, la capa bio-cibernética conectómica, el catálogo consolidado de 65 módulos tácticos, el gemelo digital interactivo Vivarium Biocibernético 3D y el Hábitat Digital Biocibernético In-Silico.
 
@@ -18,12 +18,14 @@
 10. [Resumen de Componentes, Crates & Firmware del Workspace](#10-resumen-de-componentes-crates--firmware-del-workspace)
 11. [Mapa Visual 10: Vivarium Biocibernético 3D & Gemelo Digital Táctico](#11-mapa-visual-10-vivarium-biocibernético-3d--gemelo-digital-táctico)
 12. [Mapa Visual 11: Hábitat Digital Biocibernético In-Silico & Ecosistema Multi-Cerebro A-Life](#12-mapa-visual-11-hábitat-digital-biocibernético-in-silico--ecosistema-multi-cerebro-a-life)
+13. [Mapa Visual 12: Motor de Ajedrez Táctico Autónomo In-Silico & Cognición Inter-Especies](#13-mapa-visual-12-motor-de-ajedrez-táctico-autónomo-in-silico--cognición-inter-especies)
+14. [Mapa Visual 13: El Paraíso Biocibernético In-Silico & Aprendizaje Autónomo Permanente](#14-mapa-visual-13-el-paraíso-biocibernético-in-silico--aprendizaje-autónomo-permanente)
 
 ---
 
 ## 1. Mapa Visual 1: Topología Global del Sistema & Conexión de 7 Capas
 
-El ecosistema RED v121.0.0 opera bajo una arquitectura desacoplada de 7 capas horizontales con aislamiento estricto de memoria y enlaces de comunicación IPC seguros:
+El ecosistema RED v122.0.0 opera bajo una arquitectura desacoplada de 7 capas horizontales con aislamiento estricto de memoria y enlaces de comunicación IPC seguros:
 
 ```mermaid
 graph TD
@@ -493,7 +495,7 @@ graph TD
 
 ## 12. Mapa Visual 11: Hábitat Digital Biocibernético In-Silico & Ecosistema Multi-Cerebro A-Life
 
-El **Hábitat Digital Biocibernético In-Silico** (`BiocyberneticHabitatEngine.ts`) implementa un sustrato de simulación biofísica continua a 60 Hz desacoplado con resolución de ecuaciones diferenciales en derivadas parciales (EDP), percepción sensorial y etología divergente de 3 especies vivas, ciclo de vida evolutivo A-Life y enlace de migración P2P:
+El **Hábitat Digital Biocibernético In-Silico** (`BiocyberneticHabitatEngine.ts`) implementa un sustrato de simulación biofísica continua a 60 Hz desacoplado con resolución de ecuaciones diferenciales en derivadas parciales (EDP), percepción sensorial y etología divergente de las **5 inteligencias soberanas del proyecto**, ludoteca interactiva de mini-juegos (Gran Torneo de Glucosa, Puntero Láser Chase, Lluvia de Néctar), ciclo de vida evolutivo A-Life, bocadillos de pensamiento holográficos 3D/2D y enlace de migración P2P:
 
 ```mermaid
 graph TD
@@ -508,10 +510,21 @@ graph TD
         PDE_SOLVER --> BARRIERS
     end
 
-    subgraph ESPECIES_DIVERGENTES ["Ecosistema Multi-Cerebro & Etología"]
+    subgraph ESPECIES_DIVERGENTES ["5 Inteligencias Soberanas en Coexistencia Simbiótica"]
         DROSOPHILA["Drosophila: Omatidios LC4, Alas Batientes & STDP Hebbiano PAM/PPL1"]
+        HUMAN_NEOCORTEX["Neocórtex Humano: Avatar Epistémico 7 Núcleos & Celdas Entorrinales"]
+        GRAVITY_SENTINEL["Gravity Sentinel IA: Cuadricóptero Autónomo, Cono Escaneo & Árbitro"]
         C_ELEGANS["C. elegans: Columna Sinusoidal 10 Nodos & Klinokinesis Pierce-Shimomura"]
         FORMICIDAE["Ant Colony: Mandíbulas, Forrajeo & Estigmergia PHEROMONE_TRAIL"]
+    end
+
+    subgraph LUDOTECA_HUD ["Ludoteca & Mini-Juegos Interactivos L9"]
+        SUGAR_RACE["🏆 Gran Torneo de Glucosa (Mega-Cristal 3D, Carreras & Locución IA)"]
+        LASER_CHASE["🎯 Puntero Láser Juguetón (Persecución Lúdica Interactiva)"]
+        NECTAR_RAIN["🍯 Lluvia de Néctar (+10 Fuentes de Glucosa Simultáneas)"]
+        WIND_ACROBATICS["💨 Ráfaga Acrobática (Evasiones 360° en Enjambre)"]
+        THOUGHT_BUBBLES["💬 Bocadillos Holográficos 3D/2D (Pensamientos & Ánimos en Vivo)"]
+        AFFECTIVE_DECK["💖 Acciones Afectivas (Alimentar Golosina, Acariciar & Conversar)"]
     end
 
     subgraph CICLO_A_LIFE ["Evolución & Ciclo de Vida Ecológico In-Silico"]
@@ -525,14 +538,6 @@ graph TD
         DECAY --> PDE_SOLVER
     end
 
-    subgraph INSTRUMENTAL_HUD ["Instrumental Táctico & Bio-Scanner HUD"]
-        PIPETTE["Pipeta Continua Drag & Paint (Glucosa)"]
-        AIR_PUFF["Sonda Mecánica Air-Puff (Ondas de Choque)"]
-        OPTO_LASER["Láser Optogenético ChR2 (470 nm)"]
-        BIO_SCANNER["Bio-Scanner HUD (Retícula Animada & Telemetría Individual)"]
-        AUDIO_SYNTH["TacticalAudioEngine (Síntesis Web Audio Sub-milisegundo)"]
-    end
-
     subgraph MALLA_P2P ["Migración Ecológica Inter-Dispositivo"]
         P2P_PACKET["Trama de Migración Cuantizada (72 bytes / mesh.bio.habitat.v1)"]
         LORA_BLE["Transporte de Radio LoRa SX1262 / Bluetooth LE"]
@@ -544,7 +549,136 @@ graph TD
 
     SUSTRATO_FICK <--> ESPECIES_DIVERGENTES
     ESPECIES_DIVERGENTES --> CICLO_A_LIFE
-    INSTRUMENTAL_HUD <--> ESPECIES_DIVERGENTES
-    INSTRUMENTAL_HUD <--> SUSTRATO_FICK
+    LUDOTECA_HUD <--> ESPECIES_DIVERGENTES
+    LUDOTECA_HUD <--> SUSTRATO_FICK
     ESPECIES_DIVERGENTES <--> MALLA_P2P
 ```
+
+---
+
+## 13. Mapa Visual 12: Motor de Ajedrez Táctico Autónomo In-Silico & Cognición Inter-Especies
+
+El motor soberano de ajedrez táctico in-silico (`AutonomousHabitatChessEngine.ts`) dota a los hábitats biocibernéticos (tanto la simulación interna C4ISR como la Mini-App de la Tienda Soberana) de confrontaciones cognitivas formales sin dependencias externas:
+
+```mermaid
+graph TD
+    subgraph TABLERO_CANONICO ["Tablero Canónico 8x8 Determinista (Cero Dependencias)"]
+        BOARD["Matriz 8x8 (64 casillas, fila 0-7, col 0-7)"]
+        GEN_MOVES["Generador Exhaustivo de Movimientos Legales"]
+        PROMOTION["Promoción Automática de Peones a Dama (Fila 0 / 7)"]
+        KING_SAFETY["Detección de Jaque, Mate y Captura de Rey"]
+        SAFE_LIMIT["Guardarraíl de 150 Jugadas (Detección de Tablas)"]
+        
+        BOARD --> GEN_MOVES
+        GEN_MOVES --> PROMOTION
+        GEN_MOVES --> KING_SAFETY
+        KING_SAFETY --> SAFE_LIMIT
+    end
+
+    subgraph HEURISTICAS_COGNITIVAS ["Evaluadores Neuroanatómicos de las 5 Especies"]
+        NEOCORTEX_EVAL["Human Neocortex: Minimax Alfa-Beta (Profundidad 3) + Posición Clásica"]
+        SENTINEL_EVAL["Gravity Sentinel IA: Control Vectorial, Líneas de Fuego & Densidad de Amenaza"]
+        DROSOPHILA_EVAL["Drosophila: Recompensa Dopaminérgica Hebbiana (PAM/PPL1) & Agresividad"]
+        ANT_EVAL["Ant Colony: Falange Estigmérgica, Soporte Mutuo & Blindaje de Peones"]
+        CELEGANS_EVAL["C. elegans: Klinokinesis Estocástica (Gradiente Pierce-Shimomura)"]
+    end
+
+    subgraph REFLEXIONES_HUD ["Pensamiento & Telemetría Reactiva"]
+        THOUGHT_GEN["Generador de Reflexiones en Lenguaje Natural (CognitiveThoughtEntry)"]
+        BUBBLES_3D["Bocadillos Holográficos Flotantes 3D / 2D"]
+        HUD_MODAL["TacticalHabitatModal.tsx (Mini-Tablero 8x8, Reloj & Marcador)"]
+        MINIAPP_CANVAS["biocyberneticHabitatApp.ts (Mesa Central en Mini-App)"]
+        
+        THOUGHT_GEN --> BUBBLES_3D
+        THOUGHT_GEN --> HUD_MODAL
+        THOUGHT_GEN --> MINIAPP_CANVAS
+    end
+
+    subgraph HARDWARE_3D ["Representación Física 3D (BiocyberneticHabitat3DEngine)"]
+        CHESS_TABLE_3D["Pedestal Cilíndrico Táctico (R=0.7m, metalness=0.85)"]
+        NEON_RING["Anillo Concéntrico Cian (#00f0ff, opacidad 70%)"]
+        GRID_CELLS["64 Celdas Alternadas Tácticas (0x071526 / 0x1b324f)"]
+        HOLO_CROWN["Prisma Holográfico Flotante con Rotación Continua & Levitación Sinusoidal"]
+        
+        CHESS_TABLE_3D --> NEON_RING
+        CHESS_TABLE_3D --> GRID_CELLS
+        CHESS_TABLE_3D --> HOLO_CROWN
+    end
+
+    subgraph MALLA_LORA_P2P ["Retransmisión P2P Ultraliviana (< 24 bytes)"]
+        MESH_PKT["Trama 24B: Header 'RC' (0x52 0x43) + Turno + Ganador + From/To"]
+        LORA_RADIO["Canal LoRa SX1262 / BLE GATT"]
+        SWARM_OBS["Observabilidad del Torneo en la Red Mesh Planetaria"]
+        
+        MESH_PKT --> LORA_RADIO
+        LORA_RADIO --> SWARM_OBS
+    end
+
+    TABLERO_CANONICO <--> HEURISTICAS_COGNITIVAS
+    HEURISTICAS_COGNITIVAS --> THOUGHT_GEN
+    TABLERO_CANONICO --> HARDWARE_3D
+    TABLERO_CANONICO --> MESH_PKT
+```
+
+### Características Técnicas del Motor de Ajedrez Táctico:
+1. **Determinismo y Rendimiento:** Ejecutado en el sub-bucle de física a 60 Hz sin bloquear el hilo principal de renderizado Three.js.
+2. **Paridad de Mini-App:** Sincronizado tanto en el HUD táctico principal como en la Mini-App descentralizada del ecosistema RED.
+3. **Presupuesto Espectral:** 24 bytes por jugada permiten emitir telemetría de partidas a través de enlaces LoRa de largo alcance con SF12 sin saturar el canal de radio táctico.
+4. **Cumplimiento Ético Nivel 14:** Alineado con las reglas de cohabitación in-silico y respeto cognitivo de `GOVERNANCE.md`.
+
+---
+
+## 14. Mapa Visual 13: El Paraíso Biocibernético In-Silico & Aprendizaje Autónomo Permanente
+
+El Paraíso Biocibernético (`BiocyberneticEdenParadiseEngine.ts`) y el Motor de Aprendizaje Permanente (`AutonomousLifelongLearningEngine.ts`) transforman el hábitat en un santuario edénico donde las 5 especies conviven, descansan y acumulan sabiduría duradera a lo largo del tiempo:
+
+```mermaid
+graph TD
+    subgraph SUSTRATO_PARAISOCIBERNETICO ["1. Sustrato Edénico & Microclimas (BiocyberneticEdenParadiseEngine)"]
+        CIRCADIAN["Ciclo Circadiano (180s: Día Solar Dorado ☀️ / Noche Boreal Estelar 🌙)"]
+        SPRINGS_3D["3 Manantiales de Néctar Cristalino (Aurora, Metamorfosis, Sosiego)"]
+        TREE_OF_LIFE["Árbol de la Vida Cuántico 3D (Santuario Central, R=2.8m)"]
+        MYCELIUM_WEB["Red Micelial Fúngica (Transporte Osmótico de Glucosa & Serotonina)"]
+        SOLFEGGIO["Resonancia Armónica Solfeggio Generativa (432 Hz / 528 Hz)"]
+        FICK_EXT["FickDiffusionGrid: Emisión Continua de SEROTONIN & MYCELIUM_NUTRIENTS"]
+        
+        CIRCADIAN --> SPRINGS_3D
+        CIRCADIAN --> SOLFEGGIO
+        SPRINGS_3D --> MYCELIUM_WEB
+        MYCELIUM_WEB --> TREE_OF_LIFE
+        TREE_OF_LIFE --> FICK_EXT
+    end
+
+    subgraph APRENDIZAJE_LIFELONG ["2. Aprendizaje Autónomo Permanente (AutonomousLifelongLearningEngine)"]
+        FREE_ENERGY["Inferencia Activa & Curiosidad Intrínseca (Principio de Karl Friston)"]
+        TD_BELLMAN["TD-Learning / Ecuación de Bellman: Q(s,a) += α [r + γ max Q(s',a') - Q(s,a)]"]
+        SLEEP_REPLAY["Sueño REM & Offline Replay (Consolidación Hipocampal / Central Complex)"]
+        CHESS_OPENINGS["Libro de Aperturas Aprendido (LearnedOpeningBook por Especie)"]
+        HOMEOSTASIS["Homeostasis Sináptica de Tononi (Poda de Ruido & Retención de Sabiduría)"]
+        PERSISTENCE["Persistencia Atómica Perenne en Bóveda Local (red_eden_lifelong_memory_v1)"]
+        
+        FREE_ENERGY --> TD_BELLMAN
+        TD_BELLMAN --> SLEEP_REPLAY
+        SLEEP_REPLAY --> HOMEOSTASIS
+        CHESS_OPENINGS --> PERSISTENCE
+        HOMEOSTASIS --> PERSISTENCE
+    end
+
+    subgraph OBSERVABILIDAD_HUD ["3. Interfaz & Experiencia 3D/2D"]
+        CANOPY_3D["Dosel de Partículas Bioluminiscentes & Cúpula de Auroras Boreales"]
+        WISDOM_TELEMETRY["Telemetría de Sabiduría: Wisdom Level, Curiosity Score & Replay Status"]
+        WEATHER_EVENTS["Clima Celestial Reactivo: Rocío de Néctar, Brisa de Serotonina & Meditación"]
+        MINIAPP_EDEN["Mini-App de la Tienda Soberana con Bioma Edénico Sincronizado"]
+    end
+
+    SUSTRATO_PARAISOCIBERNETICO <--> APRENDIZAJE_LIFELONG
+    APRENDIZAJE_LIFELONG --> OBSERVABILIDAD_HUD
+    SUSTRATO_PARAISOCIBERNETICO --> OBSERVABILIDAD_HUD
+```
+
+### Especificaciones de la Arquitectura Edénica:
+1. **Conservación de Sabiduría Intergeneracional:** Los pesos sinápticos y libros de aperturas de ajedrez persisten entre reinicios de la aplicación, permitiendo que las especies acumulen pericia táctica durante días y semanas.
+2. **Ciclos de Sueño REM y Plasticidad:** Los organismos experimentan fases naturales de vigilia (exploración activa) y reposo en el Santuario (replay episódico fuera de línea), evitando la catástrofe de saturación sináptica.
+3. **Química de Bienestar y Fick 5D:** La inclusión de `SEROTONIN` modula los estados afectivos hacia `SERENITY` y `TRANSCENDENCE`, reduciendo el conflicto y potenciando la inteligencia colectiva.
+
+

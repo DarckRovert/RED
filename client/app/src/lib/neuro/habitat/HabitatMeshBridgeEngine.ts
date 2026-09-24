@@ -13,7 +13,7 @@
 
 import { meshRouter } from '../../mesh/meshRouter';
 
-export type MigratoryOrganismType = 'DROSOPHILA' | 'C_ELEGANS' | 'ANT';
+export type MigratoryOrganismType = 'DROSOPHILA' | 'C_ELEGANS' | 'ANT' | 'HUMAN_NEOCORTEX' | 'GRAVITY_SENTINEL';
 
 export interface ImmigrantOrganismData {
   type: MigratoryOrganismType;
@@ -137,6 +137,8 @@ export class HabitatMeshBridgeEngine {
     let typeCode = 1;
     if (type === 'C_ELEGANS') typeCode = 2;
     else if (type === 'ANT') typeCode = 3;
+    else if (type === 'HUMAN_NEOCORTEX') typeCode = 4;
+    else if (type === 'GRAVITY_SENTINEL') typeCode = 5;
     buffer[2] = typeCode;
 
     buffer[3] = Math.floor(Math.max(0, Math.min(1, atpLevel)) * 100);
@@ -169,6 +171,8 @@ export class HabitatMeshBridgeEngine {
     let type: MigratoryOrganismType = 'DROSOPHILA';
     if (payload[2] === 2) type = 'C_ELEGANS';
     else if (payload[2] === 3) type = 'ANT';
+    else if (payload[2] === 4) type = 'HUMAN_NEOCORTEX';
+    else if (payload[2] === 5) type = 'GRAVITY_SENTINEL';
 
     const atpLevel = payload[3] / 100.0;
     const degInt = (payload[4] << 8) | payload[5];

@@ -28,10 +28,12 @@ import {
   HabitatOrganism,
   HabitatToolType,
   OrganismSpecies,
+  OrganismMood,
 } from './BiocyberneticHabitatEngine';
 import { HexapodBody3D } from '../vivarium/HexapodBody3D';
 import { centralPatternGenerator, CpgLocomotionTelemetry } from '../CentralPatternGeneratorEngine';
 import { TacticalAudioEngine } from '../../audio/TacticalAudioEngine';
+import { biocyberneticEdenParadise } from './BiocyberneticEdenParadiseEngine';
 
 export type HabitatCameraMode = 'ORBITAL' | 'FOLLOW_AGENT' | 'TOP_DOWN_GOD';
 
@@ -275,7 +277,507 @@ class AntBody3D {
   }
 }
 
-// ── 3. Motor Principal 3D del Hábitat Biocibernético ──────────────────────────
+// ── Helper de Ajuste de Línea para Canvas de Bocadillos 3D ───────────────────
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number
+): void {
+  const words = text.split(' ');
+  let line = '';
+  let curY = y;
+  let linesRendered = 0;
+
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + ' ';
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && n > 0) {
+      ctx.fillText(line.trim(), x, curY);
+      line = words[n] + ' ';
+      curY += lineHeight;
+      linesRendered++;
+      if (linesRendered >= 2) {
+        ctx.fillText((line + '...').trim(), x, curY);
+        return;
+      }
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line.trim(), x, curY);
+}
+
+// ── 3. Modelo 3D de Gravity AI Sentinel (Dron Soberano de Vigilancia) ─────────
+class GravitySentinel3D {
+  public readonly rootGroup: THREE.Group;
+  private readonly bodyGroup: THREE.Group;
+  private readonly thrusters: THREE.Mesh[] = [];
+  private readonly eyeMesh: THREE.Mesh;
+  private readonly spotLight: THREE.SpotLight;
+  private readonly scanCircle: THREE.Mesh;
+  private hoverPhase = 0;
+
+  constructor() {
+    this.rootGroup = new THREE.Group();
+    this.rootGroup.name = 'GravitySentinel_Root';
+    this.bodyGroup = new THREE.Group();
+    this.rootGroup.add(this.bodyGroup);
+
+    // Fuselaje central en aleación de titanio oscuro
+    const hullMat = new THREE.MeshStandardMaterial({
+      color: 0x09101f,
+      metalness: 0.9,
+      roughness: 0.2,
+    });
+    const coreGeo = new THREE.OctahedronGeometry(0.32, 2);
+    coreGeo.scale(1.2, 0.65, 1.2);
+    const coreMesh = new THREE.Mesh(coreGeo, hullMat);
+    coreMesh.castShadow = true;
+    this.bodyGroup.add(coreMesh);
+
+    // Anillo giratorio de inducción cuántica
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: 0x00e5ff,
+      emissive: 0x00e5ff,
+      emissiveIntensity: 0.9,
+      metalness: 0.5,
+      roughness: 0.1,
+    });
+    const ringGeo = new THREE.TorusGeometry(0.42, 0.022, 8, 32);
+    ringGeo.rotateX(Math.PI / 2);
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    this.bodyGroup.add(ringMesh);
+
+    // Ojo óptico sensorial frontal (lente cuántica cian)
+    const eyeMat = new THREE.MeshStandardMaterial({
+      color: 0x00ffff,
+      emissive: 0x00e5ff,
+      emissiveIntensity: 1.6,
+      roughness: 0.1,
+    });
+    const eyeGeo = new THREE.SphereGeometry(0.09, 16, 16);
+    this.eyeMesh = new THREE.Mesh(eyeGeo, eyeMat);
+    this.eyeMesh.position.set(0, 0, 0.32);
+    this.bodyGroup.add(this.eyeMesh);
+
+    // 4 Góndolas de propulsión iónica (outriggers) con llamas de plasma cian
+    const nacelleMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      metalness: 0.8,
+      roughness: 0.3,
+    });
+    const plasmaMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+
+    const angles = [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4];
+    angles.forEach((ang) => {
+      const armGroup = new THREE.Group();
+      armGroup.position.set(Math.cos(ang) * 0.46, -0.05, Math.sin(ang) * 0.46);
+
+      const podGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.22, 10);
+      const pod = new THREE.Mesh(podGeo, nacelleMat);
+      armGroup.add(pod);
+
+      const thrusterGeo = new THREE.ConeGeometry(0.05, 0.14, 8);
+      thrusterGeo.rotateX(Math.PI);
+      const thruster = new THREE.Mesh(thrusterGeo, plasmaMat);
+      thruster.position.y = -0.14;
+      armGroup.add(thruster);
+      this.thrusters.push(thruster);
+
+      this.bodyGroup.add(armGroup);
+    });
+
+    // Foco cónico de escaneo hacia el suelo
+    this.spotLight = new THREE.SpotLight(0x00f0ff, 2.8, 9.0, Math.PI / 6, 0.35, 1.2);
+    this.spotLight.position.set(0, 0, 0);
+    this.spotLight.target.position.set(0, -3.0, 0);
+    this.rootGroup.add(this.spotLight);
+    this.rootGroup.add(this.spotLight.target);
+
+    // Retícula circular de escaneo que barre el suelo
+    const scanGeo = new THREE.RingGeometry(0.35, 0.42, 24);
+    scanGeo.rotateX(-Math.PI / 2);
+    const scanMat = new THREE.MeshBasicMaterial({
+      color: 0x00e5ff,
+      transparent: true,
+      opacity: 0.5,
+      side: THREE.DoubleSide,
+    });
+    this.scanCircle = new THREE.Mesh(scanGeo, scanMat);
+    this.rootGroup.add(this.scanCircle);
+  }
+
+  public update(x: number, y: number, z: number, headingRad: number, speedMps: number, deltaSec: number): void {
+    this.hoverPhase += deltaSec * 3.2;
+    const hoverOffset = Math.sin(this.hoverPhase) * 0.08;
+    this.rootGroup.position.set(x, Math.max(0.6, z + hoverOffset), y);
+    this.rootGroup.rotation.y = headingRad;
+
+    // Cabeceo dinámico al acelerar
+    const tiltPitch = Math.min(0.25, speedMps * 0.12);
+    this.bodyGroup.rotation.x = tiltPitch;
+    this.bodyGroup.rotation.z = Math.sin(this.hoverPhase * 0.5) * 0.05;
+
+    // Pulso iónico en los propulsores
+    const pulse = 0.8 + 0.4 * Math.sin(this.hoverPhase * 6.0);
+    this.thrusters.forEach((t) => {
+      t.scale.set(1.0, pulse, 1.0);
+    });
+
+    // Ubicar retícula en el suelo
+    this.scanCircle.position.set(0, -this.rootGroup.position.y + 0.03, 0);
+    this.scanCircle.rotation.z += deltaSec * 2.5;
+  }
+
+  public dispose(): void {
+    this.rootGroup.traverse((obj) => {
+      if ((obj as THREE.Mesh).isMesh) {
+        const m = obj as THREE.Mesh;
+        m.geometry.dispose();
+      }
+    });
+    this.spotLight.dispose();
+  }
+}
+
+// ── 4. Modelo 3D de Neocorteza Humana (Avatar Cognitivo Epistémico) ────────────
+class HumanNeocortexAvatar3D {
+  public readonly rootGroup: THREE.Group;
+  private readonly headGroup: THREE.Group;
+  private readonly brainMesh: THREE.Mesh;
+  private readonly entorhinalRing: THREE.Mesh;
+  private readonly auraLight: THREE.PointLight;
+  private walkPhase = 0;
+
+  constructor() {
+    this.rootGroup = new THREE.Group();
+    this.rootGroup.name = 'HumanNeocortex_Root';
+
+    // Armadura biomecánica cibernética esmeralda
+    const suitMat = new THREE.MeshStandardMaterial({
+      color: 0x072714,
+      emissive: 0x10b981,
+      emissiveIntensity: 0.25,
+      roughness: 0.3,
+      metalness: 0.7,
+      transparent: true,
+      opacity: 0.9,
+    });
+
+    // Torso estilizado
+    const torsoGeo = new THREE.CapsuleGeometry(0.18, 0.45, 6, 8);
+    const torso = new THREE.Mesh(torsoGeo, suitMat);
+    torso.position.y = 0.65;
+    torso.castShadow = true;
+    this.rootGroup.add(torso);
+
+    // Cabeza y Casco Holográfico
+    this.headGroup = new THREE.Group();
+    this.headGroup.position.y = 1.05;
+
+    // Visor translúcido
+    const visorGeo = new THREE.SphereGeometry(0.2, 16, 16);
+    const visorMat = new THREE.MeshStandardMaterial({
+      color: 0x052e16,
+      transparent: true,
+      opacity: 0.45,
+      roughness: 0.1,
+      metalness: 0.1,
+    });
+    const visorMesh = new THREE.Mesh(visorGeo, visorMat);
+    this.headGroup.add(visorMesh);
+
+    // Cerebro 3D pulsante visible en el interior (7 núcleos neocorticales)
+    const brainMat = new THREE.MeshStandardMaterial({
+      color: 0x10b981,
+      emissive: 0x34d399,
+      emissiveIntensity: 1.3,
+      roughness: 0.2,
+      wireframe: true,
+    });
+    const brainGeo = new THREE.SphereGeometry(0.13, 10, 10);
+    brainGeo.scale(1.2, 0.9, 1.3);
+    this.brainMesh = new THREE.Mesh(brainGeo, brainMat);
+    this.headGroup.add(this.brainMesh);
+
+    this.rootGroup.add(this.headGroup);
+
+    // Anillo hexagonal de celdas entorrinales en la base
+    const ringGeo = new THREE.RingGeometry(0.45, 0.52, 6);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x10b981,
+      transparent: true,
+      opacity: 0.65,
+      side: THREE.DoubleSide,
+    });
+    this.entorhinalRing = new THREE.Mesh(ringGeo, ringMat);
+    this.entorhinalRing.position.y = 0.03;
+    this.rootGroup.add(this.entorhinalRing);
+
+    // Aura cognitiva esmeralda
+    this.auraLight = new THREE.PointLight(0x10b981, 1.2, 3.5);
+    this.auraLight.position.y = 1.05;
+    this.rootGroup.add(this.auraLight);
+  }
+
+  public update(x: number, y: number, headingRad: number, speedMps: number, deltaSec: number): void {
+    this.walkPhase += deltaSec * (speedMps > 0.1 ? 4.5 : 1.5);
+    const bob = Math.sin(this.walkPhase) * 0.04;
+    this.rootGroup.position.set(x, bob, y);
+    this.rootGroup.rotation.y = headingRad;
+
+    // Pulsación del cerebro neocortical según actividad de inferencia activa
+    const brainPulse = 1.0 + Math.sin(this.walkPhase * 2.0) * 0.08;
+    this.brainMesh.scale.set(brainPulse, brainPulse, brainPulse);
+
+    // Rotación del anillo entorrinal hexagonal
+    this.entorhinalRing.rotation.z += deltaSec * 1.2;
+  }
+
+  public dispose(): void {
+    this.rootGroup.traverse((obj) => {
+      if ((obj as THREE.Mesh).isMesh) {
+        const m = obj as THREE.Mesh;
+        m.geometry.dispose();
+      }
+    });
+    this.auraLight.dispose();
+  }
+}
+
+// ── 5. Bocadillo de Pensamiento Holográfico 3D (Billboard Sprite) ─────────────
+class ThoughtBubbleSprite3D {
+  public readonly sprite: THREE.Sprite;
+  private readonly canvas: HTMLCanvasElement;
+  private readonly ctx: CanvasRenderingContext2D;
+  private readonly texture: THREE.CanvasTexture;
+  private lastRenderedKey = '';
+
+  constructor() {
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = 384;
+    this.canvas.height = 128;
+    this.ctx = this.canvas.getContext('2d')!;
+
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture.minFilter = THREE.LinearFilter;
+    this.texture.magFilter = THREE.LinearFilter;
+
+    const spriteMat = new THREE.SpriteMaterial({
+      map: this.texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.sprite = new THREE.Sprite(spriteMat);
+    this.sprite.scale.set(2.4, 0.8, 1.0);
+  }
+
+  public update(
+    x: number,
+    y: number,
+    z: number,
+    species: OrganismSpecies,
+    name: string,
+    thought: string,
+    mood: OrganismMood,
+    themeColor: string
+  ): void {
+    this.sprite.position.set(x, y + 0.85, z);
+
+    const key = `${species}-${name}-${thought}-${mood}`;
+    if (key === this.lastRenderedKey) return;
+    this.lastRenderedKey = key;
+
+    const ctx = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Fondo bocadillo redondeado táctico con glassmorphism
+    ctx.fillStyle = 'rgba(6, 14, 28, 0.88)';
+    ctx.strokeStyle = themeColor;
+    ctx.lineWidth = 3;
+
+    const r = 16;
+    const bw = w - 12;
+    const bh = h - 28;
+    const bx = 6;
+    const by = 6;
+
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by);
+    ctx.lineTo(bx + bw - r, by);
+    ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + r);
+    ctx.lineTo(bx + bw, by + bh - r);
+    ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - r, by + bh);
+    // Puntero triangular hacia el organismo abajo
+    ctx.lineTo(bx + bw / 2 + 10, by + bh);
+    ctx.lineTo(bx + bw / 2, by + bh + 16);
+    ctx.lineTo(bx + bw / 2 - 10, by + bh);
+    ctx.lineTo(bx + r, by + bh);
+    ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - r);
+    ctx.lineTo(bx, by + r);
+    ctx.quadraticCurveTo(bx, by, bx + r, by);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Encabezado con Icono, Nombre y Mood
+    ctx.font = 'bold 16px "JetBrains Mono", monospace';
+    ctx.fillStyle = themeColor;
+    ctx.fillText(`${name}`, 18, 28);
+
+    // Mood badge emoji
+    const moodEmoji =
+      mood === 'COMPETITIVE'
+        ? '🏆'
+        : mood === 'PLAYFUL'
+        ? '⚡'
+        : mood === 'HUNGRY'
+        ? '🍓'
+        : mood === 'ZEN'
+        ? '🧘'
+        : '🔍';
+    ctx.font = '14px sans-serif';
+    ctx.fillText(`${moodEmoji} ${mood}`, bw - 90, 28);
+
+    // Línea divisoria fina
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(18, 36);
+    ctx.lineTo(bw - 10, 36);
+    ctx.stroke();
+
+    // Texto del pensamiento con ajuste de línea
+    ctx.font = '13px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#f1f5f9';
+    wrapText(ctx, thought, 18, 56, bw - 28, 18);
+
+    this.texture.needsUpdate = true;
+  }
+
+  public dispose(): void {
+    this.texture.dispose();
+    (this.sprite.material as THREE.Material).dispose();
+  }
+}
+
+// ── 6. Mega-Cristal de Glucosa Dorada para el Gran Torneo ─────────────────────
+class SugarMegaCrystal3D {
+  public readonly rootGroup: THREE.Group;
+  private readonly crystalMesh: THREE.Mesh;
+  private readonly ringMesh: THREE.Mesh;
+  private readonly beaconLight: THREE.PointLight;
+
+  constructor() {
+    this.rootGroup = new THREE.Group();
+    this.rootGroup.name = 'SugarMegaCrystal_Root';
+    this.rootGroup.visible = false;
+
+    // Cristal de glucosa facetado dorado brillante
+    const crystalGeo = new THREE.OctahedronGeometry(0.55, 1);
+    crystalGeo.scale(1.0, 1.6, 1.0);
+    const crystalMat = new THREE.MeshStandardMaterial({
+      color: 0xffd700,
+      emissive: 0xffaa00,
+      emissiveIntensity: 1.5,
+      roughness: 0.1,
+      metalness: 0.3,
+      transparent: true,
+      opacity: 0.92,
+    });
+    this.crystalMesh = new THREE.Mesh(crystalGeo, crystalMat);
+    this.crystalMesh.position.y = 0.9;
+    this.crystalMesh.castShadow = true;
+    this.rootGroup.add(this.crystalMesh);
+
+    // Anillo orbital giratorio
+    const ringGeo = new THREE.TorusGeometry(0.85, 0.03, 8, 32);
+    ringGeo.rotateX(Math.PI / 3);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+    this.ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    this.ringMesh.position.y = 0.9;
+    this.rootGroup.add(this.ringMesh);
+
+    // Luz dorada brillante
+    this.beaconLight = new THREE.PointLight(0xffd700, 2.5, 8.0);
+    this.beaconLight.position.y = 1.0;
+    this.rootGroup.add(this.beaconLight);
+  }
+
+  public update(deltaSec: number, x: number, z: number, visible: boolean): void {
+    this.rootGroup.visible = visible;
+    if (!visible) return;
+    this.rootGroup.position.set(x, 0, z);
+    this.crystalMesh.rotation.y += deltaSec * 1.5;
+    this.ringMesh.rotation.z += deltaSec * 2.0;
+    this.ringMesh.rotation.x += deltaSec * 0.8;
+  }
+
+  public dispose(): void {
+    this.rootGroup.traverse((obj) => {
+      if ((obj as THREE.Mesh).isMesh) {
+        const m = obj as THREE.Mesh;
+        m.geometry.dispose();
+      }
+    });
+    this.beaconLight.dispose();
+  }
+}
+
+// ── 7. Puntero Láser Juguetón 3D ──────────────────────────────────────────────
+class PlayfulLaserMesh3D {
+  public readonly rootGroup: THREE.Group;
+  private readonly laserDot: THREE.Mesh;
+  private readonly laserBeam: THREE.Mesh;
+
+  constructor() {
+    this.rootGroup = new THREE.Group();
+    this.rootGroup.visible = false;
+
+    // Punto brillante en el suelo
+    const dotGeo = new THREE.CircleGeometry(0.25, 16);
+    dotGeo.rotateX(-Math.PI / 2);
+    const dotMat = new THREE.MeshBasicMaterial({
+      color: 0x00ffcc,
+      side: THREE.DoubleSide,
+    });
+    this.laserDot = new THREE.Mesh(dotGeo, dotMat);
+    this.laserDot.position.y = 0.025;
+    this.rootGroup.add(this.laserDot);
+
+    // Haz cilíndrico desde el techo
+    const beamGeo = new THREE.CylinderGeometry(0.02, 0.08, 12, 8);
+    const beamMat = new THREE.MeshBasicMaterial({
+      color: 0x00ffcc,
+      transparent: true,
+      opacity: 0.35,
+    });
+    this.laserBeam = new THREE.Mesh(beamGeo, beamMat);
+    this.laserBeam.position.y = 6.0;
+    this.rootGroup.add(this.laserBeam);
+  }
+
+  public setPosition(x: number, z: number, visible: boolean): void {
+    this.rootGroup.visible = visible;
+    if (visible) {
+      this.rootGroup.position.set(x, 0, z);
+    }
+  }
+
+  public dispose(): void {
+    this.laserDot.geometry.dispose();
+    this.laserBeam.geometry.dispose();
+  }
+}
+
+// ── 8. Motor Principal 3D del Hábitat Biocibernético ──────────────────────────
 export class BiocyberneticHabitat3DEngine {
   private container: HTMLElement | null = null;
   private renderer: THREE.WebGLRenderer | null = null;
@@ -284,6 +786,7 @@ export class BiocyberneticHabitat3DEngine {
   private animFrameId: number | null = null;
   private isRunning = false;
   private lastTimeMs = 0;
+  private simTimeSec = 0;
 
   // Modos de Cámara y Navegación
   public cameraMode: HabitatCameraMode = 'ORBITAL';
@@ -317,7 +820,25 @@ export class BiocyberneticHabitat3DEngine {
   private flies3D: Map<string, HexapodBody3D> = new Map();
   private worms3D: Map<string, WormBody3D> = new Map();
   private ants3D: Map<string, AntBody3D> = new Map();
+  private sentinels3D: Map<string, GravitySentinel3D> = new Map();
+  private humans3D: Map<string, HumanNeocortexAvatar3D> = new Map();
+  private thoughtBubbles3D: Map<string, ThoughtBubbleSprite3D> = new Map();
   private barrierMeshes: Map<string, THREE.Mesh> = new Map();
+
+  // Entidades Lúdicas y Mini-Juegos 3D
+  private sugarMegaCrystal: SugarMegaCrystal3D;
+  private playfulLaserMesh: PlayfulLaserMesh3D;
+  private ambientSpores: THREE.Points;
+  private tacticalChessTable!: THREE.Group;
+
+  // Entidades del Paraíso Biocibernético 3D
+  private treeOfLifeGroup!: THREE.Group;
+  private nectarSpringsGroup!: THREE.Group;
+  private myceliumNetworkGroup!: THREE.Group;
+  private celestialDome!: THREE.Group;
+  private ambientLight!: THREE.AmbientLight;
+  private dirLight!: THREE.DirectionalLight;
+  private auroraMesh: THREE.Mesh | null = null;
 
   // Raycasting para interacción táctil sobre el suelo 3D
   private readonly raycaster: THREE.Raycaster;
@@ -337,22 +858,22 @@ export class BiocyberneticHabitat3DEngine {
     this.raycaster = new THREE.Raycaster();
     this.groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-    // ── Iluminación Táctica y Cyberpunk ─────────────────────────────────────
-    const ambientLight = new THREE.AmbientLight(0x18263a, 1.4);
-    this.scene.add(ambientLight);
+    // ── Iluminación Táctica y Cyberpunk Circadiana ──────────────────────────
+    this.ambientLight = new THREE.AmbientLight(0x18263a, 1.4);
+    this.scene.add(this.ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0x00f0ff, 1.2);
-    dirLight.position.set(8, 16, 8);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 1024;
-    dirLight.shadow.mapSize.height = 1024;
-    dirLight.shadow.camera.near = 1;
-    dirLight.shadow.camera.far = 40;
-    dirLight.shadow.camera.left = -12;
-    dirLight.shadow.camera.right = 12;
-    dirLight.shadow.camera.top = 12;
-    dirLight.shadow.camera.bottom = -12;
-    this.scene.add(dirLight);
+    this.dirLight = new THREE.DirectionalLight(0x00f0ff, 1.2);
+    this.dirLight.position.set(8, 16, 8);
+    this.dirLight.castShadow = true;
+    this.dirLight.shadow.mapSize.width = 1024;
+    this.dirLight.shadow.mapSize.height = 1024;
+    this.dirLight.shadow.camera.near = 1;
+    this.dirLight.shadow.camera.far = 40;
+    this.dirLight.shadow.camera.left = -12;
+    this.dirLight.shadow.camera.right = 12;
+    this.dirLight.shadow.camera.top = 12;
+    this.dirLight.shadow.camera.bottom = -12;
+    this.scene.add(this.dirLight);
 
     const fillLight = new THREE.DirectionalLight(0xff9f43, 0.6);
     fillLight.position.set(-8, 10, -8);
@@ -425,6 +946,53 @@ export class BiocyberneticHabitat3DEngine {
     // Retícula Táctica de Selección Holográfica 3D (para Bio-Scanner)
     this.selectionReticle = this.createSelectionReticle();
     this.scene.add(this.selectionReticle);
+
+    // Mega-Cristal de Glucosa Dorada para el Gran Torneo
+    this.sugarMegaCrystal = new SugarMegaCrystal3D();
+    this.scene.add(this.sugarMegaCrystal.rootGroup);
+
+    // Puntero Láser Juguetón 3D
+    this.playfulLaserMesh = new PlayfulLaserMesh3D();
+    this.scene.add(this.playfulLaserMesh.rootGroup);
+
+    // Mesa de Ajedrez Táctico In-Silico 3D
+    this.tacticalChessTable = this.createTacticalChessTable3D();
+    this.scene.add(this.tacticalChessTable);
+
+    // Entidades del Paraíso Biocibernético 3D
+    this.treeOfLifeGroup = this.createTreeOfLife3D();
+    this.scene.add(this.treeOfLifeGroup);
+
+    this.nectarSpringsGroup = this.createNectarSprings3D();
+    this.scene.add(this.nectarSpringsGroup);
+
+    this.myceliumNetworkGroup = this.createMyceliumNetwork3D();
+    this.scene.add(this.myceliumNetworkGroup);
+
+    this.celestialDome = this.createCelestialDome3D();
+    this.scene.add(this.celestialDome);
+
+    // Esporas bioluminiscentes atmosféricas
+    const sporeCount = 160;
+    const sporeGeo = new THREE.BufferGeometry();
+    const sporePositions = new Float32Array(sporeCount * 3);
+    for (let i = 0; i < sporeCount; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const dist = Math.random() * 9.5;
+      sporePositions[i * 3] = Math.cos(ang) * dist;
+      sporePositions[i * 3 + 1] = 0.4 + Math.random() * 4.2;
+      sporePositions[i * 3 + 2] = Math.sin(ang) * dist;
+    }
+    sporeGeo.setAttribute('position', new THREE.BufferAttribute(sporePositions, 3));
+    const sporeMat = new THREE.PointsMaterial({
+      color: 0x00f0ff,
+      size: 0.12,
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending,
+    });
+    this.ambientSpores = new THREE.Points(sporeGeo, sporeMat);
+    this.scene.add(this.ambientSpores);
   }
 
   private createSelectionReticle(): THREE.Group {
@@ -530,6 +1098,300 @@ export class BiocyberneticHabitat3DEngine {
     const haloMesh = new THREE.Mesh(haloGeo, haloMat);
     haloMesh.position.y = 0.26;
     group.add(haloMesh);
+
+    return group;
+  }
+
+  /**
+   * Crea la Mesa de Ajedrez Táctico Central 3D con pedestal y tablero cuadriculado
+   */
+  private createTacticalChessTable3D(): THREE.Group {
+    const group = new THREE.Group();
+    group.position.set(0, 0, 1.2);
+
+    // 1. Pedestal Cilíndrico Táctico
+    const pedGeo = new THREE.CylinderGeometry(0.55, 0.7, 0.18, 24);
+    const pedMat = new THREE.MeshStandardMaterial({
+      color: 0x0a1424,
+      roughness: 0.35,
+      metalness: 0.85,
+    });
+    const pedMesh = new THREE.Mesh(pedGeo, pedMat);
+    pedMesh.position.y = 0.09;
+    pedMesh.receiveShadow = true;
+    group.add(pedMesh);
+
+    // 2. Anillo de Luz Cian / Neón en la Base
+    const ringGeo = new THREE.RingGeometry(0.56, 0.68, 32);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x00f0ff,
+      transparent: true,
+      opacity: 0.7,
+      side: THREE.DoubleSide,
+    });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.position.y = 0.185;
+    group.add(ringMesh);
+
+    // 3. Tablero 8x8 Cuadriculado
+    const boardSize = 0.8;
+    const cellSize = boardSize / 8;
+    const boardGroup = new THREE.Group();
+    boardGroup.position.y = 0.19;
+
+    const cellGeo = new THREE.PlaneGeometry(cellSize * 0.95, cellSize * 0.95);
+    cellGeo.rotateX(-Math.PI / 2);
+    const lightMat = new THREE.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.3, emissive: 0x003366, emissiveIntensity: 0.3 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x07111e, roughness: 0.5 });
+
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const isLight = (r + c) % 2 === 0;
+        const cellMesh = new THREE.Mesh(cellGeo, isLight ? lightMat : darkMat);
+        cellMesh.position.set((c - 3.5) * cellSize, 0, (r - 3.5) * cellSize);
+        boardGroup.add(cellMesh);
+      }
+    }
+    group.add(boardGroup);
+
+    // 4. Prisma Holográfico Flotante de Ajedrez
+    const crownGeo = new THREE.OctahedronGeometry(0.12, 0);
+    const crownMat = new THREE.MeshBasicMaterial({
+      color: 0x00f0ff,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const crownMesh = new THREE.Mesh(crownGeo, crownMat);
+    crownMesh.position.y = 0.55;
+    group.add(crownMesh);
+
+    return group;
+  }
+
+  /**
+   * Crea el Árbol de la Vida Cuántico 3D (Santuario Central de Regeneración y Paz)
+   */
+  private createTreeOfLife3D(): THREE.Group {
+    const group = new THREE.Group();
+    group.position.set(0, 0, 0);
+
+    // 1. Tronco Cibernético Espiralado
+    const trunkGeo = new THREE.CylinderGeometry(0.32, 0.65, 3.2, 16);
+    const trunkMat = new THREE.MeshStandardMaterial({
+      color: 0x031826,
+      roughness: 0.25,
+      metalness: 0.8,
+      emissive: 0x00f0ff,
+      emissiveIntensity: 0.15,
+    });
+    const trunkMesh = new THREE.Mesh(trunkGeo, trunkMat);
+    trunkMesh.position.y = 1.6;
+    trunkMesh.castShadow = true;
+    group.add(trunkMesh);
+
+    // 2. Raíces Bioluminiscentes Radiales
+    const rootMat = new THREE.MeshBasicMaterial({
+      color: 0x00f0ff,
+      transparent: true,
+      opacity: 0.5,
+    });
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2;
+      const rootGeo = new THREE.CylinderGeometry(0.08, 0.02, 1.8, 8);
+      rootGeo.rotateZ(Math.PI / 3);
+      rootGeo.rotateY(angle);
+      const rootMesh = new THREE.Mesh(rootGeo, rootMat);
+      rootMesh.position.set(Math.cos(angle) * 0.9, 0.1, Math.sin(angle) * 0.9);
+      group.add(rootMesh);
+    }
+
+    // 3. Dosel de Partículas Cuánticas Bioluminiscentes (Hojas de Luz)
+    const particleCount = 360;
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+      const u = Math.random();
+      const v = Math.random();
+      const theta = u * 2.0 * Math.PI;
+      const phi = Math.acos(2.0 * v - 1.0);
+      const r = 1.2 + Math.random() * 1.4;
+
+      const px = r * Math.sin(phi) * Math.cos(theta);
+      const py = 3.2 + (r * 0.6) * Math.cos(phi);
+      const pz = r * Math.sin(phi) * Math.sin(theta);
+
+      positions[i * 3] = px;
+      positions[i * 3 + 1] = py;
+      positions[i * 3 + 2] = pz;
+
+      // Gradiente Esmeralda - Turquesa - Violeta
+      colors[i * 3] = 0.05 + Math.random() * 0.2;
+      colors[i * 3 + 1] = 0.85 + Math.random() * 0.15;
+      colors[i * 3 + 2] = 0.75 + Math.random() * 0.25;
+    }
+
+    const canopyGeo = new THREE.BufferGeometry();
+    canopyGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    canopyGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const canopyMat = new THREE.PointsMaterial({
+      size: 0.18,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+    });
+
+    const canopyPoints = new THREE.Points(canopyGeo, canopyMat);
+    group.add(canopyPoints);
+
+    // 4. Faro / Prisma Central de Meditación
+    const coreGeo = new THREE.OctahedronGeometry(0.35, 0);
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0x10b981,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+    coreMesh.position.y = 3.2;
+    group.add(coreMesh);
+
+    return group;
+  }
+
+  /**
+   * Crea los 3 Manantiales de Néctar Cristalino y Balnearios de Serenidad
+   */
+  private createNectarSprings3D(): THREE.Group {
+    const group = new THREE.Group();
+
+    const springs = [
+      { x: 0.0, z: 6.2, r: 1.8, color: 0x00f0ff },
+      { x: -5.4, z: -4.2, r: 1.6, color: 0xa855f7 },
+      { x: 5.4, z: -4.2, r: 1.6, color: 0x22c55e },
+    ];
+
+    for (const sp of springs) {
+      const springGroup = new THREE.Group();
+      springGroup.position.set(sp.x, 0, sp.z);
+
+      // Estanque circular en el suelo
+      const poolGeo = new THREE.CircleGeometry(sp.r, 32);
+      poolGeo.rotateX(-Math.PI / 2);
+      const poolMat = new THREE.MeshBasicMaterial({
+        color: sp.color,
+        transparent: true,
+        opacity: 0.45,
+        side: THREE.DoubleSide,
+      });
+      const poolMesh = new THREE.Mesh(poolGeo, poolMat);
+      poolMesh.position.y = 0.02;
+      springGroup.add(poolMesh);
+
+      // Anillo perimétrico cristalino
+      const rimGeo = new THREE.RingGeometry(sp.r * 0.95, sp.r * 1.08, 32);
+      rimGeo.rotateX(-Math.PI / 2);
+      const rimMat = new THREE.MeshStandardMaterial({
+        color: 0x071b2d,
+        emissive: sp.color,
+        emissiveIntensity: 0.6,
+        roughness: 0.3,
+        metalness: 0.7,
+        side: THREE.DoubleSide,
+      });
+      const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+      rimMesh.position.y = 0.035;
+      springGroup.add(rimMesh);
+
+      group.add(springGroup);
+    }
+
+    return group;
+  }
+
+  /**
+   * Crea las líneas luminiscentes de la Red Micelial Fúngica Subterránea
+   */
+  private createMyceliumNetwork3D(): THREE.Group {
+    const group = new THREE.Group();
+    const connections: Array<[[number, number], [number, number]]> = [
+      [[0, 0], [0, 1.2]],
+      [[0, 1.2], [0, 6.2]],
+      [[0, 0], [-5.4, -4.2]],
+      [[0, 0], [5.4, -4.2]],
+      [[-5.4, -4.2], [5.4, -4.2]],
+    ];
+
+    const hyphaMat = new THREE.LineBasicMaterial({
+      color: 0xa855f7,
+      transparent: true,
+      opacity: 0.4,
+    });
+
+    for (const [from, to] of connections) {
+      const points: THREE.Vector3[] = [];
+      const steps = 12;
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        const x = from[0] + (to[0] - from[0]) * t;
+        const z = from[1] + (to[1] - from[1]) * t;
+        // Leve curvatura ondulante
+        const arcY = Math.sin(t * Math.PI) * 0.12;
+        points.push(new THREE.Vector3(x, 0.02 + arcY, z));
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      group.add(new THREE.Line(geo, hyphaMat));
+    }
+
+    return group;
+  }
+
+  /**
+   * Crea la Cúpula Celeste con Estrellas y Cortinas de Aurora Boreal
+   */
+  private createCelestialDome3D(): THREE.Group {
+    const group = new THREE.Group();
+
+    // 1. Estrellas Volumétricas
+    const starCount = 500;
+    const starPositions = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * (Math.PI / 2.2); // Hemisferio superior
+      const r = 42.0 + Math.random() * 4.0;
+
+      starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      starPositions[i * 3 + 1] = r * Math.cos(phi);
+      starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+    }
+
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    const starMat = new THREE.PointsMaterial({
+      color: 0x93c5fd,
+      size: 0.35,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const starPoints = new THREE.Points(starGeo, starMat);
+    group.add(starPoints);
+
+    // 2. Arco Ondulante de Aurora Boreal
+    const auroraGeo = new THREE.CylinderGeometry(38, 38, 14, 48, 1, true);
+    const auroraMat = new THREE.MeshBasicMaterial({
+      color: 0x00f0ff,
+      transparent: true,
+      opacity: 0.0,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending,
+    });
+    this.auroraMesh = new THREE.Mesh(auroraGeo, auroraMat);
+    this.auroraMesh.position.y = 12.0;
+    group.add(this.auroraMesh);
 
     return group;
   }
@@ -651,16 +1513,76 @@ export class BiocyberneticHabitat3DEngine {
 
   // ── Bucle de Simulación y Sincronización Gráfica 3D ──────────────────────────
   private tick(deltaSec: number): void {
+    this.simTimeSec += deltaSec;
     // 1. Actualizar Textura Química de Fick (Glucosa, Rastro de Hormigas, Alarma)
     this.updateChemicalTexture();
 
-    // 2. Sincronizar y Renderizar Organismos Vivos 3D
+    // 2. Sincronizar y Renderizar Organismos Vivos 3D (con bocadillos de pensamiento)
     this.updateOrganisms3D(deltaSec);
 
     // 3. Sincronizar Barreras Acústicas 3D
     this.updateBarriers3D();
 
-    // 4. Actualizar Posición Cinemática de la Cámara
+    // 4. Actualizar Mega-Cristal del Gran Torneo de Glucosa
+    const sugarRace = biocyberneticHabitat.getSugarRaceState();
+    this.sugarMegaCrystal.update(deltaSec, sugarRace.targetX, sugarRace.targetY, sugarRace.isActive);
+
+    // 5. Actualizar Puntero Láser Juguetón si está activo
+    const globalLaser = biocyberneticHabitat.getLaserChaseTarget();
+    const curTool = biocyberneticHabitat.getTelemetry().activeTool;
+    const isLaserTool = curTool === 'OPTOGENETIC_LASER' || curTool === 'OPTOGENETIC_CHR2';
+    if (globalLaser) {
+      this.playfulLaserMesh.setPosition(globalLaser.x, globalLaser.y, true);
+    } else if (this.lastPaintedToolPos && isLaserTool) {
+      this.playfulLaserMesh.setPosition(this.lastPaintedToolPos.x, this.lastPaintedToolPos.z, true);
+    } else {
+      this.playfulLaserMesh.setPosition(0, 0, false);
+    }
+
+    // 6. Ondulación de esporas atmosféricas bioluminiscentes
+    if (this.ambientSpores) {
+      this.ambientSpores.rotation.y += deltaSec * 0.04;
+    }
+
+    // 6.1 Animación de la Mesa de Ajedrez Táctico 3D
+    if (this.tacticalChessTable) {
+      const crown = this.tacticalChessTable.children[this.tacticalChessTable.children.length - 1];
+      if (crown) {
+        crown.rotation.y += deltaSec * 0.8;
+        crown.position.y = 0.55 + Math.sin(this.simTimeSec * 3.0) * 0.04;
+      }
+    }
+
+    // 6.2 Animación del Paraíso Biocibernético (Árbol de la Vida, Manantiales & Ciclo Circadiano)
+    const circadian = biocyberneticEdenParadise.getCircadianState();
+    if (this.ambientLight) {
+      this.ambientLight.color.setHex(circadian.ambientLightHex);
+      this.ambientLight.intensity = circadian.isDaytime ? 1.4 : 0.8;
+    }
+    if (this.dirLight) {
+      this.dirLight.position.set(circadian.sunPosition.x, circadian.sunPosition.y, circadian.sunPosition.z);
+      this.dirLight.intensity = circadian.isDaytime ? 1.2 : 0.3;
+    }
+    if (this.auroraMesh) {
+      const auroraMat = this.auroraMesh.material as THREE.MeshBasicMaterial;
+      if (auroraMat) {
+        auroraMat.opacity = circadian.auroraIntensity * 0.35;
+      }
+      this.auroraMesh.rotation.y += deltaSec * 0.05;
+    }
+    if (this.treeOfLifeGroup) {
+      const canopy = this.treeOfLifeGroup.children[2];
+      if (canopy) {
+        canopy.rotation.y += deltaSec * 0.15;
+      }
+      const core = this.treeOfLifeGroup.children[3];
+      if (core) {
+        core.rotation.y += deltaSec * 0.6;
+        core.position.y = 3.2 + Math.sin(this.simTimeSec * 2.0) * 0.05;
+      }
+    }
+
+    // 7. Actualizar Posición Cinemática de la Cámara
     this.updateCameraPosition();
   }
 
@@ -669,21 +1591,24 @@ export class BiocyberneticHabitat3DEngine {
     const gBuf = grid.getBuffer('GLUCOSE');
     const pBuf = grid.getBuffer('PHEROMONE_TRAIL');
     const aBuf = grid.getBuffer('ALARM_PHEROMONE');
+    const sBuf = grid.getBuffer('SEROTONIN');
 
     const totalCells = 64 * 64;
     for (let i = 0; i < totalCells; i++) {
       const g = gBuf[i] || 0;
       const p = pBuf[i] || 0;
       const a = aBuf[i] || 0;
+      const s = sBuf ? sBuf[i] || 0 : 0;
 
-      // Color coding táctico:
-      // Glucosa: Esmeralda brillante (G: alto, B: medio)
-      // Rastro Pheromone: Ámbar/Dorado (R: 255, G: 160, B: 20)
-      // Alarma: Carmesí neón (R: 255, G: 20, B: 60)
-      const rVal = Math.min(255, Math.floor(a * 500 + p * 240));
-      const gVal = Math.min(255, Math.floor(g * 400 + p * 150));
-      const bVal = Math.min(255, Math.floor(g * 180 + a * 30 + 15));
-      const alphaVal = Math.min(255, Math.floor(Math.max(g * 350, p * 300, a * 450) + 18));
+      // Color coding táctico edénico:
+      // Glucosa: Esmeralda brillante (G: alto)
+      // Rastro Pheromone: Ámbar/Dorado (R: 255, G: 160)
+      // Alarma: Carmesí neón (R: 255, B: 60)
+      // Serotonina: Violeta/Cian celestial relajante
+      const rVal = Math.min(255, Math.floor(a * 500 + p * 240 + s * 140));
+      const gVal = Math.min(255, Math.floor(g * 400 + p * 150 + s * 80));
+      const bVal = Math.min(255, Math.floor(g * 180 + a * 30 + s * 450 + 15));
+      const alphaVal = Math.min(255, Math.floor(Math.max(g * 350, p * 300, a * 450, s * 380) + 18));
 
       const idx4 = i * 4;
       this.chemicalData[idx4] = rVal;
@@ -742,7 +1667,56 @@ export class BiocyberneticHabitat3DEngine {
         ant.rootGroup.position.set(org.x, 0, org.y);
         ant.rootGroup.rotation.y = Math.PI / 2 - org.headingRad;
         ant.update(org.speedMps, org.isCarryingFood, org.behaviorState, deltaSec);
+
+      } else if (org.species === 'GRAVITY_SENTINEL') {
+        let sentinel = this.sentinels3D.get(org.id);
+        if (!sentinel) {
+          sentinel = new GravitySentinel3D();
+          this.scene.add(sentinel.rootGroup);
+          this.sentinels3D.set(org.id, sentinel);
+        }
+        sentinel.update(org.x, org.y, org.altitudeMeters || 1.8, org.headingRad, org.speedMps, deltaSec);
+
+      } else if (org.species === 'HUMAN_NEOCORTEX') {
+        let human = this.humans3D.get(org.id);
+        if (!human) {
+          human = new HumanNeocortexAvatar3D();
+          this.scene.add(human.rootGroup);
+          this.humans3D.set(org.id, human);
+        }
+        human.update(org.x, org.y, org.headingRad, org.speedMps, deltaSec);
       }
+
+      // ── Actualizar Bocadillo de Pensamiento Holográfico 3D ──
+      let bubble = this.thoughtBubbles3D.get(org.id);
+      if (!bubble) {
+        bubble = new ThoughtBubbleSprite3D();
+        this.scene.add(bubble.sprite);
+        this.thoughtBubbles3D.set(org.id, bubble);
+      }
+
+      const entityZ = org.species === 'GRAVITY_SENTINEL' ? (org.altitudeMeters || 1.8) : 0;
+      const themeColor =
+        org.species === 'DROSOPHILA'
+          ? '#00e5ff'
+          : org.species === 'GRAVITY_SENTINEL'
+          ? '#38bdf8'
+          : org.species === 'HUMAN_NEOCORTEX'
+          ? '#34d399'
+          : org.species === 'C_ELEGANS'
+          ? '#2dd4bf'
+          : '#fbbf24';
+
+      bubble.update(
+        org.x,
+        entityZ + 0.35,
+        org.y,
+        org.species,
+        biocyberneticHabitat.getSpeciesDisplayName(org.species),
+        org.currentThought || 'Observando...',
+        org.mood || 'CURIOUS',
+        themeColor
+      );
     }
 
     // Purgar organismos muertos / emigrados que ya no están en la simulación
@@ -765,6 +1739,27 @@ export class BiocyberneticHabitat3DEngine {
         this.scene.remove(ant.rootGroup);
         ant.dispose();
         this.ants3D.delete(id);
+      }
+    }
+    for (const [id, sentinel] of this.sentinels3D.entries()) {
+      if (!activeIds.has(id)) {
+        this.scene.remove(sentinel.rootGroup);
+        sentinel.dispose();
+        this.sentinels3D.delete(id);
+      }
+    }
+    for (const [id, human] of this.humans3D.entries()) {
+      if (!activeIds.has(id)) {
+        this.scene.remove(human.rootGroup);
+        human.dispose();
+        this.humans3D.delete(id);
+      }
+    }
+    for (const [id, bubble] of this.thoughtBubbles3D.entries()) {
+      if (!activeIds.has(id)) {
+        this.scene.remove(bubble.sprite);
+        bubble.dispose();
+        this.thoughtBubbles3D.delete(id);
       }
     }
 
@@ -841,15 +1836,21 @@ export class BiocyberneticHabitat3DEngine {
       this.camera.lookAt(0, 0.4, 0);
 
     } else if (this.cameraMode === 'FOLLOW_AGENT') {
-      const leader = biocyberneticHabitat.getLeader() || biocyberneticHabitat.getAllOrganisms()[0];
-      if (leader) {
-        const camDist = 3.6;
-        const camHeight = 2.2;
-        const targetX = leader.x - Math.cos(leader.headingRad) * camDist;
-        const targetZ = leader.y - Math.sin(leader.headingRad) * camDist;
+      const targetOrg =
+        (this.selectedOrgId ? biocyberneticHabitat.getOrganism(this.selectedOrgId) : null) ||
+        biocyberneticHabitat.getLeader() ||
+        biocyberneticHabitat.getAllOrganisms()[0];
+
+      if (targetOrg) {
+        const isSentinel = targetOrg.species === 'GRAVITY_SENTINEL';
+        const camDist = isSentinel ? 4.2 : 3.6;
+        const orgY = isSentinel ? targetOrg.altitudeMeters || 1.8 : 0;
+        const camHeight = orgY + 2.2;
+        const targetX = targetOrg.x - Math.cos(targetOrg.headingRad) * camDist;
+        const targetZ = targetOrg.y - Math.sin(targetOrg.headingRad) * camDist;
 
         this.camera.position.lerp(new THREE.Vector3(targetX, camHeight, targetZ), 0.12);
-        this.camera.lookAt(leader.x, 0.35, leader.y);
+        this.camera.lookAt(targetOrg.x, orgY + 0.35, targetOrg.y);
       }
 
     } else if (this.cameraMode === 'TOP_DOWN_GOD') {
@@ -930,6 +1931,7 @@ export class BiocyberneticHabitat3DEngine {
             this.triggerAirPuffVfx(groundPt.x, groundPt.z);
           } else if (curTool === 'OPTOGENETIC_LASER' || curTool === 'OPTOGENETIC_CHR2') {
             biocyberneticHabitat.applyToolAt(groundPt.x, groundPt.z);
+            biocyberneticHabitat.triggerPlayfulLaser(groundPt.x, groundPt.z);
             this.triggerLaserVfx(groundPt.x, groundPt.z);
           } else if (curTool === 'HEAT_INFRARED') {
             biocyberneticHabitat.applyToolAt(groundPt.x, groundPt.z);
@@ -984,6 +1986,7 @@ export class BiocyberneticHabitat3DEngine {
           }
         } else if (curTool === 'OPTOGENETIC_LASER' || curTool === 'OPTOGENETIC_CHR2') {
           biocyberneticHabitat.applyToolAt(groundPt.x, groundPt.z);
+          biocyberneticHabitat.triggerPlayfulLaser(groundPt.x, groundPt.z);
           this.triggerLaserVfx(groundPt.x, groundPt.z);
         } else if (curTool === 'ACOUSTIC_BARRIER' && this.barrierStartPoint) {
           this.updateBarrierPreview(
@@ -1184,6 +2187,16 @@ export class BiocyberneticHabitat3DEngine {
     this.worms3D.clear();
     this.ants3D.forEach((a) => a.dispose());
     this.ants3D.clear();
+    this.sentinels3D.forEach((s) => s.dispose());
+    this.sentinels3D.clear();
+    this.humans3D.forEach((h) => h.dispose());
+    this.humans3D.clear();
+    this.thoughtBubbles3D.forEach((b) => b.dispose());
+    this.thoughtBubbles3D.clear();
+    this.sugarMegaCrystal.dispose();
+    this.playfulLaserMesh.dispose();
+    this.ambientSpores.geometry.dispose();
+    (this.ambientSpores.material as THREE.Material).dispose();
     this.barrierMeshes.forEach((m) => {
       this.scene.remove(m);
       m.geometry.dispose();
