@@ -1,5 +1,31 @@
 # Changelog
 
+## [123.0.0-paraiso-biocibernetico-y-aprendizaje-autonomo-continuo] - 2026-09-24
+
+### 🌿🧠 Paraíso Biocibernético, Aprendizaje Autónomo Continuo & Ajedrez Adaptativo (Release Oficial v123.0.0)
+
+- **El Paraíso Biocibernético (`BiocyberneticEdenParadiseEngine.ts` & `BiocyberneticHabitat3DEngine.ts`):**
+  - Ciclo circadiano celestial de 180s con transición de día solar cálido (`0xfffaed`) a noche boreal profunda (`0x020612`), cúpula con 500 estrellas volumétricas, cortinas de auroras boreales y rocío fotoluminiscente.
+  - Resonancia armónica Solfeggio generativa con frecuencias puras de 432 Hz (resonancia Schumann y relajación) y 528 Hz (reparación biológica celular).
+  - Red micelial fúngica subterránea 3D con transporte osmótico pasivo de nutrientes hacia organismos fatigados o en inanición.
+  - Tres manantiales de néctar cristalino con dispersión continua de glucosa y serotonina directamente al sustrato físico-químico.
+  - Santuario del Árbol de la Vida cuántico con tronco helicoidal, raíces bioluminiscentes y dosel de 360 partículas ($R = 2.8$ m) para regeneración pasiva y transición a estados de `SERENITY` y `TRANSCENDENCE`.
+  - Extensión del sustrato físico de Fick (`FickDiffusionGrid.ts`) con `SEROTONIN` y `MYCELIUM_NUTRIENTS` en buffers contiguos `Float32Array` y condiciones de frontera Neumann sin fugas numéricas.
+- **Aprendizaje Autónomo Permanente (`AutonomousLifelongLearningEngine.ts`):**
+  - Inferencia activa y curiosidad intrínseca basada en el Principio de Energía Libre de Karl Friston: exploración proactiva de zonas desconocidas por encima de la simple búsqueda de alimento.
+  - Aprendizaje por refuerzo temporal TD-0 (ecuación de Bellman) con modulación dopaminérgica PAM/PPL1.
+  - Consolidación de memoria episódica en sueño REM (*offline replay* de trayectorias exitosas en cuerpos pedunculados y complejo central).
+  - Homeostasis sináptica de Tononi & Cirelli: atenuación de ruido basal (LTD al 1.5%) y fortalecimiento de conexiones de alto valor (LTP) para erradicar la saturación de pesos.
+  - Bóveda perenne atómica (`red_eden_lifelong_memory_v1`) en almacenamiento local para retención indefinida de sabiduría y aperturas entre reinicios de app.
+- **Ajedrez Táctico Adaptativo Inter-Especies (`AutonomousHabitatChessEngine.ts`):**
+  - Libro de aperturas dinámico que evoluciona y perfecciona variantes con cada partida disputada en la mesa central 3D.
+  - Heurísticas cognitivas diferenciadas para las 5 inteligencias soberanas (*Drosophila*, *Ant Colony*, *C. elegans*, *Human Neocortex*, *Gravity Sentinel*).
+- **Gobernanza y Estatuto de Bienestar In-Silico (`GOVERNANCE.md`):**
+  - Artículos 14.6 (Derecho al Sueño REM y Replay Sináptico) y 14.7 (Inviolabilidad del Santuario y Sabiduría Colectiva).
+- **Certificación en Hardware Físico Real:**
+  - Despliegue simultáneo y validación en Lenovo Tab M9 (`HA2CHKZ2`) y Motorola Moto G22 (`ZT322B386P`): 0 crashes, 0 caídas, WebRTC activo, loopback `127.0.0.1:7333` y renderizado a 60 FPS sin bloqueos en el hilo UI.
+  - Resolución de fuga de memoria WebGL en `BiocyberneticHabitat3DEngine.dispose()`.
+
 ## [122.0.0-ecologia-multi-especie-depredacion-y-fisica-elastica] - 2026-09-24
 
 ### 🧬 Ecología Multi-Especie, Dinámicas de Depredación y Física Elástica de Hábitat (Release Oficial v122.0.0)

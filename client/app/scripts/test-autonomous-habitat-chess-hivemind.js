@@ -2,7 +2,7 @@
  * test-autonomous-habitat-chess-hivemind.js
  * 
  * Suite de Verificación de Resiliencia, Ajedrez Autónomo & Mente Colmena
- * RED Sovereign Biocybernetic Habitat v122.0.0
+ * RED Sovereign Biocybernetic Habitat — Chess Engine & Hivemind
  */
 
 const assert = require('assert');
@@ -112,7 +112,7 @@ runTest("Acople en BiocyberneticHabitatEngine y telemetría reactiva", () => {
 });
 
 // ── Test 7: Mini-App Soberana Multi-Especie & Ajedrez ──────────────────────────
-runTest("Validación del bundle de Mini-App Hábitat Biocibernético v122.0.0", () => {
+runTest("Validación del bundle de Mini-App Hábitat Biocibernético", () => {
   const appBundleContent = fs.readFileSync(
     path.join(__dirname, '..', 'src', 'lib', 'miniapp', 'builtin', 'biocyberneticHabitatApp.ts'),
     'utf8'

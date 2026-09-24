@@ -2,7 +2,7 @@
  * test-biocybernetic-paradise-lifelong-learning.js
  * 
  * Suite de Verificación de Resiliencia: Paraíso Biocibernético & Aprendizaje Permanente
- * RED Sovereign Mesh OS v122.0.0 — Capa Bio-Cibernética L9
+ * RED Sovereign Mesh OS — Capa Bio-Cibernética L9
  */
 
 const assert = require('assert');
