@@ -130,6 +130,13 @@ export function SurvivalBeaconModal() {
             });
         });
 
+        let batteryInstance: any = null;
+        const handleBatteryChange = () => {
+            if (batteryInstance && typeof batteryInstance.level === "number") {
+                setBatteryLevel(Math.round(batteryInstance.level * 100));
+            }
+        };
+
         // Battery Telemetry from Native Capacitor & Web APIs
         const fetchBattery = async () => {
             try {
@@ -149,16 +156,18 @@ export function SurvivalBeaconModal() {
             if (typeof navigator !== "undefined" && (navigator as any).getBattery) {
                 try {
                     const battery = await (navigator as any).getBattery();
+                    batteryInstance = battery;
                     setBatteryLevel(Math.round(battery.level * 100));
-                    battery.addEventListener?.("levelchange", () => {
-                        setBatteryLevel(Math.round(battery.level * 100));
-                    });
+                    battery.addEventListener?.("levelchange", handleBatteryChange);
                 } catch {}
             }
         };
         fetchBattery();
 
         return () => {
+            if (batteryInstance && batteryInstance.removeEventListener) {
+                try { batteryInstance.removeEventListener("levelchange", handleBatteryChange); } catch {}
+            }
             clearInterval(beaconPoll);
             unsubGps();
             if (sirenOscRef.current) {

@@ -216,7 +216,10 @@ export default function NetworkPanel() {
         };
         updateTransportMetrics();
         const interval = setInterval(updateTransportMetrics, 3000);
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(interval);
+            clearInterval(dtnTimer);
+        };
     }, []);
 
     const handleSaveLora = async () => {

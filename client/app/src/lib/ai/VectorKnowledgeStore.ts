@@ -181,6 +181,7 @@ export class VectorKnowledgeStore {
     // ─── Base Táctica Precargada de Supervivencia TCCC ──────────────────────────
 
     private static readonly RAG_CACHE_KEY = 'red_rag_index_v2';
+    private static readonly DYNAMIC_DOCS_KEY = 'red_rag_dynamic_docs_v1';
     private static readonly RAG_VERSION = 2;
 
     private async loadPreloadedTacticalBase() {
@@ -253,6 +254,26 @@ export class VectorKnowledgeStore {
             }
         ];
 
+        // Carga de documentos dinámicos persistidos por el usuario o la malla
+        let dynamicDocs: Array<Omit<KnowledgeDocument, 'vectorInt8'>> = [];
+        try {
+            if (typeof localStorage !== 'undefined') {
+                const storedDynamic = localStorage.getItem(VectorKnowledgeStore.DYNAMIC_DOCS_KEY);
+                if (storedDynamic) {
+                    const parsed = JSON.parse(storedDynamic);
+                    if (Array.isArray(parsed)) {
+                        dynamicDocs = parsed;
+                    }
+                }
+            }
+        } catch {}
+
+        // Fusión: documentos precargados TCCC + documentos dinámicos aprendidos
+        const allDocsMap = new Map<string, Omit<KnowledgeDocument, 'vectorInt8'>>();
+        for (const doc of rawDocs) allDocsMap.set(doc.id, doc);
+        for (const doc of dynamicDocs) allDocsMap.set(doc.id, doc);
+        const allDocs = Array.from(allDocsMap.values());
+
         // Intento de carga rápida desde caché de vectores
         let cached: Record<string, number[]> | null = null;
         try {
@@ -269,7 +290,7 @@ export class VectorKnowledgeStore {
 
         const newCache: Record<string, number[]> = {};
 
-        for (const doc of rawDocs) {
+        for (const doc of allDocs) {
             let vectorInt8: Int8Array;
             if (cached && cached[doc.id] && cached[doc.id].length === 64) {
                 vectorInt8 = new Int8Array(cached[doc.id]);
@@ -324,10 +345,23 @@ export class VectorKnowledgeStore {
             this.documents.push(fullDoc);
         }
 
-        // Persistir el índice actualizado para que los documentos dinámicos
+        // Persistir el documento y el índice actualizado para que los documentos dinámicos
         // sobrevivan entre sesiones y sean precargados en el próximo arranque
         try {
             if (typeof localStorage !== 'undefined') {
+                // 1. Guardar documento con metadatos completos
+                const storedDynamic = localStorage.getItem(VectorKnowledgeStore.DYNAMIC_DOCS_KEY);
+                const dynamicList: Array<Omit<KnowledgeDocument, 'vectorInt8'>> = storedDynamic ? JSON.parse(storedDynamic) : [];
+                const existIdx = dynamicList.findIndex(d => d.id === doc.id);
+                const docMeta = { id: doc.id, category: doc.category, title: doc.title, content: doc.content, tags: doc.tags };
+                if (existIdx >= 0) {
+                    dynamicList[existIdx] = docMeta;
+                } else {
+                    dynamicList.push(docMeta);
+                }
+                localStorage.setItem(VectorKnowledgeStore.DYNAMIC_DOCS_KEY, JSON.stringify(dynamicList));
+
+                // 2. Guardar vector cuantizado
                 const existing = localStorage.getItem(VectorKnowledgeStore.RAG_CACHE_KEY);
                 const parsed = existing ? JSON.parse(existing) : { version: VectorKnowledgeStore.RAG_VERSION, vectors: {} };
                 const vectors: Record<string, number[]> = parsed.vectors || {};

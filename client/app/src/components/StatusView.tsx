@@ -518,7 +518,15 @@ export default function StatusView() {
                                                 <div style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>{stream.title || "Transmisión de Malla P2P"}</div>
                                             </div>
                                         </div>
-                                        <button className="btn-tactical-primary" style={{ padding: "6px 14px", fontSize: "0.76rem", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                        <button 
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setModal({ type: "liveViewer", streamId: stream.stream_id });
+                                            }}
+                                            className="btn-tactical-primary" 
+                                            style={{ padding: "6px 14px", fontSize: "0.76rem", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                                        >
                                             <span>Unirse</span>
                                             <TacIcon name="radio" size={13} color="#FFFFFF" />
                                         </button>

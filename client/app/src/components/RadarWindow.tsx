@@ -124,46 +124,90 @@ export default function RadarWindow() {
             try {
                 const apiNodes = await getProximityNodes().catch(() => []);
                 const peerMap = new Map<string, any>();
+
+                const resolveCanonical = (rawId: string, altId?: string): string => {
+                    if (!rawId && !altId) return "";
+                    return (rawId ? meshRouter.getCanonicalId(rawId) : "") || 
+                           (altId ? meshRouter.getCanonicalId(altId) : "") || 
+                           rawId || altId || "";
+                };
+
+                const findExistingKey = (canonicalId: string, displayName?: string): string | undefined => {
+                    if (peerMap.has(canonicalId)) return canonicalId;
+                    for (const [k, node] of peerMap.entries()) {
+                        if (k === canonicalId) return k;
+                        if (displayName && 
+                            displayName !== "Dispositivo RED" && 
+                            !displayName.startsWith("Nodo ") && 
+                            node.name && 
+                            node.name.toLowerCase() === displayName.toLowerCase()) {
+                            return k;
+                        }
+                    }
+                    return undefined;
+                };
+
                 for (const node of apiNodes) {
-                    const id = node.id || node.address || "";
-                    if (!id) continue;
-                    peerMap.set(id, {
-                        id,
-                        name: node.name || `Nodo ${id.substring(0, 6)}`,
-                        rssi: typeof node.rssi === "number" ? node.rssi : -70,
-                        address: node.address || id,
-                        transport: node.transport || "mesh",
-                        distance: node.distance,
-                        latitude: (node as any).latitude ?? (node as any).lat,
-                        longitude: (node as any).longitude ?? (node as any).lon ?? (node as any).lng
+                    const rawId = node.id || node.address || "";
+                    if (!rawId) continue;
+                    const id = resolveCanonical(rawId);
+                    const name = node.name || `Nodo ${id.substring(0, 6)}`;
+                    const existingKey = findExistingKey(id, name);
+                    const existing = existingKey ? peerMap.get(existingKey) : undefined;
+                    const targetKey = existingKey || id;
+
+                    peerMap.set(targetKey, {
+                        ...existing,
+                        id: targetKey,
+                        name,
+                        rssi: typeof node.rssi === "number" ? node.rssi : (existing?.rssi ?? -70),
+                        address: node.address || existing?.address || id,
+                        transport: node.transport || existing?.transport || "mesh",
+                        distance: node.distance ?? existing?.distance,
+                        latitude: (node as any).latitude ?? (node as any).lat ?? existing?.latitude,
+                        longitude: (node as any).longitude ?? (node as any).lon ?? (node as any).lng ?? existing?.longitude
                     });
                 }
+
                 for (const mPeer of meshPeers) {
-                    const id = mPeer.id || mPeer.canonicalId || mPeer.hardwareId || "";
-                    if (!id) continue;
-                    const existing = peerMap.get(id);
-                    peerMap.set(id, {
+                    const rawId = mPeer.canonicalId || mPeer.id || mPeer.hardwareId || "";
+                    if (!rawId) continue;
+                    const id = resolveCanonical(rawId, mPeer.hardwareId);
+                    const name = (mPeer.name && !mPeer.name.startsWith("Nodo ")) ? mPeer.name : (mPeer.name || `Nodo ${id.substring(0, 6)}`);
+                    const existingKey = findExistingKey(id, name);
+                    const existing = existingKey ? peerMap.get(existingKey) : undefined;
+                    const targetKey = existingKey || id;
+
+                    peerMap.set(targetKey, {
                         ...existing,
-                        id,
-                        name: (mPeer.name && !mPeer.name.startsWith("Nodo ")) ? mPeer.name : (existing?.name || mPeer.name || `Nodo ${id.substring(0, 6)}`),
+                        id: targetKey,
+                        name: (mPeer.name && !mPeer.name.startsWith("Nodo ")) ? mPeer.name : (existing?.name || name),
                         rssi: typeof mPeer.rssi === "number" ? mPeer.rssi : (existing?.rssi ?? -70),
-                        address: mPeer.hardwareId || mPeer.canonicalId || id,
+                        address: mPeer.hardwareId || mPeer.canonicalId || existing?.address || id,
                         transport: mPeer.transport || existing?.transport || "mesh",
                         latitude: mPeer.lat ?? existing?.latitude,
                         longitude: mPeer.lng ?? existing?.longitude,
                         publicKey: mPeer.publicKey || existing?.publicKey
                     });
                 }
+
                 for (const peer of blePeers) {
-                    const id = peer.id || (peer as any).address || "";
-                    if (!id) continue;
-                    const existing = peerMap.get(id);
-                    peerMap.set(id, {
+                    const rawId = peer.id || (peer as any).address || "";
+                    if (!rawId) continue;
+                    const id = resolveCanonical(rawId, (peer as any).canonicalId);
+                    const name = (peer.name && !peer.name.startsWith("Nodo ")) ? peer.name : (peer.name || `Nodo ${id.substring(0, 6)}`);
+                    const existingKey = findExistingKey(id, name);
+                    const existing = existingKey ? peerMap.get(existingKey) : undefined;
+                    const targetKey = existingKey || id;
+
+                    peerMap.set(targetKey, {
                         ...existing,
                         ...peer,
-                        id,
-                        name: (peer.name && !peer.name.startsWith("Nodo ")) ? peer.name : (existing?.name || peer.name || `Nodo ${id.substring(0, 6)}`),
+                        id: targetKey,
+                        name: (peer.name && !peer.name.startsWith("Nodo ")) ? peer.name : (existing?.name || name),
                         rssi: typeof peer.rssi === "number" ? peer.rssi : (existing?.rssi ?? -70),
+                        address: (peer as any).address || existing?.address || id,
+                        transport: (peer as any).transport || existing?.transport || "ble",
                         latitude: (peer as any).latitude ?? (peer as any).lat ?? existing?.latitude,
                         longitude: (peer as any).longitude ?? (peer as any).lon ?? (peer as any).lng ?? existing?.longitude
                     });

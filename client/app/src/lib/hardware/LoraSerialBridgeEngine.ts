@@ -79,6 +79,8 @@ export class LoraSerialBridgeEngine {
     private bleServer: any = null;
     private bleCharacteristicTx: any = null;
     private bleCharacteristicRx: any = null;
+    private bleDeviceDisconnectHandler: any = null;
+    private bleCharacteristicChangedHandler: any = null;
     private nativeBleDeviceId: string | null = null;
 
     public static readonly NORDIC_UART_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
@@ -365,10 +367,11 @@ export class LoraSerialBridgeEngine {
                 return false;
             }
 
-            this.bleDevice.addEventListener('gattserverdisconnected', () => {
+            this.bleDeviceDisconnectHandler = () => {
                 console.warn('[LoRa] Dispositivo BLE desconectado');
                 this.disconnect();
-            });
+            };
+            this.bleDevice.addEventListener('gattserverdisconnected', this.bleDeviceDisconnectHandler);
 
             this.bleServer = await this.bleDevice.gatt.connect();
             const service = await this.bleServer.getPrimaryService(LoraSerialBridgeEngine.NORDIC_UART_SERVICE);
@@ -377,12 +380,13 @@ export class LoraSerialBridgeEngine {
             this.bleCharacteristicTx = await service.getCharacteristic(LoraSerialBridgeEngine.NORDIC_UART_TX);
 
             await this.bleCharacteristicTx.startNotifications();
-            this.bleCharacteristicTx.addEventListener('characteristicvaluechanged', (event: any) => {
+            this.bleCharacteristicChangedHandler = (event: any) => {
                 const value = event.target.value;
                 if (value) {
                     this.feedRawBytes(new Uint8Array(value.buffer));
                 }
-            });
+            };
+            this.bleCharacteristicTx.addEventListener('characteristicvaluechanged', this.bleCharacteristicChangedHandler);
 
             this.telemetry.connected = true;
             this.telemetry.transportType = 'BLE_NUS';
@@ -653,11 +657,21 @@ export class LoraSerialBridgeEngine {
         }
         if (this.bleCharacteristicTx) {
             try {
+                if (this.bleCharacteristicChangedHandler) {
+                    this.bleCharacteristicTx.removeEventListener('characteristicvaluechanged', this.bleCharacteristicChangedHandler);
+                }
                 await this.bleCharacteristicTx.stopNotifications();
             } catch {}
             this.bleCharacteristicTx = null;
         }
+        this.bleCharacteristicChangedHandler = null;
         this.bleCharacteristicRx = null;
+        if (this.bleDevice && this.bleDeviceDisconnectHandler) {
+            try {
+                this.bleDevice.removeEventListener('gattserverdisconnected', this.bleDeviceDisconnectHandler);
+            } catch {}
+            this.bleDeviceDisconnectHandler = null;
+        }
         if (this.bleServer && this.bleServer.connected) {
             try {
                 this.bleServer.disconnect();
