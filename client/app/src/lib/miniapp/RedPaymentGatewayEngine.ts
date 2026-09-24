@@ -199,10 +199,7 @@ export class RedPaymentGatewayEngine {
                 throw new Error(`Error en billetera Web3: ${err.message || err}`);
             }
         } else {
-            // Modo de intención / transferencia manual externa
-            const randBytes = new Uint8Array(16);
-            if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(randBytes);
-            txHash = `manual_evm_${Array.from(randBytes, b => b.toString(16).padStart(2,'0')).join('')}`;
+            throw new Error("Billetera Web3 no conectada o red incompatible. Conecta MetaMask en Base o Polygon para ejecutar la transferencia.");
         }
 
         const receipt: PaymentReceipt = {
@@ -336,26 +333,33 @@ export class RedPaymentGatewayEngine {
      */
     public async executeLightningPayment(intent: PaymentIntentRequest, buyerDid: string): Promise<PaymentReceipt> {
         const satAmount = intent.currency === 'SAT' ? Math.round(intent.amount) : Math.round(intent.amount * 1500);
-        const lnAddress = intent.merchant.lightningAddress || intent.merchant.paymentPassport?.lightningAddress || 'merchant@getalby.com';
+        const lnAddress = intent.merchant.lightningAddress || intent.merchant.paymentPassport?.lightningAddress;
+        if (!lnAddress) {
+            throw new Error("El comerciante no ha configurado una dirección Lightning Network válida.");
+        }
 
         const _invoiceBytes = new Uint8Array(8);
         if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(_invoiceBytes);
         const _invoiceRand = Array.from(_invoiceBytes, b => b.toString(36)).join('').substring(0, 13);
         const invoice = `lnbc${satAmount}u1p${_invoiceRand}...`;
 
-        // Si existe WebLN inyectado en el navegador, intentar pago con 1 clic
-        if (typeof window !== 'undefined' && (window as any).webln) {
-            try {
-                await (window as any).webln.enable();
-                await (window as any).webln.sendPayment(invoice);
-            } catch (e) {
-                console.warn('[RedPaymentGateway] WebLN no disponible o cancelado:', e);
-            }
+        // Requiere WebLN inyectado en el navegador para liquidación real
+        if (typeof window === 'undefined' || !(window as any).webln) {
+            throw new Error("No se detectó un proveedor WebLN (Alby, Strike, etc.) activo en el navegador para liquidar la factura.");
+        }
+
+        let paymentPreimage: string | undefined;
+        try {
+            await (window as any).webln.enable();
+            const payRes = await (window as any).webln.sendPayment(invoice);
+            paymentPreimage = payRes?.preimage || payRes?.paymentHash;
+        } catch (e: any) {
+            throw new Error(`Transacción Lightning cancelada o fallida: ${e.message || e}`);
         }
 
         const _txIdBytes = new Uint8Array(4);
         if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(_txIdBytes);
-        const txId = `ln_${Date.now()}_${Array.from(_txIdBytes, b => b.toString(36)).join('').substring(0,7)}`;
+        const txId = paymentPreimage || `ln_${Date.now()}_${Array.from(_txIdBytes, b => b.toString(36)).join('').substring(0,7)}`;
 
         const receipt: PaymentReceipt = {
             success: true,
@@ -368,7 +372,8 @@ export class RedPaymentGatewayEngine {
             buyerDid,
             details: {
                 paymentRequest: invoice,
-                lightningAddress: lnAddress
+                lightningAddress: lnAddress,
+                preimage: paymentPreimage
             }
         };
 

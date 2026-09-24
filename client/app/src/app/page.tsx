@@ -148,10 +148,42 @@ export default function AppRouter() {
   useEffect(() => {
     setMounted(true);
 
-    // ── Viewport detection ──────────────────────────────────────────────────
-    const checkViewport = () => setIsTablet(window.innerWidth >= 768);
+    // ── Viewport & Layout Mode Detection (Responsive + Forced Preference) ──
+    const checkViewport = () => {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlLayout = urlParams.get("layout") || (urlParams.get("tablet") === "true" ? "tablet" : null);
+        if (urlLayout === "tablet") { setIsTablet(true); return; }
+        if (urlLayout === "mobile") { setIsTablet(false); return; }
+
+        const storePref = useRedStore.getState().preferences?.layoutMode;
+        const localLayout = localStorage.getItem("red_layout_mode");
+        const prefLayout = storePref || localLayout;
+        if (prefLayout === "tablet") { setIsTablet(true); return; }
+        if (prefLayout === "mobile") { setIsTablet(false); return; }
+
+        // Adaptive Tablet Mode: width >= 768px, or width >= 600px in landscape
+        const isLandscape = window.innerWidth > window.innerHeight;
+        const isTabletResolution = window.innerWidth >= 768 || (window.innerWidth >= 600 && isLandscape);
+        setIsTablet(isTabletResolution);
+      } catch {
+        setIsTablet(window.innerWidth >= 768);
+      }
+    };
     checkViewport();
     window.addEventListener("resize", checkViewport);
+
+    const handleSwitchLayout = (e: any) => {
+      const mode = e?.detail;
+      if (mode === "tablet") {
+        setIsTablet(true);
+      } else if (mode === "mobile") {
+        setIsTablet(false);
+      } else {
+        checkViewport();
+      }
+    };
+    window.addEventListener("red:switch_layout", handleSwitchLayout);
 
     // ── Landing detection ───────────────────────────────────────────────────
     const checkLanding = async () => {
@@ -276,6 +308,7 @@ export default function AppRouter() {
 
     return () => {
       window.removeEventListener("resize",              checkViewport);
+      window.removeEventListener("red:switch_layout",   handleSwitchLayout);
       window.removeEventListener("red:open_conversation", handleNativeOpenConv);
       window.removeEventListener("red:open_landing",    handleOpenLanding);
       window.removeEventListener("popstate",            handlePopState);

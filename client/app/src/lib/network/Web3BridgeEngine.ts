@@ -311,12 +311,11 @@ export class Web3BridgeEngine {
             const eth = (!isNaN(rawEth) && isFinite(rawEth) && rawEth >= 0) ? rawEth : 0;
             this.state.balanceEth = eth.toFixed(4);
 
-            // 2. $RED Token simulation/contract balance query
-            // Derives sovereign staking multiplier or reads ERC-20 contract
+            // 2. $RED Sovereign Token balance query
+            // Reads authentic local sovereign staking credits (or smart contract when linked)
             const localRedBalance = parseFloat(localStorage.getItem("red_tactic_credits") || "0");
             const safeLocalRed = (!isNaN(localRedBalance) && isFinite(localRedBalance) && localRedBalance >= 0) ? localRedBalance : 0;
-            const onChainRedTokens = (eth * 1000 + safeLocalRed).toFixed(2);
-            this.state.balanceRedToken = onChainRedTokens;
+            this.state.balanceRedToken = safeLocalRed.toFixed(2);
         } catch {}
     }
 

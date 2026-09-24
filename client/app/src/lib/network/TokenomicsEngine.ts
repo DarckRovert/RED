@@ -18,8 +18,11 @@ export interface TokenomicsMetrics {
     blocksValidated: number;
     totalVouchersIssued: number;
     totalVouchersRedeemed: number;
-    estimatedFiatValueUsd: number; // 1 RED Credit ≈ 0.05 USD parity target
+    estimatedFiatValueUsd: number; // 1 RED Credit = S/. 1.00 PEN (≈ 0.27 USD parity target)
 }
+
+export const RED_CREDIT_PARITY_PEN = 1.0; // 1 RED Credit = S/. 1.00 PEN (Paridad Soberana)
+export const PEN_TO_USD_EXCHANGE_RATE = 0.27; // Tasa de cambio de referencia S/. 3.70 PEN / USD
 
 export interface OfflineVoucher {
     id: string;
@@ -49,7 +52,7 @@ export class TokenomicsEngine {
         blocksValidated: 0,
         totalVouchersIssued: 0,
         totalVouchersRedeemed: 0,
-        estimatedFiatValueUsd: 7.50
+        estimatedFiatValueUsd: 40.50 // 150 RED * 1.00 PEN * 0.27 USD
     };
 
     private vouchers: OfflineVoucher[] = [];
@@ -68,6 +71,10 @@ export class TokenomicsEngine {
         return this.instance;
     }
 
+    private calculateFiatUsd(credits: number): number {
+        return parseFloat((credits * RED_CREDIT_PARITY_PEN * PEN_TO_USD_EXCHANGE_RATE).toFixed(2));
+    }
+
     private loadState() {
         try {
             const rawMetrics = localStorage.getItem(STORAGE_METRICS_KEY);
@@ -78,7 +85,7 @@ export class TokenomicsEngine {
             const rawCredits = localStorage.getItem("red_tactic_credits");
             if (rawCredits) {
                 this.metrics.localCredits = parseFloat(rawCredits);
-                this.metrics.estimatedFiatValueUsd = parseFloat((this.metrics.localCredits * 0.05).toFixed(2));
+                this.metrics.estimatedFiatValueUsd = this.calculateFiatUsd(this.metrics.localCredits);
             }
 
             const rawVouchers = localStorage.getItem(STORAGE_VOUCHERS_KEY);
@@ -114,7 +121,7 @@ export class TokenomicsEngine {
         this.metrics.totalRelayedPackets++;
         this.metrics.relayEarnings += reward;
         this.metrics.localCredits += reward;
-        this.metrics.estimatedFiatValueUsd = parseFloat((this.metrics.localCredits * 0.05).toFixed(2));
+        this.metrics.estimatedFiatValueUsd = this.calculateFiatUsd(this.metrics.localCredits);
 
         this.saveState();
         this.notifyListeners();
@@ -132,7 +139,7 @@ export class TokenomicsEngine {
 
         this.metrics.localCredits -= amount;
         this.metrics.stakedAmount += amount;
-        this.metrics.estimatedFiatValueUsd = parseFloat((this.metrics.localCredits * 0.05).toFixed(2));
+        this.metrics.estimatedFiatValueUsd = this.calculateFiatUsd(this.metrics.localCredits);
 
         this.saveState();
         this.notifyListeners();
@@ -152,7 +159,7 @@ export class TokenomicsEngine {
         const earnedYield = amount * (this.metrics.validatorApy / 100 / 365);
         this.metrics.stakedAmount -= amount;
         this.metrics.localCredits += (amount + earnedYield);
-        this.metrics.estimatedFiatValueUsd = parseFloat((this.metrics.localCredits * 0.05).toFixed(2));
+        this.metrics.estimatedFiatValueUsd = this.calculateFiatUsd(this.metrics.localCredits);
 
         this.saveState();
         this.notifyListeners();
@@ -196,7 +203,7 @@ export class TokenomicsEngine {
 
         this.metrics.localCredits -= amount;
         this.metrics.totalVouchersIssued++;
-        this.metrics.estimatedFiatValueUsd = parseFloat((this.metrics.localCredits * 0.05).toFixed(2));
+        this.metrics.estimatedFiatValueUsd = this.calculateFiatUsd(this.metrics.localCredits);
         this.vouchers.unshift(voucher);
 
         this.saveState();
@@ -271,7 +278,7 @@ export class TokenomicsEngine {
         this.redeemedIds.add(id);
         this.metrics.localCredits += amount;
         this.metrics.totalVouchersRedeemed++;
-        this.metrics.estimatedFiatValueUsd = parseFloat((this.metrics.localCredits * 0.05).toFixed(2));
+        this.metrics.estimatedFiatValueUsd = this.calculateFiatUsd(this.metrics.localCredits);
 
         const existingIdx = this.vouchers.findIndex(v => v.id === id);
         if (existingIdx !== -1) {

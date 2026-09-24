@@ -1061,7 +1061,7 @@ export const ru: I18nSchema = {
         vivarium_badge: "ВИВАРИЙ 3D",
         habitat_title: "Биокибернетический ареал 3D",
         habitat_sub: "Уравнение диффузии Фика, омматидиальное зрение LC4, пластичность STDP и экосистема in-silico.",
-        habitat_badge: "IN-SILICO 3D",
+        habitat_badge: "ИН-СИЛИКО 3D",
         appStore_title: "Суверенный P2P магазин приложений",
         appStore_sub: "Экосистема защищенных мини-приложений, передаваемых от узла к узлу.",
         appStore_badge: "ПЕСОЧНИЦА",

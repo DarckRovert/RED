@@ -32,6 +32,8 @@ import { predictiveCortex } from "../lib/neuro/human/PredictiveCortexEngine";
 import { globalWorkspaceConsciousnessBus, ConsciousnessSnapshot } from "../lib/neuro/GlobalWorkspaceConsciousnessBus";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { bioCompassDualFusion, BioCompassDualTelemetry } from "../lib/neuro/BioCompassDualFusionEngine";
+import { biocyberneticHabitat, HabitatTelemetry } from "../lib/neuro/habitat/BiocyberneticHabitatEngine";
+import { connectomeBioBridge } from "../lib/neuro/ConnectomeBioBridge";
 
 interface Point3D {
   x: number;
@@ -77,6 +79,9 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const [criticalityTelemetry, setCriticalityTelemetry] = useState<SwarmCriticalityTelemetry>(() => swarmCriticality.getTelemetry());
   const [dualTelemetry, setDualTelemetry] = useState<BioCompassDualTelemetry>(() => bioCompassDualFusion.getTelemetry());
   const [rfBearings, setRfBearings] = useState<RfPeerBearing[]>(() => synapticMeshRouter.getAllActiveBearings());
+  const [cpgTelemetry, setCpgTelemetry] = useState<CpgLocomotionTelemetry>(() => centralPatternGenerator.getTelemetry());
+  const [habitatTelemetry, setHabitatTelemetry] = useState<HabitatTelemetry>(() => biocyberneticHabitat.getTelemetry());
+  const [isBridgeActive, setIsBridgeActive] = useState<boolean>(() => connectomeBioBridge.isConnectomeActive());
 
   // Filtros de visualización y control de cámara 3D
   const [filterSystem, setFilterSystem] = useState<"ALL" | "CX" | "MB" | "GFS" | "FB">("ALL");
@@ -257,10 +262,14 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
   const rfBearingsRef = useRef<RfPeerBearing[]>(rfBearings);
   const humanRef = useRef<HumanBrainTelemetrySnapshot>(humanSnapshot);
   const consciousnessRef = useRef<ConsciousnessSnapshot>(consciousnessTelemetry);
+  const cpgTelemRef = useRef<CpgLocomotionTelemetry>(cpgTelemetry);
+  const habitatTelemRef = useRef<HabitatTelemetry>(habitatTelemetry);
 
-  // Suscripción desacoplada a los 11 subsistemas neurobiológicos
+  // Suscripción desacoplada a los 11 subsistemas neurobiológicos y hábitat físico
   useEffect(() => {
     globalWorkspaceConsciousnessBus.start();
+    connectomeBioBridge.startConnectome();
+
     const unsubCx = ringAttractor.subscribe((t) => { cxTelemRef.current = t; });
     const unsubFb = fanShapedBody.subscribe((t) => { fbTelemRef.current = t; });
     const unsubSyn = synapticMeshRouter.subscribe((st) => {
@@ -277,6 +286,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     const unsubDual = bioCompassDualFusion.subscribe((t) => { dualTelemRef.current = t; });
     const unsubConsciousness = globalWorkspaceConsciousnessBus.subscribe((t) => { consciousnessRef.current = t; });
     const unsubHuman = humanBrainOrchestrator.subscribe((t) => { humanRef.current = t; });
+    const unsubCpg = centralPatternGenerator.subscribe((t) => { cpgTelemRef.current = t; });
+    const unsubHab = biocyberneticHabitat.subscribeTelemetry((t) => { habitatTelemRef.current = t; });
 
     // Compuerta de actualización de interfaz a 4 Hz (250ms): agrupa todos los cambios en 1 único re-render
     const syncTimer = setInterval(() => {
@@ -297,6 +308,9 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       setDualTelemetry(dualTelemRef.current);
       setConsciousnessTelemetry(consciousnessRef.current);
       setHumanSnapshot(humanRef.current);
+      setCpgTelemetry(cpgTelemRef.current);
+      setHabitatTelemetry(habitatTelemRef.current);
+      setIsBridgeActive(connectomeBioBridge.isConnectomeActive());
     }, 250);
 
     return () => {
@@ -314,6 +328,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       unsubDual();
       unsubConsciousness();
       unsubHuman();
+      unsubCpg();
+      unsubHab();
     };
   }, []);
 
@@ -1831,6 +1847,160 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
             <span>📳</span>
             <span>ABRIR GUÍA HÁPTICA EYES-FREE</span>
           </button>
+        </div>
+
+        {/* Card: Lazo Sensoriomotor Biocibernético Drosophila Connectome ↔ Hábitat Físico */}
+        <div
+          style={{
+            gridColumn: "1 / -1",
+            padding: "12px",
+            borderRadius: "10px",
+            background: isBridgeActive ? "rgba(0, 255, 136, 0.06)" : "rgba(255, 179, 0, 0.05)",
+            border: `1px solid ${isBridgeActive ? "rgba(0, 255, 136, 0.35)" : "rgba(255, 179, 0, 0.25)"}`,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "6px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "0.72rem", color: isBridgeActive ? "#00FF88" : "#FFB300", fontWeight: 900 }}>
+                🧬 LAZO BIOCIBERNÉTICO (CEREBRO MALECNS ↔ HÁBITAT FÍSICO)
+              </span>
+              <span style={{
+                fontSize: "0.55rem",
+                padding: "2px 6px",
+                borderRadius: "4px",
+                fontWeight: 900,
+                background: isBridgeActive ? "rgba(0, 255, 136, 0.2)" : "rgba(255, 179, 0, 0.2)",
+                color: isBridgeActive ? "#00FF88" : "#FFB300",
+                border: `1px solid ${isBridgeActive ? "#00FF88" : "#FFB300"}`,
+              }}>
+                {isBridgeActive ? "LAZO CERRADO (60 Hz)" : "DISOCIADO"}
+              </span>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  if (isBridgeActive) {
+                    connectomeBioBridge.stopConnectome();
+                    setIsBridgeActive(false);
+                    toast.warning("Lazo cerrado pausado: mosca en piloto autónomo");
+                  } else {
+                    connectomeBioBridge.startConnectome();
+                    setIsBridgeActive(true);
+                    toast.success("Lazo cerrado activado: MaleCNS comanda cinemática");
+                  }
+                }}
+                style={{
+                  fontSize: "0.58rem",
+                  padding: "3px 8px",
+                  borderRadius: "4px",
+                  fontWeight: 900,
+                  background: isBridgeActive ? "rgba(255, 51, 85, 0.2)" : "rgba(0, 255, 136, 0.2)",
+                  border: `1px solid ${isBridgeActive ? "#FF3355" : "#00FF88"}`,
+                  color: isBridgeActive ? "#FF3355" : "#00FF88",
+                  cursor: "pointer",
+                }}
+              >
+                {isBridgeActive ? "⏸ DESACOPLAR" : "▶ ACOPLAR LAZO"}
+              </button>
+
+              <button
+                onClick={() => {
+                  TacticalAudioEngine.playTap();
+                  setIsHabitatOpen(true);
+                }}
+                style={{
+                  fontSize: "0.58rem",
+                  padding: "3px 8px",
+                  borderRadius: "4px",
+                  fontWeight: 900,
+                  background: "rgba(0, 240, 255, 0.2)",
+                  border: "1px solid #00F0FF",
+                  color: "#00F0FF",
+                  cursor: "pointer",
+                }}
+              >
+                🌿 ARENA HÁBITAT ↗
+              </button>
+            </div>
+          </div>
+
+          {/* Grid de telemetría comparativa e indicadores bio-sensoriales */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "8px" }}>
+            {/* Panel Izquierdo: Vías Aferentes (Mundo Físico → Sentidos) */}
+            <div style={{
+              background: "rgba(0, 0, 0, 0.4)",
+              borderRadius: "6px",
+              padding: "8px",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+            }}>
+              <div style={{ fontSize: "0.62rem", color: "#00E5FF", fontWeight: 900, marginBottom: "4px" }}>
+                📥 VÍAS AFERENTES (HÁBITAT → SENTIDOS)
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem" }}>
+                <span style={{ color: "#94A3B8" }}>Quimio-nutrición (JO-CE):</span>
+                <span style={{ color: "#00E676" }}>{(habitatTelemetry.leaderGlucose * 100).toFixed(0)}% glucosa</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+                <span style={{ color: "#94A3B8" }}>Energía Acústica / Viento:</span>
+                <span style={{ color: joTelemetry.acousticEnergyLevel > 0.4 ? "#FFB300" : "#00E5FF" }}>
+                  {(joTelemetry.acousticEnergyLevel * 100).toFixed(0)}% ({joTelemetry.vibrationFrequencyHz} Hz)
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+                <span style={{ color: "#94A3B8" }}>Detector Looming (LC4/LPLC2):</span>
+                <span style={{ color: opticTelemetry.loomingThreat.isThreatDetected ? "#FF3355" : "#64748B", fontWeight: 800 }}>
+                  {opticTelemetry.loomingThreat.isThreatDetected ? "🚨 AMENAZA EN PROXIMIDAD" : "Ópticamente despejado"}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+                <span style={{ color: "#94A3B8" }}>Combustible Celular (ATP):</span>
+                <span style={{ color: habitatTelemetry.leaderAtp > 0.6 ? "#00FF88" : "#FF3355", fontWeight: 800 }}>
+                  {(habitatTelemetry.leaderAtp * 100).toFixed(0)}% ATP líder
+                </span>
+              </div>
+            </div>
+
+            {/* Panel Derecho: Vías Eferentes (Cerebro → Cinemática Física) */}
+            <div style={{
+              background: "rgba(0, 0, 0, 0.4)",
+              borderRadius: "6px",
+              padding: "8px",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+            }}>
+              <div style={{ fontSize: "0.62rem", color: "#FFD600", fontWeight: 900, marginBottom: "4px" }}>
+                📤 VÍAS EFERENTES (CEREBRO → CINEMÁTICA)
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem" }}>
+                <span style={{ color: "#94A3B8" }}>Rumbo E-PG vs Físico:</span>
+                <span style={{ color: "#FFD600", fontWeight: 800 }}>
+                  {cxTelemetry.headingDeg}° E-PG ➔ {(() => {
+                    const l = biocyberneticHabitat.getLeader();
+                    return l ? `${Math.round(((l.headingRad * 180) / Math.PI + 360) % 360)}°` : `${cxTelemetry.headingDeg}°`;
+                  })()}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+                <span style={{ color: "#94A3B8" }}>Marcha CPG &amp; Velocidad:</span>
+                <span style={{ color: "#00E5FF" }}>
+                  {cpgTelemetry.gaitMode} ({cpgTelemetry.meanFrequencyHz.toFixed(1)} Hz)
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+                <span style={{ color: "#94A3B8" }}>Arco Reflejo Giant Fiber:</span>
+                <span style={{ color: gfsTelemetry.isReflexActive ? "#FF3355" : "#00E676", fontWeight: 800 }}>
+                  {gfsTelemetry.isReflexActive ? "⚡ ESCAPE EVASIVO ACTIVO" : "Latente (<15ms)"}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", marginTop: "2px" }}>
+                <span style={{ color: "#94A3B8" }}>Estado Motor Activo:</span>
+                <span style={{ color: "#B388FF", fontWeight: 800 }}>
+                  {habitatTelemetry.leaderState}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Card 5: Radiogoniometría Bio-Inercial AoA (Direction-Finding) */}

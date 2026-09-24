@@ -943,6 +943,7 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/p2p/wallet", get(handle_get_p2p_wallet))
         .route("/api/p2p/voucher", post(handle_create_p2p_voucher))
         .route("/api/p2p/redeem", post(handle_redeem_p2p_voucher))
+        .route("/api/chunker/split", post(handle_chunker_split))
         // --- Social Network ---
         .route("/api/social/feed", get(handle_social_feed))
         .route("/api/social/post", post(handle_social_post))
@@ -2649,6 +2650,7 @@ pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>
         .route("/api/p2p/wallet", get(handle_get_p2p_wallet_async))
         .route("/api/p2p/voucher", post(handle_create_p2p_voucher_async))
         .route("/api/p2p/redeem", post(handle_redeem_p2p_voucher_async))
+        .route("/api/chunker/split", post(handle_chunker_split))
         .route("/api/profile", axum::routing::put(handle_profile_put_async))
         .route("/api/settings/burner", post(handle_set_burner_mode_async))
         .route("/api/settings/lora", post(handle_set_lora_async))
@@ -6547,3 +6549,48 @@ async_wrap_post!(
     handle_redeem_p2p_voucher,
     RedeemP2PVoucherRequest
 );
+
+/// POST /api/chunker/split — Fragmenta un archivo base64 en chunks BLAKE3
+async fn handle_chunker_split(
+    Json(req): Json<red_core::protocol::tactical::SplitFileRequest>,
+) -> impl IntoResponse {
+    let raw_bytes = match base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &req.data_base64) {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("Base64 decode error: {}", e)})),
+            )
+                .into_response()
+        }
+    };
+
+    let total_size = raw_bytes.len();
+    let chunk_size = 64 * 1024;
+    let total_chunks = if total_size == 0 { 1 } else { total_size.div_ceil(chunk_size) };
+
+    let root_hash = blake3::hash(&raw_bytes).to_hex().to_string();
+    let file_id = format!("file_{}_{}", &root_hash[..10.min(root_hash.len())], total_chunks);
+
+    let mut chunk_hashes = Vec::with_capacity(total_chunks);
+
+    for slice in raw_bytes.chunks(chunk_size) {
+        let chk_hash = blake3::hash(slice).to_hex().to_string();
+        chunk_hashes.push(chk_hash);
+    }
+
+    if chunk_hashes.is_empty() {
+        chunk_hashes.push(root_hash.clone());
+    }
+
+    let manifest = red_core::protocol::tactical::ChunkManifest {
+        file_id,
+        filename: req.filename,
+        total_size,
+        total_chunks,
+        root_hash,
+        chunk_hashes,
+    };
+
+    Json(serde_json::json!({"ok": true, "manifest": manifest})).into_response()
+}

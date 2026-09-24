@@ -107,18 +107,16 @@ export function ZkBarterSubsurfaceModal() {
 
     const handleGenerateProof = async () => {
         // Derivar hojas reales del árbol de Merkle desde contexto operacional local.
-        // Nunca se generan valores estáticos hard-codeados.
-        // Cada hoja es H(operatorId || resourceType || amount || leafIndex || epochSec).
+        // Cada hoja es H(operatorId || resourceType || amount || leafIndex).
         const operatorId = identity?.identity_hash || identity?.nickname || 'RED_OPERATOR';
-        const epochSec = Math.floor(Date.now() / 60000); // epoch de 60s para estabilidad de la raíz
 
         const deriveLeaf = async (index: number): Promise<string> => {
-            const raw = `${operatorId}:${resourceType}:${amount}:${index}:${epochSec}`;
+            const raw = `${operatorId}:${resourceType}:${amount}:${index}`;
             const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
             return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
         };
 
-        // 8 hojas derivadas garantizan un árbol de Merkle equilibrado de 3 niveles.
+        // 8 hojas derivadas garantizan un árbol de Merkle equilibrado y estable de 3 niveles.
         const leafHashes = await Promise.all([0, 1, 2, 3, 4, 5, 6, 7].map(deriveLeaf));
 
         const secretBytes = new Uint8Array(16);

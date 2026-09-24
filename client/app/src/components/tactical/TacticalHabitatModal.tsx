@@ -25,6 +25,7 @@ import {
 import { hexapodActuatorBridge } from '../../lib/neuro/vivarium/HexapodActuatorBridgeEngine';
 import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
 import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
+import { connectomeBioBridge } from '../../lib/neuro/ConnectomeBioBridge';
 
 export interface TacticalHabitatModalProps {
   onClose: () => void;
@@ -72,9 +73,10 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
       offscreenCanvasRef.current = oc;
     }
 
-    // 2. Iniciar simulación biofísica
+    // 2. Iniciar simulación biofísica y acople con conectoma MaleCNS
     biocyberneticHabitat.start();
     biocyberneticHabitat.setTool(selectedTool, toolIntensity);
+    connectomeBioBridge.startConnectome();
 
     // 3. Suscribir telemetría reactiva
     const unsubTel = biocyberneticHabitat.subscribeTelemetry((t) => {
@@ -386,6 +388,49 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
     ctx.stroke();
     ctx.shadowBlur = 0;
 
+    // 6.1 Nido Central de la Colonia Formicidae (Anthill)
+    const nestRadiusPx = 0.85 * scale;
+    ctx.save();
+    ctx.translate(centerX, centerY);
+
+    // Halo biofísico de feromonas del nido
+    const nestGrad = ctx.createRadialGradient(0, 0, nestRadiusPx * 0.15, 0, 0, nestRadiusPx * 1.35);
+    nestGrad.addColorStop(0, 'rgba(255, 159, 67, 0.22)');
+    nestGrad.addColorStop(0.55, 'rgba(238, 82, 83, 0.10)');
+    nestGrad.addColorStop(1, 'rgba(255, 159, 67, 0)');
+    ctx.fillStyle = nestGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, nestRadiusPx * 1.35, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Perímetro del montículo táctico
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+    ctx.strokeStyle = 'rgba(255, 159, 67, 0.65)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(0, 0, nestRadiusPx, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Apertura subterránea del nido (túnel central)
+    ctx.fillStyle = '#060c18';
+    ctx.strokeStyle = '#ff9f43';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(0, 0, nestRadiusPx * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Etiqueta táctica del nido
+    ctx.font = '800 8.5px monospace';
+    ctx.fillStyle = '#ff9f43';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🐜 NIDO', 0, nestRadiusPx + 11);
+    ctx.restore();
+
     // 7. Organismos Vivos con Morfología Específica
     const organisms = biocyberneticHabitat.getAllOrganisms();
     for (const org of organisms) {
@@ -616,6 +661,25 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
             padding: '2px 4px',
           }}
         >
+          <div
+            style={{
+              padding: '4px 9px',
+              borderRadius: '6px',
+              background: connectomeBioBridge.isConnectomeActive() ? 'rgba(0, 255, 136, 0.2)' : 'rgba(255, 179, 0, 0.2)',
+              border: `1px solid ${connectomeBioBridge.isConnectomeActive() ? '#00ff88' : '#ffb300'}`,
+              color: connectomeBioBridge.isConnectomeActive() ? '#00ff88' : '#ffb300',
+              fontSize: '11px',
+              fontWeight: 800,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <span>🧠</span>
+            <span>MALECNS: {connectomeBioBridge.isConnectomeActive() ? 'LAZO CERRADO' : 'AUTÓNOMO'}</span>
+          </div>
+
           <div
             style={{
               padding: '4px 9px',

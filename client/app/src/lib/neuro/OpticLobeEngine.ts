@@ -336,6 +336,61 @@ export class OpticLobeEngine {
     return isCritical;
   }
 
+  /**
+   * Inyecta una amenaza looming directamente desde el hábitat físico (ConnectomeBioBridge).
+   *
+   * Recibe la distancia real en metros al proyector de sombra más cercano y la convierte
+   * en una evaluación de amenaza LC4 / LPLC2 del mundo visual real del organismo.
+   * Si la distancia está por debajo del umbral crítico (<0.8 m), dispara el GiantFiber.
+   *
+   * @param detected       - Si hay una sombra dentro del radio de amenaza del hábitat.
+   * @param distanceMeters - Distancia en metros a la sombra más cercana.
+   */
+  public injectLoomingThreat(detected: boolean, distanceMeters: number): void {
+    if (!detected || distanceMeters <= 0) {
+      // Sin amenaza: decaimiento gradual de la intensidad
+      this.loomingThreatState.isThreatDetected = false;
+      this.loomingThreatState.threatIntensity = Math.max(0, this.loomingThreatState.threatIntensity * 0.80);
+      this.loomingThreatState.expansionRate = 0;
+      this.notifyListeners();
+      return;
+    }
+
+    // Convertir distancia real a tamaño angular aparente: θ ≈ 2 * atan(R_shadow / d)
+    // Asumimos radio de sombra de 0.5 m como referencia de calibración
+    const shadowRadiusM = 0.5;
+    const angularSizeDeg = Math.min(
+      170,
+      (2 * Math.atan(shadowRadiusM / Math.max(0.05, distanceMeters)) * 180) / Math.PI
+    );
+
+    // Tasa de expansión: inversamente proporcional a la distancia (más cerca = más expansión)
+    const expansionRate = Math.min(4.0, shadowRadiusM / Math.max(0.05, distanceMeters * distanceMeters));
+
+    // Tiempo de contacto estimado
+    const ttcMs = Math.round(Math.min(9999, (distanceMeters / Math.max(0.01, expansionRate)) * 1000));
+
+    const isCritical = distanceMeters < 0.8 || (expansionRate >= 1.2 && ttcMs <= 500);
+    const intensity = Math.min(1.0, 1.0 - (distanceMeters / 2.0));
+
+    this.loomingThreatState = {
+      isThreatDetected: isCritical,
+      expansionRate: Math.round(expansionRate * 100) / 100,
+      angularSizeDeg: Math.round(angularSizeDeg * 10) / 10,
+      estimatedTtcMs: Math.max(10, ttcMs),
+      threatIntensity: Math.round(intensity * 100) / 100,
+      lastAlertTimestamp: isCritical ? Date.now() : this.loomingThreatState.lastAlertTimestamp,
+    };
+
+    if (isCritical) {
+      try {
+        giantFiberReflex.triggerReflex('VISUAL_LOOMING_THREAT');
+      } catch {}
+    }
+
+    this.notifyListeners();
+  }
+
   public getTelemetry(): OpticLobeTelemetry {
     return {
       timestamp: Date.now(),

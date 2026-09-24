@@ -63,7 +63,17 @@ export class RedAPIClient {
     }
     async pingDmsActivity(): Promise<{ success: boolean; last_active_timestamp: number }> { return pingDmsActivity(); }
     async panicWipe(): Promise<{ success: boolean; wiped: boolean }> { return panicWipe(); }
-    async configureHardwareLoRa(config: Record<string, unknown>): Promise<{ ok: boolean; config: Record<string, unknown> }> { return fetchWithFallback('/api/network/lora/config', { method: 'POST', body: JSON.stringify(config) }, () => ({ ok: true, config })); }
+    async configureHardwareLoRa(config: Record<string, unknown>): Promise<{ ok: boolean; config?: Record<string, unknown>; error?: string }> {
+        const payload = {
+            port: String(config.port || ''),
+            baud: typeof config.baud === 'number' ? config.baud : (parseInt(String(config.baud), 10) || 115200),
+            enabled: Boolean(config.enabled)
+        };
+        return this.req<{ ok: boolean; config?: Record<string, unknown> }>('/settings/lora', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
     async getNetworkIp(): Promise<{ ok: boolean; local_ip: string }> {
         return fetchWithFallback<{ ok: boolean; local_ip: string }>('/api/network/ip', undefined, () => ({ ok: true, local_ip: '127.0.0.1' }));
     }

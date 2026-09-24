@@ -229,6 +229,8 @@ export interface UserPreferences {
     operationalMode?: 'stealth' | 'scotopic_red' | 'solar' | 'survival' | 'offgrid';
     // WhatsApp Familiar Mode vs Tactical C4ISR (v87.0.0+)
     uiMode?: 'familiar' | 'tactical';
+    // Layout Distribution Mode (v121.0.0+): auto | tablet (master-detail) | mobile (single-column)
+    layoutMode?: 'auto' | 'tablet' | 'mobile';
     chatWallpaper?: 'doodle_dark' | 'doodle_green' | 'void_black';
     readReceiptsEnabled?: boolean;
     enterIsSend?: boolean;
@@ -261,6 +263,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     biometricLock: false,
     operationalMode: 'stealth',
     uiMode: 'familiar',
+    layoutMode: 'auto',
     chatWallpaper: 'doodle_dark',
     readReceiptsEnabled: true,
     enterIsSend: false,

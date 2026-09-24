@@ -141,22 +141,49 @@ export class HexapodBody3D {
 
     this.bodyGroup.add(abdomenGroup);
 
-    // ── 5. Alas Plegadas con Resonancia Acústica ──────────────────────────────
-    const wingGeo = new THREE.PlaneGeometry(0.45, 1.4);
-    wingGeo.translate(0, 0, -0.7);
+    // ── 5. Alas Anatómicas Plegadas (Drosophila melanogaster) ──────────────────
+    // Contorno alar biofísico de Drosophila: curvatura elíptica con ápice redondeado
+    const wingShape = new THREE.Shape();
+    wingShape.moveTo(0, 0); // Base de inserción mesotorácica
+    wingShape.bezierCurveTo(0.16, 0.3, 0.25, 0.7, 0.22, 1.05);
+    wingShape.bezierCurveTo(0.18, 1.25, 0.09, 1.35, 0.0, 1.38); // Ápice elíptico
+    wingShape.bezierCurveTo(-0.09, 1.35, -0.18, 1.25, -0.22, 1.05);
+    wingShape.bezierCurveTo(-0.25, 0.7, -0.16, 0.3, 0.0, 0.0);
+
+    const wingGeo = new THREE.ShapeGeometry(wingShape, 16);
+    // Orientar para que repose horizontalmente en el plano XZ apuntando hacia atrás (-Z) sobre el abdomen
+    wingGeo.rotateX(-Math.PI / 2);
+
+    // Venación longitudinal micro-estructurada (L2, L3, L4)
+    const veinPoints = [
+      new THREE.Vector3(0, 0.002, 0),
+      new THREE.Vector3(0, 0.002, -1.32),
+      new THREE.Vector3(0, 0.002, 0),
+      new THREE.Vector3(0.14, 0.002, -0.85),
+      new THREE.Vector3(0.14, 0.002, -0.85),
+      new THREE.Vector3(0.08, 0.002, -1.25),
+      new THREE.Vector3(0, 0.002, 0),
+      new THREE.Vector3(-0.14, 0.002, -0.75),
+      new THREE.Vector3(-0.14, 0.002, -0.75),
+      new THREE.Vector3(-0.08, 0.002, -1.15),
+    ];
+    const veinGeo = new THREE.BufferGeometry().setFromPoints(veinPoints);
+    const veinMaterial = new THREE.LineBasicMaterial({
+      color: 0x00f0ff,
+      transparent: true,
+      opacity: 0.45,
+    });
 
     this.leftWing = new THREE.Mesh(wingGeo, wingMaterial);
-    this.leftWing.position.set(-0.15, 0.26, 0.1);
-    this.leftWing.rotation.x = -0.15;
-    this.leftWing.rotation.y = 0.12;
-    this.leftWing.rotation.z = -0.05;
+    this.leftWing.add(new THREE.LineSegments(veinGeo, veinMaterial));
+    this.leftWing.position.set(-0.15, 0.33, 0.10);
+    this.leftWing.rotation.set(-0.06, 0.07, -0.06);
     this.bodyGroup.add(this.leftWing);
 
     this.rightWing = new THREE.Mesh(wingGeo, wingMaterial);
-    this.rightWing.position.set(0.15, 0.26, 0.1);
-    this.rightWing.rotation.x = -0.15;
-    this.rightWing.rotation.y = -0.12;
-    this.rightWing.rotation.z = 0.05;
+    this.rightWing.add(new THREE.LineSegments(veinGeo, veinMaterial));
+    this.rightWing.position.set(0.15, 0.33, 0.10);
+    this.rightWing.rotation.set(-0.06, -0.07, 0.06);
     this.bodyGroup.add(this.rightWing);
 
     // ── 6. Articulación Cinemática 3-DOF para las 6 Patas ─────────────────────
@@ -308,23 +335,36 @@ export class HexapodBody3D {
       this.jumpOffsetY += this.jumpVelocityY * deltaSec;
       this.jumpVelocityY -= 19.6 * deltaSec; // Gravedad 2G de escape
 
-      // Desplegar alas en el aire
-      this.leftWing.rotation.z = -0.7;
-      this.rightWing.rotation.z = 0.7;
+      // Desplegar alas en el aire: abducción lateral y aleteo rápido de fuga
+      const flightFlap = Math.sin(Date.now() * 0.08) * 0.25;
+      this.leftWing.rotation.y = 0.85; // Apertura hacia afuera (~50°)
+      this.rightWing.rotation.y = -0.85;
+      this.leftWing.rotation.z = -0.15 + flightFlap;
+      this.rightWing.rotation.z = 0.15 - flightFlap;
+      this.leftWing.rotation.x = -0.06;
+      this.rightWing.rotation.x = -0.06;
 
       if (this.jumpOffsetY <= 0) {
         this.jumpOffsetY = 0;
         this.isJumping = false;
         this.jumpVelocityY = 0;
-        this.leftWing.rotation.z = -0.05;
-        this.rightWing.rotation.z = 0.05;
+        // Restaurar posición anatómica horizontal plegada sobre el abdomen
+        this.leftWing.rotation.set(-0.06, 0.07, -0.06);
+        this.rightWing.rotation.set(-0.06, -0.07, 0.06);
       }
     } else {
-      // Leve aleteo durante marcha activa
+      // Reposo y marcha en suelo
       if (cpgTelemetry.gaitMode !== 'QUIESCENT') {
-        const wingBuzz = Math.sin(Date.now() * 0.04) * 0.08;
-        this.leftWing.rotation.x = -0.15 + wingBuzz;
-        this.rightWing.rotation.x = -0.15 + wingBuzz;
+        const wingBuzz = Math.sin(Date.now() * 0.04) * 0.025;
+        this.leftWing.rotation.x = -0.06 + wingBuzz;
+        this.rightWing.rotation.x = -0.06 + wingBuzz;
+        this.leftWing.rotation.y = 0.07;
+        this.rightWing.rotation.y = -0.07;
+        this.leftWing.rotation.z = -0.06;
+        this.rightWing.rotation.z = 0.06;
+      } else {
+        this.leftWing.rotation.set(-0.06, 0.07, -0.06);
+        this.rightWing.rotation.set(-0.06, -0.07, 0.06);
       }
     }
 

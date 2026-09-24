@@ -193,6 +193,53 @@ export class JohnstonOrganEngine {
     }
   }
 
+  // ─── Métodos de Entrada del ConnectomeBioBridge ───────────────────────────
+
+  /**
+   * Inyecta concentraciones químicas del hábitat físico (ConnectomeBioBridge).
+   *
+   * La glucosa eleva la resonancia JO-CE de baja frecuencia (vías de nutrición).
+   * La feromona de alarma incrementa la energía acústica ambiental percibida,
+   * aumentando la probabilidad de activar el arco reflejo de Giant Fiber.
+   *
+   * @param glucoseConc - Concentración de glucosa bajo las antenas [0-∞], normalizada internamente.
+   * @param alarmConc   - Concentración de feromona de alarma [0-∞], normalizada internamente.
+   */
+  public updateChemicalInput(glucoseConc: number, alarmConc: number): void {
+    // JO-CE: la glucosa produce una deflexión estática de baja frecuencia (atracción antenal)
+    this.joCeDeflection = Math.min(1.0, Math.max(this.joCeDeflection * 0.85, Math.min(1.0, glucoseConc * 0.6)));
+
+    // Alarma química: eleva la energía acústica ambiental percibida
+    const alarmNorm = Math.min(1.0, alarmConc * 1.4);
+    if (alarmNorm > this.acousticEnergy) {
+      this.acousticEnergy = Math.min(1.0, this.acousticEnergy * 0.7 + alarmNorm * 0.3);
+    } else {
+      // Decaimiento exponencial si la feromona disminuye
+      this.acousticEnergy = Math.max(0, this.acousticEnergy * 0.92);
+    }
+    this.notifyListeners();
+  }
+
+  /**
+   * Dispara un choque mecánico directo desde el hábitat físico (ConnectomeBioBridge).
+   *
+   * Emula la perturbación mecanosensorial de una onda de air-puff golpeando las antenas.
+   * Si la intensidad supera el umbral de disparo, activa el arco reflejo Giant Fiber.
+   *
+   * @param intensity - Intensidad del golpe [0.0 - 1.0] normalizada.
+   */
+  public triggerMechanicalShock(intensity: number): void {
+    const clampedIntensity = Math.min(1.0, Math.max(0.0, intensity));
+    this.processShockDetection(
+      clampedIntensity,
+      120.0 + clampedIntensity * 240.0, // Estimación de frecuencia: 120–360 Hz
+      'SEISMIC_TREMOR',
+      this.windDeflectionAngle
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+
   /**
    * Inyecta una perturbación de RF o pulso de interferencia desde RfSpectrumAnalyzerEngine.
    */

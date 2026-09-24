@@ -90,15 +90,19 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
             }
 
             // 2. Lightning QR
-            const lnTarget = passport?.lightningAddress || 'merchant@getalby.com';
-            try {
-                const qr = await OfflineQrEngine.generateDataUrl(`lightning:${lnTarget}`, {
-                    width: 240,
-                    darkColor: "#FFB300",
-                    lightColor: "#060913"
-                });
-                if (isMounted) setLnQrUrl(qr);
-            } catch {}
+            const lnTarget = passport?.lightningAddress;
+            if (lnTarget) {
+                try {
+                    const qr = await OfflineQrEngine.generateDataUrl(`lightning:${lnTarget}`, {
+                        width: 240,
+                        darkColor: "#FFB300",
+                        lightColor: "#060913"
+                    });
+                    if (isMounted) setLnQrUrl(qr);
+                } catch {}
+            } else {
+                if (isMounted) setLnQrUrl('');
+            }
         };
 
         generateQrs();

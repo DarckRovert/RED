@@ -1061,7 +1061,7 @@ export const fr: I18nSchema = {
         vivarium_badge: "VIVARIUM 3D",
         habitat_title: "Habitat Biocybernétique 3D",
         habitat_sub: "EDP de diffusion de Fick, vision ommatidiale LC4, plasticité STDP et écosystème in-silico.",
-        habitat_badge: "IN-SILICO 3D",
+        habitat_badge: "HABITAT 3D",
         appStore_title: "Boutique d'Apps Souveraines P2P",
         appStore_sub: "Écosystème de mini-applications sécurisées propagées de pair à pair.",
         appStore_badge: "BAC À SABLE",

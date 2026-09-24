@@ -14,6 +14,7 @@ import { tacticalGhostGps } from "../lib/sensors/TacticalGhostGpsEngine";
 import { redCyberTunnel } from "../lib/network/RedCyberTunnelEngine";
 import TacIcon, { TacIconName } from "./ui/TacIcon";
 import { meshRouter, MeshPeer } from "../lib/mesh/meshRouter";
+import { toast } from "./Toast";
 
 export default function StatusHeader() {
     const { nodeOnline, status, navigate, preferences, updatePreferences } = useRedStore();
@@ -496,6 +497,52 @@ export default function StatusHeader() {
                         {batteryInfo.charging && <TacIcon name="zap" size={10} color="#FFD600" />}
                         <span style={{ color: "#FFFFFF" }} className="tactical-tabular">{batteryLevel}%</span>
                     </div>
+
+                    {/* Layout Viewport Switcher (Tablet Master-Detail vs Mobile Single-Column) */}
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const currentLayout = preferences?.layoutMode || (typeof window !== 'undefined' ? localStorage.getItem('red_layout_mode') : null) || 'auto';
+                            let nextLayout: 'auto' | 'tablet' | 'mobile' = 'tablet';
+                            if (currentLayout === 'tablet') nextLayout = 'mobile';
+                            else if (currentLayout === 'mobile') nextLayout = 'auto';
+                            else nextLayout = 'tablet';
+
+                            updatePreferences({ layoutMode: nextLayout });
+                            if (typeof window !== 'undefined') {
+                                localStorage.setItem('red_layout_mode', nextLayout);
+                                window.dispatchEvent(new CustomEvent('red:switch_layout', { detail: nextLayout }));
+                            }
+                            const label = nextLayout === 'tablet' ? 'Modo Tablet Dividido (Master-Detail)' : nextLayout === 'mobile' ? 'Modo Móvil (Una Columna)' : 'Detección Automática';
+                            toast.info(`📐 ${label}`);
+                        }}
+                        style={{
+                            padding: "4px 8px",
+                            background: (preferences?.layoutMode === 'tablet') 
+                                ? (isFamiliar ? "rgba(0, 168, 132, 0.2)" : "rgba(0, 229, 255, 0.18)")
+                                : (isFamiliar ? "#202C33" : "rgba(0, 0, 0, 0.55)"),
+                            border: (preferences?.layoutMode === 'tablet')
+                                ? (isFamiliar ? "1px solid #00A884" : "1px solid rgba(0, 229, 255, 0.5)")
+                                : "1px solid rgba(255, 255, 255, 0.14)",
+                            borderRadius: "9px",
+                            color: (preferences?.layoutMode === 'tablet') ? (isFamiliar ? "#00A884" : "#00E5FF") : "#CBD5E1",
+                            fontWeight: 800,
+                            fontSize: "10px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            flexShrink: 0,
+                            boxShadow: (preferences?.layoutMode === 'tablet') ? "0 0 8px rgba(0,229,255,0.25)" : "none",
+                            transition: "all 0.15s ease"
+                        }}
+                        title={`Diseño: ${preferences?.layoutMode === 'tablet' ? 'Tablet Forzado' : preferences?.layoutMode === 'mobile' ? 'Móvil Forzado' : 'Automático'} (Clic para alternar)`}
+                    >
+                        <TacIcon name="maximize" size={11} color={(preferences?.layoutMode === 'tablet') ? (isFamiliar ? "#00A884" : "#00E5FF") : "#CBD5E1"} />
+                        <span className="status-text-hide-compact">
+                            {preferences?.layoutMode === 'tablet' ? 'TABLET' : preferences?.layoutMode === 'mobile' ? 'MÓVIL' : 'AUTO'}
+                        </span>
+                    </button>
 
                     {/* Tactical Action Shortcuts: Only in Tactical Mode & hidden on ultra-compact */}
                     {!isFamiliar && (

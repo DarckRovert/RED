@@ -206,7 +206,7 @@ export class TacticalMotorActuatorEngine {
     // Modulación del Generador de Patrones Centrales (CPG) de locomoción hexápoda
     // Error angular [-180 .. +180] -> Sesgo de timoneo [-1.0 .. +1.0]
     const turnBias = Math.max(-1.0, Math.min(1.0, this.steeringError / 90.0));
-    centralPatternGenerator.setLocomotionDrive(this.isEnabled ? this.locomotionSpeed : 0.0, turnBias);
+    centralPatternGenerator.setLocomotionDrive(this.locomotionSpeed, turnBias);
 
     this.dispatchHapticFeedback();
     this.notifyListeners();
@@ -267,7 +267,7 @@ export class TacticalMotorActuatorEngine {
   public setLocomotionSpeed(speed: number): void {
     this.locomotionSpeed = Math.max(0.0, Math.min(1.0, speed));
     const turnBias = Math.max(-1.0, Math.min(1.0, this.steeringError / 90.0));
-    centralPatternGenerator.setLocomotionDrive(this.isEnabled ? this.locomotionSpeed : 0.0, turnBias);
+    centralPatternGenerator.setLocomotionDrive(this.locomotionSpeed, turnBias);
     this.notifyListeners();
   }
 

@@ -1,5 +1,5 @@
 /**
- * RED — Sovereign Mesh OS (v93.0.0)
+ * RED — Sovereign Mesh OS (v121.0.0)
  * Master Unified Library Barrel Export
  */
 
@@ -13,6 +13,7 @@ export * from './i18n';
 export * from './mesh';
 export * from './miniapp';
 export * from './network';
+export * from './neuro';
 export * from './security';
 export * from './sensors';
 export * from './storage';
@@ -23,3 +24,4 @@ export * from './updateManager';
 export * from './version';
 export * from './qr/OfflineQrEngine';
 export * from './clipboard';
+export type { TcccCasualtyCard, TourniquetRecord } from './tactical';

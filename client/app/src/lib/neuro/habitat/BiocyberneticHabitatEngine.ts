@@ -24,6 +24,7 @@ import { HabitatMeshBridgeEngine, ImmigrantOrganismData } from './HabitatMeshBri
 import { kineticStress } from '../../sensors/KineticStressEngine';
 import { hexapodActuatorBridge } from '../vivarium/HexapodActuatorBridgeEngine';
 import { TacticalAudioEngine } from '../../audio/TacticalAudioEngine';
+import { connectomeBioBridge } from '../ConnectomeBioBridge';
 
 export type OrganismSpecies = 'DROSOPHILA' | 'C_ELEGANS' | 'ANT';
 
@@ -52,6 +53,7 @@ export interface HabitatOrganism {
   decompositionRemainingSec: number;
   behaviorState: string;
   wingFlapPhase: number;
+  nestExitCooldownSec: number;
 }
 
 export type HabitatToolType =
@@ -287,6 +289,7 @@ export class BiocyberneticHabitatEngine {
       decompositionRemainingSec: 25.0,
       behaviorState: 'FORAGING',
       wingFlapPhase: 0,
+      nestExitCooldownSec: 0,
     };
 
     this.organisms.set(id, org);
@@ -362,7 +365,7 @@ export class BiocyberneticHabitatEngine {
         }
       }
 
-      // 4.2 Lógica Especializada por Especie
+      // 4.2 Lógica Especializada por Especie e Interacciones Ecológicas
       let turnRateRadPerSec = 0;
       let targetSpeed = 0.8;
 
@@ -377,7 +380,9 @@ export class BiocyberneticHabitatEngine {
         );
         const alarmSample = this.diffusionGrid.sample(gridX, gridY, 'ALARM_PHEROMONE');
 
-        if (antennalSample.meanConcentration > 0.05) {
+        // 1. Quimiotaxis / Alimentación de glucosa
+        const isNearGlucose = antennalSample.meanConcentration > 0.04;
+        if (isNearGlucose) {
           const ingested = Math.min(antennalSample.meanConcentration * 0.4, 0.2 * dt);
           org.metabolism.ingestNutrient(ingested);
           org.plasticity.injectDopamine(ingested * 5.0);
@@ -387,7 +392,11 @@ export class BiocyberneticHabitatEngine {
           org.behaviorState = 'FORAGING_WALK';
         }
 
-        // Visión omatidial de sombras
+        // 2. Detección de depredadores (Formicidae / Hormiga en aproximación)
+        const nearestAnt = this.getNearestOrganismOfSpecies(org.x, org.y, 'ANT', org.id);
+        const distToAnt = nearestAnt ? nearestAnt.dist : 999.0;
+
+        // 3. Visión omatidial de sombras y amenazas compuestas
         const eyeShadows = this.shadows.map(s => ({
           x: s.x - org.x,
           y: 0,
@@ -397,32 +406,90 @@ export class BiocyberneticHabitatEngine {
         }));
         org.eye.step(dt, 0.8, eyeShadows);
 
-        // Hebbian STDP
-        const activeKc = [4, 12, 19, 28];
-        if (antennalSample.meanConcentration > 0.02) org.plasticity.activateKcPattern(activeKc);
-        if (alarmSample > 0.1) org.plasticity.injectOctopamine(alarmSample * 2.0);
-        org.plasticity.step(dt);
+        const nearestShadowDist = this.getNearestShadowDistance(org.x, org.y);
+        const nearestAirPuff = this.getNearestAirPuffIntensity(org.x, org.y);
+        // Si hay una hormiga acechando, el sistema visual la integra como amenaza looming
+        const effectiveLoomingDist = Math.min(nearestShadowDist, distToAnt);
 
-        const valence = org.plasticity.evaluateValence(activeKc);
-        if (valence >= 0) {
-          turnRateRadPerSec = antennalSample.delta * 4.5 * (1.0 + valence);
+        const isDrivenByConnectome = org.isLeader && connectomeBioBridge.isConnectomeActive();
+
+        if (isDrivenByConnectome) {
+          // Lazo Sensoriomotor Cerrado: Estímulos Físicos Reales → Cerebro MaleCNS
+          connectomeBioBridge.injectSensoryStimuli(
+            org,
+            antennalSample.meanConcentration,
+            alarmSample,
+            effectiveLoomingDist,
+            nearestAirPuff,
+            antennalSample.delta
+          );
+          // Decisiones Motoras del Cerebro (Compass E-PG, CPG, Giant Fiber) → Organismo Físico
+          connectomeBioBridge.applyMotorCommands(org);
         } else {
-          turnRateRadPerSec = -antennalSample.delta * 4.5;
+          // Hebbian STDP y navegación interna autónoma
+          const activeKc = [4, 12, 19, 28];
+          if (antennalSample.meanConcentration > 0.02) org.plasticity.activateKcPattern(activeKc);
+          if (alarmSample > 0.1) org.plasticity.injectOctopamine(alarmSample * 2.0);
+          org.plasticity.step(dt);
+
+          const valence = org.plasticity.evaluateValence(activeKc);
+          if (valence >= 0) {
+            turnRateRadPerSec = antennalSample.delta * 4.5 * (1.0 + valence);
+          } else {
+            turnRateRadPerSec = -antennalSample.delta * 4.5;
+          }
+
+          if (alarmSample > 0.05) turnRateRadPerSec += (Math.random() - 0.5) * 6.0;
+
+          const eyeTel = org.eye.getTelemetry();
+          turnRateRadPerSec += eyeTel.horizontalOpticalFlow * 0.2;
+
+          // INTERACCIÓN ECOLÓGICA 1: Evasión refleja ante depredador Formicidae
+          if (distToAnt < 0.75 && nearestAnt) {
+            // Reflejo Giant Fiber de escape ante ataque de mandíbulas
+            const escapeAngle = Math.atan2(org.y - nearestAnt.org.y, org.x - nearestAnt.org.x);
+            org.headingRad = (escapeAngle + (Math.random() - 0.5) * 0.4) % (Math.PI * 2);
+            org.speedMps = 3.6;
+            targetSpeed = 3.6;
+            org.behaviorState = 'EVADING_PREDATOR_ANT';
+            org.plasticity.injectOctopamine(0.4);
+            TacticalAudioEngine.playReflexEscape();
+          } else if (distToAnt < 1.15 && nearestAnt) {
+            // Alerta visual de aproximación de hormiga
+            const awayAngle = Math.atan2(org.y - nearestAnt.org.y, org.x - nearestAnt.org.x);
+            const diff = ((awayAngle - org.headingRad + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+            turnRateRadPerSec += Math.sign(diff) * 3.4;
+            targetSpeed = 1.35;
+            if (org.behaviorState === 'FORAGING_WALK') org.behaviorState = 'ALERT_PREDATOR_APPROACH';
+          } else if (eyeTel.giantFiberTriggered) {
+            org.speedMps = 3.8;
+            turnRateRadPerSec += Math.PI * 0.8;
+            org.behaviorState = 'GIANT_FIBER_ESCAPE';
+            TacticalAudioEngine.playReflexEscape();
+          } else {
+            // INTERACCIÓN ECOLÓGICA 2: Distancia social conespecífica (Mosca ↔ Mosca)
+            const nearestFly = this.getNearestOrganismOfSpecies(org.x, org.y, 'DROSOPHILA', org.id);
+            if (nearestFly && nearestFly.dist < 0.65) {
+              const repulseAngle = Math.atan2(org.y - nearestFly.org.y, org.x - nearestFly.org.x);
+              const diff = ((repulseAngle - org.headingRad + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+              turnRateRadPerSec += Math.sign(diff) * 2.6;
+              if (org.behaviorState === 'FORAGING_WALK') org.behaviorState = 'TERRITORIAL_SPACING';
+            }
+
+            // Calibración de velocidad según estado biológico:
+            if (isNearGlucose) {
+              // DETENCIÓN PARA ALIMENTARSE (evita correr velozmente sobre el alimento)
+              targetSpeed = 0.08 * org.metabolism.getLocomotionFactor();
+              turnRateRadPerSec = (Math.random() - 0.5) * 0.4;
+            } else if (antennalSample.meanConcentration > 0.008) {
+              targetSpeed = 0.6 * org.metabolism.getLocomotionFactor();
+              org.behaviorState = 'GLUCOSE_CHEMOTAXIS';
+            } else {
+              targetSpeed = 0.75 * org.metabolism.getLocomotionFactor();
+              turnRateRadPerSec += (Math.random() - 0.5) * 1.4; // Meandro exploratorio
+            }
+          }
         }
-
-        if (alarmSample > 0.05) turnRateRadPerSec += (Math.random() - 0.5) * 6.0;
-
-        const eyeTel = org.eye.getTelemetry();
-        turnRateRadPerSec += eyeTel.horizontalOpticalFlow * 0.2;
-
-        if (eyeTel.giantFiberTriggered) {
-          org.speedMps = 3.8;
-          turnRateRadPerSec += Math.PI * 0.8;
-          org.behaviorState = 'GIANT_FIBER_ESCAPE';
-          TacticalAudioEngine.playReflexEscape();
-        }
-
-        targetSpeed = (antennalSample.meanConcentration > 0.01 ? 1.4 : 0.8) * org.metabolism.getLocomotionFactor();
         org.wingFlapPhase = (org.wingFlapPhase + org.speedMps * 35.0 * dt) % (Math.PI * 2);
 
         // Cinemática 18-DOF para robótica física
@@ -452,8 +519,20 @@ export class BiocyberneticHabitatEngine {
           TacticalAudioEngine.playDopamineChime();
         }
 
-        // Nocicepción térmica reversa ante calor/alarma
-        if (alarmSample > 0.06) {
+        // INTERACCIÓN ECOLÓGICA 3: Reflejo mecanosensorial por contacto de insecto (ALM/PLM)
+        const nearestInsect = this.getNearestInsect(org.x, org.y, org.id);
+
+        if (nearestInsect && nearestInsect.dist < 0.45) {
+          // Contacto táctil mecánico: retirada retrógrada instantánea y pirueta
+          const retreatAngle = Math.atan2(org.y - nearestInsect.org.y, org.x - nearestInsect.org.x);
+          org.headingRad = (retreatAngle + (Math.random() - 0.5) * 0.4) % (Math.PI * 2);
+          org.speedMps = 1.3;
+          targetSpeed = 1.3;
+          org.pirouetteTimerSec = 0.6;
+          org.behaviorState = 'MECHANOSENSORY_TOUCH_REVERSAL';
+          org.plasticity.injectOctopamine(0.35);
+        } else if (alarmSample > 0.06) {
+          // Nocicepción térmica reversa ante calor/alarma
           org.headingRad = (org.headingRad + Math.PI + (Math.random() - 0.5) * 0.4) % (Math.PI * 2);
           org.speedMps = 1.5;
           org.behaviorState = 'THERMAL_NOCICEPTIVE_REVERSAL';
@@ -499,13 +578,41 @@ export class BiocyberneticHabitatEngine {
         }
 
       } else if (org.species === 'ANT') {
-        // ── FORMICIDAE (HORMIGA): Estigmergia, Rastros de Feromona & Reclutamiento ──
+        // ── FORMICIDAE (HORMIGA): Estigmergia, Caza de Moscas & Tráfico del Nido ──
         const antennalGlucose = this.diffusionGrid.sampleAntennaPair(gridX, gridY, org.headingRad, 0.06, 'GLUCOSE');
         const antennalTrail = this.diffusionGrid.sampleAntennaPair(gridX, gridY, org.headingRad, 0.06, 'PHEROMONE_TRAIL');
 
-        if (!org.isCarryingFood) {
-          if (antennalGlucose.meanConcentration > 0.04) {
-            // Encuentra alimento: ingesta y cambio a estado de retorno
+        // Manejo del enfriamiento tras salir del nido (dispersión centrífuga)
+        if (org.nestExitCooldownSec > 0) {
+          org.nestExitCooldownSec -= dt;
+          targetSpeed = 1.25;
+          turnRateRadPerSec = (Math.random() - 0.5) * 0.8;
+          org.behaviorState = 'UNLOADED_FORAGING_OUTWARD';
+        } else if (!org.isCarryingFood) {
+          // INTERACCIÓN ECOLÓGICA 4: Comportamiento predatorio / acecho a Drosophila
+          const nearestFly = this.getNearestOrganismOfSpecies(org.x, org.y, 'DROSOPHILA', org.id);
+
+          if (nearestFly && nearestFly.dist < 0.95) {
+            // Caza activa de presa: orientarse y correr hacia la mosca
+            const angleToFly = Math.atan2(nearestFly.org.y - org.y, nearestFly.org.x - org.x);
+            const diff = ((angleToFly - org.headingRad + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+            turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 4.5);
+            targetSpeed = 1.45;
+            org.behaviorState = 'ANT_CHASING_PREY';
+
+            // Si alcanza la mosca (mordisco / choque mandibular)
+            if (nearestFly.dist < 0.38) {
+              org.behaviorState = 'ANT_BITING_PREY';
+              org.metabolism.ingestNutrient(0.08);
+              org.plasticity.injectDopamine(1.5);
+              // La mosca sale disparada por el reflejo de sobresalto
+              nearestFly.org.speedMps = 3.8;
+              nearestFly.org.headingRad = (angleToFly + Math.PI + (Math.random() - 0.5) * 0.4) % (Math.PI * 2);
+              nearestFly.org.behaviorState = 'EVADING_PREDATOR_ANT';
+              TacticalAudioEngine.playReflexEscape();
+            }
+          } else if (antennalGlucose.meanConcentration > 0.04) {
+            // Encuentra alimento: ingesta y cambio a estado de retorno al nido
             org.metabolism.ingestNutrient(0.25 * dt);
             org.isCarryingFood = true;
             TacticalAudioEngine.playDopamineChime();
@@ -525,6 +632,13 @@ export class BiocyberneticHabitatEngine {
               targetSpeed = 1.0;
             }
           }
+
+          // INTERACCIÓN ECOLÓGICA 5: Evitación mutua entre hormigas (regla de carril derecho)
+          const nearestAnt = this.getNearestOrganismOfSpecies(org.x, org.y, 'ANT', org.id);
+          if (nearestAnt && nearestAnt.dist < 0.48) {
+            turnRateRadPerSec += 1.8;
+          }
+
         } else {
           // Cargando alimento: Deposita feromona de rastro continua en la grilla de Fick
           this.diffusionGrid.injectChemical(gridX, gridY, 1.4 * dt, 'PHEROMONE_TRAIL');
@@ -535,18 +649,25 @@ export class BiocyberneticHabitatEngine {
           const diff = ((angleToNest - org.headingRad + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
           turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 3.8);
 
-          // Si llegó al nido (< 0.9 m del centro)
-          if (Math.hypot(org.x, org.y) < 0.9) {
+          // Si llegó al nido (< 0.85 m del centro)
+          if (Math.hypot(org.x, org.y) < 0.85) {
             org.isCarryingFood = false;
-            org.headingRad = (org.headingRad + Math.PI + (Math.random() - 0.5) * 0.5) % (Math.PI * 2);
-            org.behaviorState = 'UNLOADED_RETURNING_TO_FORAGE';
+            org.nestExitCooldownSec = 2.8; // Período de salida sin volver a engancharse al rastro
+            // Vector de salida radial hacia afuera del nido
+            const outwardAngle = Math.atan2(org.y, org.x) + (Math.random() - 0.5) * 0.8;
+            org.headingRad = outwardAngle;
+            org.speedMps = 1.35;
+            org.behaviorState = 'UNLOADED_FORAGING_OUTWARD';
+            TacticalAudioEngine.playDopamineChime();
           }
         }
       }
 
       // 4.3 Actualización de Rumbo y Desplazamiento
-      org.headingRad = (org.headingRad + turnRateRadPerSec * dt) % (Math.PI * 2);
-      org.speedMps += (targetSpeed - org.speedMps) * Math.min(1.0, 5.0 * dt);
+      if (!(org.isLeader && org.species === 'DROSOPHILA' && connectomeBioBridge.isConnectomeActive())) {
+        org.headingRad = (org.headingRad + turnRateRadPerSec * dt) % (Math.PI * 2);
+        org.speedMps += (targetSpeed - org.speedMps) * Math.min(1.0, 5.0 * dt);
+      }
 
       let nextX = org.x + Math.cos(org.headingRad) * org.speedMps * dt;
       let nextY = org.y + Math.sin(org.headingRad) * org.speedMps * dt;
@@ -590,21 +711,71 @@ export class BiocyberneticHabitatEngine {
         }
       }
 
-      // 4.7 Reproducción A-Life (Mitosis/Oviposición por Saciedad Energética)
+      // 4.7 Reproducción A-Life (Mitosis/Oviposición por Saciedad Energética con Dispersión Segura)
       if (org.metabolism.getTelemetry().atpLevel > 0.82 && !org.isDecomposing) {
         org.satietyTimerSec += dt;
         if (org.satietyTimerSec >= 15.0 && this.organisms.size < 22) {
           org.satietyTimerSec = 0;
+          const spawnAngle = Math.random() * Math.PI * 2;
+          const spawnDist = 0.85 + Math.random() * 0.3;
           const offspring = this.spawnOrganism(
             org.species,
-            org.x + (Math.random() - 0.5) * 0.4,
-            org.y + (Math.random() - 0.5) * 0.4,
-            Math.random() * Math.PI * 2,
+            org.x + Math.cos(spawnAngle) * spawnDist,
+            org.y + Math.sin(spawnAngle) * spawnDist,
+            spawnAngle,
             false
           );
           offspring.generation = org.generation + 1;
           offspring.plasticity.inheritFromParentWithMutation(org.plasticity, 0.05);
           TacticalAudioEngine.playMitosisChime();
+        }
+      }
+    }
+
+    // 5. Exclusión Física de Cuerpos Sólidos (Elastic Non-Penetration Solver)
+    const activeOrgs = Array.from(this.organisms.values()).filter(o => !o.isDecomposing);
+    for (let i = 0; i < activeOrgs.length; i++) {
+      const oA = activeOrgs[i];
+      const rA = BiocyberneticHabitatEngine.getSpeciesRadius(oA.species);
+
+      for (let j = i + 1; j < activeOrgs.length; j++) {
+        const oB = activeOrgs[j];
+        const rB = BiocyberneticHabitatEngine.getSpeciesRadius(oB.species);
+
+        const dx = oA.x - oB.x;
+        const dy = oA.y - oB.y;
+        const dist = Math.hypot(dx, dy);
+        const minDist = rA + rB;
+
+        if (dist < minDist) {
+          const overlap = minDist - dist;
+          let nx = dx / (dist || 0.001);
+          let ny = dy / (dist || 0.001);
+
+          if (dist < 0.001) {
+            const randAngle = Math.random() * Math.PI * 2;
+            nx = Math.cos(randAngle);
+            ny = Math.sin(randAngle);
+          }
+
+          // Impulso de separación elástica del 52% para romper solapamientos
+          const pushX = nx * overlap * 0.52;
+          const pushY = ny * overlap * 0.52;
+
+          const nextAX = oA.x + pushX;
+          const nextAY = oA.y + pushY;
+          const nextBX = oB.x - pushX;
+          const nextBY = oB.y - pushY;
+
+          // Verificar límites contra barreras y centro
+          if (!this.diffusionGrid.isPointBlocked(nextAX + centerOffset, nextAY + centerOffset)) {
+            oA.x = nextAX;
+            oA.y = nextAY;
+          }
+          if (!this.diffusionGrid.isPointBlocked(nextBX + centerOffset, nextBY + centerOffset)) {
+            oB.x = nextBX;
+            oB.y = nextBY;
+          }
         }
       }
     }
@@ -750,6 +921,78 @@ export class BiocyberneticHabitatEngine {
       if (!org.isDecomposing) return org;
     }
     return undefined;
+  }
+
+  public getLeaderOrganism(): HabitatOrganism | undefined {
+    return this.getLeader();
+  }
+
+  public getNearestShadowDistance(x: number, y: number): number {
+    if (this.shadows.length === 0) return 999.0;
+    let minDist = 999.0;
+    for (const sh of this.shadows) {
+      const dist = Math.hypot(sh.x - x, sh.y - y);
+      if (dist < minDist) minDist = dist;
+    }
+    return minDist;
+  }
+
+  public getNearestAirPuffIntensity(x: number, y: number): number {
+    if (this.airPuffWaves.length === 0) return 0.0;
+    let maxIntensity = 0.0;
+    for (const wave of this.airPuffWaves) {
+      const dist = Math.hypot(wave.x - x, wave.y - y);
+      if (Math.abs(dist - wave.radiusMeters) < 0.8) {
+        if (wave.strength > maxIntensity) maxIntensity = wave.strength;
+      }
+    }
+    return maxIntensity;
+  }
+
+  public static getSpeciesRadius(species: OrganismSpecies): number {
+    switch (species) {
+      case 'DROSOPHILA':
+        return 0.38;
+      case 'ANT':
+        return 0.32;
+      case 'C_ELEGANS':
+        return 0.22;
+      default:
+        return 0.30;
+    }
+  }
+
+  public getNearestOrganismOfSpecies(
+    x: number,
+    y: number,
+    species: OrganismSpecies,
+    excludeId: string
+  ): { org: HabitatOrganism; dist: number } | null {
+    let nearest: { org: HabitatOrganism; dist: number } | null = null;
+    for (const org of this.organisms.values()) {
+      if (org.id === excludeId || org.isDecomposing || org.species !== species) continue;
+      const dist = Math.hypot(org.x - x, org.y - y);
+      if (!nearest || dist < nearest.dist) {
+        nearest = { org, dist };
+      }
+    }
+    return nearest;
+  }
+
+  public getNearestInsect(
+    x: number,
+    y: number,
+    excludeId: string
+  ): { org: HabitatOrganism; dist: number } | null {
+    let nearest: { org: HabitatOrganism; dist: number } | null = null;
+    for (const org of this.organisms.values()) {
+      if (org.id === excludeId || org.isDecomposing || org.species === 'C_ELEGANS') continue;
+      const dist = Math.hypot(org.x - x, org.y - y);
+      if (!nearest || dist < nearest.dist) {
+        nearest = { org, dist };
+      }
+    }
+    return nearest;
   }
 
   public getOrganism(id: string): HabitatOrganism | undefined {

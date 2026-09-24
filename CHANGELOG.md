@@ -1,5 +1,25 @@
 # Changelog
 
+## [122.0.0-ecologia-multi-especie-depredacion-y-fisica-elastica] - 2026-09-24
+
+### 🧬 Ecología Multi-Especie, Dinámicas de Depredación y Física Elástica de Hábitat (Release Oficial v122.0.0)
+
+- **Física Elástica de Exclusión de Cuerpos Sólidos (`BiocyberneticHabitatEngine.ts`):**
+  - Resolvedor determinista de no-penetración a 60 Hz con radios biológicos precisos (`Drosophila: 0.38 m`, `Ant: 0.32 m`, `C. elegans: 0.22 m`) e impulsos de separación elástica del 52% que eliminan totalmente la superposición de masas en la arena.
+- **Dinámicas Ecológicas Interespecíficas:**
+  - Depredación y caza activa de hormigas hacia moscas (`ANT_CHASING_PREY` / `ANT_BITING_PREY` con aceleración a 1.45 m/s y mordisco mandibular).
+  - Detección y evasión de amenazas looming en moscas (`EVADING_PREDATOR_ANT` a 3.6 m/s con descarga de octopamina y giro de 180°).
+  - Proyección de hormigas entrantes como sombras en aproximación rápida hacia los detectores de colisión LC4/LPTC del cerebro MaleCNS FlyWire (`OpticLobeEngine.ts`).
+  - Espaciado social y territorial conespecífico (`TERRITORIAL_SPACING` con repulsión angular mutua a <0.65 m).
+  - Arco reflejo mecanosensorial en *C. elegans* (`MECHANOSENSORY_TOUCH_REVERSAL` a 1.3 m/s con pirueta Omega-turn ante contacto de insectos).
+  - Calibración de alimentación de glucosa a 0.08 m/s para ingesta estática natural.
+- **Mecánica y Renderizado Táctico del Nido Formicidae (`TacticalHabitatModal.tsx`):**
+  - Renderizado gráfico del Nido Central en Canvas con halo de feromonas, perímetro táctico punteado y túnel de acceso.
+  - Temporizador de desacoplamiento de feromonas (`nestExitCooldownSec = 2.8 s`) e impulso radial centrífugo para dispersión uniforme de hormigas recolectoras.
+  - Mitosis A-Life con dispersión orbital de 0.85 m a 1.15 m.
+- **Certificación en Hardware Físico Real:**
+  - Despliegue simultáneo y validación en Lenovo Tab M9 y Motorola Moto G22 (0 crashes, 0 caídas, SSE continuo y carga JNI exitosa).
+
 ## [121.0.0-habitat-digital-biocibernetico-y-ecosistema-multi-cerebro] - 2026-09-23
 
 ### 🧬 Hábitat Digital Biocibernético In-Silico & Ecosistema Multi-Cerebro (Release Oficial v121.0.0)

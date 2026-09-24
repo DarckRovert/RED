@@ -1151,68 +1151,67 @@ textarea:focus {
   overflow: hidden;
 }
 
-@media (min-width: 768px) {
-  .tablet-split-layout {
-    display: flex !important;
-    flex-direction: row !important;
-    width: 100% !important;
-    height: 100% !important;
-    overflow: hidden !important;
-  }
+/* Tablet Split & Master-Detail Layout Classes */
+.tablet-split-layout {
+  display: flex !important;
+  flex-direction: row !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
 
+.tablet-sidebar-pane {
+  width: clamp(280px, 32vw, 400px) !important;
+  min-width: 260px !important;
+  max-width: 420px !important;
+  height: 100% !important;
+  border-right: 1px solid var(--glass-border) !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.tablet-workspace-pane {
+  flex: 1 !important;
+  height: 100% !important;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  background: radial-gradient(ellipse 90% 60% at 50% 0%, rgba(0, 229, 255, 0.04) 0%, rgba(232, 33, 58, 0.02) 40%, transparent 75%);
+}
+
+@media (min-width: 1200px) {
   .tablet-sidebar-pane {
-    width: 380px !important;
-    min-width: 340px !important;
-    max-width: 420px !important;
-    height: 100% !important;
-    border-right: 1px solid var(--glass-border) !important;
-    flex-shrink: 0 !important;
-    position: relative !important;
-    display: flex !important;
-    flex-direction: column !important;
+    width: 400px !important;
   }
+}
 
-  .tablet-workspace-pane {
-    flex: 1 !important;
-    height: 100% !important;
-    position: relative !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
-    background: radial-gradient(ellipse 90% 60% at 50% 0%, rgba(0, 229, 255, 0.04) 0%, rgba(232, 33, 58, 0.02) 40%, transparent 75%);
-  }
+.tablet-modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  background: rgba(2, 2, 4, 0.75) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 32px !important;
+}
 
-  @media (min-width: 1200px) {
-    .tablet-sidebar-pane {
-      width: 400px !important;
-    }
-  }
-
-  .tablet-modal-overlay {
-    position: fixed !important;
-    inset: 0 !important;
-    z-index: 9999 !important;
-    background: rgba(2, 2, 4, 0.75) !important;
-    backdrop-filter: blur(16px) !important;
-    -webkit-backdrop-filter: blur(16px) !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 32px !important;
-  }
-
-  .tablet-modal-container {
-    width: 100% !important;
-    max-width: 860px !important;
-    max-height: 90vh !important;
-    border-radius: 20px !important;
-    border: 1px solid var(--glass-border) !important;
-    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--glass-border-light) !important;
-    overflow: hidden !important;
-    display: flex !important;
-    flex-direction: column !important;
-    animation: popIn var(--dur-normal) var(--ease-spring) both !important;
-  }
+.tablet-modal-container {
+  width: 100% !important;
+  max-width: 860px !important;
+  max-height: 90vh !important;
+  border-radius: 20px !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--glass-border-light) !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  animation: popIn var(--dur-normal) var(--ease-spring) both !important;
 }
 
 /* ─── Barcode / Camera Scanner Transparent Layer ────────────────────────────── */

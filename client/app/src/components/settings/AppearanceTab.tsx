@@ -123,6 +123,135 @@ export const AppearanceTab: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* ── SECCIÓN 0.5: DISTRIBUCIÓN DE PANTALLA (TABLET VS MÓVIL) ── */}
+                        <div>
+                            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span>📐</span> Distribución de Pantalla
+                            </h3>
+                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                Elige el diseño de interfaz: panel dividido C4ISR (Master-Detail para tablet/escritorio) o una sola columna compacta (móvil).
+                            </p>
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                            {/* Auto */}
+                            <div
+                                onClick={() => {
+                                    SettingsManager.triggerHaptic("medium");
+                                    updatePreferences({ layoutMode: 'auto' });
+                                    if (typeof window !== 'undefined') {
+                                        localStorage.setItem('red_layout_mode', 'auto');
+                                        window.dispatchEvent(new CustomEvent('red:switch_layout', { detail: 'auto' }));
+                                    }
+                                    toast.success("Distribución: Detección Automática");
+                                }}
+                                className="card-tactical-interactive"
+                                style={{
+                                    padding: "14px", borderRadius: "14px", cursor: "pointer",
+                                    border: (preferences.layoutMode ?? 'auto') === 'auto' ? "2px solid #00E5FF" : "1px solid var(--glass-border)",
+                                    background: (preferences.layoutMode ?? 'auto') === 'auto' ? "rgba(0, 229, 255, 0.12)" : "var(--glass-bg)",
+                                    boxShadow: (preferences.layoutMode ?? 'auto') === 'auto' ? "0 0 16px rgba(0, 229, 255, 0.3)" : "none",
+                                    display: "flex", flexDirection: "column", gap: "8px"
+                                }}
+                            >
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                    <span style={{ fontSize: "1.3rem" }}>⚙️</span>
+                                    {(preferences.layoutMode ?? 'auto') === 'auto' && (
+                                        <span style={{
+                                            width: 18, height: 18, borderRadius: "50%",
+                                            background: "#00E5FF", color: "#000",
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                            fontSize: "0.7rem", fontWeight: 900
+                                        }}>✓</span>
+                                    )}
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>Automático</div>
+                                    <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", marginTop: "2px", lineHeight: 1.3 }}>
+                                        Según ancho de pantalla y orientación
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Tablet */}
+                            <div
+                                onClick={() => {
+                                    SettingsManager.triggerHaptic("medium");
+                                    updatePreferences({ layoutMode: 'tablet' });
+                                    if (typeof window !== 'undefined') {
+                                        localStorage.setItem('red_layout_mode', 'tablet');
+                                        window.dispatchEvent(new CustomEvent('red:switch_layout', { detail: 'tablet' }));
+                                    }
+                                    toast.success("Distribución: Modo Tablet Dividido");
+                                }}
+                                className="card-tactical-interactive"
+                                style={{
+                                    padding: "14px", borderRadius: "14px", cursor: "pointer",
+                                    border: preferences.layoutMode === 'tablet' ? "2px solid #00FF88" : "1px solid var(--glass-border)",
+                                    background: preferences.layoutMode === 'tablet' ? "rgba(0, 255, 136, 0.12)" : "var(--glass-bg)",
+                                    boxShadow: preferences.layoutMode === 'tablet' ? "0 0 16px rgba(0, 255, 136, 0.3)" : "none",
+                                    display: "flex", flexDirection: "column", gap: "8px"
+                                }}
+                            >
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                    <span style={{ fontSize: "1.3rem" }}>💻</span>
+                                    {preferences.layoutMode === 'tablet' && (
+                                        <span style={{
+                                            width: 18, height: 18, borderRadius: "50%",
+                                            background: "#00FF88", color: "#000",
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                            fontSize: "0.7rem", fontWeight: 900
+                                        }}>✓</span>
+                                    )}
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>Tablet Dividido</div>
+                                    <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", marginTop: "2px", lineHeight: 1.3 }}>
+                                        Barra lateral + Panel C4ISR a la derecha
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Mobile */}
+                            <div
+                                onClick={() => {
+                                    SettingsManager.triggerHaptic("medium");
+                                    updatePreferences({ layoutMode: 'mobile' });
+                                    if (typeof window !== 'undefined') {
+                                        localStorage.setItem('red_layout_mode', 'mobile');
+                                        window.dispatchEvent(new CustomEvent('red:switch_layout', { detail: 'mobile' }));
+                                    }
+                                    toast.success("Distribución: Modo Móvil Compacto");
+                                }}
+                                className="card-tactical-interactive"
+                                style={{
+                                    padding: "14px", borderRadius: "14px", cursor: "pointer",
+                                    border: preferences.layoutMode === 'mobile' ? "2px solid #FF3355" : "1px solid var(--glass-border)",
+                                    background: preferences.layoutMode === 'mobile' ? "rgba(255, 51, 85, 0.12)" : "var(--glass-bg)",
+                                    boxShadow: preferences.layoutMode === 'mobile' ? "0 0 16px rgba(255, 51, 85, 0.3)" : "none",
+                                    display: "flex", flexDirection: "column", gap: "8px"
+                                }}
+                            >
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                    <span style={{ fontSize: "1.3rem" }}>📱</span>
+                                    {preferences.layoutMode === 'mobile' && (
+                                        <span style={{
+                                            width: 18, height: 18, borderRadius: "50%",
+                                            background: "#FF3355", color: "#FFF",
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                            fontSize: "0.7rem", fontWeight: 900
+                                        }}>✓</span>
+                                    )}
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>Móvil Compacto</div>
+                                    <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", marginTop: "2px", lineHeight: 1.3 }}>
+                                        Una sola columna con barra inferior
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Selector de Wallpaper si está en Modo Familiar */}
                         {(preferences.uiMode ?? 'familiar') === 'familiar' && (
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>

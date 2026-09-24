@@ -117,8 +117,39 @@ export class MetabolicNeuromorphicGovernor {
     this.notifyListeners();
   }
 
+  /**
+   * Inyecta el estado energético del organismo físico del hábitat (ConnectomeBioBridge).
+   *
+   * Traduce el nivel de ATP del organismo biológico (escala 0.0 - 1.0) al porcentaje de
+   * batería que usa el gobernador metabólico para calcular el régimen neuroendocrino
+   * IPC/NPF (SATIATED → CONSERVATIVE → TORPOR).
+   *
+   * Si la glucosa supera el umbral de saciedad (≥ 5.5 mM), se aplica una bonificación
+   * al regime para evitar que un organismo bien alimentado entre en TORPOR prematuramente.
+   *
+   * @param atpLevel    - Nivel de ATP del organismo [0.0 = agotado, 1.0 = máximo]
+   * @param glucoseMgDl - Glucemia estimada en mM (uso opcional, default 5.0 mM)
+   */
+  public injectOrganismAtp(atpLevel: number, glucoseMgDl: number = 5.0): void {
+    // Convertir ATP del organismo a batería equivalente del gobernador metabólico
+    // El gobernador usa batteryPct [0-100], el organismo usa atpLevel [0-1]
+    const atpAsBatteryPct = Math.min(100, Math.max(0, atpLevel * 100));
+
+    // La glucosa alta (saciedad) es un modulador positivo: hasta +15% de batería efectiva
+    const glucoseBonus = glucoseMgDl >= 5.5 ? Math.min(15, (glucoseMgDl - 5.5) * 5) : 0;
+    const effectiveBatteryPct = Math.min(100, atpAsBatteryPct + glucoseBonus);
+
+    // Solo actualizamos si la diferencia es significativa (>5%) para evitar fluctuaciones ruidosas
+    if (Math.abs(effectiveBatteryPct - this.batteryPct) > 5) {
+      this.batteryPct = effectiveBatteryPct;
+      this.recalculateRegime();
+      this.notifyListeners();
+    }
+  }
+
   private async hydrateBatteryStateSafe(): Promise<void> {
     try {
+
       if (typeof window !== 'undefined') {
         // 1. Prioridad: API nativa de batería W3C (navigator.getBattery)
         if (typeof navigator !== 'undefined' && (navigator as any).getBattery) {

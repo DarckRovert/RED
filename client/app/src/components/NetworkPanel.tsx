@@ -226,7 +226,7 @@ export default function NetworkPanel() {
             localStorage.setItem("red_lora_baud", loraBaud);
         }
         try {
-            await RedAPI.configureHardwareLoRa({ enabled: loraEnabled, port: loraPort, baud: loraBaud });
+            await RedAPI.configureHardwareLoRa({ enabled: loraEnabled, port: loraPort, baud: parseInt(loraBaud, 10) || 115200 });
             toast.success("⚙️ Configuración LoRa aplicada en el Hardware");
         } catch (e: any) {
             toast.error("⚠️ Configurado localmente, pero el nodo físico no respondió.");

@@ -83,6 +83,7 @@ export class ConnectomeEcosystemOrchestrator {
     metabolicGovernor.start();
     opticLobe.start();
     tacticalMotorActuator.start();
+    centralPatternGenerator.start();
     swarmCriticality.start();
 
     // 2. Acoplar Johnston's Organ con Giant Fiber Reflex
@@ -130,7 +131,9 @@ export class ConnectomeEcosystemOrchestrator {
     bioCompassDualFusion.start();
     const unSubDual = bioCompassDualFusion.subscribe(() => this.notifyListeners());
 
-    this.unsubs.push(unSubCompass, unSubFb, unSubMb, unSubSyn, unSubGfs, unSubOptic, unSubMotor, unSubCrit, unSubDual);
+    const unSubCpg = centralPatternGenerator.subscribe(() => this.notifyListeners());
+
+    this.unsubs.push(unSubCompass, unSubFb, unSubMb, unSubSyn, unSubGfs, unSubOptic, unSubMotor, unSubCrit, unSubDual, unSubCpg);
     console.log('[ConnectomeOrchestrator] 🦗 Drosophila MaleCNS living organism initialized and active in background');
     this.notifyListeners();
   }
@@ -161,6 +164,7 @@ export class ConnectomeEcosystemOrchestrator {
     metabolicGovernor.stop();
     opticLobe.stop();
     tacticalMotorActuator.stop();
+    centralPatternGenerator.stop();
     swarmCriticality.stop();
     bioCompassDualFusion.stop();
     this.dispatchSnapshot();
