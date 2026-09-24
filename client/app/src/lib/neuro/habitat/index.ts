@@ -8,3 +8,4 @@ export * from './OmmatidialCompoundEye';
 export * from './PersistentSynapticPlasticityEngine';
 export * from './HabitatMeshBridgeEngine';
 export * from './BiocyberneticHabitatEngine';
+export * from './BiocyberneticHabitat3DEngine';

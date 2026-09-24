@@ -177,13 +177,13 @@ export class HexapodBody3D {
     this.leftWing = new THREE.Mesh(wingGeo, wingMaterial);
     this.leftWing.add(new THREE.LineSegments(veinGeo, veinMaterial));
     this.leftWing.position.set(-0.15, 0.33, 0.10);
-    this.leftWing.rotation.set(-0.06, 0.07, -0.06);
+    this.leftWing.rotation.set(-0.04, -0.06, 0.04);
     this.bodyGroup.add(this.leftWing);
 
     this.rightWing = new THREE.Mesh(wingGeo, wingMaterial);
     this.rightWing.add(new THREE.LineSegments(veinGeo, veinMaterial));
-    this.rightWing.position.set(0.15, 0.33, 0.10);
-    this.rightWing.rotation.set(-0.06, -0.07, 0.06);
+    this.rightWing.position.set(0.15, 0.338, 0.10); // Ligero escalonamiento dorsal (8mm) para solapamiento anatómico sin z-fighting
+    this.rightWing.rotation.set(-0.04, 0.06, -0.04);
     this.bodyGroup.add(this.rightWing);
 
     // ── 6. Articulación Cinemática 3-DOF para las 6 Patas ─────────────────────
@@ -349,22 +349,22 @@ export class HexapodBody3D {
         this.isJumping = false;
         this.jumpVelocityY = 0;
         // Restaurar posición anatómica horizontal plegada sobre el abdomen
-        this.leftWing.rotation.set(-0.06, 0.07, -0.06);
-        this.rightWing.rotation.set(-0.06, -0.07, 0.06);
+        this.leftWing.rotation.set(-0.04, -0.06, 0.04);
+        this.rightWing.rotation.set(-0.04, 0.06, -0.04);
       }
     } else {
       // Reposo y marcha en suelo
       if (cpgTelemetry.gaitMode !== 'QUIESCENT') {
-        const wingBuzz = Math.sin(Date.now() * 0.04) * 0.025;
-        this.leftWing.rotation.x = -0.06 + wingBuzz;
-        this.rightWing.rotation.x = -0.06 + wingBuzz;
-        this.leftWing.rotation.y = 0.07;
-        this.rightWing.rotation.y = -0.07;
-        this.leftWing.rotation.z = -0.06;
-        this.rightWing.rotation.z = 0.06;
+        const wingBuzz = Math.sin(Date.now() * 0.04) * 0.015;
+        this.leftWing.rotation.x = -0.04 + wingBuzz;
+        this.rightWing.rotation.x = -0.04 + wingBuzz;
+        this.leftWing.rotation.y = -0.06;
+        this.rightWing.rotation.y = 0.06;
+        this.leftWing.rotation.z = 0.04;
+        this.rightWing.rotation.z = -0.04;
       } else {
-        this.leftWing.rotation.set(-0.06, 0.07, -0.06);
-        this.rightWing.rotation.set(-0.06, -0.07, 0.06);
+        this.leftWing.rotation.set(-0.04, -0.06, 0.04);
+        this.rightWing.rotation.set(-0.04, 0.06, -0.04);
       }
     }
 

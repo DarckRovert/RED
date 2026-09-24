@@ -21,6 +21,8 @@ import {
   HabitatToolType,
   OrganismSpecies,
   HabitatOrganism,
+  BiocyberneticHabitat3DEngine,
+  HabitatCameraMode,
 } from '../../lib/neuro/habitat';
 import { hexapodActuatorBridge } from '../../lib/neuro/vivarium/HexapodActuatorBridgeEngine';
 import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
@@ -33,12 +35,15 @@ export interface TacticalHabitatModalProps {
 
 export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onClose }) => {
   const [telemetry, setTelemetry] = useState<HabitatTelemetry>(biocyberneticHabitat.getTelemetry());
+  const [viewMode, setViewMode] = useState<'3D' | '2D'>('3D');
+  const [cameraMode, setCameraMode] = useState<HabitatCameraMode>('ORBITAL');
   const [selectedTool, setSelectedTool] = useState<HabitatToolType>('GLUCOSE_PIPETTE');
   const [toolIntensity, setToolIntensity] = useState<number>(1.0);
   const [bannerAlert, setBannerAlert] = useState<string | null>(null);
   const [selectedOrganismId, setSelectedOrganismId] = useState<string | null>(null);
-  const [isFollowCamActive, setIsFollowCamActive] = useState<boolean>(false);
 
+  const viewport3DRef = useRef<HTMLDivElement | null>(null);
+  const engine3DRef = useRef<BiocyberneticHabitat3DEngine | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -65,7 +70,7 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
   };
 
   useEffect(() => {
-    // 1. Inicializar Canvas Offscreen de 64x64 para campo escalar de Fick
+    // 1. Inicializar Canvas Offscreen de 64x64 para campo escalar de Fick 2D
     if (!offscreenCanvasRef.current && typeof document !== 'undefined') {
       const oc = document.createElement('canvas');
       oc.width = 64;
@@ -78,32 +83,86 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
     biocyberneticHabitat.setTool(selectedTool, toolIntensity);
     connectomeBioBridge.startConnectome();
 
-    // 3. Suscribir telemetría reactiva
+    // 3. Inicializar Motor Gráfico 3D Inmersivo
+    const engine3D = new BiocyberneticHabitat3DEngine();
+    engine3DRef.current = engine3D;
+
+    if (viewport3DRef.current && viewMode === '3D') {
+      engine3D.attach(viewport3DRef.current);
+    }
+    engine3D.setOnSelectOrganism((id) => {
+      setSelectedOrganismId(id);
+      const org = biocyberneticHabitat.getOrganism(id);
+      if (org) {
+        triggerAlert(`🎯 BIO-SCANNER 3D: Fijado en ${org.species} (${org.id.slice(-6)})`);
+      }
+    });
+    engine3D.setOnAlert((msg) => {
+      triggerAlert(msg);
+    });
+
+    if (viewMode === '3D') {
+      engine3D.start();
+    }
+
+    // 4. Suscribir telemetría reactiva
     const unsubTel = biocyberneticHabitat.subscribeTelemetry((t) => {
       setTelemetry(t);
     });
 
-    // 4. Bucle de renderizado Canvas en tiempo real
+    // 5. Bucle de renderizado Canvas en tiempo real (para modo 2D)
     let animId: number;
-    const render = () => {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          drawHabitatScene(ctx, canvas.width, canvas.height);
+    const render2D = () => {
+      if (viewMode === '2D') {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            drawHabitatScene(ctx, canvas.width, canvas.height);
+          }
         }
       }
-      animId = requestAnimationFrame(render);
+      animId = requestAnimationFrame(render2D);
     };
-    animId = requestAnimationFrame(render);
+    animId = requestAnimationFrame(render2D);
 
     return () => {
       cancelAnimationFrame(animId);
       unsubTel();
       biocyberneticHabitat.stop();
+      if (engine3DRef.current) {
+        engine3DRef.current.dispose();
+        engine3DRef.current = null;
+      }
       if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
     };
   }, []);
+
+  // Sincronizar alternancia de modo de render 3D / 2D
+  useEffect(() => {
+    const engine3D = engine3DRef.current;
+    if (!engine3D) return;
+
+    if (viewMode === '3D') {
+      if (viewport3DRef.current) {
+        engine3D.attach(viewport3DRef.current);
+      }
+      engine3D.start();
+    } else {
+      engine3D.pause();
+    }
+  }, [viewMode]);
+
+  // Sincronizar organismo seleccionado con el motor 3D
+  useEffect(() => {
+    engine3DRef.current?.setSelectedOrganism(selectedOrganismId);
+  }, [selectedOrganismId]);
+
+  const handleSelectCameraMode = (mode: HabitatCameraMode) => {
+    TacticalAudioEngine.playTap();
+    setCameraMode(mode);
+    engine3DRef.current?.setCameraMode(mode);
+  };
 
   const handleSelectTool = (tool: HabitatToolType) => {
     TacticalAudioEngine.playTap();
@@ -473,19 +532,35 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
         ctx.ellipse(0, 0, 14, 7, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Alas translúcidas oscilantes
-        const wingOsc = Math.sin(org.wingFlapPhase) * 0.4;
+        // Alas translúcidas: anatómicas plegadas sobre el abdomen en marcha/reposo, desplegadas en vuelo/escape
+        const isFlightSpeed = org.speedMps >= 1.0;
         ctx.fillStyle = 'rgba(180, 240, 255, 0.55)';
         ctx.strokeStyle = 'rgba(0, 240, 255, 0.8)';
         ctx.lineWidth = 1;
-        // Ala izq
-        ctx.beginPath();
-        ctx.ellipse(-2, -12, 11, 4.5, -0.3 + wingOsc, 0, Math.PI * 2);
-        ctx.fill(); ctx.stroke();
-        // Ala der
-        ctx.beginPath();
-        ctx.ellipse(-2, 12, 11, 4.5, 0.3 - wingOsc, 0, Math.PI * 2);
-        ctx.fill(); ctx.stroke();
+
+        if (isFlightSpeed) {
+          // Despliegue lateral con aleteo de alta frecuencia
+          const wingOsc = Math.sin(org.wingFlapPhase) * 0.35;
+          // Ala izq abierta lateralmente
+          ctx.beginPath();
+          ctx.ellipse(-2, -9, 11, 4.5, -0.45 + wingOsc, 0, Math.PI * 2);
+          ctx.fill(); ctx.stroke();
+          // Ala der abierta lateralmente
+          ctx.beginPath();
+          ctx.ellipse(-2, 9, 11, 4.5, 0.45 - wingOsc, 0, Math.PI * 2);
+          ctx.fill(); ctx.stroke();
+        } else {
+          // Posición anatómica dorsal: plegadas planas sobre el abdomen (eje posterior -X)
+          const wingBuzz = Math.sin(org.wingFlapPhase) * 0.05;
+          // Ala izq (dorso-medial)
+          ctx.beginPath();
+          ctx.ellipse(-6, -2.5, 10, 4.0, -0.06 + wingBuzz, 0, Math.PI * 2);
+          ctx.fill(); ctx.stroke();
+          // Ala der (solapada en línea media)
+          ctx.beginPath();
+          ctx.ellipse(-6, 2.5, 10, 4.0, 0.06 - wingBuzz, 0, Math.PI * 2);
+          ctx.fill(); ctx.stroke();
+        }
 
         // Patas articuladas
         ctx.strokeStyle = '#8395a7';
@@ -770,21 +845,105 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
         <div
           style={{
             flex: 1,
-            minHeight: '320px',
+            minHeight: '380px',
             position: 'relative',
             display: 'flex',
+            flexDirection: 'column',
             justifyContent: 'center',
             alignItems: 'center',
-            padding: '12px',
-            touchAction: 'manipulation',
+            padding: '8px 12px',
+            touchAction: 'none',
           }}
         >
-          {bannerAlert && (
+          {/* Controles Flotantes Superiores: Modo 3D / 2D y Modos de Cámara */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '16px',
+              left: '20px',
+              zIndex: 25,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'rgba(6, 12, 24, 0.88)',
+              border: '1px solid rgba(0, 240, 255, 0.3)',
+              borderRadius: '8px',
+              padding: '4px 6px',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            <button
+              onClick={() => {
+                TacticalAudioEngine.playTap();
+                setViewMode((prev) => (prev === '3D' ? '2D' : '3D'));
+              }}
+              style={{
+                background: viewMode === '3D' ? 'rgba(0, 240, 255, 0.25)' : 'rgba(25, 40, 65, 0.6)',
+                border: `1px solid ${viewMode === '3D' ? '#00f0ff' : 'rgba(139, 155, 180, 0.4)'}`,
+                color: viewMode === '3D' ? '#00f0ff' : '#8b9bb4',
+                borderRadius: '5px',
+                padding: '5px 10px',
+                fontSize: '10px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <span>{viewMode === '3D' ? '🌐' : '🗺️'}</span>
+              <span>{viewMode === '3D' ? '3D INMERSIVO' : '2D RADAR'}</span>
+            </button>
+          </div>
+
+          {viewMode === '3D' && (
             <div
               style={{
                 position: 'absolute',
                 top: '16px',
-                zIndex: 20,
+                right: '20px',
+                zIndex: 25,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'rgba(6, 12, 24, 0.88)',
+                border: '1px solid rgba(0, 240, 255, 0.3)',
+                borderRadius: '8px',
+                padding: '4px 6px',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              {(['ORBITAL', 'FOLLOW_AGENT', 'TOP_DOWN_GOD'] as HabitatCameraMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => handleSelectCameraMode(mode)}
+                  style={{
+                    background: cameraMode === mode ? 'rgba(0, 255, 136, 0.22)' : 'rgba(25, 40, 65, 0.6)',
+                    border: `1px solid ${cameraMode === mode ? '#00ff88' : 'rgba(139, 155, 180, 0.3)'}`,
+                    color: cameraMode === mode ? '#00ff88' : '#8b9bb4',
+                    borderRadius: '5px',
+                    padding: '5px 8px',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {mode === 'ORBITAL' && '🪐 ORBITAL'}
+                  {mode === 'FOLLOW_AGENT' && '👁️ SEGUIR'}
+                  {mode === 'TOP_DOWN_GOD' && '📐 CENITAL'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {bannerAlert && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '56px',
+                zIndex: 26,
                 background: 'rgba(6, 12, 24, 0.95)',
                 border: '1px solid #00f0ff',
                 boxShadow: '0 0 15px rgba(0, 240, 255, 0.3)',
@@ -800,27 +959,48 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
             </div>
           )}
 
-          <canvas
-            ref={canvasRef}
-            width={720}
-            height={560}
-            onPointerDown={handleCanvasPointerDown}
-            onPointerMove={handleCanvasPointerMove}
-            onPointerUp={handleCanvasPointerUp}
-            onPointerCancel={handleCanvasPointerUp}
-            style={{
-              maxWidth: '100%',
-              maxHeight: 'min(62vh, 560px)',
-              width: 'auto',
-              height: 'auto',
-              aspectRatio: '720/560',
-              cursor: 'crosshair',
-              boxShadow: '0 0 30px rgba(0, 0, 0, 0.8)',
-              borderRadius: '8px',
-              border: '1px solid rgba(0, 240, 255, 0.2)',
-              touchAction: 'none',
-            }}
-          />
+          {viewMode === '3D' ? (
+            <div
+              ref={viewport3DRef}
+              style={{
+                width: '100%',
+                maxWidth: '960px',
+                height: '100%',
+                minHeight: '400px',
+                maxHeight: 'min(68vh, 600px)',
+                aspectRatio: '16/10',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                border: '1px solid rgba(0, 240, 255, 0.35)',
+                boxShadow: '0 0 35px rgba(0, 0, 0, 0.9), inset 0 0 25px rgba(0, 240, 255, 0.06)',
+                position: 'relative',
+                touchAction: 'none',
+                cursor: selectedTool === 'GLUCOSE_PIPETTE' ? 'crosshair' : 'grab',
+              }}
+            />
+          ) : (
+            <canvas
+              ref={canvasRef}
+              width={720}
+              height={560}
+              onPointerDown={handleCanvasPointerDown}
+              onPointerMove={handleCanvasPointerMove}
+              onPointerUp={handleCanvasPointerUp}
+              onPointerCancel={handleCanvasPointerUp}
+              style={{
+                maxWidth: '100%',
+                maxHeight: 'min(62vh, 560px)',
+                width: 'auto',
+                height: 'auto',
+                aspectRatio: '720/560',
+                cursor: 'crosshair',
+                boxShadow: '0 0 30px rgba(0, 0, 0, 0.8)',
+                borderRadius: '8px',
+                border: '1px solid rgba(0, 240, 255, 0.2)',
+                touchAction: 'none',
+              }}
+            />
+          )}
 
           {/* ── Bio-Scanner HUD Card Flotante (Inspección Individual) ─────────── */}
           {selectedOrganism && (

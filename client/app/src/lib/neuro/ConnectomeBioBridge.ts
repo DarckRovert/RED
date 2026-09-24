@@ -47,6 +47,7 @@ const BRIDGE_UPDATE_INTERVAL_MS = 50; // 20 Hz de bridge sensorial
 // ─── Estado Interno del Bridge ─────────────────────────────────────────────────
 
 let lastBridgeUpdateMs = 0;
+let lastThreatAngleRad: number | null = null;
 
 // ─── Función Auxiliar ──────────────────────────────────────────────────────────
 
@@ -72,6 +73,8 @@ function normalizeAngle(rad: number): number {
  * @param alarmConc - Concentración de feromona de alarma bajo los pies [0-∞]
  * @param nearestShadowDistM - Distancia al proyector de sombra looming más cercano (m)
  * @param nearestAirPuffIntensity - Intensidad de la onda de air-puff más cercana [0-1]
+ * @param chemicalGradientDelta - Diferencia química entre antenas para tropotaxis
+ * @param threatAngleRad - Ángulo hacia la fuente de amenaza looming (para evasión direccional)
  */
 export function injectSensoryStimuli(
   leaderOrg: HabitatOrganism,
@@ -79,8 +82,12 @@ export function injectSensoryStimuli(
   alarmConc: number,
   nearestShadowDistM: number,
   nearestAirPuffIntensity: number,
-  chemicalGradientDelta: number = 0
+  chemicalGradientDelta: number = 0,
+  threatAngleRad?: number
 ): void {
+  if (typeof threatAngleRad === 'number' && Number.isFinite(threatAngleRad)) {
+    lastThreatAngleRad = threatAngleRad;
+  }
   const now = Date.now();
   if (now - lastBridgeUpdateMs < BRIDGE_UPDATE_INTERVAL_MS) return;
   lastBridgeUpdateMs = now;
@@ -121,16 +128,19 @@ export function injectSensoryStimuli(
  * @param org - Organismo líder a controlar.
  * @returns El snapshot del cerebro usado (para que el hábitat lo pueda exponer al HUD).
  */
-export function applyMotorCommands(org: HabitatOrganism): EcosystemConnectomeSnapshot {
+export function applyMotorCommands(org: HabitatOrganism, isFeeding: boolean = false): EcosystemConnectomeSnapshot {
   const snap = connectomeOrchestrator.getOrganismSnapshot();
 
   // 1. Reflejo de escape Giant Fiber — máxima prioridad, anula todo lo demás
   //    Tiempo de respuesta real del GF en Drosophila: < 8 ms.
+  //    Salto balístico orientado en dirección opuesta a la fuente de la amenaza looming.
   if (snap.giantFiber.isReflexActive) {
-    const escapeDir = org.headingRad + Math.PI + (Math.random() - 0.5) * 0.6;
+    const baseAngle = lastThreatAngleRad !== null ? lastThreatAngleRad : org.headingRad;
+    const escapeDir = baseAngle + Math.PI + (Math.random() - 0.5) * 0.5;
     org.headingRad = normalizeAngle(escapeDir);
     org.speedMps = ESCAPE_SPEED_MPS;
     org.behaviorState = 'ESCAPE_REFLEX';
+    lastThreatAngleRad = null;
     return snap;
   }
 
@@ -141,7 +151,14 @@ export function applyMotorCommands(org: HabitatOrganism): EcosystemConnectomeSna
     return snap;
   }
 
-  // 3. Heading: la brújula E-PG (Ring Attractor) dicta la dirección de marcha.
+  // 3. Estado de Alimentación: extensión de probóscide y desaceleración en el parche de glucosa
+  if (isFeeding) {
+    org.speedMps += (0.08 - org.speedMps) * 0.25;
+    org.behaviorState = 'FEEDING_GLUCOSE (CONNECTOME)';
+    return snap;
+  }
+
+  // 4. Heading: la brújula E-PG (Ring Attractor) dicta la dirección de marcha.
   //    Conversión rigurosa de azimut náutico (0°=Norte, 90°=Este) a radianes cartesianos (0=Este, π/2=Norte):
   //    targetRad = π/2 - (headingDeg * π / 180)
   if (typeof snap.compass.headingDeg === 'number' && Number.isFinite(snap.compass.headingDeg)) {
@@ -151,7 +168,7 @@ export function applyMotorCommands(org: HabitatOrganism): EcosystemConnectomeSna
     org.headingRad = normalizeAngle(org.headingRad + turnAmount);
   }
 
-  // 4. Velocidad: el CPG (Central Pattern Generator) dicta la velocidad de marcha.
+  // 5. Velocidad: el CPG (Central Pattern Generator) dicta la velocidad de marcha.
   //    Se respeta el régimen metabólico: CONSERVATIVE reduce la velocidad al 50%.
   const baseSpeed = snap.cpg.meanFrequencyHz * CPG_HZ_TO_MPS;
   const speedMultiplier = snap.organismState === 'CONSERVING' ? 0.5 : 1.0;
@@ -160,7 +177,7 @@ export function applyMotorCommands(org: HabitatOrganism): EcosystemConnectomeSna
   // Suavizado de velocidad (inertia biológica)
   org.speedMps += (targetSpeed - org.speedMps) * 0.12;
 
-  // 5. Comportamiento: refleja el modo neuronal dominante
+  // 6. Comportamiento: refleja el modo neuronal dominante
   if (snap.mushroomBody.behavioralDrive === 'APPROACH') {
     org.behaviorState = 'CONNECTOME_APPROACH';
   } else if (snap.mushroomBody.behavioralDrive === 'AVOID') {

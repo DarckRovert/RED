@@ -25,6 +25,23 @@ import { kineticStress } from '../../sensors/KineticStressEngine';
 import { hexapodActuatorBridge } from '../vivarium/HexapodActuatorBridgeEngine';
 import { TacticalAudioEngine } from '../../audio/TacticalAudioEngine';
 import { connectomeBioBridge } from '../ConnectomeBioBridge';
+import { giantFiberReflex } from '../GiantFiberReflexEngine';
+
+/**
+ * Normaliza un ángulo en radianes al rango canónico [0, 2π)
+ */
+export function normalizeAngle(rad: number): number {
+  let a = rad % (Math.PI * 2);
+  if (a < 0) a += Math.PI * 2;
+  return a;
+}
+
+/**
+ * Calcula la diferencia angular más corta entre dos rumbos en el rango [-π, π]
+ */
+export function shortestAngleDiff(target: number, current: number): number {
+  return Math.atan2(Math.sin(target - current), Math.cos(target - current));
+}
 
 export type OrganismSpecies = 'DROSOPHILA' | 'C_ELEGANS' | 'ANT';
 
@@ -415,16 +432,18 @@ export class BiocyberneticHabitatEngine {
 
         if (isDrivenByConnectome) {
           // Lazo Sensoriomotor Cerrado: Estímulos Físicos Reales → Cerebro MaleCNS
+          const threatAngle = nearestAnt ? Math.atan2(nearestAnt.org.y - org.y, nearestAnt.org.x - org.x) : undefined;
           connectomeBioBridge.injectSensoryStimuli(
             org,
             antennalSample.meanConcentration,
             alarmSample,
             effectiveLoomingDist,
             nearestAirPuff,
-            antennalSample.delta
+            antennalSample.delta,
+            threatAngle
           );
           // Decisiones Motoras del Cerebro (Compass E-PG, CPG, Giant Fiber) → Organismo Físico
-          connectomeBioBridge.applyMotorCommands(org);
+          connectomeBioBridge.applyMotorCommands(org, isNearGlucose);
         } else {
           // Hebbian STDP y navegación interna autónoma
           const activeKc = [4, 12, 19, 28];
@@ -448,7 +467,7 @@ export class BiocyberneticHabitatEngine {
           if (distToAnt < 0.75 && nearestAnt) {
             // Reflejo Giant Fiber de escape ante ataque de mandíbulas
             const escapeAngle = Math.atan2(org.y - nearestAnt.org.y, org.x - nearestAnt.org.x);
-            org.headingRad = (escapeAngle + (Math.random() - 0.5) * 0.4) % (Math.PI * 2);
+            org.headingRad = normalizeAngle(escapeAngle + (Math.random() - 0.5) * 0.4);
             org.speedMps = 3.6;
             targetSpeed = 3.6;
             org.behaviorState = 'EVADING_PREDATOR_ANT';
@@ -457,7 +476,7 @@ export class BiocyberneticHabitatEngine {
           } else if (distToAnt < 1.15 && nearestAnt) {
             // Alerta visual de aproximación de hormiga
             const awayAngle = Math.atan2(org.y - nearestAnt.org.y, org.x - nearestAnt.org.x);
-            const diff = ((awayAngle - org.headingRad + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+            const diff = shortestAngleDiff(awayAngle, org.headingRad);
             turnRateRadPerSec += Math.sign(diff) * 3.4;
             targetSpeed = 1.35;
             if (org.behaviorState === 'FORAGING_WALK') org.behaviorState = 'ALERT_PREDATOR_APPROACH';
@@ -471,7 +490,7 @@ export class BiocyberneticHabitatEngine {
             const nearestFly = this.getNearestOrganismOfSpecies(org.x, org.y, 'DROSOPHILA', org.id);
             if (nearestFly && nearestFly.dist < 0.65) {
               const repulseAngle = Math.atan2(org.y - nearestFly.org.y, org.x - nearestFly.org.x);
-              const diff = ((repulseAngle - org.headingRad + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+              const diff = shortestAngleDiff(repulseAngle, org.headingRad);
               turnRateRadPerSec += Math.sign(diff) * 2.6;
               if (org.behaviorState === 'FORAGING_WALK') org.behaviorState = 'TERRITORIAL_SPACING';
             }
@@ -480,7 +499,9 @@ export class BiocyberneticHabitatEngine {
             if (isNearGlucose) {
               // DETENCIÓN PARA ALIMENTARSE (evita correr velozmente sobre el alimento)
               targetSpeed = 0.08 * org.metabolism.getLocomotionFactor();
-              turnRateRadPerSec = (Math.random() - 0.5) * 0.4;
+              if (!nearestFly || nearestFly.dist >= 0.65) {
+                turnRateRadPerSec = (Math.random() - 0.5) * 0.4;
+              }
             } else if (antennalSample.meanConcentration > 0.008) {
               targetSpeed = 0.6 * org.metabolism.getLocomotionFactor();
               org.behaviorState = 'GLUCOSE_CHEMOTAXIS';
@@ -525,7 +546,7 @@ export class BiocyberneticHabitatEngine {
         if (nearestInsect && nearestInsect.dist < 0.45) {
           // Contacto táctil mecánico: retirada retrógrada instantánea y pirueta
           const retreatAngle = Math.atan2(org.y - nearestInsect.org.y, org.x - nearestInsect.org.x);
-          org.headingRad = (retreatAngle + (Math.random() - 0.5) * 0.4) % (Math.PI * 2);
+          org.headingRad = normalizeAngle(retreatAngle + (Math.random() - 0.5) * 0.4);
           org.speedMps = 1.3;
           targetSpeed = 1.3;
           org.pirouetteTimerSec = 0.6;
@@ -533,8 +554,9 @@ export class BiocyberneticHabitatEngine {
           org.plasticity.injectOctopamine(0.35);
         } else if (alarmSample > 0.06) {
           // Nocicepción térmica reversa ante calor/alarma
-          org.headingRad = (org.headingRad + Math.PI + (Math.random() - 0.5) * 0.4) % (Math.PI * 2);
+          org.headingRad = normalizeAngle(org.headingRad + Math.PI + (Math.random() - 0.5) * 0.4);
           org.speedMps = 1.5;
+          targetSpeed = 1.5;
           org.behaviorState = 'THERMAL_NOCICEPTIVE_REVERSAL';
         } else if (org.pirouetteTimerSec > 0) {
           // En medio de una pirueta (Omega-turn)
@@ -553,7 +575,7 @@ export class BiocyberneticHabitatEngine {
             if (Math.random() < 0.35 * dt) {
               org.pirouetteTimerSec = 0.35 + Math.random() * 0.35;
               const turnAngle = (Math.random() > 0.5 ? 1 : -1) * (Math.PI * 0.45 + Math.random() * Math.PI * 0.45);
-              org.headingRad = (org.headingRad + turnAngle) % (Math.PI * 2);
+              org.headingRad = normalizeAngle(org.headingRad + turnAngle);
               org.behaviorState = 'PIROUETTE_OMEGA_TURN';
             } else {
               targetSpeed = 0.7 * org.metabolism.getLocomotionFactor();
@@ -595,7 +617,7 @@ export class BiocyberneticHabitatEngine {
           if (nearestFly && nearestFly.dist < 0.95) {
             // Caza activa de presa: orientarse y correr hacia la mosca
             const angleToFly = Math.atan2(nearestFly.org.y - org.y, nearestFly.org.x - org.x);
-            const diff = ((angleToFly - org.headingRad + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+            const diff = shortestAngleDiff(angleToFly, org.headingRad);
             turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 4.5);
             targetSpeed = 1.45;
             org.behaviorState = 'ANT_CHASING_PREY';
@@ -607,8 +629,11 @@ export class BiocyberneticHabitatEngine {
               org.plasticity.injectDopamine(1.5);
               // La mosca sale disparada por el reflejo de sobresalto
               nearestFly.org.speedMps = 3.8;
-              nearestFly.org.headingRad = (angleToFly + Math.PI + (Math.random() - 0.5) * 0.4) % (Math.PI * 2);
+              nearestFly.org.headingRad = normalizeAngle(angleToFly + Math.PI + (Math.random() - 0.5) * 0.4);
               nearestFly.org.behaviorState = 'EVADING_PREDATOR_ANT';
+              if (nearestFly.org.isLeader && connectomeBioBridge.isConnectomeActive()) {
+                giantFiberReflex.triggerReflex('VISUAL_LOOMING_THREAT');
+              }
               TacticalAudioEngine.playReflexEscape();
             }
           } else if (antennalGlucose.meanConcentration > 0.04) {
@@ -618,7 +643,7 @@ export class BiocyberneticHabitatEngine {
             TacticalAudioEngine.playDopamineChime();
             // Gira hacia el nido / centro (0, 0)
             const angleToNest = Math.atan2(-org.y, -org.x);
-            org.headingRad = angleToNest + (Math.random() - 0.5) * 0.3;
+            org.headingRad = normalizeAngle(angleToNest + (Math.random() - 0.5) * 0.3);
             org.behaviorState = 'RETURNING_TO_NEST';
           } else {
             // Sigue el rastro de feromona estigmérgico si existe
@@ -646,7 +671,7 @@ export class BiocyberneticHabitatEngine {
           targetSpeed = 1.25;
 
           const angleToNest = Math.atan2(-org.y, -org.x);
-          const diff = ((angleToNest - org.headingRad + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+          const diff = shortestAngleDiff(angleToNest, org.headingRad);
           turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 3.8);
 
           // Si llegó al nido (< 0.85 m del centro)
@@ -654,8 +679,10 @@ export class BiocyberneticHabitatEngine {
             org.isCarryingFood = false;
             org.nestExitCooldownSec = 2.8; // Período de salida sin volver a engancharse al rastro
             // Vector de salida radial hacia afuera del nido
-            const outwardAngle = Math.atan2(org.y, org.x) + (Math.random() - 0.5) * 0.8;
-            org.headingRad = outwardAngle;
+            const outwardAngle = Math.hypot(org.x, org.y) > 0.05
+              ? Math.atan2(org.y, org.x) + (Math.random() - 0.5) * 0.8
+              : Math.random() * Math.PI * 2;
+            org.headingRad = normalizeAngle(outwardAngle);
             org.speedMps = 1.35;
             org.behaviorState = 'UNLOADED_FORAGING_OUTWARD';
             TacticalAudioEngine.playDopamineChime();
@@ -665,7 +692,7 @@ export class BiocyberneticHabitatEngine {
 
       // 4.3 Actualización de Rumbo y Desplazamiento
       if (!(org.isLeader && org.species === 'DROSOPHILA' && connectomeBioBridge.isConnectomeActive())) {
-        org.headingRad = (org.headingRad + turnRateRadPerSec * dt) % (Math.PI * 2);
+        org.headingRad = normalizeAngle(org.headingRad + turnRateRadPerSec * dt);
         org.speedMps += (targetSpeed - org.speedMps) * Math.min(1.0, 5.0 * dt);
       }
 
@@ -676,7 +703,7 @@ export class BiocyberneticHabitatEngine {
       const nextGridX = nextX + centerOffset;
       const nextGridY = nextY + centerOffset;
       if (this.diffusionGrid.isPointBlocked(nextGridX, nextGridY)) {
-        org.headingRad = (org.headingRad + Math.PI + (Math.random() - 0.5) * 0.6) % (Math.PI * 2);
+        org.headingRad = normalizeAngle(org.headingRad + Math.PI + (Math.random() - 0.5) * 0.6);
         nextX = org.x;
         nextY = org.y;
       } else {
@@ -705,7 +732,7 @@ export class BiocyberneticHabitatEngine {
           continue;
         } else {
           const normalAngle = Math.atan2(org.y, org.x);
-          org.headingRad = Math.PI + 2 * normalAngle - org.headingRad;
+          org.headingRad = normalizeAngle(Math.PI + 2 * normalAngle - org.headingRad);
           org.x = Math.cos(normalAngle) * (BiocyberneticHabitatEngine.ARENA_RADIUS_METERS - 0.05);
           org.y = Math.sin(normalAngle) * (BiocyberneticHabitatEngine.ARENA_RADIUS_METERS - 0.05);
         }
@@ -767,14 +794,36 @@ export class BiocyberneticHabitatEngine {
           const nextBX = oB.x - pushX;
           const nextBY = oB.y - pushY;
 
-          // Verificar límites contra barreras y centro
+          const rLimit = BiocyberneticHabitatEngine.ARENA_RADIUS_METERS - 0.05;
+          const distA = Math.hypot(nextAX, nextAY);
+          const distB = Math.hypot(nextBX, nextBY);
+
+          // Verificar límites contra barreras y perímetro circular
           if (!this.diffusionGrid.isPointBlocked(nextAX + centerOffset, nextAY + centerOffset)) {
-            oA.x = nextAX;
-            oA.y = nextAY;
+            if (distA < rLimit) {
+              oA.x = nextAX;
+              oA.y = nextAY;
+            } else {
+              const aAngle = Math.atan2(nextAY, nextAX);
+              oA.x = Math.cos(aAngle) * rLimit;
+              oA.y = Math.sin(aAngle) * rLimit;
+            }
+            if (oA.species === 'C_ELEGANS' && oA.wormJoints.length > 0) {
+              oA.wormJoints[0] = { x: oA.x, y: oA.y };
+            }
           }
           if (!this.diffusionGrid.isPointBlocked(nextBX + centerOffset, nextBY + centerOffset)) {
-            oB.x = nextBX;
-            oB.y = nextBY;
+            if (distB < rLimit) {
+              oB.x = nextBX;
+              oB.y = nextBY;
+            } else {
+              const bAngle = Math.atan2(nextBY, nextBX);
+              oB.x = Math.cos(bAngle) * rLimit;
+              oB.y = Math.sin(bAngle) * rLimit;
+            }
+            if (oB.species === 'C_ELEGANS' && oB.wormJoints.length > 0) {
+              oB.wormJoints[0] = { x: oB.x, y: oB.y };
+            }
           }
         }
       }
