@@ -26,7 +26,7 @@
             line-height: 1.65;
         }
         .container {
-            max-width: 880px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 40px 20px;
         }
@@ -137,15 +137,17 @@
         <div class="nav-links">
             <a href="./index.html">← Volver a RED Web Companion</a>
             <span>·</span>
-            <a href="./terms.html">Términos de Servicio & EULA →</a>
+            <a href="./terms.html">Términos de Servicio & EULA</a>
+            <span>·</span>
+            <a href="./credits.html">🎖️ Salón de la Fama & Créditos →</a>
         </div>
 
         <header>
             <img src="./red_icon.png" alt="RED Logo">
             <div>
                 <h1>RED — Sovereign Tactical Mesh OS</h1>
-                <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
-                    <span class="version-badge">PRIVACY POLICY v105.0.0</span>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
+                    <span class="version-badge">PRIVACY POLICY v125.0.0</span>
                     <span style="font-size: 0.8rem; color: var(--text-muted);">Vigencia canónica: 2026</span>
                 </div>
             </div>
@@ -154,70 +156,74 @@
         <div class="card">
             <h2>🛡️ 1. Declaración Fundamental de Soberanía y Cero Datos (Zero-Knowledge)</h2>
             <p>
-                <strong>RED (Sovereign Tactical Mesh OS)</strong> está diseñado bajo una premisa criptográfica no negociable: 
-                <span class="highlight">Arquitectura Local-First de Conocimiento Cero (Zero-Knowledge)</span> y descentralización peer-to-peer (P2P).
+                <strong>RED (Sovereign Tactical Mesh OS)</strong> está concebido bajo una arquitectura inviolable:
+                <span class="highlight">Filosofía Local-First de Cero Conocimiento (Zero-Knowledge)</span> y descentralización total entre pares (P2P).
             </p>
             <ul>
-                <li><span class="badge-zero">CERO SERVIDORES CENTRALES</span>: La aplicación no reporta a ningún servidor de telemetría, nube corporativa ni base de datos centralizada.</li>
-                <li><span class="badge-zero">CERO RASTREADORES</span>: No contiene Google Analytics, Firebase Analytics, Meta SDK, AdMob ni ningún tipo de software espía o de perfilado publicitario.</li>
-                <li><span class="badge-zero">CERO VENTA DE DATOS</span>: Ningún dato personal (PII), coordenada, mensaje o metadato es vendido, cedido ni transferido a intermediarios comerciales ni agencias gubernamentales.</li>
+                <li><span class="badge-zero">CERO SERVIDORES CENTRALES</span>: La aplicación jamás se conecta a un servidor de telemetría corporativa ni almacena datos en la nube.</li>
+                <li><span class="badge-zero">CERO RASTREADORES</span>: El software no incluye ningún SDK publicitario ni analítico (Google Analytics, Firebase, Facebook SDK ni AdMob).</li>
+                <li><span class="badge-zero">CERO VENTA DE DATOS</span>: La información del usuario permanece estrictamente confinada en su terminal.</li>
             </ul>
         </div>
 
         <div class="card">
-            <h2>🔐 2. Comunicaciones P2P, Criptografía Post-Cuántica (PQC) y Seguridad</h2>
+            <h2>🔐 2. Comunicaciones P2P y Criptografía Post-Cuántica (PQC)</h2>
             <p>
-                Todas las transmisiones a través de la malla ad-hoc (Bluetooth Low Energy, Wi-Fi Direct, LoRa TDMA y Acústica Ultrasónica) viajan blindadas mediante protocolos criptográficos de grado militar:
+                Todas las transmisiones a través de la malla ad-hoc (Bluetooth Low Energy, Wi-Fi Direct, LoRa TDMA y ultrasonido) viajan blindadas de extremo a extremo (E2EE):
             </p>
             <ul>
-                <li><strong>Criptografía Post-Cuántica (NIST FIPS 203):</strong> Encapsulación de claves híbrida ML-KEM-768 + X25519, protegiendo las comunicaciones frente a ataques cuánticos retrospectivos ("Harvest Now, Decrypt Later").</li>
-                <li><strong>Cifrado Simétrico Autenticado:</strong> Cifrado de extremo a extremo (E2EE) con AES-256-GCM y ChaCha20-Poly1305.</li>
-                <li><strong>Bóveda de Secretos Shamir (SSS 3-de-5):</strong> Fragmentación matemática de semillas mnemónicas en 5 partes en campo de Galois GF(2^8).</li>
-                <li><strong>Caja Negra Forense SHA-256:</strong> Registro de eventos inmutable con hashes encadenados desde el bloque Génesis, almacenado exclusivamente en el terminal del usuario.</li>
+                <li><strong>Criptografía Post-Cuántica (NIST FIPS 203):</strong> Encapsulación híbrida ML-KEM-768 combinada con X25519 para neutralizar ataques retrospectivos ("Harvest Now, Decrypt Later").</li>
+                <li><strong>Cifrado Simétrico Autenticado:</strong> Cifrado con AES-256-GCM y ChaCha20-Poly1305.</li>
+                <li><strong>Bóveda de Secretos Shamir (SSS 3-de-5):</strong> Fragmentación matemática de semillas mnemónicas en campo de Galois GF(2^8).</li>
+                <li><strong>Caja Negra Forense SHA-256:</strong> Registro local de eventos inmutable con hashes encadenados, confinado al dispositivo.</li>
             </ul>
         </div>
 
         <div class="card">
-            <h2>📱 3. Justificación Estricta de Permisos de Dispositivo (Google Play Data Safety)</h2>
+            <h2>📱 3. Justificación de Permisos (Google Play Data Safety Section)</h2>
             <p>
-                Conforme a los estándares de la sección de <em>Seguridad de los Datos de Google Play</em> y la normativa <em>GDPR / CCPA</em>, RED solo solicita permisos estrictamente requeridos para la operación táctica fuera de línea (Air-Gap):
+                Conforme a los estándares de la sección de <em>Seguridad de los Datos de Google Play</em> y las regulaciones <em>GDPR / CCPA</em>:
             </p>
             <ul>
-                <li><strong>Cámara (`CAMERA`):</strong> Utilizada en memoria volátil exclusivamente para escaneo de códigos QR de emparejamiento criptográfico, transceptor óptico Morse / Li-Fi y visión táctica computacional. <em>No se graban ni transmiten imágenes a terceros.</em></li>
-                <li><strong>Micrófono (`RECORD_AUDIO`):</strong> Requerido para el Walkie-Talkie táctico P2P (códec de voz a 16 kbps con Opus/IMA-ADPCM) y barrera acústica de protección anti-espía. <em>No se realizan grabaciones en segundo plano.</em></li>
-                <li><strong>Ubicación (`ACCESS_FINE_LOCATION`):</strong> Requerido por el sistema operativo Android para el escaneo de radio Bluetooth LE y utilizado localmente para la brújula táctica, cartografía offline y coordenadas de rescate. <em>Las coordenadas jamás salen del dispositivo sin orden explícita del usuario.</em></li>
-                <li><strong>Bluetooth & Wi-Fi (`BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `NEARBY_WIFI_DEVICES`):</strong> Utilizados únicamente para enlazar la malla local descentralizada sin intermediarios de red celular.</li>
-                <li><strong>Alarmas Programadas (`SCHEDULE_EXACT_ALARM`):</strong> Usado para temporizadores de autodestrucción criptográfica de mensajes y chequeos periódicos del Centinela Hombre Caído (Man-Down).</li>
+                <li><strong>Cámara (`CAMERA`):</strong> Utilizada exclusivamente en memoria volátil para escanear códigos QR tácticos, Li-Fi y transceptor óptico. No se graban ni transmiten imágenes.</li>
+                <li><strong>Micrófono (`RECORD_AUDIO`):</strong> Requerido para el Walkie-Talkie táctico P2P (códec Opus/IMA-ADPCM) y barrera acústica ultrasónica. No se realizan grabaciones en segundo plano.</li>
+                <li><strong>Ubicación (`ACCESS_FINE_LOCATION`):</strong> Requerido por el sistema operativo Android para el escaneo de radio Bluetooth Low Energy y utilizado localmente para cartografía offline y coordenadas de rescate. Jamás se comparte por Internet sin orden explícita.</li>
+                <li><strong>Bluetooth & Wi-Fi (`BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `NEARBY_WIFI_DEVICES`):</strong> Utilizados únicamente para conformar la malla física descentralizada.</li>
+                <li><strong>Alarmas Programadas (`SCHEDULE_EXACT_ALARM`):</strong> Requerido para la caducidad y autodestrucción criptográfica de mensajes temporizados y el centinela Hombre Caído (Man-Down).</li>
             </ul>
         </div>
 
         <div class="card">
-            <h2>💥 4. Protocolo de Destrucción Criptográfica Incondicional (Duress & Zeroize Wipe)</h2>
+            <h2>💥 4. Protocolo de Destrucción Criptográfica Incondicional (Duress & Zeroize)</h2>
             <p>
-                RED implementa el protocolo de coacción <code>DuressWipeEngine</code>. En caso de riesgo físico inminente o captura del terminal, la activación del PIN de coacción o botón de pánico ejecuta:
+                RED implementa el protocolo <code>DuressWipeEngine</code>. En caso de coacción física, captura del terminal o situación de riesgo inminente, el PIN de coacción o botón de pánico activa:
             </p>
             <ul>
-                <li>Sobrescritura de claves criptográficas en almacenamiento con ruido aleatorio CSPRNG (0x00, 0xFF, noise).</li>
-                <li>Destrucción atómica y desindexación de todas las bases de datos IndexedDB y almacenamiento seguro local.</li>
-                <li>Eliminación permanente e irrecuperable sin copia de respaldo externa.</li>
+                <li>Sobrescritura multinivel (0x00, 0xFF, ruido aleatorio CSPRNG) de claves y bases de datos locales.</li>
+                <li>Destrucción total e irrecuperable de la bóveda local IndexedDB.</li>
+                <li>Sin respaldo remoto ni posibilidad de restauración forense.</li>
             </ul>
         </div>
 
         <div class="card">
-            <h2>⚖️ 5. Cumplimiento Internacional (GDPR, CCPA/CPRA, LGPD)</h2>
+            <h2>✍️ 5. Registro Local de Consentimiento Expreso (Clickwrap)</h2>
             <p>
-                Dado que RED no recopila, procesa ni almacena datos en servidores externos, los derechos de acceso, rectificación, portabilidad y supresión (Derecho al Olvido) se ejercen de forma soberana e inmediata por el propio usuario dentro de la aplicación mediante el botón de purga y reinicio de bóveda.
+                Para cumplir con los estándares de consentimiento informado (GDPR Art. 7, eIDAS y Ley 27269), el sistema almacena exclusivamente de forma local un registro criptográfico de su aceptación de los Términos de Servicio y descargos tácticos:
+            </p>
+            <ul>
+                <li>Versión aceptada (ej. <code>v125.0.0</code>).</li>
+                <li>Sello de tiempo UTC de la firma digital.</li>
+                <li>Hash SHA-256 canónico del contrato.</li>
+            </ul>
+            <p>
+                Este registro nunca sale de su dispositivo hacia servidores de telemetría y puede ser revocado en cualquier momento desde el menú de Configuración → Privacidad.
             </p>
         </div>
 
         <div class="card">
-            <h2>🌐 6. Contacto & Código Abierto</h2>
+            <h2>⚖️ 6. Cumplimiento Internacional (GDPR, CCPA/CPRA, LGPD)</h2>
             <p>
-                RED es software libre auditado bajo licencia AGPL-3.0. Para auditorías de seguridad, verificación de código o consultas de cumplimiento:
-            </p>
-            <p>
-                Repositorio Oficial: <a href="https://github.com/DarckRovert/RED" target="_blank" rel="noopener noreferrer">https://github.com/DarckRovert/RED</a><br>
-                Portal Oficial: <a href="https://darckrovert.github.io/RED/" target="_blank" rel="noopener noreferrer">https://darckrovert.github.io/RED/</a>
+                Al operar bajo el principio de no recolección de datos, los derechos de acceso, rectificación, portabilidad y supresión (Derecho al Olvido) se ejercen de forma inmediata y directa por el propio usuario dentro de la aplicación mediante la purga total de la bóveda.
             </p>
         </div>
 
