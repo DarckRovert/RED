@@ -47,6 +47,8 @@ export class TacticalLocationEngine {
     private static isCapacitorActive: boolean = false;
     private static isStartingWatch: boolean = false;
     private static ghostBridgeInitialized: boolean = false;
+    private static lastStorageWriteTime: number = 0;
+    private static lastStorageCoords: { lat: number; lon: number } | null = null;
 
     private static ensureGhostBridge(): void {
         if (this.ghostBridgeInitialized) return;
@@ -252,18 +254,27 @@ export class TacticalLocationEngine {
         this.lastReportedLocation = loc;
 
         if (typeof window !== 'undefined') {
-            try {
-                localStorage.setItem(STORAGE_KEY_GPS, JSON.stringify({
-                    lat: loc.lat,
-                    lon: loc.lon,
-                    lng: loc.lon,
-                    alt: loc.alt,
-                    accuracy: loc.accuracy,
-                    heading: loc.heading,
-                    speed: loc.speed,
-                    timestamp: loc.timestamp
-                }));
-            } catch {}
+            const now = Date.now();
+            const shouldWriteDisk = !this.lastStorageCoords ||
+                (now - this.lastStorageWriteTime >= 3000) ||
+                (Math.abs(lat - this.lastStorageCoords.lat) > 0.00002 || Math.abs(lon - this.lastStorageCoords.lon) > 0.00002);
+
+            if (shouldWriteDisk) {
+                this.lastStorageWriteTime = now;
+                this.lastStorageCoords = { lat, lon };
+                try {
+                    localStorage.setItem(STORAGE_KEY_GPS, JSON.stringify({
+                        lat: loc.lat,
+                        lon: loc.lon,
+                        lng: loc.lon,
+                        alt: loc.alt,
+                        accuracy: loc.accuracy,
+                        heading: loc.heading,
+                        speed: loc.speed,
+                        timestamp: loc.timestamp
+                    }));
+                } catch {}
+            }
         }
 
         // Si hay una baliza SOS activa con coordenadas vacías o estimadas, actualizarla de inmediato
@@ -436,10 +447,16 @@ export class TacticalLocationEngine {
                     await Geolocation.requestPermissions().catch(() => null);
                 }
 
+                if (this.listeners.size === 0) {
+                    this.isStartingWatch = false;
+                    return;
+                }
+
                 // Fijación inmediata (alta precisión o coarse en interiores)
                 Geolocation.getCurrentPosition({ enableHighAccuracy: true })
                     .catch(() => Geolocation.getCurrentPosition({ enableHighAccuracy: false }))
                     .then(pos => {
+                        if (this.listeners.size === 0) return;
                         if (pos?.coords) {
                             this.saveLocation(
                                 pos.coords.latitude,
@@ -473,6 +490,16 @@ export class TacticalLocationEngine {
                     }
                 );
 
+                if (this.listeners.size === 0) {
+                    if (watchId) {
+                        Geolocation.clearWatch({ id: watchId }).catch(() => {});
+                    }
+                    this.activeCapacitorWatchId = null;
+                    this.isCapacitorActive = false;
+                    this.isStartingWatch = false;
+                    return;
+                }
+
                 if (watchId) {
                     this.activeCapacitorWatchId = watchId;
                     this.isCapacitorActive = true;
@@ -481,6 +508,11 @@ export class TacticalLocationEngine {
                 }
             } catch {
                 this.isCapacitorActive = false;
+            }
+
+            if (this.listeners.size === 0) {
+                this.isStartingWatch = false;
+                return;
             }
 
             // 2. Fallback a HTML5 Geolocation si Capacitor no está disponible (ej. navegador de escritorio)
@@ -503,6 +535,13 @@ export class TacticalLocationEngine {
                         },
                         { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
                     );
+
+                    if (this.listeners.size === 0 && this.activeHtml5WatchId !== null) {
+                        try {
+                            navigator.geolocation.clearWatch(this.activeHtml5WatchId);
+                        } catch {}
+                        this.activeHtml5WatchId = null;
+                    }
                 } catch (e) {
                     console.warn('[TacticalLocationEngine] Fallo al registrar watchPosition HTML5:', e);
                 }

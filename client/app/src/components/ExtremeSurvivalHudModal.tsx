@@ -324,9 +324,10 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
     const startAcousticBeacon = () => {
         try {
             stopAcousticBeacon();
-            const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-            if (!AudioCtx) return;
-            const ctx = new AudioCtx();
+            const ctx = AudioContextManager.acquireDedicatedContext('extreme_survival_beacon');
+            if (!ctx) return;
+            audioContextRef.current = ctx;
+
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
 
@@ -341,12 +342,12 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
             gain.connect(ctx.destination);
             osc.start();
             osc.stop(ctx.currentTime + 0.45);
-            audioContextRef.current = ctx;
 
             setTimeout(() => {
                 try {
                     if (ctx.state !== "closed") ctx.close();
                 } catch {}
+                AudioContextManager.releaseDedicatedContext('extreme_survival_beacon').catch(() => {});
             }, 500);
         } catch {}
     };
@@ -358,6 +359,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                     audioContextRef.current.close();
                 }
             } catch {}
+            AudioContextManager.releaseDedicatedContext('extreme_survival_beacon').catch(() => {});
             audioContextRef.current = null;
         }
     };

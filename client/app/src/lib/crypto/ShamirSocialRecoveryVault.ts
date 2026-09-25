@@ -27,6 +27,7 @@ export interface SocialRecoveryVaultState {
 }
 
 const STORAGE_GUARDIANS_KEY = 'red_shamir_guardians_vault_v1';
+const STORAGE_COLLECTED_KEY = 'red_shamir_collected_shares_v1';
 
 export class ShamirSocialRecoveryVault {
     private static instance: ShamirSocialRecoveryVault | null = null;
@@ -63,21 +64,26 @@ export class ShamirSocialRecoveryVault {
 
     private loadState() {
         try {
-            const raw = localStorage.getItem(STORAGE_GUARDIANS_KEY);
-            if (raw) {
-                this.guardians = JSON.parse(raw);
+            const rawGuardians = localStorage.getItem(STORAGE_GUARDIANS_KEY);
+            if (rawGuardians) {
+                this.guardians = JSON.parse(rawGuardians);
+            }
+            const rawCollected = localStorage.getItem(STORAGE_COLLECTED_KEY);
+            if (rawCollected) {
+                this.collectedShares = JSON.parse(rawCollected);
             }
         } catch (e) {
-            console.error('[ShamirSocialRecoveryVault] Error loading guardians:', e);
+            console.error('[ShamirSocialRecoveryVault] Error loading recovery vault state:', e);
         }
     }
 
     private saveState() {
         try {
             localStorage.setItem(STORAGE_GUARDIANS_KEY, JSON.stringify(this.guardians));
+            localStorage.setItem(STORAGE_COLLECTED_KEY, JSON.stringify(this.collectedShares));
             this.notify();
         } catch (e) {
-            console.error('[ShamirSocialRecoveryVault] Error saving guardians:', e);
+            console.error('[ShamirSocialRecoveryVault] Error saving recovery vault state:', e);
         }
     }
 

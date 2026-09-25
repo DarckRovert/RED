@@ -49,11 +49,15 @@ export function OffGridCompassModal() {
     const [fbTelem, setFbTelem] = useState<FanShapedBodyTelemetry>(() => fanShapedBody.getTelemetry());
 
     useEffect(() => {
+        ringAttractor.start();
+        fanShapedBody.start();
         const unsub = ringAttractor.subscribe(setRingTelem);
         const unsubFb = fanShapedBody.subscribe(setFbTelem);
         return () => {
             unsub();
             unsubFb();
+            fanShapedBody.stop();
+            ringAttractor.stop();
         };
     }, []);
 

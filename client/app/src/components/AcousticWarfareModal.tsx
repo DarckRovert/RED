@@ -105,7 +105,9 @@ export function AcousticWarfareModal() {
                 ctx.fillText("TRANSDUCTOR ACÚSTICO EN ESPERA — SELECCIONE MODO", 8, 14);
             }
 
-            animationFrameRef.current = requestAnimationFrame(render);
+            if (scramblerState.isRunning) {
+                animationFrameRef.current = requestAnimationFrame(render);
+            }
         };
 
         render();
@@ -115,7 +117,7 @@ export function AcousticWarfareModal() {
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
-    }, [scramblerState.isRunning, scramblerState.mode]);
+    }, [scramblerState.isRunning, scramblerState.mode, activeTab]);
 
     // Intercepción jerárquica LIFO de hardware (Android Back / Esc)
     useEffect(() => {

@@ -242,8 +242,8 @@ export class GiantFiberReflexEngine {
   /**
    * Disparo directo de salto de emergencia táctico
    */
-  public triggerEmergencyJump(reason: string = 'MANUAL_TACTICAL_SCRAM'): GiantFiberReflexResult {
-    return this.triggerReflex('MANUAL_TACTICAL_SCRAM');
+  public triggerEmergencyJump(reason: ReflexTriggerSource = 'MANUAL_TACTICAL_SCRAM'): GiantFiberReflexResult {
+    return this.triggerReflex(reason);
   }
 
   /**

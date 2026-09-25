@@ -413,9 +413,14 @@ export class MultipathBondingEngine {
         if (!shard) return null;
 
         const now = Date.now();
-        // Limpiar grupos expirados (> 15 segundos)
+        // Limpiar grupos expirados.
+        // AJUSTE CRÍTICO: LoRa SF12 puede tener ~8s de delay por fragmento.
+        // Con 5 shards (3 datos + 2 paridad), la ventana real puede ser de hasta 40s.
+        // 15s era demasiado agresivo y causaba pérdida silenciosa de payloads en canales lentos.
+        // 90s cubre el peor caso (SF12 @ 500Hz BW, paquetes de 255 bytes).
+        const SHARD_GROUP_TIMEOUT_MS = 90_000;
         for (const [gid, entry] of this.pendingGroups.entries()) {
-            if (now - entry.createdAt > 15000) {
+            if (now - entry.createdAt > SHARD_GROUP_TIMEOUT_MS) {
                 this.pendingGroups.delete(gid);
             }
         }

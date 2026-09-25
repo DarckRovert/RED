@@ -49,7 +49,12 @@ export function TacticalFoxhuntModal() {
         return () => unregister();
     }, [activeTab, goBack]);
 
-    // Subscripción a RDF, Triangulación, Watchdog SIGINT y LoRa
+    const selectedTargetIdRef = useRef<string>(selectedTargetId);
+    useEffect(() => {
+        selectedTargetIdRef.current = selectedTargetId;
+    }, [selectedTargetId]);
+
+    // Subscripción a RDF, Triangulación, Watchdog SIGINT y LoRa con apagado higiénico
     useEffect(() => {
         const unsubRdf = tacticalRdf.subscribe(setRdfState);
         const unsubTriang = rdfTriangulation.subscribe(setTriangState);
@@ -64,7 +69,7 @@ export function TacticalFoxhuntModal() {
         // Live LoRa packet receiver for RSSI feed
         const unbindLoraRx = loraBridge.onPacketReceived((_p, rssi) => {
             setLoraTelemetry(loraBridge.getTelemetry());
-            if (selectedTargetId === "LORA_TRANSCEIVER" && rssi !== undefined && typeof rssi === "number" && isFinite(rssi)) {
+            if (selectedTargetIdRef.current === "LORA_TRANSCEIVER" && rssi !== undefined && typeof rssi === "number" && isFinite(rssi)) {
                 setCurrentRssi(rssi);
             }
         });
@@ -98,8 +103,9 @@ export function TacticalFoxhuntModal() {
             unsubSigint();
             unbindLoraRx();
             unsubCompass();
+            rfSigintWatchdog.stopScanning().catch(() => {});
         };
-    }, [selectedTargetId]);
+    }, []);
 
     // Actualización reactiva del RSSI según el objetivo seleccionado
     useEffect(() => {

@@ -29,6 +29,7 @@ import {
   HabitatToolType,
   OrganismSpecies,
   OrganismMood,
+  UrbanStructure,
 } from './BiocyberneticHabitatEngine';
 import { HexapodBody3D } from '../vivarium/HexapodBody3D';
 import { centralPatternGenerator, CpgLocomotionTelemetry } from '../CentralPatternGeneratorEngine';
@@ -36,6 +37,24 @@ import { TacticalAudioEngine } from '../../audio/TacticalAudioEngine';
 import { biocyberneticEdenParadise } from './BiocyberneticEdenParadiseEngine';
 
 export type HabitatCameraMode = 'ORBITAL' | 'FOLLOW_AGENT' | 'TOP_DOWN_GOD';
+
+// ── GPU Tier Detection ───────────────────────────────────────────────────────
+/**
+ * Detecta el tier de GPU del dispositivo basándose en memoria RAM del sistema,
+ * núcleos de CPU y user-agent. Usado para escalar calidad de sombras y DPR.
+ * - 'low'  → Moto G22 / Helio G37 / PowerVR GE8320 (≤4GB RAM, ≤4 cores mobile)
+ * - 'mid'  → Gama media Android (≤6GB RAM, mobile)
+ * - 'high' → Desktop / flagship móvil
+ */
+function detectGpuTier(): 'low' | 'mid' | 'high' {
+  const nav = navigator as Navigator & { deviceMemory?: number; hardwareConcurrency?: number };
+  const memory  = nav.deviceMemory ?? 4;      // GB — sólo disponible en Chrome/Android
+  const cores   = nav.hardwareConcurrency ?? 4;
+  const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+  if (isMobile && (memory <= 3 || cores <= 4)) return 'low';
+  if (isMobile && memory <= 6)                  return 'mid';
+  return 'high';
+}
 
 // ── 1. Modelo 3D de Caenorhabditis elegans ────────────────────────────────────
 class WormBody3D {
@@ -825,6 +844,10 @@ export class BiocyberneticHabitat3DEngine {
   private thoughtBubbles3D: Map<string, ThoughtBubbleSprite3D> = new Map();
   private barrierMeshes: Map<string, THREE.Mesh> = new Map();
 
+  // Registros de IDs de animaciones VFX transitorias (para cancelación en dispose/detach)
+  private readonly activeVfxRafIds = new Set<number>();
+  private readonly activeVfxTimeoutIds = new Set<ReturnType<typeof setTimeout>>();
+
   // Entidades Lúdicas y Mini-Juegos 3D
   private sugarMegaCrystal: SugarMegaCrystal3D;
   private playfulLaserMesh: PlayfulLaserMesh3D;
@@ -838,7 +861,14 @@ export class BiocyberneticHabitat3DEngine {
   private celestialDome!: THREE.Group;
   private ambientLight!: THREE.AmbientLight;
   private dirLight!: THREE.DirectionalLight;
+  private gpuTier: 'low' | 'mid' | 'high' = 'high'; // sobreescrito en constructor
   private auroraMesh: THREE.Mesh | null = null;
+
+  // Entidades de la Metrópolis Biocibernética 3D
+  private metropolisGroup!: THREE.Group;
+  private structureMeshes: Map<string, THREE.Group> = new Map();
+  private highwayLines: THREE.LineSegments | null = null;
+  private lastHighwayCount = -1;
 
   // Raycasting para interacción táctil sobre el suelo 3D
   private readonly raycaster: THREE.Raycaster;
@@ -850,6 +880,9 @@ export class BiocyberneticHabitat3DEngine {
   private resizeObserver: ResizeObserver | null = null;
 
   constructor() {
+    // ── Detección de tier de GPU antes de cualquier inicialización ──────────
+    this.gpuTier = detectGpuTier();
+
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x020813);
     this.scene.fog = new THREE.FogExp2(0x020813, 0.022);
@@ -858,21 +891,28 @@ export class BiocyberneticHabitat3DEngine {
     this.raycaster = new THREE.Raycaster();
     this.groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-    // ── Iluminación Táctica y Cyberpunk Circadiana ──────────────────────────
+    // ── Iluminación Táctica y Cyberpunk Circadiana (tier-aware) ────────────
     this.ambientLight = new THREE.AmbientLight(0x18263a, 1.4);
     this.scene.add(this.ambientLight);
 
     this.dirLight = new THREE.DirectionalLight(0x00f0ff, 1.2);
     this.dirLight.position.set(8, 16, 8);
-    this.dirLight.castShadow = true;
-    this.dirLight.shadow.mapSize.width = 1024;
-    this.dirLight.shadow.mapSize.height = 1024;
-    this.dirLight.shadow.camera.near = 1;
-    this.dirLight.shadow.camera.far = 40;
-    this.dirLight.shadow.camera.left = -12;
-    this.dirLight.shadow.camera.right = 12;
-    this.dirLight.shadow.camera.top = 12;
-    this.dirLight.shadow.camera.bottom = -12;
+
+    if (this.gpuTier !== 'low') {
+      // Solo tier mid/high activa sombras dinámicas.
+      // Low (Moto G22 / PowerVR GE8320): sombras desactivadas por completo.
+      this.dirLight.castShadow = true;
+      const shadowRes = this.gpuTier === 'high' ? 1024 : 512;
+      this.dirLight.shadow.mapSize.width  = shadowRes;
+      this.dirLight.shadow.mapSize.height = shadowRes;
+      this.dirLight.shadow.camera.near   = 1;
+      this.dirLight.shadow.camera.far    = 40;
+      this.dirLight.shadow.camera.left   = -12;
+      this.dirLight.shadow.camera.right  = 12;
+      this.dirLight.shadow.camera.top    = 12;
+      this.dirLight.shadow.camera.bottom = -12;
+    }
+
     this.scene.add(this.dirLight);
 
     const fillLight = new THREE.DirectionalLight(0xff9f43, 0.6);
@@ -993,6 +1033,11 @@ export class BiocyberneticHabitat3DEngine {
     });
     this.ambientSpores = new THREE.Points(sporeGeo, sporeMat);
     this.scene.add(this.ambientSpores);
+
+    // Metrópolis Biocibernética 3D (Silos, Torres, Composteros, Balizas, Carreteras)
+    this.metropolisGroup = new THREE.Group();
+    this.metropolisGroup.name = 'MetropolisGroup_3D';
+    this.scene.add(this.metropolisGroup);
   }
 
   private createSelectionReticle(): THREE.Group {
@@ -1421,11 +1466,20 @@ export class BiocyberneticHabitat3DEngine {
       alpha: false,
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // DPR tier-aware: PowerVR GE8320 (low) → 1.0, mid → 1.25, high → 1.75.
+    // Nunca clampear a 2.0: a 1600×1800 el fill-rate del GPU low-end se satura.
+    const maxDpr = this.gpuTier === 'low' ? 1.0
+                 : this.gpuTier === 'mid' ? 1.25
+                 : 1.75;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Sombras tier-aware: low → desactivadas, mid → BasicShadowMap (1 sample),
+    // high → PCFSoftShadowMap (9 samples, sólo en GPU capaz).
+    this.renderer.shadowMap.enabled = this.gpuTier !== 'low';
+    this.renderer.shadowMap.type = this.gpuTier === 'high'
+      ? THREE.PCFSoftShadowMap
+      : THREE.BasicShadowMap;
 
     container.appendChild(this.renderer.domElement);
 
@@ -1442,6 +1496,12 @@ export class BiocyberneticHabitat3DEngine {
             this.camera.aspect = w / h;
             this.camera.updateProjectionMatrix();
             this.renderer.setSize(w, h);
+            // Re-clampear DPR tras rotación de pantalla para evitar framebuffer
+            // oversized al pasar de portrait a landscape en móviles.
+            const maxDprResize = this.gpuTier === 'low' ? 1.0
+                               : this.gpuTier === 'mid' ? 1.25
+                               : 1.75;
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDprResize));
           }
         }
       });
@@ -1529,7 +1589,7 @@ export class BiocyberneticHabitat3DEngine {
 
     // 5. Actualizar Puntero Láser Juguetón si está activo
     const globalLaser = biocyberneticHabitat.getLaserChaseTarget();
-    const curTool = biocyberneticHabitat.getTelemetry().activeTool;
+    const curTool = biocyberneticHabitat.getActiveTool();
     const isLaserTool = curTool === 'OPTOGENETIC_LASER' || curTool === 'OPTOGENETIC_CHR2';
     if (globalLaser) {
       this.playfulLaserMesh.setPosition(globalLaser.x, globalLaser.y, true);
@@ -1582,6 +1642,9 @@ export class BiocyberneticHabitat3DEngine {
       }
     }
 
+    // 6.3 Sincronización de la Metrópolis Biocibernética 3D (Silos, Torres, Composteros, Balizas, Carreteras)
+    this.updateMetropolis3D(deltaSec);
+
     // 7. Actualizar Posición Cinemática de la Cámara
     this.updateCameraPosition();
   }
@@ -1628,16 +1691,18 @@ export class BiocyberneticHabitat3DEngine {
     for (const org of organisms) {
       activeIds.add(org.id);
 
+      const pScale = org.genome?.phenotypeScale || 1.0;
+
       if (org.species === 'DROSOPHILA') {
         let fly = this.flies3D.get(org.id);
         if (!fly) {
           fly = new HexapodBody3D();
-          fly.rootGroup.scale.set(0.68, 0.68, 0.68);
           this.scene.add(fly.rootGroup);
           this.flies3D.set(org.id, fly);
         }
 
-        // Posicionamiento en el suelo X-Z
+        const flyScale = 0.68 * pScale;
+        fly.rootGroup.scale.set(flyScale, flyScale, flyScale);
         fly.rootGroup.position.set(org.x, 0, org.y);
 
         // Orientación: Drosophila 3D tiene cabeza en +Z, así que rotamos hacia headingRad
@@ -1654,6 +1719,8 @@ export class BiocyberneticHabitat3DEngine {
           this.scene.add(worm.rootGroup);
           this.worms3D.set(org.id, worm);
         }
+        const wormScale = 1.0 * pScale;
+        worm.rootGroup.scale.set(wormScale, wormScale, wormScale);
         worm.update(org.wormJoints);
 
       } else if (org.species === 'ANT') {
@@ -1664,6 +1731,8 @@ export class BiocyberneticHabitat3DEngine {
           this.ants3D.set(org.id, ant);
         }
 
+        const antScale = 0.55 * pScale;
+        ant.rootGroup.scale.set(antScale, antScale, antScale);
         ant.rootGroup.position.set(org.x, 0, org.y);
         ant.rootGroup.rotation.y = Math.PI / 2 - org.headingRad;
         ant.update(org.speedMps, org.isCarryingFood, org.behaviorState, deltaSec);
@@ -1675,6 +1744,8 @@ export class BiocyberneticHabitat3DEngine {
           this.scene.add(sentinel.rootGroup);
           this.sentinels3D.set(org.id, sentinel);
         }
+        const senScale = 1.0 * pScale;
+        sentinel.rootGroup.scale.set(senScale, senScale, senScale);
         sentinel.update(org.x, org.y, org.altitudeMeters || 1.8, org.headingRad, org.speedMps, deltaSec);
 
       } else if (org.species === 'HUMAN_NEOCORTEX') {
@@ -1684,6 +1755,8 @@ export class BiocyberneticHabitat3DEngine {
           this.scene.add(human.rootGroup);
           this.humans3D.set(org.id, human);
         }
+        const humScale = 1.0 * pScale;
+        human.rootGroup.scale.set(humScale, humScale, humScale);
         human.update(org.x, org.y, org.headingRad, org.speedMps, deltaSec);
       }
 
@@ -1696,7 +1769,7 @@ export class BiocyberneticHabitat3DEngine {
       }
 
       const entityZ = org.species === 'GRAVITY_SENTINEL' ? (org.altitudeMeters || 1.8) : 0;
-      const themeColor =
+      let themeColor =
         org.species === 'DROSOPHILA'
           ? '#00e5ff'
           : org.species === 'GRAVITY_SENTINEL'
@@ -1707,12 +1780,18 @@ export class BiocyberneticHabitat3DEngine {
           ? '#2dd4bf'
           : '#fbbf24';
 
+      if (org.behaviorState === 'SOCIAL_TROPHALLAXIS') themeColor = '#00ff88';
+      else if (org.behaviorState.includes('MITOSIS')) themeColor = '#ffd700';
+      else if (org.behaviorState === 'SENESCENT_DECAY' || org.isDecomposing) themeColor = '#fb923c';
+      else if (org.isDreaming) themeColor = '#c084fc';
+
+      const genBadge = org.generation > 1 ? ` [G${org.generation}]` : '';
       bubble.update(
         org.x,
         entityZ + 0.35,
         org.y,
         org.species,
-        biocyberneticHabitat.getSpeciesDisplayName(org.species),
+        `${biocyberneticHabitat.getSpeciesDisplayName(org.species)}${genBadge}`,
         org.currentThought || 'Observando...',
         org.mood || 'CURIOUS',
         themeColor
@@ -1826,6 +1905,260 @@ export class BiocyberneticHabitat3DEngine {
     }
   }
 
+  // ── Metrópolis Biocibernética 3D: Estructuras e Infraestructura Urbana ──────
+  private createUrbanStructureMesh(struct: UrbanStructure): THREE.Group {
+    const group = new THREE.Group();
+    group.name = `Metropolis_${struct.type}_${struct.id}`;
+    group.position.set(struct.x, 0, struct.y);
+
+    if (struct.type === 'CENTRAL_SILO') {
+      // ── Silo Central de Biopolímeros y ATP ──
+      const baseGeo = new THREE.CylinderGeometry(0.9, 1.0, 0.2, 6);
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x292524, roughness: 0.7, metalness: 0.8 });
+      const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+      baseMesh.position.y = 0.1;
+      baseMesh.castShadow = true;
+      group.add(baseMesh);
+
+      const tankGeo = new THREE.CylinderGeometry(0.75, 0.75, 1.6, 16);
+      const tankMat = new THREE.MeshStandardMaterial({
+        color: 0xf59e0b,
+        transparent: true,
+        opacity: 0.45,
+        roughness: 0.15,
+        metalness: 0.3,
+      });
+      const tankMesh = new THREE.Mesh(tankGeo, tankMat);
+      tankMesh.position.y = 1.0;
+      group.add(tankMesh);
+
+      const coreGeo = new THREE.CylinderGeometry(0.62, 0.62, 1.4, 16);
+      const coreMat = new THREE.MeshStandardMaterial({
+        color: 0xfbbf24,
+        emissive: 0xd97706,
+        emissiveIntensity: 1.2,
+        roughness: 0.2,
+      });
+      const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+      coreMesh.name = 'SiloLiquidCore';
+      coreMesh.position.y = 1.0;
+      group.add(coreMesh);
+
+      const domeGeo = new THREE.SphereGeometry(0.75, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+      const domeMat = new THREE.MeshStandardMaterial({ color: 0x78716c, metalness: 0.9, roughness: 0.2 });
+      const domeMesh = new THREE.Mesh(domeGeo, domeMat);
+      domeMesh.position.y = 1.8;
+      group.add(domeMesh);
+
+      const siloLight = new THREE.PointLight(0xf59e0b, 1.5, 4.0);
+      siloLight.position.y = 1.2;
+      group.add(siloLight);
+
+    } else if (struct.type === 'BIO_TOWER_DWELLING') {
+      // ── Torre / Hábitat Hexagonal Multi-Piso ──
+      const baseGeo = new THREE.CylinderGeometry(1.0, 1.15, 0.25, 6);
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x1e1b4b, roughness: 0.5, metalness: 0.7 });
+      const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+      baseMesh.position.y = 0.125;
+      baseMesh.castShadow = true;
+      group.add(baseMesh);
+
+      const bodyGeo = new THREE.CylinderGeometry(0.55, 0.9, 2.5, 6);
+      const bodyMat = new THREE.MeshStandardMaterial({
+        color: 0x312e81,
+        roughness: 0.4,
+        metalness: 0.6,
+      });
+      const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+      bodyMesh.position.y = 1.45;
+      bodyMesh.castShadow = true;
+      group.add(bodyMesh);
+
+      const cellGeo = new THREE.CylinderGeometry(0.57, 0.92, 2.3, 6);
+      const cellMat = new THREE.MeshBasicMaterial({
+        color: 0xa855f7,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.7,
+      });
+      const cellMesh = new THREE.Mesh(cellGeo, cellMat);
+      cellMesh.position.y = 1.45;
+      group.add(cellMesh);
+
+      const spireGeo = new THREE.ConeGeometry(0.45, 1.1, 6);
+      const spireMat = new THREE.MeshStandardMaterial({
+        color: 0x4f46e5,
+        emissive: 0x818cf8,
+        emissiveIntensity: 0.8,
+        roughness: 0.2,
+      });
+      const spireMesh = new THREE.Mesh(spireGeo, spireMat);
+      spireMesh.name = 'TowerSpire';
+      spireMesh.position.y = 3.25;
+      group.add(spireMesh);
+
+      const orbGeo = new THREE.SphereGeometry(0.14, 8, 8);
+      const orbMat = new THREE.MeshBasicMaterial({ color: 0xc084fc });
+      const orbMesh = new THREE.Mesh(orbGeo, orbMat);
+      orbMesh.position.y = 3.85;
+      group.add(orbMesh);
+
+    } else if (struct.type === 'BIO_COMPOSTER') {
+      // ── Compostero Bio-Circular de Reciclaje ──
+      const drumGeo = new THREE.CylinderGeometry(0.9, 0.75, 0.6, 16);
+      const drumMat = new THREE.MeshStandardMaterial({ color: 0x064e3b, roughness: 0.6, metalness: 0.4 });
+      const drumMesh = new THREE.Mesh(drumGeo, drumMat);
+      drumMesh.position.y = 0.3;
+      drumMesh.castShadow = true;
+      group.add(drumMesh);
+
+      const vortexGeo = new THREE.CylinderGeometry(0.8, 0.1, 0.5, 16);
+      const vortexMat = new THREE.MeshStandardMaterial({
+        color: 0x10b981,
+        emissive: 0x34d399,
+        emissiveIntensity: 1.4,
+        roughness: 0.2,
+      });
+      const vortexMesh = new THREE.Mesh(vortexGeo, vortexMat);
+      vortexMesh.name = 'CompostVortex';
+      vortexMesh.position.y = 0.35;
+      group.add(vortexMesh);
+
+      const ringGeo = new THREE.TorusGeometry(0.95, 0.05, 8, 24);
+      ringGeo.rotateX(Math.PI / 2);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true });
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.name = 'CompostCatalystRing';
+      ringMesh.position.y = 0.65;
+      group.add(ringMesh);
+
+    } else if (struct.type === 'DEFENSE_BEACON') {
+      // ── Baliza Táctica de Defensa y Vigilancia ──
+      const tripodGeo = new THREE.ConeGeometry(0.65, 1.6, 4);
+      const tripodMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.3, metalness: 0.8 });
+      const tripodMesh = new THREE.Mesh(tripodGeo, tripodMat);
+      tripodMesh.position.y = 0.8;
+      group.add(tripodMesh);
+
+      const lensGeo = new THREE.OctahedronGeometry(0.28);
+      const lensMat = new THREE.MeshStandardMaterial({
+        color: 0x06b6d4,
+        emissive: 0x22d3ee,
+        emissiveIntensity: 2.0,
+      });
+      const lensMesh = new THREE.Mesh(lensGeo, lensMat);
+      lensMesh.name = 'BeaconLens';
+      lensMesh.position.y = 1.7;
+      group.add(lensMesh);
+
+      const beamGeo = new THREE.CylinderGeometry(0.4, 0.05, 3.5, 12);
+      const beamMat = new THREE.MeshBasicMaterial({
+        color: 0x00f0ff,
+        transparent: true,
+        opacity: 0.22,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+      });
+      const beamMesh = new THREE.Mesh(beamGeo, beamMat);
+      beamMesh.position.y = 3.4;
+      group.add(beamMesh);
+    }
+
+    return group;
+  }
+
+  private updateMetropolis3D(deltaSec: number): void {
+    const metropolisEngine = biocyberneticHabitat.getMetropolisEngine();
+    const telemetry = metropolisEngine.getTelemetry();
+    const activeIds = new Set<string>();
+
+    for (const struct of telemetry.structures) {
+      activeIds.add(struct.id);
+      let group = this.structureMeshes.get(struct.id);
+      if (!group) {
+        group = this.createUrbanStructureMesh(struct);
+        this.metropolisGroup.add(group);
+        this.structureMeshes.set(struct.id, group);
+      }
+
+      if (struct.type === 'BIO_COMPOSTER') {
+        const ring = group.getObjectByName('CompostCatalystRing');
+        if (ring) ring.rotation.z += deltaSec * 2.5;
+        const vortex = group.getObjectByName('CompostVortex');
+        if (vortex) {
+          const s = 0.95 + Math.sin(this.simTimeSec * 4.0) * 0.05;
+          vortex.scale.set(s, 1.0, s);
+        }
+      } else if (struct.type === 'CENTRAL_SILO') {
+        const core = group.getObjectByName('SiloLiquidCore');
+        if (core) {
+          const stored = struct.storedGlucose + struct.storedAtp;
+          const fillRatio = Math.max(0.15, Math.min(1.0, stored / Math.max(1, struct.capacity)));
+          core.scale.y = fillRatio;
+          core.position.y = 0.3 + (fillRatio * 1.4) * 0.5;
+        }
+      } else if (struct.type === 'DEFENSE_BEACON') {
+        const lens = group.getObjectByName('BeaconLens');
+        if (lens) {
+          lens.rotation.y += deltaSec * 1.8;
+          lens.rotation.x += deltaSec * 0.6;
+        }
+      }
+
+      const buildScale = Math.max(0.3, struct.constructionProgress);
+      group.scale.y = buildScale;
+    }
+
+    for (const [id, grp] of this.structureMeshes.entries()) {
+      if (!activeIds.has(id)) {
+        this.metropolisGroup.remove(grp);
+        grp.traverse((obj) => {
+          const anyObj = obj as unknown as { geometry?: THREE.BufferGeometry; material?: THREE.Material | THREE.Material[] };
+          if (anyObj.geometry) anyObj.geometry.dispose();
+          if (anyObj.material) {
+            if (Array.isArray(anyObj.material)) anyObj.material.forEach((m) => m.dispose());
+            else anyObj.material.dispose();
+          }
+        });
+        this.structureMeshes.delete(id);
+      }
+    }
+
+    const highways = telemetry.highways;
+    if (highways.length !== this.lastHighwayCount) {
+      this.lastHighwayCount = highways.length;
+      if (this.highwayLines) {
+        this.metropolisGroup.remove(this.highwayLines);
+        this.highwayLines.geometry.dispose();
+        (this.highwayLines.material as THREE.Material).dispose();
+        this.highwayLines = null;
+      }
+
+      if (highways.length > 0) {
+        const positions = new Float32Array(highways.length * 6);
+        for (let i = 0; i < highways.length; i++) {
+          const hw = highways[i];
+          positions[i * 6] = hw.x1;
+          positions[i * 6 + 1] = 0.025;
+          positions[i * 6 + 2] = hw.y1;
+          positions[i * 6 + 3] = hw.x2;
+          positions[i * 6 + 4] = 0.025;
+          positions[i * 6 + 5] = hw.y2;
+        }
+        const lineGeo = new THREE.BufferGeometry();
+        lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const lineMat = new THREE.LineBasicMaterial({
+          color: 0xffb703,
+          transparent: true,
+          opacity: 0.85,
+          blending: THREE.AdditiveBlending,
+        });
+        this.highwayLines = new THREE.LineSegments(lineGeo, lineMat);
+        this.metropolisGroup.add(this.highwayLines);
+      }
+    }
+  }
+
   private updateCameraPosition(): void {
     if (this.cameraMode === 'ORBITAL') {
       const { radius, theta, phi } = this.camSpherical;
@@ -1919,7 +2252,7 @@ export class BiocyberneticHabitat3DEngine {
         }
 
         // Si no pulsó un organismo, evaluar si interactúa con una herramienta en el suelo de la arena
-        const curTool = biocyberneticHabitat.getTelemetry().activeTool;
+        const curTool = biocyberneticHabitat.getActiveTool();
         const insideArena = Math.hypot(groundPt.x, groundPt.z) <= this.arenaRadius;
 
         if (insideArena && curTool !== 'NONE') {
@@ -1969,7 +2302,7 @@ export class BiocyberneticHabitat3DEngine {
 
     if (this.activePointers.size === 1 && this.isDragging) {
       const groundPt = this.getRaycastGroundPoint(e.clientX, e.clientY);
-      const curTool = biocyberneticHabitat.getTelemetry().activeTool;
+      const curTool = biocyberneticHabitat.getActiveTool();
 
       if (this.isInteractingWithTool && groundPt) {
         // Interacción exclusiva con herramientas tácticas (sin rotar la cámara)
@@ -2024,7 +2357,7 @@ export class BiocyberneticHabitat3DEngine {
 
   private onPointerUp = (e: PointerEvent) => {
     if (this.isInteractingWithTool && this.barrierStartPoint) {
-      const curTool = biocyberneticHabitat.getTelemetry().activeTool;
+      const curTool = biocyberneticHabitat.getActiveTool();
       if (curTool === 'ACOUSTIC_BARRIER') {
         const groundPt = this.getRaycastGroundPoint(e.clientX, e.clientY);
         if (groundPt) {
@@ -2081,11 +2414,13 @@ export class BiocyberneticHabitat3DEngine {
     laserMesh.position.set(x, 7, z);
     this.toolVfxGroup.add(laserMesh);
 
-    setTimeout(() => {
+    const tid = setTimeout(() => {
+      this.activeVfxTimeoutIds.delete(tid);
       this.toolVfxGroup.remove(laserMesh);
       laserMesh.geometry.dispose();
       (laserMesh.material as THREE.Material).dispose();
     }, 120);
+    this.activeVfxTimeoutIds.add(tid);
   }
 
   public triggerAirPuffVfx(x: number, z: number): void {
@@ -2102,10 +2437,12 @@ export class BiocyberneticHabitat3DEngine {
     this.toolVfxGroup.add(ringMesh);
 
     const start = performance.now();
+    let rafId: number;
     const anim = () => {
       const elapsed = (performance.now() - start) * 0.001;
       const progress = elapsed / 0.55;
       if (progress >= 1.0) {
+        this.activeVfxRafIds.delete(rafId);
         this.toolVfxGroup.remove(ringMesh);
         ringGeo.dispose();
         ringMat.dispose();
@@ -2113,10 +2450,12 @@ export class BiocyberneticHabitat3DEngine {
         const curScale = 1.0 + progress * 6.5;
         ringMesh.scale.set(curScale, curScale, curScale);
         ringMat.opacity = 0.8 * (1.0 - progress);
-        requestAnimationFrame(anim);
+        rafId = requestAnimationFrame(anim);
+        this.activeVfxRafIds.add(rafId);
       }
     };
-    requestAnimationFrame(anim);
+    rafId = requestAnimationFrame(anim);
+    this.activeVfxRafIds.add(rafId);
   }
 
   public triggerHeatVfx(x: number, z: number): void {
@@ -2132,20 +2471,24 @@ export class BiocyberneticHabitat3DEngine {
     this.toolVfxGroup.add(colMesh);
 
     const start = performance.now();
+    let rafId: number;
     const anim = () => {
       const elapsed = (performance.now() - start) * 0.001;
       const progress = elapsed / 0.45;
       if (progress >= 1.0) {
+        this.activeVfxRafIds.delete(rafId);
         this.toolVfxGroup.remove(colMesh);
         colGeo.dispose();
         colMat.dispose();
       } else {
         colMesh.scale.set(1.0 + progress * 0.8, 1.0 + progress * 0.5, 1.0 + progress * 0.8);
         colMat.opacity = 0.65 * (1.0 - progress);
-        requestAnimationFrame(anim);
+        rafId = requestAnimationFrame(anim);
+        this.activeVfxRafIds.add(rafId);
       }
     };
-    requestAnimationFrame(anim);
+    rafId = requestAnimationFrame(anim);
+    this.activeVfxRafIds.add(rafId);
   }
 
   public triggerLoomingVfx(x: number, z: number): void {
@@ -2161,10 +2504,12 @@ export class BiocyberneticHabitat3DEngine {
     this.toolVfxGroup.add(diskMesh);
 
     const start = performance.now();
+    let rafId: number;
     const anim = () => {
       const elapsed = (performance.now() - start) * 0.001;
       const progress = elapsed / 0.6;
       if (progress >= 1.0) {
+        this.activeVfxRafIds.delete(rafId);
         this.toolVfxGroup.remove(diskMesh);
         diskGeo.dispose();
         diskMat.dispose();
@@ -2172,13 +2517,22 @@ export class BiocyberneticHabitat3DEngine {
         const curScale = 1.0 + progress * 8.5;
         diskMesh.scale.set(curScale, curScale, curScale);
         diskMat.opacity = 0.85 * (1.0 - progress);
-        requestAnimationFrame(anim);
+        rafId = requestAnimationFrame(anim);
+        this.activeVfxRafIds.add(rafId);
       }
     };
-    requestAnimationFrame(anim);
+    rafId = requestAnimationFrame(anim);
+    this.activeVfxRafIds.add(rafId);
   }
 
   public dispose(): void {
+    // Cancelar TODOS los bucles VFX activos ANTES de detach() para evitar
+    // acceso a geometrías ya liberadas en un contexto WebGL perdido.
+    this.activeVfxRafIds.forEach((id) => cancelAnimationFrame(id));
+    this.activeVfxRafIds.clear();
+    this.activeVfxTimeoutIds.forEach((id) => clearTimeout(id));
+    this.activeVfxTimeoutIds.clear();
+
     this.detach();
     this.removeBarrierPreview();
     this.flies3D.forEach((f) => f.dispose());
@@ -2230,6 +2584,15 @@ export class BiocyberneticHabitat3DEngine {
     disposeHierarchy(this.myceliumNetworkGroup);
     disposeHierarchy(this.celestialDome);
     disposeHierarchy(this.tacticalChessTable);
+    this.structureMeshes.forEach((mesh) => disposeHierarchy(mesh));
+    this.structureMeshes.clear();
+    if (this.highwayLines) {
+      this.scene.remove(this.highwayLines);
+      this.highwayLines.geometry.dispose();
+      (this.highwayLines.material as THREE.Material).dispose();
+      this.highwayLines = null;
+    }
+    disposeHierarchy(this.metropolisGroup);
     disposeHierarchy(this.nestMound);
     disposeHierarchy(this.toolVfxGroup);
     disposeHierarchy(this.selectionReticle);

@@ -23,3 +23,4 @@ export * from './human';
 export * from './vivarium';
 export * from './habitat';
 export * from './ConnectomeBioBridge';
+export * from './SensoriomotorAutonomicBridge';

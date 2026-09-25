@@ -14,6 +14,7 @@ import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { AudioContextManager } from "../lib/audio/AudioContextManager";
 import { meshRouter } from "../lib/mesh/meshRouter";
 
 type RfTab = "spectrum" | "jamming" | "devices";
@@ -94,7 +95,7 @@ export function RfSpectrumModal() {
     // 4. Captura Real de Micrófono Web Audio API FFT
     const cleanupAudio = () => {
         if (audioCtxRef.current) {
-            try { audioCtxRef.current.close(); } catch {}
+            AudioContextManager.releaseDedicatedContext('rf_spectrum_modal').catch(() => {});
             audioCtxRef.current = null;
         }
         if (micStreamRef.current) {
@@ -125,8 +126,11 @@ export function RfSpectrumModal() {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
                 micStreamRef.current = stream;
 
-                const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-                const audioCtx = new AudioCtxClass();
+                const audioCtx = AudioContextManager.acquireDedicatedContext('rf_spectrum_modal');
+                if (!audioCtx) return;
+                if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume().catch(() => {});
+                }
                 audioCtxRef.current = audioCtx;
 
                 const source = audioCtx.createMediaStreamSource(stream);
@@ -139,38 +143,43 @@ export function RfSpectrumModal() {
                 const bufferLength = analyser.frequencyBinCount;
                 const dataArray = new Uint8Array(bufferLength);
 
+                let lastAcousticUpdateTs = 0;
                 const updateAcousticFft = () => {
                     if (!analyserRef.current || bandMode !== "ACOUSTIC_FFT") return;
                     analyserRef.current.getByteFrequencyData(dataArray);
 
-                    const baseFreq = 16000;
-                    const stepFreq = 400;
-                    const channels: ChannelSignalData[] = [];
+                    const now = performance.now();
+                    if (now - lastAcousticUpdateTs >= 120) {
+                        lastAcousticUpdateTs = now;
+                        const baseFreq = 16000;
+                        const stepFreq = 400;
+                        const channels: ChannelSignalData[] = [];
 
-                    for (let ch = 0; ch < 12; ch++) {
-                        const targetFreq = baseFreq + ch * stepFreq;
-                        const binIndex = Math.min(
-                            bufferLength - 1,
-                            Math.floor((targetFreq / (audioCtx.sampleRate / 2)) * bufferLength)
-                        );
-                        const rawAmp = dataArray[binIndex] || 0;
-                        const rssiCalculated = Math.round(-110 + (rawAmp / 255) * 80);
+                        for (let ch = 0; ch < 12; ch++) {
+                            const targetFreq = baseFreq + ch * stepFreq;
+                            const binIndex = Math.min(
+                                bufferLength - 1,
+                                Math.floor((targetFreq / (audioCtx.sampleRate / 2)) * bufferLength)
+                            );
+                            const rawAmp = dataArray[binIndex] || 0;
+                            const rssiCalculated = Math.round(-110 + (rawAmp / 255) * 80);
 
-                        channels.push({
-                            channelNumber: ch + 1,
-                            frequencyMhz: Number((targetFreq / 1000).toFixed(1)),
-                            rssiDb: rssiCalculated,
-                            rssiCurrentDbm: rssiCalculated,
-                            rssiMaxHoldDbm: rssiCalculated,
-                            signalQualityPct: Math.round((rawAmp / 255) * 100),
-                            isOccupied: rawAmp > 60,
-                            noiseFloorDb: -105,
-                            noiseFloorDbm: -105,
-                            occupiedByProtocol: rawAmp > 60 ? "SoundMesh Ultra" : undefined
-                        });
+                            channels.push({
+                                channelNumber: ch + 1,
+                                frequencyMhz: Number((targetFreq / 1000).toFixed(1)),
+                                rssiDb: rssiCalculated,
+                                rssiCurrentDbm: rssiCalculated,
+                                rssiMaxHoldDbm: rssiCalculated,
+                                signalQualityPct: Math.round((rawAmp / 255) * 100),
+                                isOccupied: rawAmp > 60,
+                                noiseFloorDb: -105,
+                                noiseFloorDbm: -105,
+                                occupiedByProtocol: rawAmp > 60 ? "SoundMesh Ultra" : undefined
+                            });
+                        }
+
+                        setAcousticChannels(channels);
                     }
-
-                    setAcousticChannels(channels);
                     animationFrameId = requestAnimationFrame(updateAcousticFft);
                 };
 
@@ -189,12 +198,17 @@ export function RfSpectrumModal() {
     }, [bandMode, isScanning]);
 
     // 5. Motor de Análisis de Espectro Continuo
+    const acousticChannelsRef = useRef(acousticChannels);
+    acousticChannelsRef.current = acousticChannels;
+    const scannedBleDevicesRef = useRef(scannedBleDevices);
+    scannedBleDevicesRef.current = scannedBleDevices;
+
     useEffect(() => {
         if (!isScanning) return;
 
         const interval = setInterval(() => {
-            const currentBleList = Array.from(scannedBleDevices.values());
-            const currentAcousticList = acousticChannels;
+            const currentBleList = Array.from(scannedBleDevicesRef.current.values());
+            const currentAcousticList = acousticChannelsRef.current;
 
             const nextMetrics = bandMode === "ACOUSTIC_FFT"
                 ? RfSpectrumAnalyzerEngine.processAcousticChannels(currentAcousticList)
@@ -203,7 +217,7 @@ export function RfSpectrumModal() {
         }, 1200);
 
         return () => clearInterval(interval);
-    }, [bandMode, isScanning, scannedBleDevices, acousticChannels]);
+    }, [bandMode, isScanning]);
 
     // 6. Waterfall Canvas Renderer
     useEffect(() => {

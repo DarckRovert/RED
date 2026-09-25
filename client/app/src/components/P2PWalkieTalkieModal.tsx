@@ -184,6 +184,7 @@ export const P2PWalkieTalkieModal: React.FC = () => {
     useEffect(() => {
         let timer: any;
         let animationFrameId: number;
+        let lastVadUpdate = 0;
 
         if (isRecording) {
             timer = setInterval(() => setRecordingTime((t) => t + 1), 1000);
@@ -199,6 +200,11 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                 if (ctx) {
                     const width = canvas.width;
                     const height = canvas.height;
+                    const nowPerf = performance.now();
+                    const shouldUpdateVad = nowPerf - lastVadUpdate >= 100;
+                    if (shouldUpdateVad) {
+                        lastVadUpdate = nowPerf;
+                    }
 
                     ctx.fillStyle = "rgba(4, 8, 18, 0.4)";
                     ctx.fillRect(0, 0, width, height);
@@ -220,14 +226,16 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                         const dataArray = new Uint8Array(bufferLength);
                         analyserRef.current.getByteTimeDomainData(dataArray);
 
-                        // Calcular nivel VAD
-                        let sum = 0;
-                        for (let i = 0; i < bufferLength; i++) {
-                            const val = (dataArray[i] - 128) / 128;
-                            sum += val * val;
+                        // Calcular nivel VAD con actualización controlada para evitar 60 re-renders/segundo
+                        if (shouldUpdateVad) {
+                            let sum = 0;
+                            for (let i = 0; i < bufferLength; i++) {
+                                const val = (dataArray[i] - 128) / 128;
+                                sum += val * val;
+                            }
+                            const rms = Math.sqrt(sum / bufferLength);
+                            setVadLevel(Math.min(100, Math.round(rms * 280)));
                         }
-                        const rms = Math.sqrt(sum / bufferLength);
-                        setVadLevel(Math.min(100, Math.round(rms * 280)));
 
                         // Dibujar forma de onda
                         ctx.lineWidth = 2;
@@ -251,8 +259,10 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                     } else if (isRecording) {
                         // Modo nativo Android (Capacitor VoiceRecorder): Modulación sintética RF en tiempo real
                         const now = Date.now() / 150;
-                        const syntheticVad = Math.round(45 + 35 * Math.sin(now * 1.8) * Math.cos(now * 0.9));
-                        setVadLevel(Math.max(15, syntheticVad));
+                        if (shouldUpdateVad) {
+                            const syntheticVad = Math.round(45 + 35 * Math.sin(now * 1.8) * Math.cos(now * 0.9));
+                            setVadLevel(Math.max(15, syntheticVad));
+                        }
 
                         ctx.lineWidth = 2;
                         ctx.strokeStyle = "#FF3355";
@@ -279,7 +289,9 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                     }
                 }
             }
-            animationFrameId = requestAnimationFrame(renderOscilloscope);
+            if (isRecording || playingBurstId) {
+                animationFrameId = requestAnimationFrame(renderOscilloscope);
+            }
         };
 
         animationFrameId = requestAnimationFrame(renderOscilloscope);

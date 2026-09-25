@@ -25,6 +25,9 @@ import {
   HabitatCameraMode,
   OrganismMood,
   SugarRaceState,
+  computeFitnessScore,
+  UrbanStructureType,
+  CivilianCaste,
 } from '../../lib/neuro/habitat';
 import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
 import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
@@ -43,6 +46,54 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
   const [bannerAlert, setBannerAlert] = useState<string | null>(null);
   const [selectedOrganismId, setSelectedOrganismId] = useState<string | null>(null);
   const [showChessHUD, setShowChessHUD] = useState<boolean>(false);
+  const [activeMainTab, setActiveMainTab] = useState<'VIEWPORT' | 'EVOLUTION' | 'METROPOLIS'>('VIEWPORT');
+  const [timeScale, setTimeScale] = useState<number>(biocyberneticHabitat.getTimeScale());
+
+  const handleSetTimeScale = (scale: number) => {
+    TacticalAudioEngine.playTap();
+    biocyberneticHabitat.setTimeScale(scale);
+    setTimeScale(scale);
+    if (scale === 0) triggerAlert('⏸️ Simulación pausada');
+    else if (scale === 1) triggerAlert('▶️ Tiempo Real 1X');
+    else triggerAlert(`⚡ Acelerador Temporal activo: ${scale}X`);
+  };
+
+  const handleForceMitosis = (orgId: string) => {
+    TacticalAudioEngine.playTap();
+    const baby = biocyberneticHabitat.forceAssistMitosis(orgId);
+    if (baby) {
+      setSelectedOrganismId(baby.id);
+      triggerAlert(`🧬 ¡Mitosis asistida exitosa! Nació espécimen G${baby.generation} (${baby.id.slice(-6)})`);
+    } else {
+      triggerAlert('⚠️ El organismo no tiene suficiente vigor para dividirse.');
+    }
+  };
+
+  const handleTriggerSporeBloom = () => {
+    TacticalAudioEngine.playTap();
+    biocyberneticHabitat.triggerEnvironmentalSporeBloom();
+    triggerAlert('🌾 ¡Brote masivo de esporas de glucosa sembrado en el biodomo!');
+  };
+
+  const handleTriggerMutagenicRay = () => {
+    TacticalAudioEngine.playTap();
+    biocyberneticHabitat.triggerMutagenicCosmicRay();
+    triggerAlert('⚡ ¡Pulso cósmico mutagénico inyectado! Tasa de mutación a 250% por 10s.');
+  };
+
+  const handleRequestConstruction = (type: UrbanStructureType) => {
+    TacticalAudioEngine.playTap();
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 3.2 + Math.random() * 3.8;
+    const x = Math.cos(angle) * dist;
+    const y = Math.sin(angle) * dist;
+    const success = biocyberneticHabitat.requestUrbanConstruction(type, x, y);
+    if (success) {
+      triggerAlert(`🏗️ Proyecto de obra iniciado: ${type} en (${x.toFixed(1)}, ${y.toFixed(1)})`);
+    } else {
+      triggerAlert('⚠️ Biopolímeros insuficientes en la metrópolis para iniciar esta obra.');
+    }
+  };
 
   const viewport3DRef = useRef<HTMLDivElement | null>(null);
   const engine3DRef = useRef<BiocyberneticHabitat3DEngine | null>(null);
@@ -112,26 +163,10 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
       setTelemetry(t);
     });
 
-    // 5. Bucle de renderizado Canvas en tiempo real (para modo 2D)
-    let animId: number;
-    const render2D = () => {
-      if (viewMode === '2D') {
-        const canvas = canvasRef.current;
-        if (canvas) {
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            drawHabitatScene(ctx, canvas.width, canvas.height);
-          }
-        }
-      }
-      animId = requestAnimationFrame(render2D);
-    };
-    animId = requestAnimationFrame(render2D);
-
     return () => {
-      cancelAnimationFrame(animId);
       unsubTel();
       biocyberneticHabitat.stop();
+      connectomeBioBridge.stopConnectome();
       if (engine3DRef.current) {
         engine3DRef.current.dispose();
         engine3DRef.current = null;
@@ -140,19 +175,43 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
     };
   }, []);
 
-  // Sincronizar alternancia de modo de render 3D / 2D
+  // Sincronizar alternancia de modo de render 3D / 2D y bucle activo
   useEffect(() => {
+    let anim2DId: number | null = null;
     const engine3D = engine3DRef.current;
-    if (!engine3D) return;
 
     if (viewMode === '3D') {
-      if (viewport3DRef.current) {
-        engine3D.attach(viewport3DRef.current);
+      if (engine3D) {
+        if (viewport3DRef.current) {
+          engine3D.attach(viewport3DRef.current);
+        }
+        engine3D.start();
       }
-      engine3D.start();
     } else {
-      engine3D.pause();
+      // Modo 2D Radar: pausar GPU 3D para ahorrar batería y arrancar Canvas 2D
+      if (engine3D) {
+        engine3D.pause();
+      }
+
+      const loop2D = () => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            drawHabitatScene(ctx, canvas.width, canvas.height);
+          }
+        }
+        anim2DId = requestAnimationFrame(loop2D);
+      };
+
+      anim2DId = requestAnimationFrame(loop2D);
     }
+
+    return () => {
+      if (anim2DId !== null) {
+        cancelAnimationFrame(anim2DId);
+      }
+    };
   }, [viewMode]);
 
   // Sincronizar organismo seleccionado con el motor 3D
@@ -541,6 +600,68 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
       ctx.beginPath();
       ctx.arc(px, py, rPx, 0, Math.PI * 2);
       ctx.stroke();
+    }
+
+    // 5.8 Autopistas de Feromonas de la Metrópolis en 2D Radar
+    if (telemetry.metropolis) {
+      for (const hw of telemetry.metropolis.highways) {
+        const hx1 = centerX + hw.x1 * scale;
+        const hy1 = centerY + hw.y1 * scale;
+        const hx2 = centerX + hw.x2 * scale;
+        const hy2 = centerY + hw.y2 * scale;
+
+        ctx.strokeStyle = 'rgba(255, 183, 3, 0.4)';
+        ctx.lineWidth = Math.max(3, hw.widthMeters * scale);
+        ctx.beginPath();
+        ctx.moveTo(hx1, hy1);
+        ctx.lineTo(hx2, hy2);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(hx1, hy1);
+        ctx.lineTo(hx2, hy2);
+        ctx.stroke();
+      }
+
+      // 5.9 Estructuras Vivas de la Metrópolis en 2D Radar
+      for (const s of telemetry.metropolis.structures) {
+        const sx = centerX + s.x * scale;
+        const sy = centerY + s.y * scale;
+        const srPx = Math.max(8, s.radiusMeters * scale);
+
+        const col =
+          s.type === 'CENTRAL_SILO'
+            ? '#f59e0b'
+            : s.type === 'BIO_TOWER_DWELLING'
+            ? '#a855f7'
+            : s.type === 'BIO_COMPOSTER'
+            ? '#10b981'
+            : '#38bdf8';
+
+        ctx.fillStyle = 'rgba(10, 18, 30, 0.85)';
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(sx, sy, srPx, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = '9px monospace';
+        ctx.fillStyle = col;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const icon =
+          s.type === 'CENTRAL_SILO'
+            ? '🏛️'
+            : s.type === 'BIO_TOWER_DWELLING'
+            ? '🗼'
+            : s.type === 'BIO_COMPOSTER'
+            ? '♻️'
+            : '📡';
+        ctx.fillText(icon, sx, sy);
+      }
     }
 
     // 6. Borde Perimétrico de la Arena
@@ -1261,6 +1382,194 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
         </button>
       </div>
 
+      {/* ── Sub-Barra Táctica: Selector de Vista (Biodomo vs Evolución) & Warp Temporal ── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '8px',
+          padding: '8px 16px',
+          background: 'rgba(5, 10, 22, 0.98)',
+          borderBottom: '1px solid rgba(0, 240, 255, 0.25)',
+          flexShrink: 0,
+        }}
+      >
+        {/* Selector de Pestaña Principal */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            onClick={() => {
+              TacticalAudioEngine.playTap();
+              setActiveMainTab('VIEWPORT');
+            }}
+            style={{
+              background: activeMainTab === 'VIEWPORT' ? 'rgba(0, 240, 255, 0.2)' : 'rgba(15, 23, 42, 0.7)',
+              border: `1px solid ${activeMainTab === 'VIEWPORT' ? '#00f0ff' : 'rgba(148, 163, 184, 0.3)'}`,
+              color: activeMainTab === 'VIEWPORT' ? '#00f0ff' : '#94a3b8',
+              borderRadius: '6px',
+              padding: '5px 12px',
+              fontSize: '11px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+            }}
+          >
+            <span>🌐</span>
+            <span>BIODOMO IN-SILICO</span>
+          </button>
+          <button
+            onClick={() => {
+              TacticalAudioEngine.playTap();
+              setActiveMainTab('EVOLUTION');
+            }}
+            style={{
+              background: activeMainTab === 'EVOLUTION' ? 'rgba(168, 85, 247, 0.25)' : 'rgba(15, 23, 42, 0.7)',
+              border: `1px solid ${activeMainTab === 'EVOLUTION' ? '#c084fc' : 'rgba(148, 163, 184, 0.3)'}`,
+              color: activeMainTab === 'EVOLUTION' ? '#c084fc' : '#94a3b8',
+              borderRadius: '6px',
+              padding: '5px 12px',
+              fontSize: '11px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+            }}
+          >
+            <span>🧬</span>
+            <span>EVOLUCIÓN & FILOGENIA</span>
+            {telemetry.maxGeneration && telemetry.maxGeneration > 1 && (
+              <span
+                style={{
+                  fontSize: '9px',
+                  background: '#a855f7',
+                  color: '#ffffff',
+                  padding: '1px 5px',
+                  borderRadius: '10px',
+                  fontWeight: 900,
+                }}
+              >
+                G{telemetry.maxGeneration}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => {
+              TacticalAudioEngine.playTap();
+              setActiveMainTab('METROPOLIS');
+            }}
+            style={{
+              background: activeMainTab === 'METROPOLIS' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(15, 23, 42, 0.7)',
+              border: `1px solid ${activeMainTab === 'METROPOLIS' ? '#f59e0b' : 'rgba(148, 163, 184, 0.3)'}`,
+              color: activeMainTab === 'METROPOLIS' ? '#f59e0b' : '#94a3b8',
+              borderRadius: '6px',
+              padding: '5px 12px',
+              fontSize: '11px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+            }}
+          >
+            <span>🏙️</span>
+            <span>METRÓPOLIS BIOCIBERNÉTICA</span>
+            {telemetry.metropolis && (
+              <span
+                style={{
+                  fontSize: '9px',
+                  background: '#f59e0b',
+                  color: '#000000',
+                  padding: '1px 5px',
+                  borderRadius: '10px',
+                  fontWeight: 900,
+                }}
+              >
+                L{telemetry.metropolis.civilizationLevel}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Acelerador Temporal & Intervención Génica */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
+            WARP:
+          </span>
+          {[
+            { label: '⏸️', value: 0, title: 'Pausa' },
+            { label: '1X', value: 1, title: 'Tiempo Real' },
+            { label: '2X', value: 2, title: 'Doble Velocidad' },
+            { label: '5X', value: 5, title: 'Warp Evolutivo 5X' },
+            { label: '10X', value: 10, title: 'Hiper-Evolución 10X' },
+          ].map((item) => (
+            <button
+              key={item.value}
+              onClick={() => handleSetTimeScale(item.value)}
+              title={item.title}
+              style={{
+                background: timeScale === item.value ? 'rgba(0, 255, 136, 0.25)' : 'rgba(15, 23, 42, 0.65)',
+                border: `1px solid ${timeScale === item.value ? '#00ff88' : 'rgba(148, 163, 184, 0.25)'}`,
+                color: timeScale === item.value ? '#00ff88' : '#94a3b8',
+                borderRadius: '5px',
+                padding: '4px 8px',
+                fontSize: '10px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+
+          {/* Botones de Brote y Rayo Cósmico */}
+          <button
+            onClick={handleTriggerSporeBloom}
+            title="Sembrar 12 esporas de glucosa ricas en ATP"
+            style={{
+              background: 'rgba(234, 179, 8, 0.15)',
+              border: '1px solid #eab308',
+              color: '#eab308',
+              borderRadius: '5px',
+              padding: '4px 8px',
+              fontSize: '10px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            <span>🌾</span>
+            <span>ESPORAS</span>
+          </button>
+
+          <button
+            onClick={handleTriggerMutagenicRay}
+            title="Inyectar pulso cósmico de radiación (mutaciones x2.5 durante 10s)"
+            style={{
+              background: 'rgba(236, 72, 153, 0.15)',
+              border: '1px solid #ec4899',
+              color: '#ec4899',
+              borderRadius: '5px',
+              padding: '4px 8px',
+              fontSize: '10px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            <span>⚡</span>
+            <span>PULSO CÓSMICO</span>
+          </button>
+        </div>
+      </div>
+
       {/* ── Coexistencia Multicerebral: 5 Inteligencias Vivas en Simbiosis ────── */}
       <div
         style={{
@@ -1383,8 +1692,655 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
           position: 'relative',
         }}
       >
-        {/* ── 2. Área Central del Viewport de Simulación ──────────────────────── */}
-        <div
+        {/* ── Vista de Evolución & Filogenia de Población A-Life ────────────── */}
+        {activeMainTab === 'EVOLUTION' && (
+          <div
+            style={{
+              padding: '16px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              maxWidth: '960px',
+              margin: '0 auto',
+              width: '100%',
+              minHeight: 0,
+            }}
+          >
+            {/* Header del Dashboard de Evolución */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '10px',
+                padding: '12px 16px',
+                background: 'rgba(15, 23, 42, 0.85)',
+                border: '1px solid rgba(168, 85, 247, 0.3)',
+                borderRadius: '8px',
+              }}
+            >
+              <div>
+                <div style={{ color: '#c084fc', fontWeight: 900, fontSize: '13px', letterSpacing: '0.8px' }}>
+                  🧬 MONITOR DE EVOLUCIÓN DARWINIANA & POBLACIÓN A-LIFE
+                </div>
+                <div style={{ color: '#94a3b8', fontSize: '10px', marginTop: '2px' }}>
+                  Herencia alélica estocástica (Box-Muller), deriva génica, clanes filogenéticos y selección natural en tiempo real.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={handleTriggerSporeBloom}
+                  style={{
+                    background: 'rgba(234, 179, 8, 0.2)',
+                    border: '1px solid #eab308',
+                    color: '#facc15',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  🌾 BROTE DE ESPORAS
+                </button>
+                <button
+                  onClick={handleTriggerMutagenicRay}
+                  style={{
+                    background: 'rgba(236, 72, 153, 0.2)',
+                    border: '1px solid #ec4899',
+                    color: '#f472b6',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ⚡ PULSO CÓSMICO
+                </button>
+              </div>
+            </div>
+
+            {/* Tarjetas de Métricas Poblacionales */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                gap: '10px',
+              }}
+            >
+              <div style={{ background: 'rgba(6, 12, 24, 0.9)', border: '1px solid rgba(0, 240, 255, 0.3)', borderRadius: '8px', padding: '10px 14px' }}>
+                <div style={{ fontSize: '9.5px', color: '#64748b', fontWeight: 800 }}>GENERACIÓN MÁXIMA</div>
+                <div style={{ fontSize: '20px', color: '#00f0ff', fontWeight: 900, marginTop: '4px' }}>
+                  G{telemetry.maxGeneration || 1}
+                </div>
+                <div style={{ fontSize: '8.5px', color: '#94a3b8', marginTop: '2px' }}>Profundidad del árbol filogenético</div>
+              </div>
+
+              <div style={{ background: 'rgba(6, 12, 24, 0.9)', border: '1px solid rgba(168, 85, 247, 0.3)', borderRadius: '8px', padding: '10px 14px' }}>
+                <div style={{ fontSize: '9.5px', color: '#64748b', fontWeight: 800 }}>LINAJES ACTIVOS</div>
+                <div style={{ fontSize: '20px', color: '#c084fc', fontWeight: 900, marginTop: '4px' }}>
+                  {telemetry.populationGenetics?.activeLineagesCount || 0}
+                </div>
+                <div style={{ fontSize: '8.5px', color: '#94a3b8', marginTop: '2px' }}>Clanes coexistentes en el biodomo</div>
+              </div>
+
+              <div style={{ background: 'rgba(6, 12, 24, 0.9)', border: '1px solid rgba(52, 211, 153, 0.3)', borderRadius: '8px', padding: '10px 14px' }}>
+                <div style={{ fontSize: '9.5px', color: '#64748b', fontWeight: 800 }}>NACIMIENTOS (MITOSIS)</div>
+                <div style={{ fontSize: '20px', color: '#34d399', fontWeight: 900, marginTop: '4px' }}>
+                  {telemetry.populationGenetics?.totalBirths || 0}
+                </div>
+                <div style={{ fontSize: '8.5px', color: '#94a3b8', marginTop: '2px' }}>Eventos de replicación celular</div>
+              </div>
+
+              <div style={{ background: 'rgba(6, 12, 24, 0.9)', border: '1px solid rgba(244, 63, 94, 0.3)', borderRadius: '8px', padding: '10px 14px' }}>
+                <div style={{ fontSize: '9.5px', color: '#64748b', fontWeight: 800 }}>SENESCENCIA / EXTINCIÓN</div>
+                <div style={{ fontSize: '20px', color: '#f43f5e', fontWeight: 900, marginTop: '4px' }}>
+                  {telemetry.populationGenetics?.totalDeaths || 0}
+                </div>
+                <div style={{ fontSize: '8.5px', color: '#94a3b8', marginTop: '2px' }}>Ciclo biológico completado</div>
+              </div>
+
+              <div style={{ background: 'rgba(6, 12, 24, 0.9)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '8px', padding: '10px 14px' }}>
+                <div style={{ fontSize: '9.5px', color: '#64748b', fontWeight: 800 }}>CLAN DOMINANTE</div>
+                <div style={{ fontSize: '13px', color: '#fbbf24', fontWeight: 900, marginTop: '8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {telemetry.populationGenetics?.topLineageId || 'Sin clan'}
+                </div>
+                <div style={{ fontSize: '8.5px', color: '#94a3b8', marginTop: '2px' }}>Mayor adaptabilidad al hábitat</div>
+              </div>
+            </div>
+
+            {/* Medias Alélicas del Acervo Génico */}
+            {telemetry.populationGenetics && (
+              <div
+                style={{
+                  background: 'rgba(6, 12, 24, 0.95)',
+                  border: '1px solid rgba(0, 240, 255, 0.25)',
+                  borderRadius: '8px',
+                  padding: '14px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                }}
+              >
+                <div style={{ fontSize: '11px', color: '#00f0ff', fontWeight: 800 }}>
+                  🧬 PROMEDIO DE RASGOS ALÉLICOS (ACERVO GÉNICO DE LA POBLACIÓN)
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', marginBottom: '4px' }}>
+                      <span style={{ color: '#94a3b8' }}>Velocidad Media</span>
+                      <span style={{ color: '#38bdf8', fontWeight: 700 }}>{telemetry.populationGenetics.meanSpeedGene.toFixed(2)}x</span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, (telemetry.populationGenetics.meanSpeedGene / 2) * 100)}%`, height: '100%', background: '#38bdf8' }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', marginBottom: '4px' }}>
+                      <span style={{ color: '#94a3b8' }}>Eficiencia Metabólica</span>
+                      <span style={{ color: '#f59e0b', fontWeight: 700 }}>{telemetry.populationGenetics.meanMetabolicEfficiency.toFixed(2)}x</span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, (telemetry.populationGenetics.meanMetabolicEfficiency / 2) * 100)}%`, height: '100%', background: '#f59e0b' }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', marginBottom: '4px' }}>
+                      <span style={{ color: '#94a3b8' }}>Rango Sensorial</span>
+                      <span style={{ color: '#10b981', fontWeight: 700 }}>{telemetry.populationGenetics.meanSensoryRadius.toFixed(2)}x</span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, (telemetry.populationGenetics.meanSensoryRadius / 2) * 100)}%`, height: '100%', background: '#10b981' }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', marginBottom: '4px' }}>
+                      <span style={{ color: '#94a3b8' }}>Longevidad Media</span>
+                      <span style={{ color: '#c084fc', fontWeight: 700 }}>{Math.round(telemetry.populationGenetics.meanLongevitySec)}s</span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, (telemetry.populationGenetics.meanLongevitySec / 500) * 100)}%`, height: '100%', background: '#c084fc' }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', marginBottom: '4px' }}>
+                      <span style={{ color: '#94a3b8' }}>Cooperación / Trofalaxis</span>
+                      <span style={{ color: '#f43f5e', fontWeight: 700 }}>{(telemetry.populationGenetics.meanCooperationGene * 100).toFixed(0)}%</span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, telemetry.populationGenetics.meanCooperationGene * 100)}%`, height: '100%', background: '#f43f5e' }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Crónica Evolutiva en Tiempo Real (Live Event Feed) */}
+            <div
+              style={{
+                background: 'rgba(6, 12, 24, 0.95)',
+                border: '1px solid rgba(168, 85, 247, 0.3)',
+                borderRadius: '8px',
+                padding: '14px 18px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#c084fc', fontWeight: 800 }}>
+                  📜 CRÓNICA EVOLUTIVA & FILOGENÉTICA EN TIEMPO REAL
+                </div>
+                <div style={{ fontSize: '9px', color: '#64748b' }}>
+                  {telemetry.evolutionChronicle?.length || 0} eventos registrados
+                </div>
+              </div>
+
+              <div
+                style={{
+                  maxHeight: '280px',
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  paddingRight: '6px',
+                }}
+              >
+                {(!telemetry.evolutionChronicle || telemetry.evolutionChronicle.length === 0) ? (
+                  <div style={{ color: '#64748b', fontSize: '11px', fontStyle: 'italic', padding: '16px 0', textAlign: 'center' }}>
+                    Esperando los primeros eventos de mitosis y mutación genética... (Aumenta el Warp temporal a 5X o 10X para acelerar generaciones)
+                  </div>
+                ) : (
+                  telemetry.evolutionChronicle.map((entry) => (
+                    <div
+                      key={entry.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        background: 'rgba(15, 23, 42, 0.6)',
+                        borderLeft: `3px solid ${
+                          entry.type === 'MITOSIS' || entry.type === 'BIRTH'
+                            ? '#00ff88'
+                            : entry.type === 'MUTATION_BREAKTHROUGH'
+                            ? '#a855f7'
+                            : entry.type === 'TROPHALLAXIS'
+                            ? '#38bdf8'
+                            : entry.type === 'SENESCENCE'
+                            ? '#f59e0b'
+                            : '#ef4444'
+                        }`,
+                        borderRadius: '4px',
+                        fontSize: '9.5px',
+                        gap: '8px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                        <span style={{ fontSize: '12px', flexShrink: 0 }}>
+                          {(entry.type === 'MITOSIS' || entry.type === 'BIRTH') && '🧬'}
+                          {entry.type === 'MUTATION_BREAKTHROUGH' && '⚡'}
+                          {entry.type === 'TROPHALLAXIS' && '🤝'}
+                          {entry.type === 'SENESCENCE' && '⏳'}
+                          {entry.type === 'STARVATION' && '💀'}
+                          {entry.type === 'EXTINCTION' && '⚠️'}
+                        </span>
+                        <span style={{ color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {entry.headline}
+                        </span>
+                        {entry.lineageId && (
+                          <span
+                            style={{
+                              fontSize: '8px',
+                              padding: '1px 5px',
+                              borderRadius: '4px',
+                              background: 'rgba(168, 85, 247, 0.15)',
+                              color: '#c084fc',
+                              fontWeight: 700,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {entry.lineageId}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                        <span
+                          style={{
+                            fontSize: '8px',
+                            padding: '1px 4px',
+                            borderRadius: '3px',
+                            background: 'rgba(0, 240, 255, 0.12)',
+                            color: '#00f0ff',
+                            fontWeight: 800,
+                          }}
+                        >
+                          G{entry.generation}
+                        </span>
+                        <span style={{ color: '#64748b', fontSize: '8px' }}>
+                          {new Date(entry.timestampSec * 1000).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Vista de Metrópolis Biocibernética (Urbanismo & Metabolismo Circular) ── */}
+        {activeMainTab === 'METROPOLIS' && telemetry.metropolis && (
+          <div
+            style={{
+              padding: '16px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              maxWidth: '960px',
+              margin: '0 auto',
+              width: '100%',
+              minHeight: 0,
+            }}
+          >
+            {/* Header: Nivel de Civilización */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+                padding: '12px 16px',
+                background: 'rgba(245, 158, 11, 0.1)',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+                borderRadius: '8px',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '20px' }}>🏙️</span>
+                  <div>
+                    <div style={{ color: '#fbbf24', fontWeight: 900, fontSize: '14px', letterSpacing: '0.5px' }}>
+                      NIVEL {telemetry.metropolis.civilizationLevel}: {
+                        telemetry.metropolis.civilizationLevel === 1 ? 'CAMPAMENTO SILVESTRE' :
+                        telemetry.metropolis.civilizationLevel === 2 ? 'ALDEA SIMBIÓTICA' :
+                        telemetry.metropolis.civilizationLevel === 3 ? 'CIUDADELA ESTIGMÉRGICA' :
+                        telemetry.metropolis.civilizationLevel === 4 ? 'METRÓPOLIS CIRCULAR' :
+                        'MEGALÓPOLIS EDÉNICA SOBERANA'
+                      }
+                    </div>
+                    <div style={{ color: '#94a3b8', fontSize: '11px' }}>
+                      Urbanismo estigmérgico, división cívica del trabajo y metabolismo circular de biomasa
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span
+                  style={{
+                    background: 'rgba(245, 158, 11, 0.2)',
+                    border: '1px solid #f59e0b',
+                    color: '#fbbf24',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  PIB METABÓLICO: {telemetry.metropolis.metabolicGdpTotal} ATP
+                </span>
+                <span
+                  style={{
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    border: '1px solid #10b981',
+                    color: '#34d399',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  RECURSOS SILOS: {telemetry.metropolis.totalStoredGlucose} G / {telemetry.metropolis.totalStoredAtp} ATP
+                </span>
+              </div>
+            </div>
+
+            {/* 4 Métricas Macro-Económicas & Circulares */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+              <div style={{ background: 'rgba(15, 23, 42, 0.75)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: '8px', padding: '10px 12px' }}>
+                <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800 }}>💰 PIB METABÓLICO</div>
+                <div style={{ fontSize: '16px', color: '#fbbf24', fontWeight: 900, marginTop: '4px' }}>
+                  {telemetry.metropolis.metabolicGdpTotal} <span style={{ fontSize: '11px' }}>ATP</span>
+                </div>
+                <div style={{ fontSize: '9px', color: '#64748b', marginTop: '2px' }}>Valor agregado bioquímico acumulado</div>
+              </div>
+
+              <div style={{ background: 'rgba(15, 23, 42, 0.75)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '8px', padding: '10px 12px' }}>
+                <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800 }}>🏗️ RESERVA DE BIOPOLÍMEROS</div>
+                <div style={{ fontSize: '16px', color: '#34d399', fontWeight: 900, marginTop: '4px' }}>
+                  {telemetry.metropolis.totalBiopolymerStockpile} <span style={{ fontSize: '11px' }}>u</span>
+                </div>
+                <div style={{ fontSize: '9px', color: '#64748b', marginTop: '2px' }}>Material para erección de estructuras</div>
+              </div>
+
+              <div style={{ background: 'rgba(15, 23, 42, 0.75)', border: '1px solid rgba(6, 182, 212, 0.25)', borderRadius: '8px', padding: '10px 12px' }}>
+                <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800 }}>♻️ BIOMASA RECICLADA</div>
+                <div style={{ fontSize: '16px', color: '#22d3ee', fontWeight: 900, marginTop: '4px' }}>
+                  {telemetry.metropolis.totalRecycledBiomass} <span style={{ fontSize: '11px' }}>kg</span>
+                </div>
+                <div style={{ fontSize: '9px', color: '#64748b', marginTop: '2px' }}>Cero residuo: cadáveres a nutrientes</div>
+              </div>
+
+              <div style={{ background: 'rgba(15, 23, 42, 0.75)', border: '1px solid rgba(168, 85, 247, 0.25)', borderRadius: '8px', padding: '10px 12px' }}>
+                <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800 }}>🛣️ AUTOPISTAS DE FEROMONAS</div>
+                <div style={{ fontSize: '16px', color: '#c084fc', fontWeight: 900, marginTop: '4px' }}>
+                  {telemetry.metropolis.highways.length} <span style={{ fontSize: '11px' }}>tramos</span>
+                </div>
+                <div style={{ fontSize: '9px', color: '#64748b', marginTop: '2px' }}>+45% velocidad, -40% coste ATP</div>
+              </div>
+            </div>
+
+            {/* División Cívica del Trabajo: 5 Castas Especializadas */}
+            <div style={{ background: 'rgba(15, 23, 42, 0.85)', border: '1px solid rgba(0, 240, 255, 0.2)', borderRadius: '8px', padding: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: '#00f0ff', letterSpacing: '0.5px' }}>
+                  👥 CENSO Y DIVISIÓN CÍVICA DEL TRABAJO (5 CASTAS)
+                </span>
+                <span style={{ fontSize: '10px', color: '#64748b' }}>Asignación genotípica cuantitativa</span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px' }}>
+                {[
+                  {
+                    caste: 'BUILDER' as CivilianCaste,
+                    icon: '👷',
+                    name: 'CONSTRUCTOR',
+                    desc: 'Erige y repara silos y torres con biopolímeros',
+                    count: telemetry.metropolis.casteBreakdown.BUILDER,
+                    color: '#f59e0b',
+                  },
+                  {
+                    caste: 'HARVESTER' as CivilianCaste,
+                    icon: '🌾',
+                    name: 'RECOLECTOR',
+                    desc: 'Forrajea glucosa externa y abastece los silos',
+                    count: telemetry.metropolis.casteBreakdown.HARVESTER,
+                    color: '#10b981',
+                  },
+                  {
+                    caste: 'SENTINEL' as CivilianCaste,
+                    icon: '🛡️',
+                    name: 'CENTINELA',
+                    desc: 'Patrulla perímetros y emite alarmas tácticas',
+                    count: telemetry.metropolis.casteBreakdown.SENTINEL,
+                    color: '#38bdf8',
+                  },
+                  {
+                    caste: 'SCHOLAR' as CivilianCaste,
+                    icon: '📜',
+                    name: 'ERUDITO',
+                    desc: 'Sincroniza tensores cognitivos en el Conectoma',
+                    count: telemetry.metropolis.casteBreakdown.SCHOLAR,
+                    color: '#c084fc',
+                  },
+                  {
+                    caste: 'NURSE' as CivilianCaste,
+                    icon: '🩹',
+                    name: 'ENFERMERO',
+                    desc: 'Trofalaxis médica activa a especímenes débiles',
+                    count: telemetry.metropolis.casteBreakdown.NURSE,
+                    color: '#ec4899',
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.caste}
+                    style={{
+                      background: 'rgba(2, 6, 16, 0.7)',
+                      border: `1px solid ${item.color}40`,
+                      borderRadius: '6px',
+                      padding: '8px 10px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: item.color }}>
+                        {item.icon} {item.name}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 900,
+                          color: '#ffffff',
+                          background: `${item.color}30`,
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        {item.count}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '4px', lineHeight: 1.25 }}>
+                      {item.desc}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Catálogo de Infraestructura Urbana & Ordenanzas de Construcción */}
+            <div style={{ background: 'rgba(15, 23, 42, 0.85)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: '8px', padding: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#fbbf24', letterSpacing: '0.5px' }}>
+                    🏛️ INFRAESTRUCTURA VIVA & PLANIFICACIÓN URBANA
+                  </span>
+                  <div style={{ fontSize: '10px', color: '#64748b' }}>
+                    {telemetry.metropolis.structures.length} estructuras registradas en el catastro biológico
+                  </div>
+                </div>
+
+                {/* Botones de Ordenanzas de Construcción Manual */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => handleRequestConstruction('CENTRAL_SILO')}
+                    style={{
+                      background: 'rgba(245, 158, 11, 0.2)',
+                      border: '1px solid #f59e0b',
+                      color: '#fbbf24',
+                      borderRadius: '5px',
+                      padding: '4px 8px',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    + SILO (50p)
+                  </button>
+                  <button
+                    onClick={() => handleRequestConstruction('BIO_TOWER_DWELLING')}
+                    style={{
+                      background: 'rgba(168, 85, 247, 0.2)',
+                      border: '1px solid #a855f7',
+                      color: '#c084fc',
+                      borderRadius: '5px',
+                      padding: '4px 8px',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    + TORRE (60p)
+                  </button>
+                  <button
+                    onClick={() => handleRequestConstruction('BIO_COMPOSTER')}
+                    style={{
+                      background: 'rgba(16, 185, 129, 0.2)',
+                      border: '1px solid #10b981',
+                      color: '#34d399',
+                      borderRadius: '5px',
+                      padding: '4px 8px',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    + COMPOSTERO (45p)
+                  </button>
+                  <button
+                    onClick={() => handleRequestConstruction('DEFENSE_BEACON')}
+                    style={{
+                      background: 'rgba(56, 189, 248, 0.2)',
+                      border: '1px solid #38bdf8',
+                      color: '#38bdf8',
+                      borderRadius: '5px',
+                      padding: '4px 8px',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    + BALIZA (35p)
+                  </button>
+                </div>
+              </div>
+
+              {/* Lista de Estructuras */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '8px' }}>
+                {telemetry.metropolis.structures.map((s) => (
+                  <div
+                    key={s.id}
+                    style={{
+                      background: 'rgba(2, 6, 16, 0.75)',
+                      border: `1px solid ${
+                        s.type === 'CENTRAL_SILO' ? '#f59e0b40' :
+                        s.type === 'BIO_TOWER_DWELLING' ? '#a855f740' :
+                        s.type === 'BIO_COMPOSTER' ? '#10b98140' : '#38bdf840'
+                      }`,
+                      borderRadius: '6px',
+                      padding: '10px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 800, fontSize: '11px', color: '#f1f5f9' }}>
+                        {s.type === 'CENTRAL_SILO' && '🏛️'}
+                        {s.type === 'BIO_TOWER_DWELLING' && '🗼'}
+                        {s.type === 'BIO_COMPOSTER' && '♻️'}
+                        {s.type === 'DEFENSE_BEACON' && '📡'}
+                        {' '}{s.name}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '9px',
+                          fontWeight: 800,
+                          color: s.constructionProgress >= 1 ? '#00ff88' : '#fbbf24',
+                          background: s.constructionProgress >= 1 ? 'rgba(0,255,136,0.15)' : 'rgba(251,191,36,0.15)',
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        {s.constructionProgress >= 1 ? 'COMPLETO' : `${Math.round(s.constructionProgress * 100)}% OBRA`}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', color: '#94a3b8' }}>
+                      <span>Pos: ({s.x.toFixed(1)}, {s.y.toFixed(1)})m</span>
+                      <span>Salud: {Math.round(s.integrityPercent)}%</span>
+                      {s.capacity > 0 && (
+                        <span>Reservas: {Math.round(s.storedGlucose + s.storedAtp)}/{s.capacity}</span>
+                      )}
+                    </div>
+
+                    {/* Barra de Progreso de Construcción / Integridad */}
+                    <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden', marginTop: '2px' }}>
+                      <div
+                        style={{
+                          width: `${Math.round(s.constructionProgress * 100)}%`,
+                          height: '100%',
+                          background: s.constructionProgress >= 1 ? '#00f0ff' : '#f59e0b',
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Contenedor del Viewport 3D/2D e Instrumental (preserva el WebGL context) ── */}
+        <div style={{ display: activeMainTab === 'VIEWPORT' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          {/* ── 2. Área Central del Viewport de Simulación ──────────────────────── */}
+          <div
           style={{
             flex: 1,
             minHeight: '380px',
@@ -1644,6 +2600,43 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
                 >
                   {selectedOrganism.personality}
                 </span>
+
+                {selectedOrganism.caste && (
+                  <span
+                    style={{
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: 'rgba(245, 158, 11, 0.15)',
+                      border: '1px solid rgba(245, 158, 11, 0.4)',
+                      color: '#fbbf24',
+                      fontWeight: 800,
+                      fontSize: '9.5px',
+                    }}
+                  >
+                    CASTA: {selectedOrganism.caste === 'BUILDER' && '👷 CONSTRUCTOR'}
+                    {selectedOrganism.caste === 'HARVESTER' && '🌾 RECOLECTOR'}
+                    {selectedOrganism.caste === 'SENTINEL' && '🛡️ CENTINELA'}
+                    {selectedOrganism.caste === 'SCHOLAR' && '📜 ERUDITO'}
+                    {selectedOrganism.caste === 'NURSE' && '🩹 ENFERMERO'}
+                  </span>
+                )}
+
+                {selectedOrganism.biopolymerCarried !== undefined && selectedOrganism.biopolymerCarried > 0 && (
+                  <span
+                    style={{
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid rgba(16, 185, 129, 0.4)',
+                      color: '#34d399',
+                      fontWeight: 800,
+                      fontSize: '9.5px',
+                    }}
+                  >
+                    🏗️ POLÍMERO: {selectedOrganism.biopolymerCarried.toFixed(1)} u
+                  </span>
+                )}
+
                 <span style={{ color: '#64748b', marginLeft: 'auto', fontSize: '9px' }}>
                   {selectedOrganism.behaviorState}
                 </span>
@@ -1704,7 +2697,61 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
                 </div>
               </div>
 
-              {/* Botones de Acción Afectiva, Social y Mecánica */}
+              {/* Telemetría Genética & Linaje Darwiniano */}
+              {selectedOrganism.genome && (
+                <div
+                  style={{
+                    background: 'rgba(15, 23, 42, 0.9)',
+                    border: '1px solid rgba(168, 85, 247, 0.3)',
+                    borderRadius: '6px',
+                    padding: '6px 8px',
+                    fontSize: '9px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#c084fc', fontWeight: 800 }}>
+                      🧬 {selectedOrganism.genome.lineageId} &middot; G{selectedOrganism.generation}
+                    </span>
+                    <span style={{ color: '#00ff88', fontWeight: 700 }}>
+                      Aptitud: {computeFitnessScore(selectedOrganism.genome, selectedOrganism.ageSec, selectedOrganism.atpCollectedTotal, selectedOrganism.offspringCount).toFixed(0)} pts
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: '8.5px' }}>
+                    <span>Edad: {Math.round(selectedOrganism.ageSec)}s / {Math.round(selectedOrganism.genome.longevityGene)}s</span>
+                    <span>Descendencia: {selectedOrganism.offspringCount} vástagos</span>
+                  </div>
+
+                  {/* Barras de Alelos Genómicos */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', marginTop: '2px' }}>
+                    <div>
+                      <div style={{ fontSize: '8px', color: '#38bdf8' }}>VELOCIDAD</div>
+                      <div style={{ width: '100%', height: '3px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.min(100, (selectedOrganism.genome.speedGene / 2) * 100)}%`, height: '100%', background: '#38bdf8' }} />
+                      </div>
+                      <div style={{ fontSize: '7.5px', color: '#94a3b8' }}>{selectedOrganism.genome.speedGene.toFixed(2)}x</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '8px', color: '#f59e0b' }}>METABOLISMO</div>
+                      <div style={{ width: '100%', height: '3px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.min(100, (selectedOrganism.genome.metabolicEfficiencyGene / 2) * 100)}%`, height: '100%', background: '#f59e0b' }} />
+                      </div>
+                      <div style={{ fontSize: '7.5px', color: '#94a3b8' }}>{selectedOrganism.genome.metabolicEfficiencyGene.toFixed(2)}x</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '8px', color: '#10b981' }}>SENSORIAL</div>
+                      <div style={{ width: '100%', height: '3px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.min(100, (selectedOrganism.genome.sensoryRadiusGene / 2) * 100)}%`, height: '100%', background: '#10b981' }} />
+                      </div>
+                      <div style={{ fontSize: '7.5px', color: '#94a3b8' }}>{selectedOrganism.genome.sensoryRadiusGene.toFixed(2)}x</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Botones de Acción Afectiva, Social, Genética y Mecánica */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', marginTop: '2px' }}>
                 <button
                   onClick={() => handleFeedTreat(selectedOrganism.id)}
@@ -1771,21 +2818,19 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
                   ⚡ ChR2
                 </button>
                 <button
-                  onClick={() => {
-                    biocyberneticHabitat.triggerAirPuff(selectedOrganism.x, selectedOrganism.y, 1.2);
-                  }}
+                  onClick={() => handleForceMitosis(selectedOrganism.id)}
                   style={{
-                    background: 'rgba(255, 255, 255, 0.15)',
-                    border: '1px solid #ffffff',
-                    color: '#ffffff',
+                    background: 'rgba(168, 85, 247, 0.2)',
+                    border: '1px solid #a855f7',
+                    color: '#c084fc',
                     borderRadius: '4px',
                     padding: '4px',
                     fontSize: '9px',
-                    fontWeight: 700,
+                    fontWeight: 800,
                     cursor: 'pointer',
                   }}
                 >
-                  💨 AIR PUFF
+                  🧬 MITOSIS
                 </button>
                 <button
                   onClick={() => handleSelectCameraMode('FOLLOW_AGENT')}
@@ -2307,6 +3352,7 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
             </button>
           </div>
         </div>
+      </div>
 
         {/* Modal / Card Flotante de Ajedrez Táctico In-Silico */}
         {showChessHUD && (

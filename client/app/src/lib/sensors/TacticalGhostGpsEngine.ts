@@ -328,8 +328,8 @@ export class TacticalGhostGpsEngine {
 
             // 1 grado latitud ~ 111,139 metros
             const deltaLat = (radiusM * Math.cos(angleRad)) / 111139;
-            // 1 grado longitud ~ 111,139 * cos(lat)
-            const deltaLon = (radiusM * Math.sin(angleRad)) / (111139 * Math.cos((baseLat * Math.PI) / 180));
+            // 1 grado longitud ~ 111,139 * cos(lat) con clamp de seguridad polar
+            const deltaLon = (radiusM * Math.sin(angleRad)) / (111139 * Math.max(0.01, Math.cos((baseLat * Math.PI) / 180)));
 
             targetLat = baseLat + deltaLat;
             targetLon = baseLon + deltaLon;

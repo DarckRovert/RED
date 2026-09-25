@@ -166,6 +166,9 @@ export class DtnMushroomBodyEngine {
 
   private startStdpDecayLoop(): void {
     if (this.stdpDecayInterval) return;
+    // Guard: setInterval no existe en entorno SSR (Next.js server). Sin este guard
+    // se crea un timer Node.js que nunca se limpia, leak por cada request SSR.
+    if (typeof window === 'undefined') return;
     this.stdpDecayInterval = setInterval(() => {
       this.decayEligibilityTraces(1.0);
     }, 1000);

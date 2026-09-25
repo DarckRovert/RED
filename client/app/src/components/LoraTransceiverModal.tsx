@@ -10,6 +10,7 @@ import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { useRedStore } from "../store/useRedStore";
 import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
+import { AudioContextManager } from "../lib/audio/AudioContextManager";
 
 interface LoraTransceiverModalProps {
     onClose?: () => void;
@@ -54,8 +55,13 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
             try { activeStreamRef.current.getTracks().forEach(t => t.stop()); } catch {}
             activeStreamRef.current = null;
         }
-        if (activeAudioCtxRef.current && activeAudioCtxRef.current.state !== "closed") {
-            try { activeAudioCtxRef.current.close(); } catch {}
+        if (activeAudioCtxRef.current) {
+            try {
+                if (activeAudioCtxRef.current.state !== "closed") {
+                    activeAudioCtxRef.current.close();
+                }
+            } catch {}
+            AudioContextManager.releaseDedicatedContext('lora_vocoder_tx').catch(() => {});
             activeAudioCtxRef.current = null;
         }
         setIsRecordingVocoder(false);
@@ -620,8 +626,15 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                                     activeStreamRef.current = stream;
 
-                                    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-                                    const audioCtx = new AudioContextClass();
+                                    const audioCtx = AudioContextManager.acquireDedicatedContext('lora_vocoder_tx');
+                                    if (!audioCtx) {
+                                        cleanupVocoderRecorder();
+                                        toast.error("No se pudo inicializar hardware de audio");
+                                        return;
+                                    }
+                                    if (audioCtx.state === 'suspended') {
+                                        await audioCtx.resume().catch(() => {});
+                                    }
                                     activeAudioCtxRef.current = audioCtx;
 
                                     const sourceNode = audioCtx.createMediaStreamSource(stream);

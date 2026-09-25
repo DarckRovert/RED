@@ -204,6 +204,12 @@ export class StegoEngine {
                             const headerLen = new TextEncoder().encode(headerText.substring(0, secondColon + 1)).length;
                             const totalBytesNeeded = headerLen + byteLen;
                             const totalBitsNeeded = totalBytesNeeded * 8;
+                            const maxBits = totalPixels * 3;
+
+                            if (totalBitsNeeded > maxBits) {
+                                return resolve(null); // Carga útil declarada excede la capacidad física de la imagen (cabecera corrupta o inválida)
+                            }
+
                             const totalPixelsNeeded = Math.ceil(totalBitsNeeded / 3);
 
                             // Leer únicamente los bits exactos del payload sin cargar la imagen entera
@@ -256,6 +262,9 @@ export class StegoEngine {
                         const byteLen = parseInt(legacyText.substring(firstColon + 1, secondColon), 10);
                         if (!isNaN(byteLen) && byteLen >= 0) {
                             const headerLen = new TextEncoder().encode(legacyText.substring(0, secondColon + 1)).length;
+                            if (headerLen + byteLen > legacyBytes.length) {
+                                return resolve(null);
+                            }
                             const secret = legacyBytes.subarray(headerLen, headerLen + byteLen);
                             return resolve(new TextDecoder().decode(secret));
                         }

@@ -8,6 +8,18 @@
  */
 
 import * as THREE from 'three';
+
+// ── GPU Tier Detection (replicado de BiocyberneticHabitat3DEngine) ────────────
+function detectGpuTierVivarium(): 'low' | 'mid' | 'high' {
+  const nav = navigator as Navigator & { deviceMemory?: number; hardwareConcurrency?: number };
+  const memory   = nav.deviceMemory ?? 4;
+  const cores    = nav.hardwareConcurrency ?? 4;
+  const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+  if (isMobile && (memory <= 3 || cores <= 4)) return 'low';
+  if (isMobile && memory <= 6)                  return 'mid';
+  return 'high';
+}
+
 import { HexapodBody3D } from './HexapodBody3D';
 import { EntorhinalGridFloor3D } from './EntorhinalGridFloor3D';
 import { VivariumEntities3D } from './VivariumEntities3D';
@@ -92,8 +104,10 @@ export class Vivarium3DEngine {
   private threatTimeout: ReturnType<typeof setTimeout> | null = null;
   private jammingTimeout: ReturnType<typeof setTimeout> | null = null;
   private loraUnsub: (() => void) | null = null;
+  private gpuTier: 'low' | 'mid' | 'high' = 'high'; // sobreescrito en constructor
 
   constructor() {
+    this.gpuTier = detectGpuTierVivarium();
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x03060c);
     this.scene.fog = new THREE.FogExp2(0x03060c, 0.022);
@@ -156,7 +170,9 @@ export class Vivarium3DEngine {
       alpha: false,
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // DPR tier-aware: low → 1.0 (PowerVR GE8320), mid → 1.25, high → 1.75
+    const maxDpr = this.gpuTier === 'low' ? 1.0 : this.gpuTier === 'mid' ? 1.25 : 1.75;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
 

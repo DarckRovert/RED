@@ -292,7 +292,11 @@ export class SatelliteMeshGatewayEngine {
             return false;
         }
 
-        if (this.outboundQueue.length === 0) {
+        // Capturar el conteo de paquetes de usuario ANTES de agregar el beacon automático
+        // para evitar inflar totalUplinks con el beacon sintético de latido.
+        const userQueuedCount = this.outboundQueue.length;
+
+        if (userQueuedCount === 0) {
             // Si la cola está vacía, generamos un beacon de pulso orbital automático
             this.composeAndEnqueueSbd('PULSO AUTOMATICO DE ENLACE LEO', 3);
         }
@@ -313,7 +317,8 @@ export class SatelliteMeshGatewayEngine {
             }
         }
 
-        this.totalUplinks += Math.max(1, this.outboundQueue.length);
+        // Sumar solo los paquetes de usuario reales; el beacon automático no cuenta como uplink de usuario
+        this.totalUplinks += userQueuedCount;
         this.lastUplinkTimestamp = Date.now();
         this.outboundQueue = [];
         this.notify();

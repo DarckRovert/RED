@@ -83,6 +83,10 @@ export class LoraSerialBridgeEngine {
     private bleCharacteristicChangedHandler: any = null;
     private nativeBleDeviceId: string | null = null;
 
+    // Mutex booleano para serializar escrituras en la rama Web Serial.
+    // La API Web Serial lanza TypeError si se llama getWriter() mientras el stream ya está bloqueado.
+    private serialWriteLocked: boolean = false;
+
     public static readonly NORDIC_UART_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
     public static readonly NORDIC_UART_RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
     public static readonly NORDIC_UART_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
@@ -569,7 +573,13 @@ export class LoraSerialBridgeEngine {
         }
 
         if (this.serialPort && this.serialPort.writable) {
+            // Mutex de escritura: la Web Serial API lanza si getWriter() se llama con el stream bloqueado
+            if (this.serialWriteLocked) {
+                console.warn('[LoRa] Escritura serie ignorada: mutex activo (transmisión concurrente en curso)');
+                return false;
+            }
             try {
+                this.serialWriteLocked = true;
                 this.serialWriter = this.serialPort.writable.getWriter();
                 await this.serialWriter.write(bytes);
                 this.serialWriter.releaseLock();
@@ -580,7 +590,13 @@ export class LoraSerialBridgeEngine {
                 return true;
             } catch (e) {
                 console.error('[LoRa] Error al transmitir por puerto serie:', e);
+                if (this.serialWriter) {
+                    try { this.serialWriter.releaseLock(); } catch {}
+                    this.serialWriter = null;
+                }
                 return false;
+            } finally {
+                this.serialWriteLocked = false;
             }
         }
 

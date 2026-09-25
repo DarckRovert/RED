@@ -176,4 +176,12 @@ export class BiocyberneticMetabolismEngine {
     this.trehalose = BiocyberneticMetabolismEngine.MAX_TREHALOSE * energyRatio;
     this.state = 'OPTIMAL';
   }
+
+  /**
+   * Deduce directamente una porción de ATP para eventos bioenergéticos (mitosis, trofalaxis).
+   */
+  public expendAtp(ratio: number): void {
+    const units = BiocyberneticMetabolismEngine.MAX_ATP * Math.max(0, ratio);
+    this.atp = Math.max(0, this.atp - units);
+  }
 }

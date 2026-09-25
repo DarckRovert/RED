@@ -41,7 +41,10 @@ export enum AerDomainCode {
   VITAL_HEART_RATE_MARCH = 0x04, // Telemetría de choque / tono vagal MARCH
   EW_JAMMING_DETECTED = 0x05,  // Detección de perturbación de guerra electrónica
   METABOLIC_TORPOR_STATE = 0x06, // Estado neuroendocrino / ahorro torpor
-  PHEROMONE_ALARM = 0x07       // Alarma estigmérgica biológica de enjambre
+  PHEROMONE_ALARM = 0x07,       // Alarma estigmérgica biológica de enjambre
+  KINETIC_SHOCK_MANDOWN = 0x08, // Shock cinético / impacto / inmovilidad Man-Down
+  ACOUSTIC_SONAR_CAVITY = 0x09, // Eco de cavidad acústica / obstáculo físico cercano
+  SYNAPTIC_DELTA_WEIGHT = 0x0A  // Sincronización de conductancia Hebbiana inter-pares
 }
 
 export interface AerSpikeEvent {

@@ -99,6 +99,7 @@ export class FanShapedBodyEngine {
   private pdrUnsub: (() => void) | null = null;
   private compassUnsub: (() => void) | null = null;
   private isTracking = false;
+  private clientRefCount = 0;
 
   // Interneuronas bio-inspiradas
   private pfnLeft = 0.0;
@@ -130,6 +131,7 @@ export class FanShapedBodyEngine {
    * Inicia el acoplamiento bio-cibernético con RingAttractor, PDR y barómetro.
    */
   public start(): void {
+    this.clientRefCount++;
     if (this.isTracking) return;
     this.isTracking = true;
 
@@ -184,7 +186,14 @@ export class FanShapedBodyEngine {
     }
   }
 
-  public stop(): void {
+  public stop(force = false): void {
+    if (force) {
+      this.clientRefCount = 0;
+    } else {
+      this.clientRefCount = Math.max(0, this.clientRefCount - 1);
+      if (this.clientRefCount > 0) return;
+    }
+
     this.isTracking = false;
     if (this.compassUnsub) {
       this.compassUnsub();
@@ -496,7 +505,7 @@ export class FanShapedBodyEngine {
   }
 
   public destroy(): void {
-    this.stop();
+    this.stop(true);
     this.resetOdometry();
     this.listeners.clear();
     FanShapedBodyEngine.instance = null;

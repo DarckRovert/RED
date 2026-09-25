@@ -31,6 +31,17 @@
  */
 
 import * as THREE from 'three';
+
+// ── GPU Tier Detection (tier-aware WebGL quality scaling) ────────────────
+function detectGpuTierConnectome(): 'low' | 'mid' | 'high' {
+  const nav = navigator as Navigator & { deviceMemory?: number; hardwareConcurrency?: number };
+  const memory   = nav.deviceMemory ?? 4;
+  const cores    = nav.hardwareConcurrency ?? 4;
+  const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+  if (isMobile && (memory <= 3 || cores <= 4)) return 'low';
+  if (isMobile && memory <= 6)                  return 'mid';
+  return 'high';
+}
 import { ringAttractor, RingAttractorTelemetry } from './RingAttractorEngine';
 import { fanShapedBody, FanShapedBodyTelemetry } from './FanShapedBodyEngine';
 import { giantFiberReflex, GiantFiberTelemetry } from './GiantFiberReflexEngine';
@@ -78,10 +89,23 @@ export class Connectome3DMultiBrainEngine {
 
   // Controles de cámara orbital táctil / ratón
   private isPointerDown = false;
+  private isDragging = false;
+  private pointerStartX = 0;
+  private pointerStartY = 0;
   private prevPointerX = 0;
   private prevPointerY = 0;
   private spherical = { radius: 16, phi: Math.PI / 2.8, theta: 0 };
   private pinchStartDist = 0;
+
+  // Resiliencia WebGL ante cambio de contexto en SO / app
+  private onContextLost = (e: Event): void => {
+    e.preventDefault();
+    this.stopRenderLoop();
+  };
+
+  private onContextRestored = (): void => {
+    this.startRenderLoop();
+  };
 
   // Raycasting
   private raycaster = new THREE.Raycaster();
@@ -121,8 +145,10 @@ export class Connectome3DMultiBrainEngine {
   private humanSnapshot: HumanBrainTelemetrySnapshot = humanBrainOrchestrator.getSnapshot();
   private consciousnessTelemetry: ConsciousnessSnapshot = globalWorkspaceConsciousnessBus.getSnapshot();
   private rfBearings: RfPeerBearing[] = [];
+  private gpuTier: 'low' | 'mid' | 'high' = 'high';
 
   constructor() {
+    this.gpuTier = detectGpuTierConnectome();
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x02040a);
     this.scene.fog = new THREE.FogExp2(0x02040a, 0.022);
@@ -884,12 +910,16 @@ export class Connectome3DMultiBrainEngine {
   private bindDomListeners(container: HTMLElement): void {
     const onDown = (e: MouseEvent | TouchEvent) => {
       this.isPointerDown = true;
+      this.isDragging = false;
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
       const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
       this.prevPointerX = clientX;
       this.prevPointerY = clientY;
+      this.pointerStartX = clientX;
+      this.pointerStartY = clientY;
 
       if ('touches' in e && e.touches.length === 2) {
+        this.isDragging = true;
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         this.pinchStartDist = Math.hypot(dx, dy);
@@ -897,37 +927,46 @@ export class Connectome3DMultiBrainEngine {
     };
 
     const onMove = (e: MouseEvent | TouchEvent) => {
+      if (!this.isPointerDown) return;
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
       const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
 
-      if (this.isPointerDown) {
-        if ('touches' in e && e.touches.length === 2) {
-          const dx = e.touches[0].clientX - e.touches[1].clientX;
-          const dy = e.touches[0].clientY - e.touches[1].clientY;
-          const dist = Math.hypot(dx, dy);
-          const factor = this.pinchStartDist / dist;
-          this.spherical.radius = THREE.MathUtils.clamp(this.spherical.radius * factor, 5, 45);
-          this.pinchStartDist = dist;
-          this.updateCameraFromSpherical();
-        } else {
-          const deltaX = clientX - this.prevPointerX;
-          const deltaY = clientY - this.prevPointerY;
-          this.spherical.theta -= deltaX * 0.008;
-          this.spherical.phi = THREE.MathUtils.clamp(
-            this.spherical.phi - deltaY * 0.008,
-            0.15,
-            Math.PI - 0.15
-          );
-          this.updateCameraFromSpherical();
-        }
-        this.prevPointerX = clientX;
-        this.prevPointerY = clientY;
+      const dragDist = Math.hypot(clientX - this.pointerStartX, clientY - this.pointerStartY);
+      if (dragDist > 6) {
+        this.isDragging = true;
       }
+
+      if ('touches' in e && e.touches.length === 2) {
+        this.isDragging = true;
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        const factor = this.pinchStartDist / dist;
+        this.spherical.radius = THREE.MathUtils.clamp(this.spherical.radius * factor, 5, 45);
+        this.pinchStartDist = dist;
+        this.updateCameraFromSpherical();
+      } else {
+        const deltaX = clientX - this.prevPointerX;
+        const deltaY = clientY - this.prevPointerY;
+        this.spherical.theta -= deltaX * 0.008;
+        this.spherical.phi = THREE.MathUtils.clamp(
+          this.spherical.phi - deltaY * 0.008,
+          0.15,
+          Math.PI - 0.15
+        );
+        this.updateCameraFromSpherical();
+      }
+      this.prevPointerX = clientX;
+      this.prevPointerY = clientY;
     };
 
     const onUp = (e: MouseEvent | TouchEvent) => {
+      if (!this.isPointerDown) return;
       this.isPointerDown = false;
-      this.checkRaycastClick(e);
+      if (!this.isDragging) {
+        this.checkRaycastClick(e);
+      }
+      this.isDragging = false;
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -961,6 +1000,11 @@ export class Connectome3DMultiBrainEngine {
     const rect = this.container.getBoundingClientRect();
     const clientX = 'changedTouches' in e ? e.changedTouches[0].clientX : (e as MouseEvent).clientX;
     const clientY = 'changedTouches' in e ? e.changedTouches[0].clientY : (e as MouseEvent).clientY;
+
+    // Descartar clics fuera de los límites físicos del canvas 3D
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+      return;
+    }
 
     this.mouseVec.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.mouseVec.y = -((clientY - rect.top) / rect.height) * 2 + 1;
@@ -1014,11 +1058,17 @@ export class Connectome3DMultiBrainEngine {
       alpha: false,
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // DPR tier-aware: low → 1.0 (PowerVR GE8320), mid → 1.25, high → 1.75
+    const maxDpr = this.gpuTier === 'low' ? 1.0 : this.gpuTier === 'mid' ? 1.25 : 1.75;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.25;
 
     container.appendChild(this.renderer.domElement);
+
+    // Resiliencia WebGL ante cambio de contexto en SO / app
+    this.renderer.domElement.addEventListener('webglcontextlost', this.onContextLost, false);
+    this.renderer.domElement.addEventListener('webglcontextrestored', this.onContextRestored, false);
 
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver((entries) => {
@@ -1028,6 +1078,9 @@ export class Connectome3DMultiBrainEngine {
             this.camera.aspect = w / h;
             this.camera.updateProjectionMatrix();
             this.renderer.setSize(w, h);
+            // Re-clampear DPR tras rotación de pantalla
+            const maxDprR = this.gpuTier === 'low' ? 1.0 : this.gpuTier === 'mid' ? 1.25 : 1.75;
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDprR));
           }
         }
       });
@@ -1051,8 +1104,12 @@ export class Connectome3DMultiBrainEngine {
       this.resizeObserver = null;
     }
 
-    if (this.renderer && this.renderer.domElement && this.renderer.domElement.parentElement) {
-      this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+    if (this.renderer && this.renderer.domElement) {
+      this.renderer.domElement.removeEventListener('webglcontextlost', this.onContextLost);
+      this.renderer.domElement.removeEventListener('webglcontextrestored', this.onContextRestored);
+      if (this.renderer.domElement.parentElement) {
+        this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+      }
       this.renderer.dispose();
       this.renderer = null;
     }

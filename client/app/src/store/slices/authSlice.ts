@@ -161,6 +161,33 @@ function registerMeshLocalDeliveryListener(get: () => RedStore) {
                 };
             }
             if (parsed) {
+                // Intercepción de telemetría de cacería de zorros / radiogoniometría (LOB y muestras)
+                if (parsed.msg_type === 'RF_FOXHUNT_LOB') {
+                    if (typeof parsed.observer_lat === 'number' && typeof parsed.observer_lon === 'number' && typeof parsed.bearing_deg === 'number') {
+                        import('../../lib/sensors/RdfTriangulationEngine').then(({ rdfTriangulation }) => {
+                            rdfTriangulation.addBearing(parsed.observer_lat, parsed.observer_lon, parsed.bearing_deg, parsed.rssi_dbm ?? -90);
+                        });
+                    }
+                    return;
+                }
+                if (parsed.msg_type === 'RF_FOXHUNT_SAMPLE') {
+                    return;
+                }
+
+                // Intercepción de fragmentos de custodia Shamir distribuidos
+                if (parsed.type === 'SHAMIR_RECOVERY_SHARE') {
+                    if (typeof parsed.shareIndex === 'number' && typeof parsed.shareHex === 'string') {
+                        import('../../lib/crypto/ShamirSocialRecoveryVault').then(({ shamirRecoveryVault }) => {
+                            shamirRecoveryVault.addCollectedShare({
+                                shareIndex: parsed.shareIndex,
+                                shareHex: parsed.shareHex
+                            });
+                        });
+                        toast.info(`🔑 Fragmento Shamir #${parsed.shareIndex} recibido de ${parsed.guardianName || 'Guardián'}`);
+                    }
+                    return;
+                }
+
                 // If the inner packet has a nested content JSON string with type, extract it
                 if (typeof parsed.content === 'string' && parsed.content.trim().startsWith('{')) {
                     try {

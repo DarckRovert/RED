@@ -40,6 +40,8 @@ export const EyesFreeHapticModal: React.FC<EyesFreeHapticModalProps> = ({ isOpen
   useEffect(() => {
     if (!isOpen) return;
     tacticalMotorActuator.setEnabled(true);
+    ringAttractor.start();
+    fanShapedBody.start();
     const unSubC = ringAttractor.subscribe(setCompass);
     const unSubFb = fanShapedBody.subscribe(setFb);
     const unSubM = tacticalMotorActuator.subscribe(setMotor);
@@ -48,6 +50,8 @@ export const EyesFreeHapticModal: React.FC<EyesFreeHapticModalProps> = ({ isOpen
       unSubC();
       unSubFb();
       unSubM();
+      fanShapedBody.stop();
+      ringAttractor.stop();
     };
   }, [isOpen]);
 

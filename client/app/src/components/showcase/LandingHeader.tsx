@@ -117,11 +117,11 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
           </div>
           <div style={{ color: "#64748B" }}>|</div>
           <div>
-            <span style={{ color: "#94A3B8" }}>TESTS:</span> <span style={{ color: "#00FF88", fontWeight: 700 }}>248/248 PASS</span>
+            <span style={{ color: "#94A3B8" }}>NODOS:</span> <span style={{ color: "#00FF88", fontWeight: 700 }}>{telemetryNodes}</span>
           </div>
           <div style={{ color: "#64748B" }}>|</div>
           <div>
-            <span style={{ color: "#94A3B8" }}>VOCODER:</span> <span style={{ color: "#00E5FF", fontWeight: 700 }}>1.2 kbps</span>
+            <span style={{ color: "#94A3B8" }}>EPOCH:</span> <span style={{ color: "#00E5FF", fontWeight: 700 }}>#{cryptoEpoch.toString(16).toUpperCase()}</span>
           </div>
           <div style={{ color: "#64748B" }}>|</div>
           <div>

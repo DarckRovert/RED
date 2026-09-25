@@ -148,9 +148,17 @@ export class CrdtStateReconciler {
     }
 
     /**
-     * Obtiene los elementos activos de un conjunto LWW
+     * Obtiene los elementos activos de un conjunto LWW,
+     * respetando lápidas (tombstones) incluso en conjuntos no reconciliados.
+     * Un elemento se considera eliminado si su tombstone.timestamp >= addItem.timestamp.
      */
     public static getActiveElements<T>(set: LwwElementSet<T>): T[] {
-        return Object.values(set.addSet).map(item => item.data);
+        return Object.entries(set.addSet)
+            .filter(([id, item]) => {
+                const tomb = set.removeSet[id];
+                // Elemento activo sólo si no existe lápida o si el add-timestamp es posterior
+                return !tomb || tomb.timestamp < item.timestamp;
+            })
+            .map(([, item]) => item.data);
     }
 }

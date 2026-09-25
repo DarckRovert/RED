@@ -372,7 +372,12 @@ export class PqcCryptoEngine {
                 const raw = localStorage.getItem('red_pqc_hybrid_keys');
                 if (raw) {
                     const parsed = JSON.parse(raw);
-                    if (parsed.kyberPublicKeyHex && parsed.kyberPrivateKeyHex) {
+                    if (
+                        parsed.kyberPublicKeyHex &&
+                        parsed.kyberPrivateKeyHex &&
+                        parsed.x25519PublicKeyHex &&
+                        parsed.x25519PrivateKeyHex
+                    ) {
                         return parsed;
                     }
                 }

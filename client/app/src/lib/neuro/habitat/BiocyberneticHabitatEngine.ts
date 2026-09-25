@@ -29,6 +29,23 @@ import { giantFiberReflex } from '../GiantFiberReflexEngine';
 import { autonomousHabitatChess, AutonomousHabitatChessEngine, ChessMove } from './AutonomousHabitatChessEngine';
 import { biocyberneticEdenParadise, BiocyberneticEdenParadiseEngine, EdenParadiseTelemetry } from './BiocyberneticEdenParadiseEngine';
 import { autonomousLifelongLearning, AutonomousLifelongLearningEngine, LifelongLearningTelemetry } from './AutonomousLifelongLearningEngine';
+import {
+  OrganismGenome,
+  createInitialGenome,
+  inheritGenomeWithMutation,
+  computeFitnessScore,
+  EvolutionChronicleEntry,
+  PopulationGeneticsTelemetry,
+} from './OrganismGenome';
+export * from './OrganismGenome';
+import {
+  BiocyberneticMetropolisEngine,
+  CivilianCaste,
+  MetropolisTelemetry,
+  UrbanStructureType,
+  UrbanStructure,
+} from './BiocyberneticMetropolisEngine';
+export * from './BiocyberneticMetropolisEngine';
 
 /**
  * Normaliza un ángulo en radianes al rango canónico [0, 2π)
@@ -119,6 +136,15 @@ export interface HabitatOrganism {
   curiosityScore: number;
   isDreaming: boolean;
   sleepReplayTicks: number;
+  // Genoma Cuantitativo y Dinámica Evolutiva A-Life L9
+  genome: OrganismGenome;
+  ageSec: number;
+  atpCollectedTotal: number;
+  offspringCount: number;
+  trophallaxisTimerSec: number;
+  // Urbanismo Estigmérgico y Metrópolis Biocibernética
+  caste: CivilianCaste;
+  biopolymerCarried: number;
 }
 
 export type HabitatToolType =
@@ -197,6 +223,11 @@ export interface HabitatTelemetry {
   };
   edenParadise: EdenParadiseTelemetry;
   lifelongLearning: LifelongLearningTelemetry;
+  timeScale: number;
+  maxGeneration: number;
+  populationGenetics: PopulationGeneticsTelemetry;
+  evolutionChronicle: EvolutionChronicleEntry[];
+  metropolis: MetropolisTelemetry;
 }
 
 export class BiocyberneticHabitatEngine {
@@ -205,9 +236,12 @@ export class BiocyberneticHabitatEngine {
   public static readonly ARENA_RADIUS_METERS = 10.0;
   public static readonly ARENA_DIAMETER_METERS = 20.0;
   public static readonly FIXED_TIMESTEP_SEC = 1.0 / 60.0; // 60 Hz exactos (~16.66 ms)
+  public static readonly MAX_PHYSICS_SUB_STEPS = 3; // Prevenir "Spiral of Death" en hardware móvil
+  private static readonly TELEMETRY_INTERVAL_SEC = 0.1; // 10 Hz para HUD y React
 
   public readonly diffusionGrid: FickDiffusionGrid;
   public readonly meshBridge: HabitatMeshBridgeEngine;
+  public readonly metropolisEngine: BiocyberneticMetropolisEngine;
 
   private organisms: Map<string, HabitatOrganism> = new Map();
   private shadows: ShadowProjector[] = [];
@@ -223,6 +257,7 @@ export class BiocyberneticHabitatEngine {
   private simTimeSec = 0;
   private accumulator = 0;
   private lastFrameTimestamp = 0;
+  private lastTelemetryTimeSec = 0;
   private animFrameId: any = null;
 
   private isActuatorStreaming = false;
@@ -244,6 +279,135 @@ export class BiocyberneticHabitatEngine {
   private laserChaseGlobalTarget: { x: number; y: number } | null = null;
   private laserChaseTimerSec = 0;
 
+  // ── Dinámica de Evolución y Genómica A-Life L9 ──────────────────────────────
+  private timeScale: number = 1.0;
+  private evolutionChronicle: EvolutionChronicleEntry[] = [];
+  private maxGenerationReached: number = 1;
+  private totalBirths: number = 0;
+  private totalDeaths: number = 0;
+  private lineageCounter: number = 1;
+  private environmentalStressMultiplier: number = 1.0;
+  private autoSporeCooldownSec: number = 0;
+
+  public addEvolutionChronicle(entry: Omit<EvolutionChronicleEntry, 'id' | 'timestampSec'>): void {
+    const fullEntry: EvolutionChronicleEntry = {
+      id: `chron-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      timestampSec: Math.round(this.simTimeSec),
+      ...entry,
+    };
+    this.evolutionChronicle.unshift(fullEntry);
+    if (this.evolutionChronicle.length > 50) {
+      this.evolutionChronicle.pop();
+    }
+  }
+
+  public getEvolutionChronicle(): EvolutionChronicleEntry[] {
+    return [...this.evolutionChronicle];
+  }
+
+  public setTimeScale(scale: number): void {
+    this.timeScale = Math.max(0, Math.min(10.0, scale));
+  }
+
+  public getTimeScale(): number {
+    return this.timeScale;
+  }
+
+  public getPopulationGenetics(): PopulationGeneticsTelemetry {
+    let speedSum = 0;
+    let metaSum = 0;
+    let sensorySum = 0;
+    let longevitySum = 0;
+    let coopSum = 0;
+    let count = 0;
+    const lineageCounts = new Map<string, number>();
+
+    for (const org of this.organisms.values()) {
+      if (org.isDecomposing) continue;
+      count++;
+      speedSum += org.genome.speedGene;
+      metaSum += org.genome.metabolicEfficiencyGene;
+      sensorySum += org.genome.sensoryRadiusGene;
+      longevitySum += org.genome.longevityGene;
+      coopSum += org.genome.cooperationGene;
+      lineageCounts.set(org.genome.lineageId, (lineageCounts.get(org.genome.lineageId) || 0) + 1);
+    }
+
+    let topLineage = 'LIN-DROS-01';
+    let maxLCount = 0;
+    for (const [lin, c] of lineageCounts.entries()) {
+      if (c > maxLCount) {
+        maxLCount = c;
+        topLineage = lin;
+      }
+    }
+
+    return {
+      totalBirths: this.totalBirths,
+      totalDeaths: this.totalDeaths,
+      maxGeneration: this.maxGenerationReached,
+      activeLineagesCount: lineageCounts.size,
+      meanSpeedGene: count > 0 ? Math.round((speedSum / count) * 100) / 100 : 1.0,
+      meanMetabolicEfficiency: count > 0 ? Math.round((metaSum / count) * 100) / 100 : 1.0,
+      meanSensoryRadius: count > 0 ? Math.round((sensorySum / count) * 100) / 100 : 1.0,
+      meanLongevitySec: count > 0 ? Math.round(longevitySum / count) : 180,
+      meanCooperationGene: count > 0 ? Math.round((coopSum / count) * 100) / 100 : 0.5,
+      topLineageId: topLineage,
+    };
+  }
+
+  public forceAssistMitosis(organismId: string): HabitatOrganism | null {
+    const org = this.organisms.get(organismId);
+    if (!org || org.isDecomposing) return null;
+    org.offspringCount++;
+    const spawnAngle = Math.random() * Math.PI * 2;
+    const spawnDist = 0.85 + Math.random() * 0.4;
+    const offspring = this.spawnOrganism(
+      org.species,
+      org.x + Math.cos(spawnAngle) * spawnDist,
+      org.y + Math.sin(spawnAngle) * spawnDist,
+      spawnAngle,
+      false,
+      org.genome,
+      org.id
+    );
+    offspring.plasticity.inheritFromParentWithMutation(org.plasticity, org.genome.mutationRateGene * 1.5);
+    TacticalAudioEngine.playMitosisChime();
+    return offspring;
+  }
+
+  public triggerEnvironmentalSporeBloom(x?: number, y?: number): void {
+    const targetX = x !== undefined ? x : (Math.random() - 0.5) * 8;
+    const targetY = y !== undefined ? y : (Math.random() - 0.5) * 8;
+    const centerOffset = BiocyberneticHabitatEngine.ARENA_RADIUS_METERS;
+    this.diffusionGrid.injectChemical(targetX + centerOffset, targetY + centerOffset, 45.0, 'GLUCOSE');
+    this.addEvolutionChronicle({
+      type: 'BIRTH',
+      species: 'DROSOPHILA',
+      organismId: 'environment',
+      generation: this.maxGenerationReached,
+      lineageId: 'ECOSYSTEM',
+      headline: '🌾 Brote Masivo de Esporas de Glucosa',
+      detail: `Saturación de nutrientes en (${targetX.toFixed(1)}, ${targetY.toFixed(1)}). Quimiotaxis competitiva en curso.`,
+    });
+  }
+
+  public triggerMutagenicCosmicRay(): void {
+    this.environmentalStressMultiplier = 2.5;
+    setTimeout(() => {
+      this.environmentalStressMultiplier = 1.0;
+    }, 10000);
+    this.addEvolutionChronicle({
+      type: 'MUTATION_BREAKTHROUGH',
+      species: 'GRAVITY_SENTINEL',
+      organismId: 'cosmic-flux',
+      generation: this.maxGenerationReached,
+      lineageId: 'ENVIRONMENT',
+      headline: '⚡ Pulso Cósmico Mutagénico Inyectado',
+      detail: 'Tasa de mutación celular incrementada a 250% durante 10 segundos. Saltos fenotípicos inducidos.',
+    });
+  }
+
   private constructor() {
     this.diffusionGrid = new FickDiffusionGrid(
       BiocyberneticHabitatEngine.ARENA_DIAMETER_METERS,
@@ -251,6 +415,7 @@ export class BiocyberneticHabitatEngine {
       64
     );
     this.meshBridge = HabitatMeshBridgeEngine.getInstance();
+    this.metropolisEngine = BiocyberneticMetropolisEngine.getInstance();
 
     // Iniciar con un ecosistema inicial balanceado con TODAS las inteligencias del proyecto
     this.spawnOrganism('DROSOPHILA', -1.5, 0, 0, true);
@@ -287,26 +452,44 @@ export class BiocyberneticHabitatEngine {
       }
     });
 
-    // 2. Iniciar enlace de migración P2P
+    // 2. Iniciar enlace de migración P2P y orquestador del conectoma
     this.meshBridge.start();
     this.meshBridgeUnsub = this.meshBridge.onOrganismImmigrated((immigrant) => {
       this.handleIncomingImmigrant(immigrant);
     });
+    connectomeBioBridge.startConnectome();
 
-    // 3. Lanzar bucle con acumulador temporal
+    // 3. Lanzar bucle con acumulador temporal protegido contra Spiral of Death
     const loop = (currentTimestamp: number) => {
       if (!this.isRunning) return;
 
       const frameDeltaSec = Math.min(0.1, (currentTimestamp - this.lastFrameTimestamp) / 1000.0);
       this.lastFrameTimestamp = currentTimestamp;
-      this.accumulator += frameDeltaSec;
-
-      while (this.accumulator >= BiocyberneticHabitatEngine.FIXED_TIMESTEP_SEC) {
-        this.physicsTick(BiocyberneticHabitatEngine.FIXED_TIMESTEP_SEC);
-        this.accumulator -= BiocyberneticHabitatEngine.FIXED_TIMESTEP_SEC;
+      if (this.timeScale > 0) {
+        this.accumulator += frameDeltaSec * this.timeScale;
       }
 
-      this.notifyTelemetry();
+      const maxSteps = Math.max(BiocyberneticHabitatEngine.MAX_PHYSICS_SUB_STEPS, Math.ceil(this.timeScale * 4));
+      let subSteps = 0;
+      while (
+        this.accumulator >= BiocyberneticHabitatEngine.FIXED_TIMESTEP_SEC &&
+        subSteps < maxSteps
+      ) {
+        this.physicsTick(BiocyberneticHabitatEngine.FIXED_TIMESTEP_SEC);
+        this.accumulator -= BiocyberneticHabitatEngine.FIXED_TIMESTEP_SEC;
+        subSteps++;
+      }
+
+      // Romper espiral de muerte si el hardware entra en lag severo
+      if (this.accumulator >= BiocyberneticHabitatEngine.FIXED_TIMESTEP_SEC) {
+        this.accumulator = 0;
+      }
+
+      // Throttling de telemetría a 10 Hz (evita re-renders y reducciones de 4096 celdas a 60 FPS)
+      if (this.simTimeSec - this.lastTelemetryTimeSec >= BiocyberneticHabitatEngine.TELEMETRY_INTERVAL_SEC) {
+        this.lastTelemetryTimeSec = this.simTimeSec;
+        this.notifyTelemetry();
+      }
 
       if (typeof requestAnimationFrame !== 'undefined') {
         this.animFrameId = requestAnimationFrame(loop);
@@ -342,6 +525,7 @@ export class BiocyberneticHabitatEngine {
       this.meshBridgeUnsub = null;
     }
     this.meshBridge.stop();
+    connectomeBioBridge.stopConnectome();
   }
 
   /**
@@ -352,9 +536,51 @@ export class BiocyberneticHabitatEngine {
     x: number = 0,
     y: number = 0,
     headingRad: number = 0,
-    isLeader: boolean = false
+    isLeader: boolean = false,
+    parentGenome?: OrganismGenome,
+    parentId?: string
   ): HabitatOrganism {
     const id = `org-${species.toLowerCase()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    let genome: OrganismGenome;
+    if (parentGenome) {
+      const { childGenome, mutationHighlights } = inheritGenomeWithMutation(
+        parentGenome,
+        parentId || 'parent',
+        this.simTimeSec,
+        this.environmentalStressMultiplier
+      );
+      genome = childGenome;
+      this.totalBirths++;
+      if (genome.generation > this.maxGenerationReached) {
+        this.maxGenerationReached = genome.generation;
+      }
+      this.addEvolutionChronicle({
+        type: mutationHighlights.length > 0 ? 'MUTATION_BREAKTHROUGH' : 'MITOSIS',
+        species,
+        organismId: id,
+        generation: genome.generation,
+        lineageId: genome.lineageId,
+        headline: mutationHighlights.length > 0
+          ? `🧬 Mitosis con Mutación (G${genome.generation})`
+          : `✨ Mitosis Exitosa (G${genome.generation})`,
+        detail: mutationHighlights.length > 0
+          ? `${species} (${id.slice(-6)}): ${mutationHighlights.join(', ')}`
+          : `${species} (${id.slice(-6)}) heredó linaje ${genome.lineageId}`,
+      });
+    } else {
+      genome = createInitialGenome(species, this.lineageCounter++);
+      this.totalBirths++;
+      this.addEvolutionChronicle({
+        type: 'BIRTH',
+        species,
+        organismId: id,
+        generation: 1,
+        lineageId: genome.lineageId,
+        headline: `🌱 Nacimiento Fundador (G1)`,
+        detail: `Linaje ${genome.lineageId} establecido en el hábitat.`,
+      });
+    }
 
     const wormJoints = [];
     for (let j = 0; j < 10; j++) {
@@ -400,7 +626,12 @@ export class BiocyberneticHabitatEngine {
       z: initialAltitude,
       headingRad,
       speedMps: 0,
-      generation: 1,
+      generation: genome.generation,
+      genome,
+      ageSec: 0,
+      atpCollectedTotal: 0,
+      offspringCount: 0,
+      trophallaxisTimerSec: 0,
       metabolism: new BiocyberneticMetabolismEngine(1.0),
       eye: new OmmatidialCompoundEye(),
       plasticity: new PersistentSynapticPlasticityEngine(),
@@ -429,6 +660,8 @@ export class BiocyberneticHabitatEngine {
       curiosityScore: 0.85,
       isDreaming: false,
       sleepReplayTicks: 0,
+      caste: this.metropolisEngine.determineCasteFromGenome(genome, species),
+      biopolymerCarried: 0,
     };
 
     this.organisms.set(id, org);
@@ -440,6 +673,7 @@ export class BiocyberneticHabitatEngine {
    */
   public physicsTick(dt: number): void {
     this.simTimeSec += dt;
+    this.metropolisEngine.tick(dt);
 
     // 1. Difusión de Fick continua (PDE) con viento leve advectivo
     const wind = { vx: 0.06 * Math.sin(this.simTimeSec * 0.25), vy: 0.03 * Math.cos(this.simTimeSec * 0.35) };
@@ -570,27 +804,99 @@ export class BiocyberneticHabitatEngine {
     biocyberneticEdenParadise.setSanctuaryOrganismsCount(sanctuaryOrganismsCount);
     autonomousLifelongLearning.update(dt, !circadian.isDaytime || sanctuaryOrganismsCount > 0, dreamingOrganismsCount);
 
+    // 3.5 Regeneración Ecológica Natural de Néctar (Sustentabilidad A-Life)
+    this.autoSporeCooldownSec -= dt;
+    if (this.autoSporeCooldownSec <= 0) {
+      this.autoSporeCooldownSec = 5.0;
+      const centerOffset = BiocyberneticHabitatEngine.ARENA_RADIUS_METERS;
+      const springs = [
+        { x: -3.5, y: -3.5 },
+        { x: 3.5, y: -3.5 },
+        { x: -3.5, y: 3.5 },
+        { x: 3.5, y: 3.5 },
+      ];
+      for (const sp of springs) {
+        this.diffusionGrid.injectChemical(sp.x + centerOffset, sp.y + centerOffset, 2.8, 'GLUCOSE');
+      }
+    }
+
     // 4. Actualizar organismos
     const centerOffset = BiocyberneticHabitatEngine.ARENA_RADIUS_METERS;
 
     for (const [id, org] of this.organisms.entries()) {
+      org.ageSec += dt;
+
       // 4.0 Gestión de Biodegradación de Organismos Fenececidos
       if (org.isDecomposing) {
         org.decompositionRemainingSec -= dt;
         const gridX = org.x + centerOffset;
         const gridY = org.y + centerOffset;
         // La biomasa se disuelve lentamente en la grilla enriqueciendo el sustrato
-        this.diffusionGrid.injectChemical(gridX, gridY, 0.04 * dt, 'GLUCOSE');
+        this.diffusionGrid.injectChemical(gridX, gridY, 0.05 * dt, 'GLUCOSE');
         if (org.decompositionRemainingSec <= 0) {
+          this.metropolisEngine.recycleDecomposedCorpse(org.x, org.y, 4.0);
           this.organisms.delete(id);
         }
         continue;
       }
 
-      if (org.metabolism.getTelemetry().isDead) {
+      // Senescencia celular biológica (límite de longevidad)
+      if (org.ageSec >= org.genome.longevityGene && !org.isDecomposing) {
+        org.isDecomposing = true;
+        org.behaviorState = 'SENESCENT_DECAY';
+        this.totalDeaths++;
+        this.addEvolutionChronicle({
+          type: 'SENESCENCE',
+          species: org.species,
+          organismId: org.id,
+          generation: org.genome.generation,
+          lineageId: org.genome.lineageId,
+          headline: `🍂 Senescencia Celular (G${org.genome.generation})`,
+          detail: `${org.species} (${org.id.slice(-6)}) completó su ciclo tras ${Math.round(org.ageSec)}s (Fitness: ${computeFitnessScore(org.genome, org.ageSec, org.atpCollectedTotal, org.offspringCount)}).`,
+        });
+        continue;
+      }
+
+      if (org.metabolism.getTelemetry().isDead && !org.isDecomposing) {
         org.isDecomposing = true;
         org.behaviorState = 'DECAYING_BIOMASS';
+        this.totalDeaths++;
+        this.addEvolutionChronicle({
+          type: 'STARVATION',
+          species: org.species,
+          organismId: org.id,
+          generation: org.genome.generation,
+          lineageId: org.genome.lineageId,
+          headline: `💀 Muerte por Inanición (G${org.genome.generation})`,
+          detail: `${org.species} (${org.id.slice(-6)}) agotó su ATP tras ${Math.round(org.ageSec)}s. Su biomasa fertiliza el suelo.`,
+        });
         continue;
+      }
+
+      // 4.0.0 Trofalaxis Social (Intercambio A-Life de Nutrientes entre Organismos Afines)
+      if (org.trophallaxisTimerSec > 0) {
+        org.trophallaxisTimerSec -= dt;
+      } else if (org.genome.cooperationGene > 0.45 && org.metabolism.getTelemetry().atpLevel > 0.65) {
+        const friend = this.getNearestOrganismOfSpecies(org.x, org.y, org.species, org.id);
+        if (friend && friend.dist < 0.8 && friend.org.metabolism.getTelemetry().atpLevel < 0.45 && !friend.org.isDecomposing) {
+          org.trophallaxisTimerSec = 8.0;
+          friend.org.trophallaxisTimerSec = 8.0;
+          org.behaviorState = 'SOCIAL_TROPHALLAXIS';
+          friend.org.behaviorState = 'SOCIAL_TROPHALLAXIS';
+          org.metabolism.expendAtp(0.08);
+          friend.org.metabolism.ingestNutrient(0.08 * friend.org.genome.metabolicEfficiencyGene);
+          org.plasticity.injectDopamine(1.5);
+          friend.org.plasticity.injectDopamine(1.5);
+          this.addEvolutionChronicle({
+            type: 'TROPHALLAXIS',
+            species: org.species,
+            organismId: org.id,
+            generation: org.genome.generation,
+            lineageId: org.genome.lineageId,
+            headline: `🤝 Trofalaxis Social (${org.species})`,
+            detail: `${org.id.slice(-6)} [G${org.generation}] compartió nutrientes con ${friend.org.id.slice(-6)} [G${friend.org.generation}].`,
+          });
+        }
       }
 
       // 4.0.1 Gestión de Acrobacias y Caricias Afectivas
@@ -667,8 +973,10 @@ export class BiocyberneticHabitatEngine {
           const ingested = Math.min(antennalSample.meanConcentration * 0.4, 0.2 * dt);
           org.metabolism.ingestNutrient(ingested);
           org.plasticity.injectDopamine(ingested * 5.0);
+          if (org.behaviorState !== 'FEEDING_GLUCOSE') {
+            TacticalAudioEngine.playDopamineChime();
+          }
           org.behaviorState = 'FEEDING_GLUCOSE';
-          TacticalAudioEngine.playDopamineChime();
         } else {
           org.behaviorState = 'FORAGING_WALK';
         }
@@ -734,9 +1042,11 @@ export class BiocyberneticHabitatEngine {
             org.headingRad = normalizeAngle(escapeAngle + (Math.random() - 0.5) * 0.4);
             org.speedMps = 3.6;
             targetSpeed = 3.6;
+            if (org.behaviorState !== 'EVADING_PREDATOR_ANT') {
+              TacticalAudioEngine.playReflexEscape();
+            }
             org.behaviorState = 'EVADING_PREDATOR_ANT';
             org.plasticity.injectOctopamine(0.4);
-            TacticalAudioEngine.playReflexEscape();
           } else if (distToAnt < 1.15 && nearestAnt) {
             // Alerta visual de aproximación de hormiga
             const awayAngle = Math.atan2(org.y - nearestAnt.org.y, org.x - nearestAnt.org.x);
@@ -747,8 +1057,10 @@ export class BiocyberneticHabitatEngine {
           } else if (eyeTel.giantFiberTriggered) {
             org.speedMps = 3.8;
             turnRateRadPerSec += Math.PI * 0.8;
+            if (org.behaviorState !== 'GIANT_FIBER_ESCAPE') {
+              TacticalAudioEngine.playReflexEscape();
+            }
             org.behaviorState = 'GIANT_FIBER_ESCAPE';
-            TacticalAudioEngine.playReflexEscape();
           } else {
             // INTERACCIÓN ECOLÓGICA 2: Distancia social conespecífica (Mosca ↔ Mosca)
             const nearestFly = this.getNearestOrganismOfSpecies(org.x, org.y, 'DROSOPHILA', org.id);
@@ -801,7 +1113,9 @@ export class BiocyberneticHabitatEngine {
           const ingested = Math.min(currentC * 0.45, 0.25 * dt);
           org.metabolism.ingestNutrient(ingested);
           org.plasticity.injectDopamine(ingested * 4.0);
-          TacticalAudioEngine.playDopamineChime();
+          if (org.behaviorState !== 'FEEDING_ON_FOOD') {
+            TacticalAudioEngine.playDopamineChime();
+          }
         }
 
         // INTERACCIÓN ECOLÓGICA 3: Reflejo mecanosensorial por contacto de insecto (ALM/PLM)
@@ -903,8 +1217,10 @@ export class BiocyberneticHabitatEngine {
           } else if (antennalGlucose.meanConcentration > 0.04) {
             // Encuentra alimento: ingesta y cambio a estado de retorno al nido
             org.metabolism.ingestNutrient(0.25 * dt);
+            if (!org.isCarryingFood) {
+              TacticalAudioEngine.playDopamineChime();
+            }
             org.isCarryingFood = true;
-            TacticalAudioEngine.playDopamineChime();
             // Gira hacia el nido / centro (0, 0)
             const angleToNest = Math.atan2(-org.y, -org.x);
             org.headingRad = normalizeAngle(angleToNest + (Math.random() - 0.5) * 0.3);
@@ -1060,7 +1376,73 @@ export class BiocyberneticHabitatEngine {
         }
       }
 
+      // 4.29 Conducción Táctica según Casta Cívica (Stigmergic Civic Taxis)
+      if (org.caste === 'BUILDER') {
+        const unfinished = Array.from(this.metropolisEngine.structures.values()).find((s) => s.constructionProgress < 1.0);
+        if (unfinished) {
+          const dx = unfinished.x - org.x;
+          const dy = unfinished.y - org.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > unfinished.radiusMeters + 0.3) {
+            const targetAngle = Math.atan2(dy, dx);
+            const diff = shortestAngleDiff(targetAngle, org.headingRad);
+            turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 3.8);
+            targetSpeed = 1.15;
+            org.behaviorState = 'BUILDER_DISPATCH_TO_SITE';
+          }
+        }
+      } else if (org.caste === 'HARVESTER' && (org.isCarryingFood || org.metabolism.getTelemetry().glucoseLevel > 0.8)) {
+        let nearestSilo: UrbanStructure | null = null;
+        let minDist = 999;
+        for (const s of this.metropolisEngine.structures.values()) {
+          if (s.type === 'CENTRAL_SILO' && s.constructionProgress >= 1.0) {
+            const d = Math.hypot(s.x - org.x, s.y - org.y);
+            if (d < minDist) {
+              minDist = d;
+              nearestSilo = s;
+            }
+          }
+        }
+        if (nearestSilo && minDist > 1.2) {
+          const dx = nearestSilo.x - org.x;
+          const dy = nearestSilo.y - org.y;
+          const targetAngle = Math.atan2(dy, dx);
+          const diff = shortestAngleDiff(targetAngle, org.headingRad);
+          turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 3.6);
+          targetSpeed = 1.25;
+          org.behaviorState = 'HARVESTER_DELIVERING_SILO';
+        }
+      } else if (org.caste === 'NURSE' && org.metabolism.getTelemetry().atpLevel > 0.4) {
+        const weakOrg = Array.from(this.organisms.values()).find(
+          (other) => other.id !== org.id && !other.isDecomposing && other.metabolism.getTelemetry().atpLevel < 0.32
+        );
+        if (weakOrg) {
+          const dx = weakOrg.x - org.x;
+          const dy = weakOrg.y - org.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 0.5) {
+            const targetAngle = Math.atan2(dy, dx);
+            const diff = shortestAngleDiff(targetAngle, org.headingRad);
+            turnRateRadPerSec = Math.sign(diff) * Math.min(Math.abs(diff), 4.0);
+            targetSpeed = 1.2;
+            org.behaviorState = 'NURSE_APPROACHING_PATIENT';
+          } else {
+            weakOrg.metabolism.revive(Math.min(0.65, weakOrg.metabolism.getTelemetry().atpLevel + 0.12 * dt));
+            org.metabolism.expendAtp(0.05 * dt);
+            org.currentThought = `🩹 Asistiendo vitalmente a espécimen G${weakOrg.generation}.`;
+            weakOrg.currentThought = '💖 Recibiendo auxilio vital de Enfermero.';
+            org.behaviorState = 'MEDICAL_TROPHALLAXIS';
+          }
+        }
+      }
+
       // 4.3 Actualización de Rumbo y Desplazamiento
+      // 4.3 Modulación por Calzada Bioluminiscente Urbana (Pheromone Highway)
+      const hwyBonus = this.metropolisEngine.getHighwaySpeedMultiplier(org.x, org.y);
+      if (hwyBonus > 1.0) {
+        targetSpeed *= hwyBonus;
+      }
+
       if (!(org.isLeader && org.species === 'DROSOPHILA' && connectomeBioBridge.isConnectomeActive())) {
         org.headingRad = normalizeAngle(org.headingRad + turnRateRadPerSec * dt);
         org.speedMps += (targetSpeed - org.speedMps) * Math.min(1.0, 5.0 * dt);
@@ -1081,9 +1463,36 @@ export class BiocyberneticHabitatEngine {
         org.y = nextY;
       }
 
-      // 4.5 Trabajo mecánico celular
-      const mechanicalPower = org.speedMps * 2.0;
-      const spikeCount = 35 + Math.floor(org.speedMps * 25);
+      // 4.45 Interacciones Cívicas y Urbanismo Estigmérgico
+      if (org.caste === 'HARVESTER' && (org.isCarryingFood || org.metabolism.getTelemetry().glucoseLevel > 0.75)) {
+        const dep = this.metropolisEngine.depositInNearestSilo(org.x, org.y, 3.5, 1.8);
+        if (dep && dep.acceptedGlucose > 0) {
+          org.isCarryingFood = false;
+          org.currentThought = '📦 Descargando provisiones en el Silo Central de la metrópolis.';
+          org.plasticity.injectDopamine(2.0);
+        }
+      }
+
+      if (org.metabolism.getTelemetry().atpLevel < 0.28) {
+        const withdrawn = this.metropolisEngine.withdrawFromNearestSilo(org.x, org.y, 0.45);
+        if (withdrawn > 0) {
+          org.metabolism.ingestNutrient(withdrawn * 2.0);
+          org.currentThought = '🌾 Reabastecido por las reservas comunales del Silo.';
+        }
+      }
+
+      if (org.caste === 'BUILDER') {
+        const contributed = this.metropolisEngine.contributeToConstruction(org.x, org.y, 1.2 * dt);
+        if (contributed) {
+          org.currentThought = '🔨 Erigiendo infraestructura estigmérgica en el sector.';
+          org.plasticity.injectDopamine(0.8 * dt);
+        }
+      }
+
+      // 4.5 Trabajo mecánico celular (las calzadas reducen el consumo en 40%)
+      const energyFriction = hwyBonus > 1.0 ? 0.6 : 1.0;
+      const mechanicalPower = org.speedMps * 2.0 * energyFriction;
+      const spikeCount = 35 + Math.floor(org.speedMps * 25 * energyFriction);
       org.metabolism.step(dt, spikeCount, mechanicalPower);
 
       // 4.6 Confinamiento Perimétrico y Migración P2P
@@ -1108,22 +1517,26 @@ export class BiocyberneticHabitatEngine {
         }
       }
 
-      // 4.7 Reproducción A-Life (Mitosis/Oviposición por Saciedad Energética con Dispersión Segura)
-      if (org.metabolism.getTelemetry().atpLevel > 0.82 && !org.isDecomposing) {
+      // 4.7 Reproducción A-Life (Mitosis/Oviposición por Saciedad Energética con Herencia y Mutación)
+      if (org.metabolism.getTelemetry().atpLevel > 0.80 && !org.isDecomposing && org.ageSec > 10.0) {
         org.satietyTimerSec += dt;
-        if (org.satietyTimerSec >= 15.0 && this.organisms.size < 22) {
+        if (org.satietyTimerSec >= 10.0 && this.organisms.size < 24) {
           org.satietyTimerSec = 0;
+          org.metabolism.expendAtp(0.30);
+          org.offspringCount++;
+
           const spawnAngle = Math.random() * Math.PI * 2;
-          const spawnDist = 0.85 + Math.random() * 0.3;
+          const spawnDist = 0.85 + Math.random() * 0.4;
           const offspring = this.spawnOrganism(
             org.species,
             org.x + Math.cos(spawnAngle) * spawnDist,
             org.y + Math.sin(spawnAngle) * spawnDist,
             spawnAngle,
-            false
+            false,
+            org.genome,
+            org.id
           );
-          offspring.generation = org.generation + 1;
-          offspring.plasticity.inheritFromParentWithMutation(org.plasticity, 0.05);
+          offspring.plasticity.inheritFromParentWithMutation(org.plasticity, org.genome.mutationRateGene);
           TacticalAudioEngine.playMitosisChime();
         }
       }
@@ -1672,6 +2085,14 @@ export class BiocyberneticHabitatEngine {
     return this.organisms.get(id);
   }
 
+  public getActiveTool(): HabitatToolType {
+    return this.activeToolState.activeTool;
+  }
+
+  public getActiveToolState(): TacticalToolState {
+    return { ...this.activeToolState };
+  }
+
   public getAllOrganisms(): HabitatOrganism[] {
     return Array.from(this.organisms.values());
   }
@@ -1709,6 +2130,19 @@ export class BiocyberneticHabitatEngine {
       else if (org.species === 'ANT') antCount++;
       else if (org.species === 'HUMAN_NEOCORTEX') humanNeocortexCount++;
       else if (org.species === 'GRAVITY_SENTINEL') gravitySentinelCount++;
+    }
+
+    const casteCounts: Record<CivilianCaste, number> = {
+      BUILDER: 0,
+      HARVESTER: 0,
+      SENTINEL: 0,
+      SCHOLAR: 0,
+      NURSE: 0,
+    };
+    for (const org of this.organisms.values()) {
+      if (!org.isDecomposing && org.caste) {
+        casteCounts[org.caste] = (casteCounts[org.caste] || 0) + 1;
+      }
     }
 
     return {
@@ -1750,7 +2184,20 @@ export class BiocyberneticHabitatEngine {
       },
       edenParadise: biocyberneticEdenParadise.getTelemetry(),
       lifelongLearning: autonomousLifelongLearning.getTelemetry(),
+      timeScale: this.timeScale,
+      maxGeneration: this.maxGenerationReached,
+      populationGenetics: this.getPopulationGenetics(),
+      evolutionChronicle: this.evolutionChronicle.slice(0, 25),
+      metropolis: this.metropolisEngine.getTelemetry(casteCounts),
     };
+  }
+
+  public getMetropolisEngine(): BiocyberneticMetropolisEngine {
+    return this.metropolisEngine;
+  }
+
+  public requestUrbanConstruction(type: UrbanStructureType, x: number, y: number, name?: string): UrbanStructure | null {
+    return this.metropolisEngine.requestConstruction(type, x, y, name);
   }
 
   /**

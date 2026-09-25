@@ -37,6 +37,7 @@ export function SonarSeismicModal() {
     const gravityEmaRef = useRef<number>(9.81);
     const lastTapTsRef = useRef<number>(0);
     const tapCadenceRef = useRef<number[]>([]);
+    const lastUiUpdateRef = useRef<number>(0);
 
     // Intercepción LIFO de hardware Android y tecla Escape
     useEffect(() => {
@@ -98,10 +99,13 @@ export function SonarSeismicModal() {
             }
 
             if (!isFinite(mag) || mag < 0) mag = 0;
-            setCurrentVibrationG(Math.round(mag * 100) / 100);
+            const now = Date.now();
+            if (now - lastUiUpdateRef.current >= 66 || mag > 1.15) {
+                lastUiUpdateRef.current = now;
+                setCurrentVibrationG(Math.round(mag * 100) / 100);
+            }
 
             // Detección de impacto cinemático sobre escombros (> 1.15 G)
-            const now = Date.now();
             if (mag > 1.15 && (now - lastTapTsRef.current > 150)) {
                 lastTapTsRef.current = now;
                 TacticalAudioEngine.playTap();

@@ -48,6 +48,7 @@ const BRIDGE_UPDATE_INTERVAL_MS = 50; // 20 Hz de bridge sensorial
 
 let lastBridgeUpdateMs = 0;
 let lastThreatAngleRad: number | null = null;
+let activeConnectomeClients = 0;
 
 // ─── Función Auxiliar ──────────────────────────────────────────────────────────
 
@@ -198,8 +199,10 @@ export function isConnectomeActive(): boolean {
 
 /**
  * Inicia el orquestador del conectoma en segundo plano para activar el lazo cerrado.
+ * Utiliza conteo de referencias para coexistencia entre múltiples vistas modales.
  */
 export function startConnectome(): void {
+  activeConnectomeClients++;
   if (!connectomeOrchestrator.isOrganismRunning()) {
     connectomeOrchestrator.start();
   }
@@ -207,8 +210,15 @@ export function startConnectome(): void {
 
 /**
  * Detiene el orquestador del conectoma.
+ * @param force Si es true, ignora el contador y detiene inmediatamente.
  */
-export function stopConnectome(): void {
+export function stopConnectome(force = false): void {
+  if (activeConnectomeClients > 0 && !force) {
+    activeConnectomeClients--;
+    if (activeConnectomeClients > 0) return;
+  } else if (force) {
+    activeConnectomeClients = 0;
+  }
   if (connectomeOrchestrator.isOrganismRunning()) {
     connectomeOrchestrator.stop();
   }

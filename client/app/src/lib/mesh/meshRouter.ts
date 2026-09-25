@@ -65,6 +65,7 @@ import { PredictiveCortexEngine } from '../neuro/human/PredictiveCortexEngine';
 import { TacticalLocationEngine } from '../sensors/TacticalLocationEngine';
 import { kineticStress } from '../sensors/KineticStressEngine';
 import { swarmCriticality } from '../neuro/SwarmCriticalityEngine';
+import { sensoriomotorAutonomicBridge } from '../neuro/SensoriomotorAutonomicBridge';
 
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
 const DEDUP_WINDOW_MSG_MS = 30 * 60 * 1000;       // 30m  — chat messages (reduces Map size ~95% in long sessions)
@@ -1635,6 +1636,12 @@ class MeshRouter {
             dtnMushroomBody.applyDopaminergicNeuromodulation('PPL1', 0.85, targetCh);
           } else if (spike.domain === AerDomainCode.CBRN_RADIATION_ALERT) {
             console.warn(`[MeshRouter] ☢️ Alerta AER: Salto CBRN recibido de nodo ${senderShortHex} (Nivel: ${spike.value})`);
+          } else if (
+            spike.domain === AerDomainCode.KINETIC_SHOCK_MANDOWN ||
+            spike.domain === AerDomainCode.ACOUSTIC_SONAR_CAVITY ||
+            spike.domain === AerDomainCode.SYNAPTIC_DELTA_WEIGHT
+          ) {
+            sensoriomotorAutonomicBridge.handleRemoteSpike(spike, senderShortHex);
           }
         }
 
@@ -2242,10 +2249,27 @@ class MeshRouter {
       // 2. On native platform (Rust daemon active), bridge binary OnionPackets and Sled-bound JSON messages
       // Skip pure TS-exclusive protocol envelopes that the Rust deserializer discards
       const isTsExclusiveEnvelope =
+        isDeliveryAck ||
+        isLocationMsg ||
+        isHandshakeMsg ||
         payloadStr.startsWith('SOS_BEACON_') ||
         payloadStr.startsWith('DEAD_DROP_') ||
         payloadStr.startsWith('SAT_RELAY_') ||
-        payloadStr.startsWith('KURAMOTO_');
+        payloadStr.startsWith('KURAMOTO_') ||
+        payloadStr.includes('DELIVERY_ACK') ||
+        payloadStr.includes('NODE_LOCATION_UPDATE') ||
+        payloadStr.includes('SWARM_PHEROMONE') ||
+        payloadStr.includes('"pheromone"') ||
+        payloadStr.includes('IDENTITY_ANNOUNCE') ||
+        payloadStr.includes('IDENTITY_RESPONSE') ||
+        payloadStr.includes('IDENTITY_REQUEST') ||
+        payloadStr.includes('SYNC_STATE_') ||
+        payloadStr.includes('SHAKE_PAIR_') ||
+        payloadStr.includes(PQC_TYPE_KEY_ANNOUNCE) ||
+        ((packet.flags & FLAG_AER_SPIKE) !== 0) ||
+        (packet.payload.length >= 2 && packet.payload[0] === 0xAE && packet.payload[1] === 0x51) ||
+        (packet.payload.length >= 2 && packet.payload[0] === 0xBE && packet.payload[1] === 0x01) ||
+        (packet.payload.length >= 2 && packet.payload[0] === 0xBD && packet.payload[1] === 0x01);
 
       if (isNative && !isTsExclusiveEnvelope) {
         this.deliverToRustNode(packet).catch(err => {
@@ -2633,8 +2657,6 @@ class MeshRouter {
 
       // Canalizar a través del planificador TDMA para mitigar colisiones ALOHA
       const okHardware = await loraTdmaScheduler.scheduleTransmission(framedPayload, isEmergency ? 10 : 5, isEmergency);
-      const hex = Array.from(payload).map(b => b.toString(16).padStart(2, '0')).join('');
-      await RedAPI.injectMeshPayload(hex, true).catch(() => {});
       return okHardware;
     } catch {
       return false;
@@ -2644,13 +2666,22 @@ class MeshRouter {
   // ─── Rust Node Integration ───────────────────────────────────────────────────
 
   private async deliverToRustNode(packet: MeshPacket) {
-    const hex = Array.from(packet.payload)
+    // Si el payload es un JSON directo de mensaje, inyectar el cuerpo; si es binario, codificar trama canónica MeshPacket (96B)
+    let wireBytes: Uint8Array = packet.payload;
+    try {
+      const str = new TextDecoder().decode(packet.payload);
+      if (!str.trimStart().startsWith('{')) {
+        wireBytes = encode(packet);
+      }
+    } catch {
+      wireBytes = encode(packet);
+    }
+    const hex = Array.from(wireBytes)
       .map(b => b.toString(16).padStart(2, '0')).join('');
     try {
       await RedAPI.injectMeshPayload(hex);
     } catch (e) {
-      console.error('[MeshRouter] Failed to deliver to Rust node:', e);
-      throw e;
+      console.warn('[MeshRouter] Non-blocking Rust node delivery skipped/failed:', (e as any)?.message || e);
     }
   }
 

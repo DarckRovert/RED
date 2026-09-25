@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRedStore } from '../store/useRedStore';
 import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from '../lib/version';
+import { meshRouter } from '../lib/mesh/meshRouter';
 import { useTranslation } from '../lib/i18n/i18nEngine';
 import { copyToClipboard } from '../lib/clipboard';
 import { LandingHeader } from './showcase/LandingHeader';
@@ -41,8 +42,18 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
     const [heroMnemonicSeed, setHeroMnemonicSeed] = useState("beacon sovereign pulse acoustic cipher horizon rescue citadel shield quantum radar mesh");
 
     const [fps, setFps] = useState(60);
-    const [telemetryNodes, setTelemetryNodes] = useState(14);
+    const [telemetryNodes, setTelemetryNodes] = useState(() => Math.max(1, meshRouter.peers.size));
     const [cryptoEpoch, setCryptoEpoch] = useState(RED_BUILD_CODE);
+
+    // Suscripción en tiempo real a la topología viva de la malla P2P
+    useEffect(() => {
+        const updateNodes = () => {
+            setTelemetryNodes(Math.max(1, meshRouter.peers.size));
+        };
+        updateNodes();
+        const unsub = meshRouter.onPeersChange(() => updateNodes());
+        return () => unsub();
+    }, []);
 
     const isGhPages = typeof window !== "undefined" && window.location.pathname.includes("/RED");
     const basePath = isGhPages ? "/RED" : "";
@@ -163,7 +174,19 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
             radius: Math.random() * 1.8 + 0.6,
         }));
 
+        let frameCount = 0;
+        let lastFpsUpdate = performance.now();
+
         const render = () => {
+            const now = performance.now();
+            frameCount++;
+            if (now - lastFpsUpdate >= 1000) {
+                const calculatedFps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+                setFps(calculatedFps);
+                frameCount = 0;
+                lastFpsUpdate = now;
+            }
+
             ctx.clearRect(0, 0, width, height);
 
             for (let i = 0; i < particles.length; i++) {

@@ -44,6 +44,21 @@ export class TacticalAudioEngine {
 
     private static lastMessageReceivedSoundTs = 0;
     private static readonly ACOUSTIC_BURST_GUARD_MS = 600;
+    private static soundCooldowns: Map<string, number> = new Map();
+
+    /**
+     * Valida el intervalo refractario mínimo para un efecto acústico específico.
+     * Evita saturación de buffers de audio y picos de GC en dispositivos como Moto G22.
+     */
+    public static checkAcousticCooldown(soundId: string, minIntervalMs: number): boolean {
+        const now = Date.now();
+        const last = this.soundCooldowns.get(soundId) || 0;
+        if (now - last < minIntervalMs) {
+            return false;
+        }
+        this.soundCooldowns.set(soundId, now);
+        return true;
+    }
 
     /** Tono armónico dual confirmando mensaje recibido por la malla (523Hz -> 659Hz, 90ms) */
     public static playMessageReceived(): void {
@@ -278,6 +293,8 @@ export class TacticalAudioEngine {
 
     /** Campanilla armónica dual (C6 -> G6) confirmando absorción de nutrientes y ráfaga dopaminérgica PAM (60ms) */
     public static playDopamineChime(): void {
+        if (!this.checkAcousticCooldown('dopamine_chime', 350)) return;
+
         const prefs = SettingsManager.getPreferences();
         if (!prefs.soundsEnabled) return;
 
@@ -306,6 +323,8 @@ export class TacticalAudioEngine {
 
     /** Barrido de escape cinético balístico monosináptico (Giant Fiber / LC4) */
     public static playReflexEscape(): void {
+        if (!this.checkAcousticCooldown('reflex_escape', 250)) return;
+
         const prefs = SettingsManager.getPreferences();
         if (!prefs.soundsEnabled) return;
 
@@ -334,6 +353,8 @@ export class TacticalAudioEngine {
 
     /** Ráfaga de aire suave / estímulo mecanosensorial (Air Puff / Tactile Poke) */
     public static playBioPuff(): void {
+        if (!this.checkAcousticCooldown('bio_puff', 180)) return;
+
         const prefs = SettingsManager.getPreferences();
         if (!prefs.soundsEnabled) return;
 

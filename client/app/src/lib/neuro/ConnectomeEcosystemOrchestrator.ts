@@ -28,6 +28,7 @@ import { tacticalMotorActuator, TacticalMotorActuatorTelemetry } from './Tactica
 import { centralPatternGenerator, CpgLocomotionTelemetry } from './CentralPatternGeneratorEngine';
 import { swarmCriticality, SwarmCriticalityTelemetry } from './SwarmCriticalityEngine';
 import { bioCompassDualFusion, BioCompassDualTelemetry } from './BioCompassDualFusionEngine';
+import { sensoriomotorAutonomicBridge, AutonomicBridgeTelemetry } from './SensoriomotorAutonomicBridge';
 
 export interface EcosystemConnectomeSnapshot {
   timestamp: number;
@@ -46,6 +47,8 @@ export interface EcosystemConnectomeSnapshot {
   cpg: CpgLocomotionTelemetry;
   criticality: SwarmCriticalityTelemetry;
   bioCompassDual?: BioCompassDualTelemetry;
+  /** Telemetría del Puente Sensoriomotor Autonómico (sensores físicos ↔ neuro-núcleos) */
+  autonomicBridge: AutonomicBridgeTelemetry;
   // Resumen sintético táctico
   tacticalSummary: string;
 }
@@ -133,8 +136,16 @@ export class ConnectomeEcosystemOrchestrator {
 
     const unSubCpg = centralPatternGenerator.subscribe(() => this.notifyListeners());
 
-    this.unsubs.push(unSubCompass, unSubFb, unSubMb, unSubSyn, unSubGfs, unSubOptic, unSubMotor, unSubCrit, unSubDual, unSubCpg);
+    // 5. Activar Puente Sensoriomotor Autonómico (cierra el bucle hardware ↔ neuro-núcleos)
+    const bridgeOk = sensoriomotorAutonomicBridge.start();
+    const unSubBridge = sensoriomotorAutonomicBridge.subscribe(() => this.notifyListeners());
+    if (!bridgeOk) {
+      console.warn('[ConnectomeOrchestrator] ⚠️ SensoriomotorAutonomicBridge arrancó en modo degradado (hardware no disponible)');
+    }
+
+    this.unsubs.push(unSubCompass, unSubFb, unSubMb, unSubSyn, unSubGfs, unSubOptic, unSubMotor, unSubCrit, unSubDual, unSubCpg, unSubBridge);
     console.log('[ConnectomeOrchestrator] 🦗 Drosophila MaleCNS living organism initialized and active in background');
+    console.log('[ConnectomeOrchestrator] 🔗 Sensoriomotor Autonomic Bridge ONLINE — bucle cibernético físico cerrado.');
     this.notifyListeners();
   }
 
@@ -143,7 +154,9 @@ export class ConnectomeEcosystemOrchestrator {
   }
 
   public triggerEmergencyBurst(reason: string = 'MANUAL_OVERRIDE'): void {
-    giantFiberReflex.triggerEmergencyJump(reason);
+    const VALID_SOURCES = ['EW_JAMMING', 'IMSI_CATCHER', 'ROGUE_CARRIER_DOWNGRADE', 'GONIOMETRIC_PING', 'VISUAL_LOOMING_THREAT', 'MANUAL_TACTICAL_SCRAM'] as const;
+    const safeReason = VALID_SOURCES.includes(reason as any) ? reason as (typeof VALID_SOURCES)[number] : 'MANUAL_TACTICAL_SCRAM';
+    giantFiberReflex.triggerEmergencyJump(safeReason);
     tacticalMotorActuator.triggerEmergencyBurst();
     this.notifyListeners();
   }
@@ -167,6 +180,7 @@ export class ConnectomeEcosystemOrchestrator {
     centralPatternGenerator.stop();
     swarmCriticality.stop();
     bioCompassDualFusion.stop();
+    sensoriomotorAutonomicBridge.stop();
     this.dispatchSnapshot();
   }
 
@@ -186,6 +200,7 @@ export class ConnectomeEcosystemOrchestrator {
     const cpg = centralPatternGenerator.getTelemetry();
     const criticality = swarmCriticality.getTelemetry();
     const bioCompassDual = bioCompassDualFusion.getTelemetry();
+    const autonomicBridge = sensoriomotorAutonomicBridge.getTelemetry();
 
     // Determinar estado de salud y régimen global del organismo
     let organismState: EcosystemConnectomeSnapshot['organismState'] = 'OPTIMAL';
@@ -216,7 +231,8 @@ export class ConnectomeEcosystemOrchestrator {
       `Criticalidad SOC: Estado ${criticality.criticalityState} (σ=${criticality.branchingRatio.toFixed(2)}, α=${criticality.estimatedAlpha.toFixed(2)}, Prelay=${(criticality.relayProbability * 100).toFixed(0)}%). ` +
       `Compás Dual: Coherencia ${(bioCompassDual.phaseCoherence * 100).toFixed(0)}% (${bioCompassDual.phaseCoherenceState}), Deriva ${bioCompassDual.estimatedDriftMeters}m, Resets ${bioCompassDual.hippocampalResetsCount}. ` +
       `Mecanorrecepción JO: ${jo.acousticEnergyLevel > 0.5 ? 'ALERTA' : 'NOMINAL'}. ` +
-      `Metabolismo: ${metabolic.regime} (Batería ${metabolic.batteryPct}%, Autonomía est. ${metabolic.estimatedStandbyHours}h).`;
+      `Metabolismo: ${metabolic.regime} (Batería ${metabolic.batteryPct}%, Autonomía est. ${metabolic.estimatedStandbyHours}h). ` +
+      `Bridge SAB: ${autonomicBridge.isRunning ? 'ONLINE' : 'OFFLINE'} — Espigas emitidas: ${autonomicBridge.totalSpikesEmitted}, Rx remotas: ${autonomicBridge.totalRemoteSpikesReceived}, CBRN: ${autonomicBridge.lastCbrnLevel}.`;
 
     return {
       timestamp: Date.now(),
@@ -234,6 +250,7 @@ export class ConnectomeEcosystemOrchestrator {
       cpg,
       criticality,
       bioCompassDual,
+      autonomicBridge,
       tacticalSummary,
     };
   }

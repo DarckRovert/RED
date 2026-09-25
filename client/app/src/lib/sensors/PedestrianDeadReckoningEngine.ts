@@ -29,6 +29,7 @@ export class PedestrianDeadReckoningEngine {
     private displacementEastMeters: number = 0;
     private lastStepTime: number = 0;
     private defaultStrideMeters: number = 0.75; // Zancada táctica promedio
+    private lastRecordedStride: number = 0.75;  // Última zancada dinámica real registrada (Weinberg)
     private stepHistory: number[] = [];
 
     // Filtros de acelerómetro para detección de pasos en hardware real
@@ -174,6 +175,9 @@ export class PedestrianDeadReckoningEngine {
         const safeHeading = ((rawHeading % 360) + 360) % 360;
         const safeStride = (typeof strideMeters === 'number' && isFinite(strideMeters) && strideMeters > 0) ? strideMeters : this.defaultStrideMeters;
 
+        // Registrar la última zancada real para que getState() pueda calcular velocidad correctamente
+        this.lastRecordedStride = safeStride;
+
         this.totalSteps++;
         this.distanceMeters = Math.round((this.distanceMeters + safeStride) * 100) / 100;
         this.currentHeadingDeg = safeHeading;
@@ -207,7 +211,10 @@ export class PedestrianDeadReckoningEngine {
             }
         }
 
-        const averageSpeedMps = Math.round((stepFrequencyHz * this.defaultStrideMeters) * 10) / 10;
+        // Velocidad media usando la última zancada dinámica real (Weinberg) en lugar del valor por defecto estático.
+        // Usar defaultStrideMeters generaba hasta 47% de error en carrera táctica (zancada real ~1.1m vs 0.75m).
+        const effectiveStride = this.lastRecordedStride > 0 ? this.lastRecordedStride : this.defaultStrideMeters;
+        const averageSpeedMps = Math.round((stepFrequencyHz * effectiveStride) * 10) / 10;
 
         return {
             isTracking: this.isTracking,

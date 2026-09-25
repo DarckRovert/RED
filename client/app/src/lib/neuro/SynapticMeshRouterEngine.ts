@@ -22,6 +22,16 @@
 
 import { RingAttractorEngine } from './RingAttractorEngine';
 import { AerSpikeEvent, AerDomainCode } from '../mesh/meshProtocol';
+import { DtnMushroomBodyEngine } from './DtnMushroomBodyEngine';
+
+/** Helper singleton lazy-loader para evitar circular-dependency en el import estático */
+function getDtnMushroomBody(): DtnMushroomBodyEngine | null {
+  try {
+    return DtnMushroomBodyEngine.getInstance();
+  } catch {
+    return null;
+  }
+}
 
 export interface RfSectorHistogram {
   sectors: number[];                 // 16 sectores circulares con media móvil LQS [0, 100]
@@ -287,6 +297,27 @@ export class SynapticMeshRouterEngine {
   }
 
   /**
+   * Aplica una modulación sináptica delta recibida remotamente vía espiga AER (SYNAPTIC_DELTA_WEIGHT).
+   * @param peerId Identificador del par
+   * @param _neuronId Sub-canal o id neuronal
+   * @param deltaInt16 Escalar cuantizado int16 (-1000 a +1000 representa -1.0 a +1.0)
+   */
+  public applyRemoteDeltaWeight(peerId: string, _neuronId: number, deltaInt16: number): void {
+    if (!peerId) return;
+    const cleanId = peerId.trim().toLowerCase();
+    const link = this.touchPeer(cleanId);
+    const dW = Math.max(-0.5, Math.min(0.5, deltaInt16 / 1000));
+    link.weight = Math.max(
+      SynapticMeshRouterEngine.MIN_WEIGHT,
+      Math.min(SynapticMeshRouterEngine.MAX_WEIGHT, link.weight + dW)
+    );
+    link.isPruned = link.weight < SynapticMeshRouterEngine.PRUNE_THRESHOLD;
+    link.isRichClubHub = link.weight >= SynapticMeshRouterEngine.HIGH_CONDUCTANCE_THRESHOLD;
+    this.recalculateTopology();
+    this.notifyListeners();
+  }
+
+  /**
    * Calcula la atenuación de flujo efectivo y probabilidad de entrega multi-salto
    * (Inspirado en connectome-interpreter / Yijie Yin y fly-brain / Rojas Aliaga 2026).
    * Evalúa el decaimiento de conductancia a lo largo de un vector de pesos de ruta.
@@ -452,12 +483,14 @@ export class SynapticMeshRouterEngine {
 
       // Modulación por STDP 3-Factores del Mushroom Body (Drosophila Learning Center)
       try {
-        const { dtnMushroomBody } = require('./DtnMushroomBodyEngine');
-        const drive = dtnMushroomBody.getPeerBehavioralDrive(cleanId);
-        if (drive.drive === 'AVOID') {
-          score -= 0.60; // Fuerte penalización si el par está marcado con aversión PPL1 (Jamming/Malicioso)
-        } else if (drive.drive === 'APPROACH') {
-          score += 0.20; // Refuerzo apetitivo PAM
+        const mb = getDtnMushroomBody();
+        if (mb) {
+          const drive = mb.getPeerBehavioralDrive(cleanId);
+          if (drive.drive === 'AVOID') {
+            score -= 0.60; // Fuerte penalización si el par está marcado con aversión PPL1 (Jamming/Malicioso)
+          } else if (drive.drive === 'APPROACH') {
+            score += 0.20; // Refuerzo apetitivo PAM
+          }
         }
       } catch {}
 
@@ -758,10 +791,13 @@ export class SynapticMeshRouterEngine {
         this.lifWatchdogTimer = null;
       }
     } else if (!this.lifWatchdogTimer && typeof window !== 'undefined') {
-      // Watchdog L9: Vaciado forzado si la ráfaga no alcanza el umbral en 1500ms
+      // Watchdog L9: Vaciado forzado si la ráfaga no alcanza el umbral en 1500ms.
+      // CRÍTICO: se drena lifPacketQueue para evitar crecimiento ilimitado de memoria.
       this.lifWatchdogTimer = setTimeout(() => {
         this.lifWatchdogTimer = null;
         if (this.lifPacketQueue.length > 0) {
+          // Drain the queue and reset potential — prevents unbounded memory growth
+          this.lifPacketQueue = [];
           this.lifMembranePotentialMv = SynapticMeshRouterEngine.LIF_V_RESET_MV;
           this.notifyListeners();
         }

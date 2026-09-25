@@ -12,6 +12,7 @@ import { opticalMorseLiFi, MorseTransmissionState } from "../lib/sensors/Optical
 import { TacticalLocationEngine, TacticalLocation } from "../lib/sensors/TacticalLocationEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { AudioContextManager } from "../lib/audio/AudioContextManager";
 
 type BeaconTab = "sos" | "actuators" | "soundmesh" | "feed";
 
@@ -174,10 +175,8 @@ export function SurvivalBeaconModal() {
                 try { sirenOscRef.current.stop(); } catch {}
                 sirenOscRef.current = null;
             }
-            if (audioCtxRef.current) {
-                try { audioCtxRef.current.close(); } catch {}
-                audioCtxRef.current = null;
-            }
+            AudioContextManager.releaseDedicatedContext('survival_beacon_siren').catch(() => {});
+            audioCtxRef.current = null;
             if (flashIntervalRef.current) {
                 clearInterval(flashIntervalRef.current);
                 flashIntervalRef.current = null;
@@ -266,18 +265,22 @@ export function SurvivalBeaconModal() {
                 try { sirenOscRef.current.stop(); } catch {}
                 sirenOscRef.current = null;
             }
-            if (audioCtxRef.current) {
-                try { audioCtxRef.current.close(); } catch {}
-                audioCtxRef.current = null;
-            }
+            AudioContextManager.releaseDedicatedContext('survival_beacon_siren').catch(() => {});
+            audioCtxRef.current = null;
             setSoundSirenActive(false);
             TacticalAudioEngine.playTap();
             toast.info("Sirena acústica detenida");
         } else {
             TacticalAudioEngine.playEmergencyAlarm();
             try {
-                const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-                const ctx = new AudioCtx();
+                const ctx = AudioContextManager.acquireDedicatedContext('survival_beacon_siren');
+                if (!ctx) {
+                    toast.error("No se pudo inicializar audio de emergencia");
+                    return;
+                }
+                if (ctx.state === 'suspended') {
+                    ctx.resume().catch(() => {});
+                }
                 audioCtxRef.current = ctx;
 
                 const osc = ctx.createOscillator();

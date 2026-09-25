@@ -218,6 +218,36 @@ runTest('5.1 MaleCnsConnectomeHUD: Módulo Visual y Controles AER', () => {
   assert(hudCode.includes('synapticTelemetry.airtimeSavedBytesTotal'), 'El HUD debe vincular bytes de espectro RF ahorrados');
 });
 
+// ── 6. Verificación de Nuevos Dominios AER & Bucle Sensoriomotor Autonómico ────
+const bridgePath = path.join(__dirname, '..', 'src', 'lib', 'neuro', 'SensoriomotorAutonomicBridge.ts');
+const orchPath = path.join(__dirname, '..', 'src', 'lib', 'neuro', 'ConnectomeEcosystemOrchestrator.ts');
+const bridgeCode = fs.readFileSync(bridgePath, 'utf8');
+const orchCode = fs.readFileSync(orchPath, 'utf8');
+
+runTest('6.1 meshProtocol: Nuevos Dominios AER Cinéticos, Acústicos y Sinápticos', () => {
+  assert(protocolCode.includes('KINETIC_SHOCK_MANDOWN = 0x08'), 'Debe incluir dominio KINETIC_SHOCK_MANDOWN');
+  assert(protocolCode.includes('ACOUSTIC_SONAR_CAVITY = 0x09'), 'Debe incluir dominio ACOUSTIC_SONAR_CAVITY');
+  assert(protocolCode.includes('SYNAPTIC_DELTA_WEIGHT = 0x0A'), 'Debe incluir dominio SYNAPTIC_DELTA_WEIGHT');
+});
+
+runTest('6.2 SensoriomotorAutonomicBridge: Estructura, Singleton y Throttling', () => {
+  assert(bridgeCode.includes('class SensoriomotorAutonomicBridge'), 'Debe definir clase SensoriomotorAutonomicBridge');
+  assert(bridgeCode.includes('REFRACTORY_PERIOD_MS = 250'), 'Debe contar con período refractario de 250ms anti-saturación');
+  assert(bridgeCode.includes('broadcastSpikeThrottled'), 'Debe implementar emisión con throttling');
+  assert(bridgeCode.includes('handleRemoteSpike'), 'Debe manejar espigas remotas');
+});
+
+runTest('6.3 ConnectomeEcosystemOrchestrator: Bucle Sensoriomotor Cerrado', () => {
+  assert(orchCode.includes('sensoriomotorAutonomicBridge'), 'Debe importar sensoriomotorAutonomicBridge');
+  assert(orchCode.includes('autonomicBridge: AutonomicBridgeTelemetry'), 'EcosystemConnectomeSnapshot debe incluir autonomicBridge');
+  assert(orchCode.includes('sensoriomotorAutonomicBridge.start()'), 'Debe iniciar el bridge en start()');
+  assert(orchCode.includes('sensoriomotorAutonomicBridge.stop()'), 'Debe detener el bridge en stop()');
+});
+
+runTest('6.4 SynapticMeshRouterEngine: Plasticidad Sináptica Remota en Malla', () => {
+  assert(synapticCode.includes('applyRemoteDeltaWeight'), 'Debe implementar applyRemoteDeltaWeight');
+});
+
 console.log('\n' + '='.repeat(80));
 console.log(`🎉 RESULTADO: ${passedTests}/${totalTests} PRUEBAS AER SUPERADAS CON ÉXITO (100% OK)`);
 console.log('='.repeat(80) + '\n');

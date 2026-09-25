@@ -5,6 +5,7 @@ import { useRedStore } from "../store/useRedStore";
 import type { PendingContactRequest } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
+import { AudioContextManager } from "../lib/audio/AudioContextManager";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { toast } from "./Toast";
 
@@ -51,9 +52,8 @@ export function IncomingContactRequestModal() {
         if (req) {
             TacticalAudioEngine.playRogerBeep();
             try {
-                const AudioCtxClass = typeof window !== "undefined" ? (window.AudioContext || (window as any).webkitAudioContext) : null;
-                if (AudioCtxClass) {
-                    const ctx = new AudioCtxClass();
+                const ctx = AudioContextManager.acquireDedicatedContext('contact_request');
+                if (ctx) {
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
                     osc.connect(gain);
@@ -69,6 +69,7 @@ export function IncomingContactRequestModal() {
                         try {
                             if (ctx.state !== "closed") ctx.close();
                         } catch {}
+                        AudioContextManager.releaseDedicatedContext('contact_request').catch(() => {});
                     }, 600);
                 }
             } catch {}

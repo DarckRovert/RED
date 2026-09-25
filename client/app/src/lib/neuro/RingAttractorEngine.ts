@@ -60,6 +60,7 @@ export class RingAttractorEngine {
     private lastExternalHeadingDeg: number = 0;
     private lastStepTime: number = 0;
     private isRunning: boolean = false;
+    private clientRefCount: number = 0;
 
     // Listeners reactivos
     private listeners: Set<(t: RingAttractorTelemetry) => void> = new Set();
@@ -133,6 +134,7 @@ export class RingAttractorEngine {
      * Inicia la captura de sensores nativos acoplada al SSOT TacticalCompassEngine y DeviceMotion para P-EN.
      */
     public start(): void {
+        this.clientRefCount++;
         if (this.isRunning) return;
         this.isRunning = true;
         this.lastStepTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -175,7 +177,14 @@ export class RingAttractorEngine {
     /**
      * Detiene la escucha de sensores.
      */
-    public stop(): void {
+    public stop(force = false): void {
+        if (force) {
+            this.clientRefCount = 0;
+        } else {
+            this.clientRefCount = Math.max(0, this.clientRefCount - 1);
+            if (this.clientRefCount > 0) return;
+        }
+
         this.isRunning = false;
         if (this.simInterval) {
             clearInterval(this.simInterval);
@@ -560,7 +569,7 @@ export class RingAttractorEngine {
      */
     public static resetForTesting(): void {
         if (this.instance) {
-            this.instance.stop();
+            this.instance.stop(true);
             this.instance.listeners.clear();
             this.instance.rfBearingCues.clear();
             this.instance.remoteKuramotoPhases.clear();

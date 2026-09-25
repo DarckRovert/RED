@@ -17,6 +17,7 @@
  */
 
 import { giantFiberReflex } from './GiantFiberReflexEngine';
+import { AudioContextManager } from '../audio/AudioContextManager';
 
 export interface MechanosensoryShockEvent {
   timestamp: number;
@@ -127,10 +128,8 @@ export class JohnstonOrganEngine {
       this.audioStream.getTracks().forEach(t => t.stop());
       this.audioStream = null;
     }
-    if (this.audioContext && this.audioContext.state !== 'closed') {
-      try { this.audioContext.close(); } catch {}
-      this.audioContext = null;
-    }
+    AudioContextManager.releaseDedicatedContext('johnston_organ').catch(() => {});
+    this.audioContext = null;
     this.notifyListeners();
   }
 
@@ -144,10 +143,13 @@ export class JohnstonOrganEngine {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       this.audioStream = stream;
-      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtxClass) return;
 
-      this.audioContext = new AudioCtxClass();
+      this.audioContext = AudioContextManager.acquireDedicatedContext('johnston_organ');
+      if (!this.audioContext) return;
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume().catch(() => {});
+      }
+
       const source = this.audioContext.createMediaStreamSource(stream);
       this.audioAnalyser = this.audioContext.createAnalyser();
       this.audioAnalyser.fftSize = 512;

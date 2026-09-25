@@ -105,9 +105,27 @@ export class CelestialNavigationEngine {
         else if (moonPhaseDays > 23.99 && moonPhaseDays <= 27.68) moonPhaseName = 'Creciente Menguante';
 
         // Posición lunar estimada
-        const rawMoonAz = (azimuthDeg + 180 + (moonPhaseDays * 12.2));
-        const moonAzimuthDeg = ((rawMoonAz % 360) + 360) % 360;
-        const moonAltitudeDeg = Math.sin((moonAzimuthDeg * rad)) * 60;
+        // La Luna avanza ~13.176°/día (vs 0.9856°/día del Sol) y tiene un desfase medio orbital
+        // respecto al Sol definido por su anomalía sinodal.
+        // Longitud eclíptica lunar simplificada:
+        const moonMeanLon = ((L + moonPhaseDays * (360 / 29.53059)) % 360 + 360) % 360;
+        const moonLambdaRad = moonMeanLon * rad;
+        // Declinación lunar (usando la misma órbita eclíptica inclinada por epsilon)
+        const sinMoonDecl = Math.sin(epsilon) * Math.sin(moonLambdaRad);
+        const moonDeclinationDeg = Math.asin(Math.max(-1, Math.min(1, sinMoonDecl))) * deg;
+        // Ángulo horario lunar a partir del GMST y la longitud media
+        const moonHa = (lst - moonMeanLon) * rad;
+        const sinMoonAlt = Math.sin(latRad) * Math.sin(moonDeclinationDeg * rad)
+            + Math.cos(latRad) * Math.cos(moonDeclinationDeg * rad) * Math.cos(moonHa);
+        const moonAltitudeDeg = Math.asin(Math.max(-1, Math.min(1, sinMoonAlt))) * deg;
+        // Azimut lunar
+        const moonDenomAz = Math.cos(latRad) * Math.cos(moonAltitudeDeg * rad);
+        const cosMoonAz = Math.abs(moonDenomAz) > 1e-6
+            ? (Math.sin(moonDeclinationDeg * rad) - Math.sin(latRad) * sinMoonAlt) / moonDenomAz
+            : 0;
+        let moonAzimuthDeg = isFinite(cosMoonAz) ? Math.acos(Math.max(-1, Math.min(1, cosMoonAz))) * deg : 0;
+        if (Math.sin(moonHa) > 0) moonAzimuthDeg = 360 - moonAzimuthDeg;
+        moonAzimuthDeg = ((moonAzimuthDeg % 360) + 360) % 360;
 
         // Estado de iluminación táctica
         let tacticalLightingState: 'FULL_DAYLIGHT' | 'CIVIL_TWILIGHT' | 'NAUTICAL_TWILIGHT' | 'ASTRONOMICAL_TWILIGHT' | 'PITCH_BLACK' = 'PITCH_BLACK';
@@ -155,7 +173,7 @@ export class CelestialNavigationEngine {
             moon: {
                 azimuthDeg: Math.round(moonAzimuthDeg * 10) / 10,
                 altitudeDeg: Math.round(moonAltitudeDeg * 10) / 10,
-                declinationDeg: 15.2,
+                declinationDeg: Math.round(moonDeclinationDeg * 10) / 10,
                 isAboveHorizon: moonAltitudeDeg > 0,
             },
             moonIlluminationPct: isFinite(moonIlluminationPct) ? Math.max(0, Math.min(100, moonIlluminationPct)) : 50,

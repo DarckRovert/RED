@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from '../../lib/i18n/i18nEngine';
+import { AudioContextManager } from '../../lib/audio/AudioContextManager';
 
 export const LandingInteractiveLabs: React.FC = () => {
     const { t } = useTranslation();
@@ -60,8 +61,11 @@ export const LandingInteractiveLabs: React.FC = () => {
         if (typeof window === "undefined") return;
         try {
             setIsTransmittingAudio(true);
-            const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-            const ctx = new AudioCtx();
+            const ctx = AudioContextManager.getSharedContext();
+            if (!ctx) {
+                setIsTransmittingAudio(false);
+                return;
+            }
             audioContextRef.current = ctx;
 
             const analyser = ctx.createAnalyser();

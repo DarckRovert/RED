@@ -12,3 +12,5 @@ export * from './BiocyberneticHabitat3DEngine';
 export * from './AutonomousHabitatChessEngine';
 export * from './AutonomousLifelongLearningEngine';
 export * from './BiocyberneticEdenParadiseEngine';
+export * from './OrganismGenome';
+export * from './BiocyberneticMetropolisEngine';

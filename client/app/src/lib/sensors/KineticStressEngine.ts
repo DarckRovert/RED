@@ -96,12 +96,22 @@ export class KineticStressEngine {
     try {
       const manDown = ManDownDetectorEngine.getInstance();
       this.manDownUnsub = manDown.subscribe((tel: ManDownTelemetry) => {
-        this.isManDownActive = tel.state === 'IMPACT_DETECTED' || tel.state === 'PRE_ALARM_COUNTDOWN' || tel.state === 'ALARM_DISPATCHED';
+        const wasManDown = this.isManDownActive;
+        this.isManDownActive =
+          tel.state === 'IMPACT_DETECTED' ||
+          tel.state === 'PRE_ALARM_COUNTDOWN' ||
+          tel.state === 'ALARM_DISPATCHED';
         this.immobilityDurationSec = tel.immobilityDurationSec;
         this.lastImpactMagnitude = tel.lastMagnitude;
 
         if (this.isManDownActive) {
-          this.currentLevel = 'CRITICAL_SHOCK';
+          if (this.currentLevel !== 'CRITICAL_SHOCK') {
+            this.currentLevel = 'CRITICAL_SHOCK';
+            this.notify();
+          }
+        } else if (wasManDown && !this.isManDownActive) {
+          // Cese de la emergencia Man-Down: restaurar estado nominal y notificar
+          this.currentLevel = 'NOMINAL';
           this.notify();
         }
       });
@@ -179,10 +189,12 @@ export class KineticStressEngine {
   public evaluateSpectralTremor(): void {
     if (this.accelMagnitudeHistory.length < 16) return;
 
-    // A. Si ManDown ya está activo, mantener CRITICAL_SHOCK
+    // A. Si ManDown ya está activo, mantener CRITICAL_SHOCK sin re-notificar a 4 Hz
     if (this.isManDownActive) {
-      this.currentLevel = 'CRITICAL_SHOCK';
-      this.notify();
+      if (this.currentLevel !== 'CRITICAL_SHOCK') {
+        this.currentLevel = 'CRITICAL_SHOCK';
+        this.notify();
+      }
       return;
     }
 

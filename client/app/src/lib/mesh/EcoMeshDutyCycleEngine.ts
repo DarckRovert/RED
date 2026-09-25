@@ -150,10 +150,17 @@ export class EcoMeshDutyCycleEngine {
         this.setMode('sos_override');
         if (this.activeTimer) clearTimeout(this.activeTimer);
         this.activeTimer = setTimeout(() => {
-            this.mode = 'balanced';
-            this.evaluatePolicy();
+            this.activeTimer = null;
+            // CRÍTICO: Resetear this.mode a 'sos_override' (valor actual) antes de llamar evaluatePolicy()
+            // para que setMode() no haga early-return por igualdad de modo y siempre ejecute
+            // startCycleLoop() — que es el paso necesario para restaurar el ciclo de duty-cycling
+            // de batería (balanced / ultra_eco). Sin esto, el dispositivo queda en escaneo 100%
+            // continuo del modo sos_override, agotando la batería indefinidamente.
+            this.mode = 'sos_override'; // Asegurar estado conocido (no-cambiado) antes del reset
+            this.evaluatePolicy();      // evaluatePolicy → setMode('balanced'|'ultra_eco') → startCycleLoop()
         }, durationMs);
     }
+
 
     /** Ciclo de trabajo periódico (Scan / Sleep) */
     private startCycleLoop(): void {

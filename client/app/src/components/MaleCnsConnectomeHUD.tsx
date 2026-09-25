@@ -319,6 +319,8 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
 
     return () => {
       clearInterval(syncTimer);
+      globalWorkspaceConsciousnessBus.stop();
+      connectomeBioBridge.stopConnectome();
       unsubCx();
       unsubFb();
       unsubSyn();
@@ -1733,7 +1735,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
                 onClick={() => {
                   TacticalAudioEngine.playTap();
                   if (isBridgeActive) {
-                    connectomeBioBridge.stopConnectome();
+                    connectomeBioBridge.stopConnectome(true);
                     setIsBridgeActive(false);
                     toast.warning("Lazo cerrado pausado: mosca en piloto autónomo");
                   } else {

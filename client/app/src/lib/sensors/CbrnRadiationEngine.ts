@@ -45,6 +45,9 @@ export class CbrnRadiationEngine {
     private hotPixelHitsLastFrame: number = 0;
     private cmosScanInterval: any = null;
     private activeSimulationScenario: CbrnSimulationScenario = 'NONE';
+    private lastNotifyTime: number = 0;
+    private readonly notifyThrottleMs: number = 250; // Máximo 4 Hz para evitar saturar el hilo de UI en dispositivos de gama de entrada
+    private pendingNotifyTimer: any = null;
 
     private listeners: Set<(t: RadiationTelemetry) => void> = new Set();
 
@@ -73,7 +76,24 @@ export class CbrnRadiationEngine {
         return () => this.listeners.delete(cb);
     }
 
-    private notify() {
+    private notify(force = false) {
+        const now = Date.now();
+        if (!force && (now - this.lastNotifyTime < this.notifyThrottleMs)) {
+            if (!this.pendingNotifyTimer) {
+                this.pendingNotifyTimer = setTimeout(() => {
+                    this.pendingNotifyTimer = null;
+                    this.notify(true);
+                }, this.notifyThrottleMs - (now - this.lastNotifyTime));
+            }
+            return;
+        }
+
+        if (this.pendingNotifyTimer) {
+            clearTimeout(this.pendingNotifyTimer);
+            this.pendingNotifyTimer = null;
+        }
+
+        this.lastNotifyTime = now;
         const t = this.getTelemetry();
         this.listeners.forEach(cb => {
             try { cb(t); } catch {}
@@ -198,6 +218,10 @@ export class CbrnRadiationEngine {
             clearInterval(this.cmosScanInterval);
             this.cmosScanInterval = null;
         }
+        if (this.pendingNotifyTimer) {
+            clearTimeout(this.pendingNotifyTimer);
+            this.pendingNotifyTimer = null;
+        }
         if (this.videoStream) {
             try {
                 this.videoStream.getTracks().forEach(t => t.stop());
@@ -210,7 +234,7 @@ export class CbrnRadiationEngine {
         this.isCameraActive = false;
         this.isLensCovered = false;
         this.hotPixelHitsLastFrame = 0;
-        this.notify();
+        this.notify(true);
     }
 
     /**
@@ -248,7 +272,9 @@ export class CbrnRadiationEngine {
         // 2. Factor de conversión estándar silicio CMOS a dosis equivalente ambiental H*(10): 120 CPM ≈ 1.0 uSv/h
         const derivedDose = Math.max(0.04, Math.round((cpmCalculated / 120) * 100) / 100);
 
-        this.doseRateUsVh = isFinite(derivedDose) ? derivedDose : 0.04;
+        // Suavizado EMA para amortiguar ruido térmico espurio de píxeles oscuros en sensores móviles
+        const smoothed = Math.round((0.80 * this.doseRateUsVh + 0.20 * derivedDose) * 100) / 100;
+        this.doseRateUsVh = isFinite(smoothed) && smoothed >= 0.04 ? smoothed : (isFinite(derivedDose) ? derivedDose : 0.04);
         this.isManualOverride = false;
         this.notify();
     }
@@ -285,6 +311,10 @@ export class CbrnRadiationEngine {
     public destroy(): void {
         this.stopMonitoring();
         this.stopCmosCameraCapture();
+        if (this.pendingNotifyTimer) {
+            clearTimeout(this.pendingNotifyTimer);
+            this.pendingNotifyTimer = null;
+        }
         this.listeners.clear();
     }
 

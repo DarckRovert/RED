@@ -38,6 +38,7 @@ export class OpticalMorseRxEngine {
     private detectedUnitMs: number = 100; // ~12 WPM default (100ms unit)
 
     private luminanceHistory: number[] = [];
+    private lastNotifyTime: number = 0;
     private listeners: Set<(state: MorseRxState) => void> = new Set();
 
     private currentState: MorseRxState = {
@@ -91,9 +92,9 @@ export class OpticalMorseRxEngine {
     public processFrameLuminance(luma: number, now: number = Date.now()): MorseRxState {
         if (!isFinite(luma)) return this.currentState;
 
-        // Mantener promedio móvil adaptativo
+        // Mantener promedio móvil adaptativo extendido (~6.0s a 20 FPS)
         this.luminanceHistory.push(luma);
-        if (this.luminanceHistory.length > 30) this.luminanceHistory.shift();
+        if (this.luminanceHistory.length > 120) this.luminanceHistory.shift();
 
         const minLuma = Math.min(...this.luminanceHistory);
         const maxLuma = Math.max(...this.luminanceHistory);
@@ -101,6 +102,11 @@ export class OpticalMorseRxEngine {
 
         const isCurrentlyOn = luma > dynamicThreshold && (maxLuma - minLuma) > 15;
         const duration = Math.max(0, now - this.lastStateChangeTime);
+
+        const prevLightOn = this.currentState.isLightOn;
+        const prevBuffer = this.currentState.currentSymbolBuffer;
+        const prevText = this.currentState.decodedText;
+        const prevLuma = this.currentState.currentLuminance;
 
         if (isCurrentlyOn !== this.isLightOn) {
             // Cambio de estado óptico
@@ -160,13 +166,24 @@ export class OpticalMorseRxEngine {
             lastDecodedChar: this.currentState.lastDecodedChar,
         };
 
-        this.notify();
+        const hasStateChange = this.isLightOn !== prevLightOn ||
+            this.currentSymbolBuffer !== prevBuffer ||
+            this.decodedText !== prevText ||
+            Math.abs(Math.round(luma) - prevLuma) >= 4 ||
+            (now - this.lastNotifyTime >= 250);
+
+        if (hasStateChange) {
+            this.lastNotifyTime = now;
+            this.notify();
+        }
+
         return this.currentState;
     }
 
     public reset(): void {
         this.clearText();
         this.luminanceHistory = [];
+        this.lastNotifyTime = 0;
         this.isLightOn = false;
         this.lastStateChangeTime = Date.now();
         this.detectedUnitMs = 100;

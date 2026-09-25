@@ -1,5 +1,23 @@
 # Changelog
 
+## [124.0.0-ciudad-digital-biocibernetica-y-urbanismo-estigmergico] - 2026-09-25
+
+### 🏙️🐜 Ciudad Digital Biocibernética & Urbanismo Estigmérgico A-Life (Release Oficial v124.0.0)
+
+- **Ciudad Digital Biocibernética & Urbanismo Estigmérgico (`BiocyberneticMetropolisEngine.ts` & `BiocyberneticHabitatEngine.ts`):**
+  - Urbanismo descentralizado por estigmergia: coordinación cívica colectiva mediante depósitos químicos guiados (`BUILD_SITE`), feromonas de rastro y radio-balizas.
+  - 5 Castas Ciudadanas Especializadas: `BUILDER` (construcción y cimentación), `HARVESTER` (recolección y provisión a silos), `NURSE` (trofalaxia médica y administración de serotonina), `SCHOLAR` (investigación y aceleración del PIB tecnológico en el Conectoma) y `SENTINEL` (patrulla perimetral y defensa contra interferencias RF).
+  - 5 Infraestructuras Cívicas Progresivas: Silos de Reserva Comunitaria (`SILO`), Residencias/Colmenas (`RESIDENCE`), Torres Sensoras C4ISR LoRa (`SENSOR_TOWER`), Estaciones de Compostaje y Reciclaje de Biomasa Circular (`COMPOSTER`) y Red de Autopistas de Alta Velocidad (`HIGHWAY`).
+  - Fisiología de Transporte Acelerado: Reducción de coeficiente de fricción dinámico al 45% y aceleración vectorial al 165% en calzadas cívicas para optimizar la logística de enjambre.
+  - Micro-Economía y Producto Interno Bruto (PIB) Cívico: Contabilidad determinista en tiempo real de reservas comunitarias, tasa de recolección neta, consumo basal, eficiencia de reciclaje y valor agregado de la infraestructura.
+  - Persistencia Atómica en Disco (`red_metropolis_state_v1`): Retención indestructible del estado urbanístico, andamios y métricas macroeconómicas.
+- **Renderizado 3D y Radar Táctico 2D (`BiocyberneticHabitat3DEngine.ts` & `TacticalHabitatModal.tsx`):**
+  - Infraestructura volumétrica procedural en Three.js con andamios de construcción pulsantes, silos con núcleos giratorios y autopistas con brillo rasante.
+  - HUD Urbano de Metrópolis en tiempo real con estadísticas de población por castas, reservas de silos, capacidad residencial, PIB cívico y controles de megaproyectos.
+  - Proyección táctica 2D en sincronía milimétrica con la arena tridimensional.
+- **Certificación en Hardware Físico Real:**
+  - Despliegue simultáneo y validación en Lenovo Tab M9 (`HA2CHKZ2`) y Motorola Moto G22 (`ZT322B386P`): 0 crashes, 0 caídas, JNI (`libred_mobile.so`), servidor loopback `127.0.0.1:7333` y renderizado a 60 FPS sin bloqueos en el hilo UI.
+
 ## [123.0.0-paraiso-biocibernetico-y-aprendizaje-autonomo-continuo] - 2026-09-24
 
 ### 🌿🧠 Paraíso Biocibernético, Aprendizaje Autónomo Continuo & Ajedrez Adaptativo (Release Oficial v123.0.0)

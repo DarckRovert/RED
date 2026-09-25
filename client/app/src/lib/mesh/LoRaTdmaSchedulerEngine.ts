@@ -59,9 +59,14 @@ export class LoRaTdmaSchedulerEngine {
     private transmitHandler: ((payload: Uint8Array) => Promise<boolean>) | null = null;
     private timerHandle: any = null;
 
+    // Mutex simple para serializar escrituras serie concurrentes
+    private txLocked: boolean = false;
+
     private isTorporThrottled: boolean = false;
     private lastTorporTxTimestamp: number = 0;
     public static readonly TORPOR_MIN_TX_INTERVAL_MS = 15_000; // Mínimo 15 segundos entre transmisiones no vitales en Torpor
+    // Tiempo máximo de espera en cola antes de expirar la Promise (30s)
+    private static readonly QUEUE_PROMISE_TIMEOUT_MS = 30_000;
 
     private metrics: TdmaSchedulerMetrics = {
         packetsScheduled: 0,
@@ -219,13 +224,37 @@ export class LoRaTdmaSchedulerEngine {
                 console.log('[LoRaTDMA] 🛑 Paquete no crítico suprimido por Gobernador Metabólico (Régimen TORPOR)');
                 return false;
             }
-            this.lastTorporTxTimestamp = now;
+            // NOTA: lastTorporTxTimestamp se actualiza en onSlotBoundary() DESPUÉS de que la
+            // transmisión es despachada realmente, no aquí, para evitar suprimir el siguiente
+            // intento si la transmisión actual falla.
         }
 
         return new Promise<boolean>((resolve) => {
             const slotInfo = this.getCurrentSlotInfo();
             // Emergencias moderadas usan el slot 9 (contención rápida); tráfico estándar usa la ranura asignada 1..8
             const targetSlot = isEmergency ? 9 : slotInfo.assignedSlotIndex;
+
+            // Guard de timeout: si la Promise no se resuelve en QUEUE_PROMISE_TIMEOUT_MS, se resuelve
+            // como false para que el caller nunca quede bloqueado indefinidamente.
+            let settled = false;
+            const timeoutHandle = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    const idx = this.queue.findIndex(q => q.resolve === wrappedResolve);
+                    if (idx !== -1) this.queue.splice(idx, 1);
+                    this.metrics.activeQueueLength = this.queue.length;
+                    console.warn(`[LoRaTDMA] ⏰ Promise TDMA expirada por timeout (${LoRaTdmaSchedulerEngine.QUEUE_PROMISE_TIMEOUT_MS}ms). Paquete descartado.`);
+                    resolve(false);
+                }
+            }, LoRaTdmaSchedulerEngine.QUEUE_PROMISE_TIMEOUT_MS);
+
+            const wrappedResolve = (ok: boolean) => {
+                if (!settled) {
+                    settled = true;
+                    clearTimeout(timeoutHandle);
+                    resolve(ok);
+                }
+            };
 
             const item: TdmaQueueItem = {
                 id: `TDMA-${Date.now()}-${this.generateNonce()}`,
@@ -234,7 +263,7 @@ export class LoRaTdmaSchedulerEngine {
                 isEmergency,
                 enqueuedAt: Date.now(),
                 targetSlot,
-                resolve,
+                resolve: wrappedResolve,
             };
 
             this.queue.push(item);
@@ -300,6 +329,10 @@ export class LoRaTdmaSchedulerEngine {
                 const ok = await this.transmitHandler(item.payload);
                 this.metrics.packetsTransmittedOnSlot++;
                 this.metrics.collisionsMitigated++;
+                // Actualizar timestamp de Torpor SÓLO si la transmisión fue exitosa
+                if (ok && this.isTorporThrottled && !item.isEmergency && item.priority < 8) {
+                    this.lastTorporTxTimestamp = Date.now();
+                }
                 item.resolve(ok);
             } else {
                 item.resolve(false);

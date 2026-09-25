@@ -153,10 +153,7 @@ export class StructuralHealthSeismicEngine {
 
     public destroy(): void {
         this.stopMonitoring();
-        if (this.audioCtx) {
-            try { this.audioCtx.close(); } catch {}
-            this.audioCtx = null;
-        }
+        this.audioCtx = null;
         this.listeners.clear();
         StructuralHealthSeismicEngine.instance = null;
     }

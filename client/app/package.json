@@ -1,6 +1,6 @@
 {
   "name": "red-app",
-  "version": "123.0.0",
+  "version": "124.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -24,6 +24,7 @@
     "test:vault": "node scripts/test-phase3-vault-crypto.js",
     "test:mesh": "node scripts/test-phase4-depin-mesh.js",
     "test:evolution": "node scripts/test-phase5-evolutionary-hardening.js",
+    "test:habitat-evolution": "node scripts/test-biocybernetic-habitat-evolution.js",
     "test:chaos": "node scripts/test-phase6-chaos-mesh-stress.js",
     "test:miniapps": "node scripts/test-phase7-miniapps-payments.js",
     "test:cot": "node scripts/test-phase8-cot-meshtastic.js",

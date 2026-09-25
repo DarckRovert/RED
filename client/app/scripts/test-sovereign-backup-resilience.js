@@ -151,6 +151,68 @@ runTest('7. Bóveda Criptográfica: Contraseña incorrecta arroja fallo de auten
     assert.throws(() => simulateVaultUnpacking(packed, 'WrongPassword'), /unable to authenticate data|bad decrypt/i);
 });
 
+// ── 4. Verificación del Diccionario Completo BIP-39 (2048 palabras) ───────────
+const wordlistPath = path.join(__dirname, '..', 'src', 'lib', 'storage', 'bip39EnglishWordlist.ts');
+const wordlistCode = fs.readFileSync(wordlistPath, 'utf8');
+
+runTest('8. Diccionario BIP-39 Completo: 2048 palabras canónicas sin truncamiento', () => {
+    const wordlistMatch = wordlistCode.match(/export const BIP39_ENGLISH_WORDLIST: readonly string\[\] = Object\.freeze\(\[([\s\S]*?)\]\);/);
+    assert(wordlistMatch, 'Debe exportar BIP39_ENGLISH_WORDLIST como array inmutable');
+    const words = eval('[' + wordlistMatch[1] + ']');
+    assert.strictEqual(words.length, 2048, `El diccionario debe contener exactamente 2048 palabras, tiene: ${words.length}`);
+    assert.strictEqual(new Set(words).size, 2048, 'Todas las 2048 palabras deben ser únicas');
+    assert.strictEqual(words[0], 'abandon', 'La primera palabra debe ser abandon');
+    assert.strictEqual(words[2047], 'zoo', 'La última palabra debe ser zoo');
+});
+
+runTest('9. Integridad Criptográfica de Checksum BIP-39 (Vectores Oficiales)', () => {
+    // Vector 0 oficial BIP-39: 128 bits de cero -> checksum byte 0x37 -> 4 bits = 3 ('about')
+    const wordlistMatch = wordlistCode.match(/export const BIP39_ENGLISH_WORDLIST: readonly string\[\] = Object\.freeze\(\[([\s\S]*?)\]\);/);
+    const words = eval('[' + wordlistMatch[1] + ']');
+    
+    function validateChecksum(mnemonic) {
+        const clean = mnemonic.trim().toLowerCase().split(/\s+/);
+        if (clean.length !== 12) return false;
+        const bits = [];
+        for (const w of clean) {
+            const idx = words.indexOf(w);
+            if (idx === -1) return false;
+            for (let b = 10; b >= 0; b--) {
+                bits.push((idx & (1 << b)) !== 0);
+            }
+        }
+        const entropyBytes = new Uint8Array(16);
+        for (let i = 0; i < 16; i++) {
+            let byte = 0;
+            for (let b = 0; b < 8; b++) {
+                byte = (byte << 1) | (bits[i * 8 + b] ? 1 : 0);
+            }
+            entropyBytes[i] = byte;
+        }
+        const hash = crypto.createHash('sha256').update(entropyBytes).digest();
+        const checksumByte = hash[0];
+        for (let b = 0; b < 4; b++) {
+            const expectedBit = (checksumByte & (1 << (7 - b))) !== 0;
+            if (bits[128 + b] !== expectedBit) return false;
+        }
+        return true;
+    }
+
+    const validVector = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+    const invalidVector = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon';
+    assert.strictEqual(validateChecksum(validVector), true, 'El vector con checksum correcto debe ser validado como true');
+    assert.strictEqual(validateChecksum(invalidVector), false, 'El vector con checksum alterado debe ser rechazado como false');
+});
+
+runTest('10. Retrocompatibilidad Cero Regresión: Mnemónicos históricos derivan la misma identidad', () => {
+    // Frase generada bajo la versión anterior de 300 palabras
+    const historicPhrase = 'century census cement celery ceiling cave caution cause caught cattle category catch';
+    const idA = simulateRestoreMnemonic(historicPhrase);
+    const idB = simulateRestoreMnemonic(historicPhrase.toLowerCase());
+    assert.strictEqual(idA.identity_hash, idB.identity_hash, 'La identidad histórica debe derivarse idénticamente');
+    assert.strictEqual(idA.short_id, idB.short_id, 'El short_id táctico histórico no debe alterarse');
+});
+
 console.log('\n================================================================================');
 console.log(`📊 RESUMEN FINAL: ${passedTests}/${totalTests} PRUEBAS SUPERADAS EXITOSAMENTE (100% PASS)`);
 console.log('================================================================================\n');

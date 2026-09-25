@@ -41,7 +41,6 @@ export default function NearbyDevicesPanel() {
     const { t } = useTranslation();
     const { navigate, goBack, contacts, identity } = useRedStore();
     const [devices, setDevices] = useState<UnifiedDevice[]>([]);
-    const [scanAngle, setScanAngle] = useState(0);
     const [connecting, setConnecting] = useState<string | null>(null);
 
     useEffect(() => {
@@ -205,11 +204,6 @@ export default function NearbyDevicesPanel() {
     }, [contacts, identity]);
 
     useEffect(() => {
-        const t = setInterval(() => setScanAngle(a => (a + 4) % 360), 30);
-        return () => clearInterval(t);
-    }, []);
-
-    useEffect(() => {
         const unregister = BackHandlerRegistry.register(() => {
             TacticalAudioEngine.playTap();
             goBack();
@@ -284,6 +278,12 @@ export default function NearbyDevicesPanel() {
             display: "flex", flexDirection: "column",
             overflow: "hidden", position: "relative"
         }}>
+            <style>{`
+                @keyframes radarSweepAnim {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+            `}</style>
             {/* Header Táctico */}
             <header style={{
                 padding: "16px 20px",
@@ -352,10 +352,13 @@ export default function NearbyDevicesPanel() {
                             <div style={{ position: "absolute", width: "120px", height: "120px", borderRadius: "50%", border: "1px dashed rgba(0,229,255,0.2)" }} />
                             <div style={{ position: "absolute", width: "60px", height: "60px", borderRadius: "50%", border: "1px dashed rgba(0,229,255,0.2)" }} />
                             
-                            {/* Sweeper beam */}
+                            {/* Sweeper beam acelerado por GPU (cero re-renderizados de React) */}
                             <div style={{
                                 position: "absolute", inset: 0,
-                                background: `conic-gradient(from ${scanAngle}deg at 50% 50%, rgba(0,229,255,0.4) 0deg, transparent 60deg, transparent 360deg)`
+                                borderRadius: "50%",
+                                background: "conic-gradient(from 0deg at 50% 50%, rgba(0,229,255,0.4) 0deg, transparent 60deg, transparent 360deg)",
+                                animation: "radarSweepAnim 2.8s linear infinite",
+                                pointerEvents: "none"
                             }} />
 
                             {/* Detected Devices Radar Blips */}

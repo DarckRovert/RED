@@ -87,6 +87,7 @@ export class GlobalWorkspaceConsciousnessBus {
   public static readonly UI_THROTTLE_MS = 100; // 10 Hz máximo para reactividad fluida
 
   private isRunning = false;
+  private refCount = 0;
   private unsubs: Array<() => void> = [];
   private listeners: Set<(snapshot: ConsciousnessSnapshot) => void> = new Set();
 
@@ -129,6 +130,7 @@ export class GlobalWorkspaceConsciousnessBus {
    * Inicia el bus de conciencia global y acopla los bucles de retroalimentación
    */
   public start(): void {
+    this.refCount++;
     if (this.isRunning) return;
     this.isRunning = true;
 
@@ -165,7 +167,13 @@ export class GlobalWorkspaceConsciousnessBus {
     this.evaluateGlobalWorkspaceCompetition();
   }
 
-  public stop(): void {
+  public stop(force = false): void {
+    if (this.refCount > 0 && !force) {
+      this.refCount--;
+      if (this.refCount > 0) return;
+    } else if (force) {
+      this.refCount = 0;
+    }
     if (!this.isRunning) return;
     this.isRunning = false;
 

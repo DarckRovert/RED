@@ -208,7 +208,8 @@ export class TacticalOnionRouter {
      * Envuelve el payload en 3 capas de piel de cebolla
      */
     public wrapLayers(payload: Uint8Array, circuit: OnionCircuit): { entryPacket: Uint8Array; firstHopDid: string } {
-        const iv = this.getRandomBytes(12);
+        const iv3 = this.getRandomBytes(12);
+        const iv2 = this.getRandomBytes(12);
 
         // Capa 3: Exit Relay -> Destino Final
         const layer3Obj = {
@@ -219,7 +220,7 @@ export class TacticalOnionRouter {
         };
         const layer3Raw = new TextEncoder().encode(JSON.stringify(layer3Obj));
         const key3 = this.generateKey();
-        const layer3Enc = this.encryptLayer(layer3Raw, key3, iv);
+        const layer3Enc = this.encryptLayer(layer3Raw, key3, iv3);
 
         // Capa 2: Middle Relay -> Exit Relay (clave protegida por derivación)
         const layer2Obj = {
@@ -227,12 +228,12 @@ export class TacticalOnionRouter {
             nextHop: circuit.exitRelay.relayDid,
             isExit: false,
             keyNextHex: Array.from(key3).map(b => b.toString(16).padStart(2, '0')).join(''),
-            ivHex: Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join(''),
+            ivHex: Array.from(iv3).map(b => b.toString(16).padStart(2, '0')).join(''),
             payloadEncHex: Array.from(layer3Enc).map(b => b.toString(16).padStart(2, '0')).join('')
         };
         const layer2Raw = new TextEncoder().encode(JSON.stringify(layer2Obj));
         const key2 = this.generateKey();
-        const layer2Enc = this.encryptLayer(layer2Raw, key2, iv);
+        const layer2Enc = this.encryptLayer(layer2Raw, key2, iv2);
 
         // Capa 1: Entry Relay -> Middle Relay
         const layer1Obj = {
@@ -240,7 +241,7 @@ export class TacticalOnionRouter {
             nextHop: circuit.middleRelay.relayDid,
             isExit: false,
             keyNextHex: Array.from(key2).map(b => b.toString(16).padStart(2, '0')).join(''),
-            ivHex: Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join(''),
+            ivHex: Array.from(iv2).map(b => b.toString(16).padStart(2, '0')).join(''),
             payloadEncHex: Array.from(layer2Enc).map(b => b.toString(16).padStart(2, '0')).join('')
         };
         const layer1Raw = new TextEncoder().encode(JSON.stringify(layer1Obj));
@@ -266,7 +267,7 @@ export class TacticalOnionRouter {
             // Si es la capa final de salida
             if (parsed.isExit && parsed.payloadHex) {
                 const hex = parsed.payloadHex;
-                const len = hex.length / 2;
+                const len = hex.length >>> 1;
                 const out = new Uint8Array(len);
                 for (let i = 0; i < len; i++) {
                     out[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
@@ -303,7 +304,7 @@ export class TacticalOnionRouter {
     }
 
     private hexToBytes(hex: string): Uint8Array {
-        const len = hex.length / 2;
+        const len = hex.length >>> 1;
         const out = new Uint8Array(len);
         for (let i = 0; i < len; i++) {
             out[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
