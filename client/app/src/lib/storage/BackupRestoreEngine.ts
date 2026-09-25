@@ -4,6 +4,8 @@
  * using Web Crypto API (AES-256-GCM + PBKDF2-SHA256 with 100,000 iterations).
  */
 
+import { RED_VERSION } from '../version';
+
 export interface ContactBackup {
     id?: string;
     identityHash?: string;
@@ -60,7 +62,7 @@ export class BackupRestoreEngine {
 
         // 1. Recolectar datos de la bóveda local
         const backupData: BackupData = {
-            version: "36.0.0",
+            version: RED_VERSION,
             timestamp: Date.now(),
             identity: this.getJSON("red_identity"),
             contacts: this.getJSON("red_web_contacts") || this.getJSON("red_contacts") || [],

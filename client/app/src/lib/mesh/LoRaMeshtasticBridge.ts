@@ -602,13 +602,8 @@ export class LoRaMeshtasticBridge {
         }
 
         if (!this.isConnected) {
-            if (packetForLoopback) {
-                this.dispatchInbound(packetForLoopback);
-            } else {
-                const unframed = this.unframePacket(framed);
-                if (unframed) this.dispatchInbound(unframed);
-            }
-            return true;
+            // Radio desconectada: NO simular transmisión exitosa; retornar false para activar fallbacks
+            return false;
         }
 
         if (this.isNativeUsb) {

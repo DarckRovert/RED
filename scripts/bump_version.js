@@ -265,6 +265,58 @@ updateFile('client/app/scripts/test-cyber-tunnel-real-egress.js', (content) => {
     return updated;
 }, 'Test Suite CyberTunnel Egress');
 
+// 23. client/app/src/lib/legal/LegalAgreementManager.ts
+updateFile('client/app/src/lib/legal/LegalAgreementManager.ts', (content) => {
+    return content.replace(/export const CURRENT_LEGAL_VERSION = ["'][^"']+["'];/, `export const CURRENT_LEGAL_VERSION = "${targetVersion}";`);
+}, 'LegalAgreementManager SSOT');
+
+// 24. DISCLAIMER.md
+updateFile('DISCLAIMER.md', (content) => {
+    let updated = content.replace(/\*Versión Canónica: v\d+\.\d+\.\d+/, `*Versión Canónica: v${targetVersion}`);
+    updated = updated.replace(/Documento Canónico v\d+\.\d+\.\d+\./, `Documento Canónico v${targetVersion}.`);
+    return updated;
+}, 'DISCLAIMER.md Descargo Legal Canónico');
+
+// 25. CREDITS.md
+updateFile('CREDITS.md', (content) => {
+    let updated = content.replace(/\*Versión Canónica: v\d+\.\d+\.\d+/, `*Versión Canónica: v${targetVersion}`);
+    updated = updated.replace(/Documento Canónico v\d+\.\d+\.\d+\./, `Documento Canónico v${targetVersion}.`);
+    return updated;
+}, 'CREDITS.md Salón de la Fama Canónico');
+
+// 26. terms.html (Root)
+updateFile('terms.html', (content) => {
+    return content.replace(/TERMS & EULA v\d+\.\d+\.\d+/, `TERMS & EULA v${targetVersion}`);
+}, 'terms.html Términos Canónicos Web');
+
+// 27. privacy.html (Root)
+updateFile('privacy.html', (content) => {
+    let updated = content.replace(/PRIVACY POLICY v\d+\.\d+\.\d+/, `PRIVACY POLICY v${targetVersion}`);
+    updated = updated.replace(/v\d+\.\d+\.\d+/g, `v${targetVersion}`);
+    return updated;
+}, 'privacy.html Privacidad Canónica Web');
+
+// 28. credits.html (Root)
+updateFile('credits.html', (content) => {
+    return content.replace(/HALL OF FAME v\d+\.\d+\.\d+/, `HALL OF FAME v${targetVersion}`);
+}, 'credits.html Salón de la Fama Canónico Web');
+
+// 29. Sincronización Satélite Automática de Archivos Legales (Next.js public/ y Rust node/src/web/)
+const satelliteSyncTargets = [
+    { src: 'terms.html', dests: ['client/app/public/terms.html', 'node/src/web/terms.html'] },
+    { src: 'privacy.html', dests: ['client/app/public/privacy.html', 'node/src/web/privacy.html'] },
+    { src: 'credits.html', dests: ['client/app/public/credits.html', 'node/src/web/credits.html'] },
+];
+
+satelliteSyncTargets.forEach(({ src, dests }) => {
+    const srcPath = path.join(ROOT_DIR, src);
+    if (!fs.existsSync(srcPath)) return;
+    const content = fs.readFileSync(srcPath, 'utf8');
+    dests.forEach(dest => {
+        updateFile(dest, () => content, `Sincronización Satélite ${src} → ${dest}`);
+    });
+});
+
 // Imprimir Reporte de Resultados
 console.log("📋 REPORTE DE ACTUALIZACIÓN DE ARCHIVOS:");
 let hasErrors = false;

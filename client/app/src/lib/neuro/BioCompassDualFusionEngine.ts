@@ -24,7 +24,6 @@ import { entorhinalGridCell, EntorhinalGridCellEngine, EntorhinalTelemetry, Grid
 import { hippocampalEpisodic } from './human/HippocampalEpisodicEngine';
 import { tacticalMotorActuator } from './TacticalMotorActuatorEngine';
 import { centralPatternGenerator } from './CentralPatternGeneratorEngine';
-import { pedestrianDeadReckoning, PdrState } from '../sensors/PedestrianDeadReckoningEngine';
 import { meshRouter } from '../mesh/meshRouter';
 import { AerDomainCode } from '../mesh/meshProtocol';
 
@@ -62,12 +61,16 @@ export interface BioCompassDualTelemetry {
 export class BioCompassDualFusionEngine {
   private static instance: BioCompassDualFusionEngine | null = null;
 
+  public static readonly AER_REFRACTORY_PERIOD_MS = 500; // Máximo 2 espigas/segundo (preservación espectral LoRa TDMA)
+  public static readonly UI_THROTTLE_MS = 66; // 15 Hz (~66ms) cadencia óptima anti-saturación de CPU
+
   private isRunning = false;
   private isAutonomousNavActive = false;
   private hippocampalResetsCount = 0;
   private lastAerSpikeBroadcastAt = 0;
   private lastBroadcastHeading = -999;
-  private lastPdrDistance = 0.0;
+  private lastNotifyTime = 0;
+  private notifyThrottleTimer: ReturnType<typeof setTimeout> | null = null;
 
   private unsubs: Array<() => void> = [];
   private listeners: Set<(telemetry: BioCompassDualTelemetry) => void> = new Set();
@@ -81,54 +84,57 @@ export class BioCompassDualFusionEngine {
     return BioCompassDualFusionEngine.instance;
   }
 
+  /**
+   * Calcula la distancia angular geodésica mínima entre dos rumbos sobre la circunferencia S^1 [0° .. 180°].
+   */
+  public static computeCircularDifference(degA: number, degB: number): number {
+    if (!isFinite(degA) || !isFinite(degB)) return 0;
+    const diff = Math.abs(((degA - degB + 540) % 360) - 180);
+    return Math.round(diff * 10) / 10;
+  }
+
   public start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
 
     // Iniciar subsistemas si no están corriendo
+    fanShapedBody.start();
     entorhinalGridCell.start();
 
-    // 1. Suscripción a PDR (Pedestrian Dead Reckoning inercial)
-    const unsubPdr = pedestrianDeadReckoning.subscribe((pdr: PdrState) => {
-      if (pdr.distanceMeters < this.lastPdrDistance) {
-        this.lastPdrDistance = pdr.distanceMeters;
-      }
-      const delta = pdr.distanceMeters - this.lastPdrDistance;
-      if (delta >= 0.01) {
-        const heading = (typeof pdr.currentHeadingDeg === 'number' && isFinite(pdr.currentHeadingDeg))
-          ? pdr.currentHeadingDeg
-          : ringAttractor.getTelemetry().headingDeg;
-        this.integrateMotion(delta, heading);
-        this.lastPdrDistance = pdr.distanceMeters;
-      }
-    });
-
-    // 2. Suscripción a RingAttractor para cambios de rumbo azimutal E-PG
+    // 1. Suscripción a RingAttractor para cambios de rumbo azimutal E-PG
     const unsubRing = ringAttractor.subscribe((ringTelem: RingAttractorTelemetry) => {
-      // Disparar micro-espiga AER táctica si el rumbo viró > 30° respecto al último broadcast
-      if (Math.abs(ringTelem.headingDeg - this.lastBroadcastHeading) >= 30) {
+      // Disparar micro-espiga AER táctica si el rumbo viró >= 30° respecto al último broadcast en la métrica circular S^1
+      const headingDiff = this.lastBroadcastHeading === -999
+        ? 30
+        : BioCompassDualFusionEngine.computeCircularDifference(ringTelem.headingDeg, this.lastBroadcastHeading);
+
+      if (headingDiff >= 30) {
         this.broadcastAerHeadingSpike(ringTelem.headingDeg);
       }
       this.evaluateClosedLoopSteering();
       this.notifyListeners();
     });
 
-    // 3. Suscripción a Fan-Shaped Body
+    // 2. Suscripción reactiva a Fan-Shaped Body (la odometría de pasos se ingesta directamente en FB)
     const unsubFb = fanShapedBody.subscribe(() => {
       this.evaluateClosedLoopSteering();
       this.notifyListeners();
     });
 
-    // 4. Suscripción a Entorhinal Grid Cells
+    // 3. Suscripción reactiva a Entorhinal Grid Cells (la odometría de pasos se ingesta directamente en MEC)
     const unsubMec = entorhinalGridCell.subscribe(() => {
       this.notifyListeners();
     });
 
-    this.unsubs.push(unsubPdr, unsubRing, unsubFb, unsubMec);
+    this.unsubs.push(unsubRing, unsubFb, unsubMec);
   }
 
   public stop(): void {
     this.isRunning = false;
+    if (this.notifyThrottleTimer) {
+      clearTimeout(this.notifyThrottleTimer);
+      this.notifyThrottleTimer = null;
+    }
     this.unsubs.forEach((u) => {
       try { u(); } catch {}
     });
@@ -176,7 +182,7 @@ export class BioCompassDualFusionEngine {
    * Computa el vector de timoneo combinado (Dual Fused Steering Vector) ponderando
    * la cinemática vectorial del Fan-Shaped Body con el gradiente topológico de la Corteza Entorrinal.
    */
-  public getFusedSteeringSolution(): {
+  public getFusedSteeringSolution(cachedCoherence?: number): {
     fusedSteeringErrorDeg: number;
     steeringMode: AutonomousCpgSteeringState;
     distanceMeters: number;
@@ -200,7 +206,9 @@ export class BioCompassDualFusionEngine {
       };
     }
 
-    const coherence = this.calculatePhaseCoherence();
+    const coherence = (typeof cachedCoherence === 'number' && Number.isFinite(cachedCoherence))
+      ? cachedCoherence
+      : this.calculatePhaseCoherence();
     // Peso asignado al Fan-Shaped Body (mayor cuanto mayor sea la coherencia armónica)
     const wFb = 0.70 * coherence + 0.30;
     const wTopo = 1.0 - wFb;
@@ -261,7 +269,7 @@ export class BioCompassDualFusionEngine {
   public setGuidanceGoal(xMeters: number, yMeters: number, zMeters = 0.0): void {
     fanShapedBody.setTarget(xMeters, yMeters, zMeters);
     this.evaluateClosedLoopSteering();
-    this.notifyListeners();
+    this.notifyListeners(true);
   }
 
   /**
@@ -272,7 +280,7 @@ export class BioCompassDualFusionEngine {
     if (this.isAutonomousNavActive) {
       centralPatternGenerator.setLocomotionDrive(0.0, 0.0);
     }
-    this.notifyListeners();
+    this.notifyListeners(true);
   }
 
   /**
@@ -280,7 +288,7 @@ export class BioCompassDualFusionEngine {
    */
   public setHomeDatum(x?: number, y?: number, z?: number): void {
     fanShapedBody.setHomeOrigin(x, y, z);
-    this.notifyListeners();
+    this.notifyListeners(true);
   }
 
   /**
@@ -309,7 +317,7 @@ export class BioCompassDualFusionEngine {
     } catch {}
 
     this.evaluateClosedLoopSteering();
-    this.notifyListeners();
+    this.notifyListeners(true);
   }
 
   /**
@@ -322,18 +330,22 @@ export class BioCompassDualFusionEngine {
     } else {
       this.evaluateClosedLoopSteering();
     }
-    this.notifyListeners();
+    this.notifyListeners(true);
   }
 
   /**
    * Difunde una micro-espiga neuromórfica AER (14 bytes) con el rumbo azimutal actual
-   * a través de la radio malla LoRa/BLE sin sobrecargar el espectro RF.
+   * a través de la radio malla LoRa/BLE con control de período refractario.
    */
   public async broadcastAerHeadingSpike(heading = ringAttractor.getTelemetry().headingDeg): Promise<void> {
+    const now = Date.now();
+    if (this.lastBroadcastHeading !== -999 && (now - this.lastAerSpikeBroadcastAt < BioCompassDualFusionEngine.AER_REFRACTORY_PERIOD_MS)) {
+      return;
+    }
     try {
       const headingInt = Math.round(((heading % 360) + 360) % 360);
       await meshRouter.broadcastAerSpike(AerDomainCode.CX_COMPASS_HEADING, 0, headingInt);
-      this.lastAerSpikeBroadcastAt = Date.now();
+      this.lastAerSpikeBroadcastAt = now;
       this.lastBroadcastHeading = headingInt;
     } catch {}
   }
@@ -343,7 +355,7 @@ export class BioCompassDualFusionEngine {
     const fbTelem = fanShapedBody.getTelemetry();
     const mecTelem = entorhinalGridCell.getTelemetry();
     const coherence = this.calculatePhaseCoherence();
-    const steeringSol = this.getFusedSteeringSolution();
+    const steeringSol = this.getFusedSteeringSolution(coherence);
 
     let coherenceState: PhaseCoherenceState = 'NOMINAL';
     if (coherence >= 0.55) {
@@ -383,10 +395,39 @@ export class BioCompassDualFusionEngine {
   public subscribe(callback: (telemetry: BioCompassDualTelemetry) => void): () => void {
     this.listeners.add(callback);
     callback(this.getTelemetry());
-    return () => this.listeners.delete(callback);
+    return () => {
+      this.listeners.delete(callback);
+      if (this.listeners.size === 0 && this.notifyThrottleTimer) {
+        clearTimeout(this.notifyThrottleTimer);
+        this.notifyThrottleTimer = null;
+      }
+    };
   }
 
-  private notifyListeners(): void {
+  private notifyListeners(force = false): void {
+    if (!this.isRunning || this.listeners.size === 0) return;
+    const now = Date.now();
+    const elapsed = now - this.lastNotifyTime;
+
+    if (force || elapsed >= BioCompassDualFusionEngine.UI_THROTTLE_MS) {
+      if (this.notifyThrottleTimer) {
+        clearTimeout(this.notifyThrottleTimer);
+        this.notifyThrottleTimer = null;
+      }
+      this.lastNotifyTime = now;
+      this.dispatchTelemetry();
+    } else if (!this.notifyThrottleTimer) {
+      this.notifyThrottleTimer = setTimeout(() => {
+        this.notifyThrottleTimer = null;
+        if (!this.isRunning || this.listeners.size === 0) return;
+        this.lastNotifyTime = Date.now();
+        this.dispatchTelemetry();
+      }, BioCompassDualFusionEngine.UI_THROTTLE_MS - elapsed);
+    }
+  }
+
+  private dispatchTelemetry(): void {
+    if (this.listeners.size === 0) return;
     const telem = this.getTelemetry();
     for (const listener of this.listeners) {
       try { listener(telem); } catch {}

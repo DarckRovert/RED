@@ -149,8 +149,13 @@ export class FanShapedBodyEngine {
     } catch {}
 
     // 3. Acoplar Odometría Inercial de Pasos de PDR con Desnivel Hipsométrico Real
-    let lastStepCount = 0;
+    let lastStepCount = -1;
     this.pdrUnsub = pedestrianDeadReckoning.subscribe((pdrState: PdrState) => {
+      // En la primera llamada (sincronización inicial), fijar baseline sin integrar pasos históricos
+      if (lastStepCount === -1) {
+        lastStepCount = pdrState.totalSteps;
+        return;
+      }
       if (pdrState.totalSteps > lastStepCount) {
         const stepsDelta = pdrState.totalSteps - lastStepCount;
         lastStepCount = pdrState.totalSteps;
@@ -174,9 +179,9 @@ export class FanShapedBodyEngine {
           }
         } catch {}
 
-        for (let i = 0; i < stepsDelta; i++) {
-          this.integrateStep(stepStride, pdrState.currentHeadingDeg, stepDeltaZ / stepsDelta);
-        }
+        // Acumular el desplazamiento total de este tick e integrar en una única pasada (O(1) vs O(N))
+        const effectiveSteps = Math.min(stepsDelta, 50);
+        this.integrateStep(stepStride * effectiveSteps, pdrState.currentHeadingDeg, stepDeltaZ);
       }
     });
 

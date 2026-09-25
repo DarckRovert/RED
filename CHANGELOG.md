@@ -1,5 +1,28 @@
 # Changelog
 
+## [125.0.0-blindaje-legal-soberano-y-ecosistema-tri-mirror] - 2026-09-25
+
+### 🏛️📜 Blindaje Legal Soberano, Salón de la Fama Open Source & Ecosistema Web Tri-Mirror (Release Oficial v125.0.0)
+
+- **Blindaje Legal Soberano & Clickwrap Digital Gate (`LegalAgreementManager.ts` & `DigitalContractGateModal.tsx`):**
+  - SSOT de Cumplimiento Normativo: Creación de `LegalAgreementManager.ts` para centralizar la versión legal autoritativa, identificadores criptográficos SHA-256 del contrato y persistencia de consentimientos.
+  - Puerta de Consentimiento Digital Estricto (`DigitalContractGateModal.tsx`): Modal de aceptación obligatoria que intercepta el inicio del sistema operativo en `page.tsx` hasta suscribir afirmativamente 4 cláusulas: Términos EULA AGPL-3.0, descargo de emergencias VHF/UHF, regulación de espectro LoRa sub-GHz y descargo médico TCCC.
+  - Resiliencia de Consentimiento en Android: Recuperación y persistencia nativa con `SecureStoragePlugin` (`isContractAcceptedNativeFallback()`) para soportar purgas de almacenamiento por parte del sistema operativo móvil.
+- **Salón de la Fama & Atribución Open Source (`CREDITS.md`, `credits.html` & `HallOfFameData.ts`):**
+  - Reconocimiento y honores a 19 pioneros globales en computación, criptografía, radiofrecuencia, neurobiología, medicina de combate y telecomunicaciones.
+  - Mención formal al creador y arquitecto principal Rodrigo Alejandro Vega Rojas (alias "DarckRovert") por el diseño integral de RED Sovereign Mesh OS.
+  - Modal Interactivo Táctico (`HallOfFameModal.tsx`) con filtros por categoría, búsqueda en tiempo real, insignias de licencia y enlaces directos a proyectos fuente.
+  - Integración en `LegalComplianceModal.tsx` (Pestaña 6), `PrivacyTab.tsx`, `UpdatesTab.tsx` y pie de página de la landing page.
+- **Ecosistema Web de 3 Destinos (Triple-Mirror Serving Architecture):**
+  - Sincronización binaria idéntica de `terms.html`, `privacy.html` y `credits.html` entre raíz (`./`), Next.js SPA (`client/app/public/`) y servidor Rust Axum (`node/src/web/`).
+  - Endpoints públicos directos en Rust `red-node` (`/credits`, `/credits.html`, `/terms`, `/privacy`) servidos vía `include_str!()` sin exigir autenticación de sesión.
+  - Automatización de sincronización en `scripts/bump_version.js` y validación estricta en `scripts/pre_build_check.js` y `client/app/scripts/check_release_integrity.js`.
+- **Gobernanza Automatizada (Nivel 15 & Nivel 16):**
+  - Nivel 15: Reglas operativas para el motor OTA Update Engine in-app.
+  - Nivel 16: Blindaje legal, atribución inmutable y sincronización satélite con cero tolerancia a desviaciones.
+- **Certificación en Hardware Físico Real:**
+  - Despliegue limpio simultáneo y validación en Lenovo Tab M9 (`HA2CHKZ2`) y Motorola Moto G22 (`ZT322B386P`): 0 crashes, 0 caídas, JNI (`libred_mobile.so`), servidor loopback `127.0.0.1:7333` y renderizado a 60 FPS sin bloqueos en el hilo UI.
+
 ## [124.0.0-ciudad-digital-biocibernetica-y-urbanismo-estigmergico] - 2026-09-25
 
 ### 🏙️🐜 Ciudad Digital Biocibernética & Urbanismo Estigmérgico A-Life (Release Oficial v124.0.0)

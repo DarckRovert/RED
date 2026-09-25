@@ -110,9 +110,8 @@ export class KineticStressEngine {
             this.notify();
           }
         } else if (wasManDown && !this.isManDownActive) {
-          // Cese de la emergencia Man-Down: restaurar estado nominal y notificar
-          this.currentLevel = 'NOMINAL';
-          this.notify();
+          // Cese de la emergencia Man-Down: re-evaluar inmediatamente con el búfer cinético real
+          this.evaluateSpectralTremor();
         }
       });
     } catch (err) {
@@ -179,6 +178,7 @@ export class KineticStressEngine {
     this.currentLevel = 'NOMINAL';
     this.tremorFrequencyHz = 0;
     this.tremorIntensity = 0;
+    this.isManDownActive = false;
     this.notify();
   }
 
@@ -188,15 +188,6 @@ export class KineticStressEngine {
    */
   public evaluateSpectralTremor(): void {
     if (this.accelMagnitudeHistory.length < 16) return;
-
-    // A. Si ManDown ya está activo, mantener CRITICAL_SHOCK sin re-notificar a 4 Hz
-    if (this.isManDownActive) {
-      if (this.currentLevel !== 'CRITICAL_SHOCK') {
-        this.currentLevel = 'CRITICAL_SHOCK';
-        this.notify();
-      }
-      return;
-    }
 
     const n = this.accelMagnitudeHistory.length;
     const mean = this.accelMagnitudeHistory.reduce((a, b) => a + b, 0) / n;
@@ -208,7 +199,23 @@ export class KineticStressEngine {
     }
     variance /= n;
 
-    // B. Zero-Crossing Rate sobre la señal centrada
+    const previousLevel = this.currentLevel;
+    const previousIntensity = this.tremorIntensity;
+    const previousFreq = this.tremorFrequencyHz;
+
+    // 1. Noise Gate Físico: Si la varianza es inferior al piso de ruido térmico MEMS (variance < 0.04 m²/s⁴)
+    // el dispositivo está en reposo estático. Forzar 0 Hz y descartar falsos temblores por ruido blanco.
+    if (variance < 0.04) {
+      this.tremorFrequencyHz = 0;
+      this.tremorIntensity = 0;
+      this.currentLevel = this.isManDownActive ? 'CRITICAL_SHOCK' : 'NOMINAL';
+      if (previousLevel !== this.currentLevel) {
+        this.notify();
+      }
+      return;
+    }
+
+    // 2. Zero-Crossing Rate sobre la señal centrada
     let zeroCrossings = 0;
     for (let i = 1; i < n; i++) {
       const prev = this.accelMagnitudeHistory[i - 1] - mean;
@@ -225,15 +232,13 @@ export class KineticStressEngine {
     const estimatedFreqHz = zeroCrossings / (2 * durationSec);
     this.tremorFrequencyHz = estimatedFreqHz;
 
-    // C. Determinar si la oscilación cae en la banda fisiológica de temblor (8 Hz - 13 Hz)
+    // 3. Determinar si la oscilación cae en la banda fisiológica de temblor (7.5 Hz - 13.5 Hz)
     const isTremorBand = estimatedFreqHz >= 7.5 && estimatedFreqHz <= 13.5;
     const tremorEnergy = Math.min(1.0, Math.sqrt(variance) / 3.0);
     this.tremorIntensity = isTremorBand ? tremorEnergy : tremorEnergy * 0.2;
 
-    // D. Decisión de Estado de Estrés Fisiológico
-    const previousLevel = this.currentLevel;
-
-    if (this.tremorIntensity > 0.65 && isTremorBand) {
+    // 4. Decisión de Estado de Estrés Fisiológico
+    if (this.isManDownActive || (this.tremorIntensity > 0.65 && isTremorBand)) {
       this.currentLevel = 'CRITICAL_SHOCK';
     } else if (this.tremorIntensity > 0.30 || (variance > 4.5 && !isTremorBand)) {
       this.currentLevel = 'ELEVATED';
@@ -241,7 +246,12 @@ export class KineticStressEngine {
       this.currentLevel = 'NOMINAL';
     }
 
-    if (previousLevel !== this.currentLevel) {
+    const hasLevelChanged = previousLevel !== this.currentLevel;
+    const hasSignificantMetricChange =
+      Math.abs(previousIntensity - this.tremorIntensity) > 0.05 ||
+      Math.abs(previousFreq - this.tremorFrequencyHz) > 0.5;
+
+    if (hasLevelChanged || (this.currentLevel !== 'NOMINAL' && hasSignificantMetricChange)) {
       this.notify();
     }
   }

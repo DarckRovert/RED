@@ -36,23 +36,69 @@ import { centralPatternGenerator, CpgLocomotionTelemetry } from '../CentralPatte
 import { TacticalAudioEngine } from '../../audio/TacticalAudioEngine';
 import { biocyberneticEdenParadise } from './BiocyberneticEdenParadiseEngine';
 
-export type HabitatCameraMode = 'ORBITAL' | 'FOLLOW_AGENT' | 'TOP_DOWN_GOD';
+export type HabitatCameraMode = 'ORBITAL' | 'FOLLOW_AGENT' | 'TOP_DOWN_GOD' | 'FLY_COCKPIT_FPV';
 
-// ── GPU Tier Detection ───────────────────────────────────────────────────────
+// ── GPU Tier Detection Empírica con Inspección de Hardware WebGL ─────────────
 /**
- * Detecta el tier de GPU del dispositivo basándose en memoria RAM del sistema,
- * núcleos de CPU y user-agent. Usado para escalar calidad de sombras y DPR.
- * - 'low'  → Moto G22 / Helio G37 / PowerVR GE8320 (≤4GB RAM, ≤4 cores mobile)
- * - 'mid'  → Gama media Android (≤6GB RAM, mobile)
- * - 'high' → Desktop / flagship móvil
+ * Clasificación de GPU de Alta Fidelidad mediante consulta directa a la extensión
+ * WEBGL_debug_renderer_info y análisis de huella de hardware.
+ * Garantiza fluidez absoluta en Moto G22 (PowerVR), tablets Lenovo y paneles de 90/120Hz.
  */
 function detectGpuTier(): 'low' | 'mid' | 'high' {
+  if (typeof window === 'undefined') return 'high';
+
+  // 1. Detección directa por Vendor/Renderer de WebGL no enmascarado
+  try {
+    const probeCanvas = document.createElement('canvas');
+    const gl = probeCanvas.getContext('webgl2') || probeCanvas.getContext('webgl');
+    if (gl) {
+      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      const renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL).toLowerCase() : '';
+
+      // Liberar contexto de prueba
+      const loseContext = gl.getExtension('WEBGL_lose_context');
+      if (loseContext) loseContext.loseContext();
+
+      // GPUs de gama baja conocidas (PowerVR Moto G22, Mali budget, Adreno 5xx/610, Intel HD antigua)
+      if (
+        /powervr|ge8320|ge8300|mali-g31|mali-g51|mali-g52|mali-t|adreno.*(504|505|506|610|612|615)|intel.*(hd|uhd).*graphics.*(400|500|600|605|610)|swiftshader|llvmpipe/i.test(
+          renderer
+        )
+      ) {
+        return 'low';
+      }
+
+      // GPUs de gama media (Mali-G57, Mali-G68, Adreno 618/619/640)
+      if (/mali-g57|mali-g68|mali-g72|mali-g76|adreno.*(618|619|620|630|640|710)/i.test(renderer)) {
+        return 'mid';
+      }
+
+      // GPUs dedicadas o flagships móviles (NVIDIA, Radeon RX, Apple M/A15+, Adreno 730+)
+      if (/nvidia|geforce|radeon rx|apple|adreno.*(730|740|750)|mali-g710|mali-g715|mali-g720/i.test(renderer)) {
+        return 'high';
+      }
+    }
+  } catch {
+    // Si WebGL falla o está restringido, degradar con gracia
+  }
+
+  // 2. Fallback de detección por características del sistema y pantalla
   const nav = navigator as Navigator & { deviceMemory?: number; hardwareConcurrency?: number };
-  const memory  = nav.deviceMemory ?? 4;      // GB — sólo disponible en Chrome/Android
-  const cores   = nav.hardwareConcurrency ?? 4;
-  const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-  if (isMobile && (memory <= 3 || cores <= 4)) return 'low';
-  if (isMobile && memory <= 6)                  return 'mid';
+  const memory = nav.deviceMemory ?? 4;
+  const cores = nav.hardwareConcurrency ?? 4;
+  const isMobileOrTablet =
+    /Mobi|Android|Tablet|iPad/i.test(navigator.userAgent) ||
+    (typeof window !== 'undefined' && window.innerWidth <= 1024);
+
+  if (isMobileOrTablet) {
+    // Moto G22 tiene 4GB RAM y 8 núcleos A53 lentos; cualquier dispositivo móvil <= 4GB es 'low'
+    if (memory <= 4 || cores <= 6) return 'low';
+    if (memory <= 6) return 'mid';
+  } else {
+    // En Web desktop, si tiene poca memoria o pocos núcleos, no saturar
+    if (memory <= 4 || cores <= 4) return 'mid';
+  }
+
   return 'high';
 }
 
@@ -810,17 +856,17 @@ export class BiocyberneticHabitat3DEngine {
   // Modos de Cámara y Navegación
   public cameraMode: HabitatCameraMode = 'ORBITAL';
   private selectedOrgId: string | null = null;
-  private camSpherical = { radius: 18.0, theta: 0.0, phi: Math.PI / 3.4 };
+  private camSpherical = { radius: 36.0, theta: 0.0, phi: Math.PI / 3.4 };
 
   // Control táctil / ratón (Arrastre y Zoom)
   private isDragging = false;
   private previousMousePosition = { x: 0, y: 0 };
   private activePointers: Map<number, { x: number; y: number }> = new Map();
   private initialPinchDist = 0;
-  private initialPinchRadius = 18.0;
+  private initialPinchRadius = 36.0;
 
   // Entorno 3D de la Arena
-  private readonly arenaRadius = 10.0;
+  private readonly arenaRadius = 24.0;
   private readonly chemicalTexture: THREE.DataTexture;
   private readonly chemicalData: Uint8Array;
   private readonly groundMesh: THREE.Mesh;
@@ -868,7 +914,12 @@ export class BiocyberneticHabitat3DEngine {
   private metropolisGroup!: THREE.Group;
   private structureMeshes: Map<string, THREE.Group> = new Map();
   private highwayLines: THREE.LineSegments | null = null;
+  private highwayRibbonsGroup: THREE.Group | null = null;
+  private streetLampsGroup: THREE.Group | null = null;
+  private skywaysGroup: THREE.Group | null = null;
   private lastHighwayCount = -1;
+  private lastStreetLampCount = -1;
+  private lastSkywayCount = -1;
 
   // Raycasting para interacción táctil sobre el suelo 3D
   private readonly raycaster: THREE.Raycaster;
@@ -906,17 +957,17 @@ export class BiocyberneticHabitat3DEngine {
       this.dirLight.shadow.mapSize.width  = shadowRes;
       this.dirLight.shadow.mapSize.height = shadowRes;
       this.dirLight.shadow.camera.near   = 1;
-      this.dirLight.shadow.camera.far    = 40;
-      this.dirLight.shadow.camera.left   = -12;
-      this.dirLight.shadow.camera.right  = 12;
-      this.dirLight.shadow.camera.top    = 12;
-      this.dirLight.shadow.camera.bottom = -12;
+      this.dirLight.shadow.camera.far    = 80;
+      this.dirLight.shadow.camera.left   = -28;
+      this.dirLight.shadow.camera.right  = 28;
+      this.dirLight.shadow.camera.top    = 28;
+      this.dirLight.shadow.camera.bottom = -28;
     }
 
     this.scene.add(this.dirLight);
 
     const fillLight = new THREE.DirectionalLight(0xff9f43, 0.6);
-    fillLight.position.set(-8, 10, -8);
+    fillLight.position.set(-18, 22, -18);
     this.scene.add(fillLight);
 
     // ── Suelo Táctico y Textura Química Fick en Vivo (64x64 RGBA) ───────────
@@ -945,13 +996,13 @@ export class BiocyberneticHabitat3DEngine {
     this.groundMesh.receiveShadow = true;
     this.scene.add(this.groundMesh);
 
-    // Anillos Concéntricos Tácticos de Alcance
+    // Anillos Concéntricos Tácticos de Alcance (Escala 24m)
     const ringMat = new THREE.LineBasicMaterial({
       color: 0x00f0ff,
       transparent: true,
       opacity: 0.25,
     });
-    for (let r = 2; r <= 10; r += 2) {
+    for (let r = 4; r <= 24; r += 4) {
       const ringPts: THREE.Vector3[] = [];
       for (let a = 0; a <= 64; a++) {
         const th = (a / 64) * Math.PI * 2;
@@ -1013,14 +1064,14 @@ export class BiocyberneticHabitat3DEngine {
     this.scene.add(this.celestialDome);
 
     // Esporas bioluminiscentes atmosféricas
-    const sporeCount = 160;
+    const sporeCount = 280;
     const sporeGeo = new THREE.BufferGeometry();
     const sporePositions = new Float32Array(sporeCount * 3);
     for (let i = 0; i < sporeCount; i++) {
       const ang = Math.random() * Math.PI * 2;
-      const dist = Math.random() * 9.5;
+      const dist = Math.random() * 23.5;
       sporePositions[i * 3] = Math.cos(ang) * dist;
-      sporePositions[i * 3 + 1] = 0.4 + Math.random() * 4.2;
+      sporePositions[i * 3 + 1] = 0.4 + Math.random() * 8.0;
       sporePositions[i * 3 + 2] = Math.sin(ang) * dist;
     }
     sporeGeo.setAttribute('position', new THREE.BufferAttribute(sporePositions, 3));
@@ -1407,7 +1458,7 @@ export class BiocyberneticHabitat3DEngine {
     for (let i = 0; i < starCount; i++) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * (Math.PI / 2.2); // Hemisferio superior
-      const r = 42.0 + Math.random() * 4.0;
+      const r = 68.0 + Math.random() * 8.0;
 
       starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       starPositions[i * 3 + 1] = r * Math.cos(phi);
@@ -1426,7 +1477,7 @@ export class BiocyberneticHabitat3DEngine {
     group.add(starPoints);
 
     // 2. Arco Ondulante de Aurora Boreal
-    const auroraGeo = new THREE.CylinderGeometry(38, 38, 14, 48, 1, true);
+    const auroraGeo = new THREE.CylinderGeometry(62, 62, 24, 48, 1, true);
     const auroraMat = new THREE.MeshBasicMaterial({
       color: 0x00f0ff,
       transparent: true,
@@ -1435,7 +1486,7 @@ export class BiocyberneticHabitat3DEngine {
       blending: THREE.AdditiveBlending,
     });
     this.auroraMesh = new THREE.Mesh(auroraGeo, auroraMat);
-    this.auroraMesh.position.y = 12.0;
+    this.auroraMesh.position.y = 18.0;
     group.add(this.auroraMesh);
 
     return group;
@@ -1537,9 +1588,20 @@ export class BiocyberneticHabitat3DEngine {
     if (this.isRunning) return;
     this.isRunning = true;
     this.lastTimeMs = performance.now();
+    const targetFps = this.gpuTier === 'low' ? 30 : this.gpuTier === 'mid' ? 45 : 60;
+    const minFrameIntervalMs = 1000 / targetFps;
+    let lastRenderTime = 0;
 
     const loop = (now: number) => {
       if (!this.isRunning) return;
+      this.animFrameId = requestAnimationFrame(loop);
+
+      const elapsedSinceRender = now - lastRenderTime;
+      if (elapsedSinceRender < minFrameIntervalMs - 1.5) {
+        return; // Omitir fotograma para estabilizar tasa de refresco y evitar sobrecalentamiento en 90/120Hz
+      }
+      lastRenderTime = now;
+
       const deltaSec = Math.min(0.1, (now - this.lastTimeMs) * 0.001);
       this.lastTimeMs = now;
 
@@ -1548,7 +1610,6 @@ export class BiocyberneticHabitat3DEngine {
       if (this.renderer && this.container) {
         this.renderer.render(this.scene, this.camera);
       }
-      this.animFrameId = requestAnimationFrame(loop);
     };
 
     this.animFrameId = requestAnimationFrame(loop);
@@ -1573,12 +1634,14 @@ export class BiocyberneticHabitat3DEngine {
 
   // ── Bucle de Simulación y Sincronización Gráfica 3D ──────────────────────────
   private tick(deltaSec: number): void {
-    this.simTimeSec += deltaSec;
+    const timeScale = biocyberneticHabitat.getTimeScale();
+    const animDeltaSec = deltaSec * (timeScale > 0 ? timeScale : 0);
+    this.simTimeSec += animDeltaSec;
     // 1. Actualizar Textura Química de Fick (Glucosa, Rastro de Hormigas, Alarma)
     this.updateChemicalTexture();
 
     // 2. Sincronizar y Renderizar Organismos Vivos 3D (con bocadillos de pensamiento)
-    this.updateOrganisms3D(deltaSec);
+    this.updateOrganisms3D(animDeltaSec);
 
     // 3. Sincronizar Barreras Acústicas 3D
     this.updateBarriers3D();
@@ -1696,21 +1759,27 @@ export class BiocyberneticHabitat3DEngine {
       if (org.species === 'DROSOPHILA') {
         let fly = this.flies3D.get(org.id);
         if (!fly) {
-          fly = new HexapodBody3D();
+          fly = new HexapodBody3D(this.gpuTier !== 'low');
           this.scene.add(fly.rootGroup);
           this.flies3D.set(org.id, fly);
         }
 
         const flyScale = 0.68 * pScale;
         fly.rootGroup.scale.set(flyScale, flyScale, flyScale);
-        fly.rootGroup.position.set(org.x, 0, org.y);
+        const flyAlt = org.altitudeMeters || 0.05;
+        fly.rootGroup.position.set(org.x, flyAlt, org.y);
 
         // Orientación: Drosophila 3D tiene cabeza en +Z, así que rotamos hacia headingRad
         const headingDeg = (org.headingRad * 180) / Math.PI;
         const isThreat = org.behaviorState.includes('EVADING') || org.behaviorState.includes('ESCAPE');
         const isJumping = org.behaviorState === 'ESCAPE_REFLEX' || org.speedMps > 3.0;
+        const isFlying = flyAlt > 0.3;
 
-        fly.update(deltaSec, cpgTelem, -headingDeg, isThreat, isJumping, 0.5);
+        // Inclinación de alabeo en curvas aéreas y maniobras
+        const rollAngle = isFlying ? Math.sin(this.simTimeSec * 3.0) * 0.08 : 0;
+        fly.rootGroup.rotation.z = rollAngle;
+
+        fly.update(deltaSec, cpgTelem, -headingDeg, isThreat, isJumping, 0.5, isFlying);
 
       } else if (org.species === 'C_ELEGANS') {
         let worm = this.worms3D.get(org.id);
@@ -1768,7 +1837,7 @@ export class BiocyberneticHabitat3DEngine {
         this.thoughtBubbles3D.set(org.id, bubble);
       }
 
-      const entityZ = org.species === 'GRAVITY_SENTINEL' ? (org.altitudeMeters || 1.8) : 0;
+      const entityZ = (org.species === 'GRAVITY_SENTINEL' || org.species === 'DROSOPHILA') ? (org.altitudeMeters || 0.05) : 0;
       let themeColor =
         org.species === 'DROSOPHILA'
           ? '#00e5ff'
@@ -1865,8 +1934,8 @@ export class BiocyberneticHabitat3DEngine {
       activeIds.add(b.id);
       let mesh = this.barrierMeshes.get(b.id);
 
-      // Re-centrar coordenadas a la arena [-10, 10]
-      const gridCenter = 10.0;
+      // Re-centrar coordenadas a la arena [-24, 24]
+      const gridCenter = this.arenaRadius;
       const x1 = b.x1 - gridCenter;
       const z1 = b.y1 - gridCenter;
       const x2 = b.x2 - gridCenter;
@@ -1912,96 +1981,296 @@ export class BiocyberneticHabitat3DEngine {
     group.position.set(struct.x, 0, struct.y);
 
     if (struct.type === 'CENTRAL_SILO') {
-      // ── Silo Central de Biopolímeros y ATP ──
-      const baseGeo = new THREE.CylinderGeometry(0.9, 1.0, 0.2, 6);
-      const baseMat = new THREE.MeshStandardMaterial({ color: 0x292524, roughness: 0.7, metalness: 0.8 });
+      // ── Silo Central Monumental de Biopolímeros y ATP ──
+      const siloHeight = struct.heightMeters || 4.8;
+      const siloRadius = struct.radiusMeters || 1.4;
+
+      const baseGeo = new THREE.CylinderGeometry(siloRadius, siloRadius * 1.1, 0.4, 8);
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.7, metalness: 0.8 });
       const baseMesh = new THREE.Mesh(baseGeo, baseMat);
-      baseMesh.position.y = 0.1;
+      baseMesh.position.y = 0.2;
       baseMesh.castShadow = true;
       group.add(baseMesh);
 
-      const tankGeo = new THREE.CylinderGeometry(0.75, 0.75, 1.6, 16);
+      // 4 Pilares de soporte estructural de celosía
+      const pillarMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.85, roughness: 0.25 });
+      for (let p = 0; p < 4; p++) {
+        const pAngle = (p * Math.PI) / 2 + Math.PI / 4;
+        const px = Math.cos(pAngle) * (siloRadius * 0.95);
+        const pz = Math.sin(pAngle) * (siloRadius * 0.95);
+        const pillarGeo = new THREE.CylinderGeometry(0.07, 0.07, siloHeight * 0.85, 6);
+        const pillarMesh = new THREE.Mesh(pillarGeo, pillarMat);
+        pillarMesh.position.set(px, (siloHeight * 0.85) / 2 + 0.3, pz);
+        pillarMesh.castShadow = true;
+        group.add(pillarMesh);
+      }
+
+      // Tanque cilíndrico de contención transparente
+      const tankGeo = new THREE.CylinderGeometry(siloRadius * 0.78, siloRadius * 0.78, siloHeight * 0.8, 16);
       const tankMat = new THREE.MeshStandardMaterial({
         color: 0xf59e0b,
         transparent: true,
-        opacity: 0.45,
-        roughness: 0.15,
-        metalness: 0.3,
+        opacity: 0.35,
+        roughness: 0.1,
+        metalness: 0.4,
       });
       const tankMesh = new THREE.Mesh(tankGeo, tankMat);
-      tankMesh.position.y = 1.0;
+      tankMesh.position.y = (siloHeight * 0.8) / 2 + 0.3;
       group.add(tankMesh);
 
-      const coreGeo = new THREE.CylinderGeometry(0.62, 0.62, 1.4, 16);
+      // Núcleo líquido luminoso de ATP y Glucosa
+      const coreGeo = new THREE.CylinderGeometry(siloRadius * 0.72, siloRadius * 0.72, siloHeight * 0.75, 16);
       const coreMat = new THREE.MeshStandardMaterial({
         color: 0xfbbf24,
         emissive: 0xd97706,
-        emissiveIntensity: 1.2,
+        emissiveIntensity: 1.4,
         roughness: 0.2,
       });
       const coreMesh = new THREE.Mesh(coreGeo, coreMat);
       coreMesh.name = 'SiloLiquidCore';
-      coreMesh.position.y = 1.0;
+      coreMesh.position.y = (siloHeight * 0.75) / 2 + 0.3;
       group.add(coreMesh);
 
-      const domeGeo = new THREE.SphereGeometry(0.75, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
-      const domeMat = new THREE.MeshStandardMaterial({ color: 0x78716c, metalness: 0.9, roughness: 0.2 });
+      // Cúpula superior y grúa de carga
+      const domeGeo = new THREE.SphereGeometry(siloRadius * 0.8, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+      const domeMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.9, roughness: 0.2 });
       const domeMesh = new THREE.Mesh(domeGeo, domeMat);
-      domeMesh.position.y = 1.8;
+      domeMesh.position.y = siloHeight * 0.8 + 0.3;
       group.add(domeMesh);
 
-      const siloLight = new THREE.PointLight(0xf59e0b, 1.5, 4.0);
-      siloLight.position.y = 1.2;
+      const siloLight = new THREE.PointLight(0xf59e0b, 1.8, 6.0);
+      siloLight.position.y = (siloHeight * 0.8) / 2 + 0.5;
       group.add(siloLight);
 
     } else if (struct.type === 'BIO_TOWER_DWELLING') {
-      // ── Torre / Hábitat Hexagonal Multi-Piso ──
-      const baseGeo = new THREE.CylinderGeometry(1.0, 1.15, 0.25, 6);
-      const baseMat = new THREE.MeshStandardMaterial({ color: 0x1e1b4b, roughness: 0.5, metalness: 0.7 });
+      // ── Rascacielos Hexagonal Residencial con Balconadas y Helipuerto 3D ──
+      const towerHeight = struct.heightMeters || 6.5;
+      const towerRadius = struct.radiusMeters || 1.5;
+      const numFloors = struct.floorsCount || 5;
+
+      // Base monumental
+      const baseGeo = new THREE.CylinderGeometry(towerRadius * 1.1, towerRadius * 1.25, 0.4, 6);
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5, metalness: 0.8 });
       const baseMesh = new THREE.Mesh(baseGeo, baseMat);
-      baseMesh.position.y = 0.125;
+      baseMesh.position.y = 0.2;
       baseMesh.castShadow = true;
       group.add(baseMesh);
 
-      const bodyGeo = new THREE.CylinderGeometry(0.55, 0.9, 2.5, 6);
-      const bodyMat = new THREE.MeshStandardMaterial({
-        color: 0x312e81,
-        roughness: 0.4,
-        metalness: 0.6,
-      });
-      const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
-      bodyMesh.position.y = 1.45;
-      bodyMesh.castShadow = true;
-      group.add(bodyMesh);
+      // Pisos hexagonales escalonados con balcones y ventanales
+      const floorHeight = (towerHeight - 0.8) / numFloors;
+      const floorGroup = new THREE.Group();
+      floorGroup.name = 'TowerFloors';
 
-      const cellGeo = new THREE.CylinderGeometry(0.57, 0.92, 2.3, 6);
-      const cellMat = new THREE.MeshBasicMaterial({
-        color: 0xa855f7,
-        wireframe: true,
+      for (let f = 0; f < numFloors; f++) {
+        const floorRad = towerRadius * (1.0 - f * 0.05);
+        const floorY = 0.4 + f * floorHeight + floorHeight / 2;
+
+        // Cuerpo del piso
+        const fGeo = new THREE.CylinderGeometry(floorRad * 0.92, floorRad, floorHeight * 0.92, 6);
+        const fMat = new THREE.MeshStandardMaterial({
+          color: 0x1e1b4b,
+          roughness: 0.35,
+          metalness: 0.7,
+        });
+        const fMesh = new THREE.Mesh(fGeo, fMat);
+        fMesh.position.y = floorY;
+        fMesh.castShadow = true;
+        floorGroup.add(fMesh);
+
+        // Ventanales bioluminiscentes en cada piso (células de apartamentos)
+        const winGeo = new THREE.CylinderGeometry(floorRad * 0.94, floorRad * 1.01, floorHeight * 0.6, 6);
+        const winMat = new THREE.MeshStandardMaterial({
+          color: 0x38bdf8,
+          emissive: 0x0284c7,
+          emissiveIntensity: 0.8,
+          roughness: 0.2,
+          transparent: true,
+          opacity: 0.85,
+        });
+        const winMesh = new THREE.Mesh(winGeo, winMat);
+        winMesh.name = `WindowFloor_${f}`;
+        winMesh.position.y = floorY;
+        floorGroup.add(winMesh);
+
+        // Balconada perimetral
+        const balcGeo = new THREE.CylinderGeometry(floorRad * 1.08, floorRad * 1.08, 0.08, 6);
+        const balcMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8 });
+        const balcMesh = new THREE.Mesh(balcGeo, balcMat);
+        balcMesh.position.y = floorY + floorHeight * 0.46;
+        floorGroup.add(balcMesh);
+      }
+      group.add(floorGroup);
+
+      // Helipuerto / Plataforma Aérea de Aterrizaje en Azotea para Drosophila y Drones
+      const roofY = 0.4 + numFloors * floorHeight;
+      const padRadius = towerRadius * (1.0 - numFloors * 0.05) * 1.15;
+      const helipadGeo = new THREE.CylinderGeometry(padRadius, padRadius * 0.95, 0.15, 12);
+      const helipadMat = new THREE.MeshStandardMaterial({
+        color: 0x0a0f1d,
+        roughness: 0.7,
+        metalness: 0.5,
+      });
+      const helipadMesh = new THREE.Mesh(helipadGeo, helipadMat);
+      helipadMesh.position.y = roofY + 0.08;
+      group.add(helipadMesh);
+
+      // Anillo de Baliza Aérea del Helipuerto (pulsante)
+      const beaconRingGeo = new THREE.RingGeometry(padRadius * 0.5, padRadius * 0.78, 24);
+      beaconRingGeo.rotateX(-Math.PI / 2);
+      const beaconRingMat = new THREE.MeshBasicMaterial({
+        color: 0x00f0ff,
+        side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.7,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
       });
-      const cellMesh = new THREE.Mesh(cellGeo, cellMat);
-      cellMesh.position.y = 1.45;
-      group.add(cellMesh);
+      const beaconRingMesh = new THREE.Mesh(beaconRingGeo, beaconRingMat);
+      beaconRingMesh.name = 'TowerLandingRing';
+      beaconRingMesh.position.y = roofY + 0.17;
+      group.add(beaconRingMesh);
 
-      const spireGeo = new THREE.ConeGeometry(0.45, 1.1, 6);
-      const spireMat = new THREE.MeshStandardMaterial({
-        color: 0x4f46e5,
-        emissive: 0x818cf8,
-        emissiveIntensity: 0.8,
+      // Mástil de Telecomunicaciones / Aguja con Luz Estroboscópica
+      const mastGeo = new THREE.CylinderGeometry(0.04, 0.08, 1.4, 6);
+      const mastMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9, roughness: 0.1 });
+      const mastMesh = new THREE.Mesh(mastGeo, mastMat);
+      mastMesh.position.y = roofY + 0.85;
+      group.add(mastMesh);
+
+      const navOrbGeo = new THREE.SphereGeometry(0.12, 8, 8);
+      const navOrbMat = new THREE.MeshBasicMaterial({ color: 0xec4899 });
+      const navOrbMesh = new THREE.Mesh(navOrbGeo, navOrbMat);
+      navOrbMesh.name = 'TowerSpire';
+      navOrbMesh.position.y = roofY + 1.6;
+      group.add(navOrbMesh);
+
+    } else if (struct.type === 'COMMERCIAL_AGORA') {
+      // ── Plaza Circular del Gran Ágora y Mercado Central ──
+      const agoraRadius = struct.radiusMeters || 1.8;
+
+      // Terraza y plaza elevada
+      const plazaGeo = new THREE.CylinderGeometry(agoraRadius, agoraRadius * 1.1, 0.3, 24);
+      const plazaMat = new THREE.MeshStandardMaterial({
+        color: 0x1e293b,
+        roughness: 0.6,
+        metalness: 0.5,
+      });
+      const plazaMesh = new THREE.Mesh(plazaGeo, plazaMat);
+      plazaMesh.position.y = 0.15;
+      plazaMesh.castShadow = true;
+      group.add(plazaMesh);
+
+      // Puestos de mercado y quioscos perimetrales con toldos bioluminiscentes
+      const numStalls = 6;
+      for (let k = 0; k < numStalls; k++) {
+        const stallAngle = (k * Math.PI * 2) / numStalls;
+        const sx = Math.cos(stallAngle) * (agoraRadius * 0.75);
+        const sz = Math.sin(stallAngle) * (agoraRadius * 0.75);
+
+        const stallGeo = new THREE.BoxGeometry(0.5, 0.4, 0.4);
+        const stallMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7 });
+        const stallMesh = new THREE.Mesh(stallGeo, stallMat);
+        stallMesh.position.set(sx, 0.45, sz);
+        stallMesh.rotation.y = -stallAngle;
+        group.add(stallMesh);
+
+        // Toldo neon
+        const canopyGeo = new THREE.ConeGeometry(0.38, 0.25, 4);
+        const canopyMat = new THREE.MeshStandardMaterial({
+          color: 0xf43f5e,
+          emissive: 0xe11d48,
+          emissiveIntensity: 0.7,
+          roughness: 0.3,
+        });
+        const canopyMesh = new THREE.Mesh(canopyGeo, canopyMat);
+        canopyMesh.position.set(sx, 0.75, sz);
+        canopyMesh.rotation.y = -stallAngle + Math.PI / 4;
+        group.add(canopyMesh);
+      }
+
+      // Monumento Holográfico Central (Obelisco / Cristal Flotante Giratorio)
+      const holoGeo = new THREE.OctahedronGeometry(0.55);
+      const holoMat = new THREE.MeshStandardMaterial({
+        color: 0xf43f5e,
+        emissive: 0xfb7185,
+        emissiveIntensity: 1.6,
         roughness: 0.2,
+        metalness: 0.8,
+        wireframe: false,
       });
-      const spireMesh = new THREE.Mesh(spireGeo, spireMat);
-      spireMesh.name = 'TowerSpire';
-      spireMesh.position.y = 3.25;
-      group.add(spireMesh);
+      const holoMesh = new THREE.Mesh(holoGeo, holoMat);
+      holoMesh.name = 'AgoraHoloMonument';
+      holoMesh.position.y = 1.35;
+      group.add(holoMesh);
 
-      const orbGeo = new THREE.SphereGeometry(0.14, 8, 8);
-      const orbMat = new THREE.MeshBasicMaterial({ color: 0xc084fc });
-      const orbMesh = new THREE.Mesh(orbGeo, orbMat);
-      orbMesh.position.y = 3.85;
-      group.add(orbMesh);
+      const agoraLight = new THREE.PointLight(0xf43f5e, 1.5, 5.0);
+      agoraLight.position.y = 1.35;
+      group.add(agoraLight);
+
+    } else if (struct.type === 'RESEARCH_CONNECTOME') {
+      // ── Centro de I+D Conectoma Cuántico con Anillos Giroscópicos ──
+      const labRadius = struct.radiusMeters || 1.6;
+
+      // Base geodésica del laboratorio
+      const labBaseGeo = new THREE.CylinderGeometry(labRadius * 0.9, labRadius, 0.6, 16);
+      const labBaseMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.85 });
+      const labBaseMesh = new THREE.Mesh(labBaseGeo, labBaseMat);
+      labBaseMesh.position.y = 0.3;
+      labBaseMesh.castShadow = true;
+      group.add(labBaseMesh);
+
+      // Cúpula translúcida
+      const domeLabGeo = new THREE.SphereGeometry(labRadius * 0.75, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+      const domeLabMat = new THREE.MeshStandardMaterial({
+        color: 0x06b6d4,
+        transparent: true,
+        opacity: 0.3,
+        roughness: 0.1,
+        metalness: 0.8,
+      });
+      const domeLabMesh = new THREE.Mesh(domeLabGeo, domeLabMat);
+      domeLabMesh.position.y = 0.6;
+      group.add(domeLabMesh);
+
+      // Núcleo cuántico central
+      const coreGeo = new THREE.SphereGeometry(0.5, 16, 16);
+      const coreMat = new THREE.MeshStandardMaterial({
+        color: 0x00f0ff,
+        emissive: 0x00e5ff,
+        emissiveIntensity: 2.2,
+      });
+      const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+      coreMesh.name = 'ConnectomeCore';
+      coreMesh.position.y = 1.6;
+      group.add(coreMesh);
+
+      // Anillo giroscópico interior
+      const ringInGeo = new THREE.TorusGeometry(0.95, 0.035, 8, 32);
+      const ringInMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true });
+      const ringInMesh = new THREE.Mesh(ringInGeo, ringInMat);
+      ringInMesh.name = 'ConnectomeRingInner';
+      ringInMesh.position.y = 1.6;
+      group.add(ringInMesh);
+
+      // Anillo giroscópico exterior
+      const ringOutGeo = new THREE.TorusGeometry(1.25, 0.035, 8, 32);
+      const ringOutMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, wireframe: true });
+      const ringOutMesh = new THREE.Mesh(ringOutGeo, ringOutMat);
+      ringOutMesh.name = 'ConnectomeRingOuter';
+      ringOutMesh.position.y = 1.6;
+      group.add(ringOutMesh);
+
+      // Skybeam cenital hacia la atmósfera
+      const beamGeo = new THREE.CylinderGeometry(0.08, 0.35, 12, 16);
+      const beamMat = new THREE.MeshBasicMaterial({
+        color: 0x00f0ff,
+        transparent: true,
+        opacity: 0.22,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+      });
+      const beamMesh = new THREE.Mesh(beamGeo, beamMat);
+      beamMesh.position.y = 6.6;
+      group.add(beamMesh);
 
     } else if (struct.type === 'BIO_COMPOSTER') {
       // ── Compostero Bio-Circular de Reciclaje ──
@@ -2062,6 +2331,71 @@ export class BiocyberneticHabitat3DEngine {
       const beamMesh = new THREE.Mesh(beamGeo, beamMat);
       beamMesh.position.y = 3.4;
       group.add(beamMesh);
+
+    } else if (struct.type === 'BIO_FACTORY') {
+      // ── Bio-Fábrica de Síntesis de Biopolímeros y Materiales Vivos ──
+      const facRadius = struct.radiusMeters || 1.8;
+      const facHeight = struct.heightMeters || 2.8;
+
+      // Plataforma industrial de aleación
+      const baseGeo = new THREE.BoxGeometry(facRadius * 2.2, 0.4, facRadius * 1.8);
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x1e1b4b, roughness: 0.5, metalness: 0.8 });
+      const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+      baseMesh.position.y = 0.2;
+      baseMesh.castShadow = true;
+      group.add(baseMesh);
+
+      // 3 Bio-Reactores cilíndricos de síntesis con compuertas
+      const numVats = 3;
+      for (let v = 0; v < numVats; v++) {
+        const vx = (v - 1) * (facRadius * 0.7);
+        const vatGeo = new THREE.CylinderGeometry(0.42, 0.48, facHeight * 0.72, 16);
+        const vatMat = new THREE.MeshStandardMaterial({ color: 0x312e81, roughness: 0.4, metalness: 0.7 });
+        const vatMesh = new THREE.Mesh(vatGeo, vatMat);
+        vatMesh.position.set(vx, (facHeight * 0.72) / 2 + 0.4, 0);
+        vatMesh.castShadow = true;
+        group.add(vatMesh);
+
+        // Ventana de inspección del reactor de biopolímero (verde esmeralda luminoso)
+        const winGeo = new THREE.CylinderGeometry(0.45, 0.45, facHeight * 0.35, 16, 1, false, 0, Math.PI);
+        const winMat = new THREE.MeshStandardMaterial({
+          color: 0x10b981,
+          emissive: 0x059669,
+          emissiveIntensity: 1.8,
+          roughness: 0.1,
+          transparent: true,
+          opacity: 0.85,
+        });
+        const winMesh = new THREE.Mesh(winGeo, winMat);
+        winMesh.name = `BioFactoryVatWin_${v}`;
+        winMesh.position.set(vx, (facHeight * 0.72) / 2 + 0.4, 0);
+        winMesh.rotation.y = Math.PI / 2;
+        group.add(winMesh);
+
+        // Anillo de presurización
+        const prGeo = new THREE.TorusGeometry(0.5, 0.035, 6, 16);
+        prGeo.rotateX(Math.PI / 2);
+        const prMat = new THREE.MeshStandardMaterial({ color: 0x6366f1, metalness: 0.9, roughness: 0.2 });
+        const prMesh = new THREE.Mesh(prGeo, prMat);
+        prMesh.position.set(vx, facHeight * 0.58 + 0.4, 0);
+        group.add(prMesh);
+      }
+
+      // Tuberías industriales elevadas
+      const pipeGeo = new THREE.CylinderGeometry(0.07, 0.07, facRadius * 1.6, 8);
+      pipeGeo.rotateZ(Math.PI / 2);
+      const pipeMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.85, roughness: 0.3 });
+      const pipeMesh = new THREE.Mesh(pipeGeo, pipeMat);
+      pipeMesh.position.set(0, facHeight * 0.76 + 0.4, 0);
+      group.add(pipeMesh);
+
+      // Baliza de producción superior (pulsante)
+      const beaconGeo = new THREE.SphereGeometry(0.18, 8, 8);
+      const beaconMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+      const beaconMesh = new THREE.Mesh(beaconGeo, beaconMat);
+      beaconMesh.name = 'BioFactoryBeacon';
+      beaconMesh.position.set(0, facHeight * 0.92 + 0.4, 0);
+      group.add(beaconMesh);
     }
 
     return group;
@@ -2093,9 +2427,70 @@ export class BiocyberneticHabitat3DEngine {
         const core = group.getObjectByName('SiloLiquidCore');
         if (core) {
           const stored = struct.storedGlucose + struct.storedAtp;
-          const fillRatio = Math.max(0.15, Math.min(1.0, stored / Math.max(1, struct.capacity)));
+          const fillRatio = Math.max(0.12, Math.min(1.0, stored / Math.max(1, struct.capacity)));
           core.scale.y = fillRatio;
-          core.position.y = 0.3 + (fillRatio * 1.4) * 0.5;
+          const siloH = struct.heightMeters || 4.8;
+          core.position.y = 0.3 + (fillRatio * (siloH * 0.75)) * 0.5;
+        }
+      } else if (struct.type === 'BIO_TOWER_DWELLING') {
+        const landingRing = group.getObjectByName('TowerLandingRing') as THREE.Mesh | undefined;
+        if (landingRing) {
+          const mat = landingRing.material as THREE.MeshBasicMaterial;
+          mat.opacity = 0.5 + Math.sin(this.simTimeSec * 3.5) * 0.35;
+        }
+        const spire = group.getObjectByName('TowerSpire');
+        if (spire) spire.rotation.y += deltaSec * 2.0;
+
+        // Modulación dinámica de ventanas de cada celda/piso según ciclo y ocupantes
+        const towerCells = (telemetry.livingCells || []).filter(c => c.towerId === struct.id);
+        const floorsCount = struct.floorsCount || 5;
+        for (let f = 0; f < floorsCount; f++) {
+          const winMesh = group.getObjectByName(`WindowFloor_${f}`) as THREE.Mesh | undefined;
+          if (winMesh) {
+            const floorCells = towerCells.filter(c => c.floor === f + 1);
+            const isSleeping = floorCells.some(c => c.isOccupied && c.windowLightIntensity > 0.5);
+            const winMat = winMesh.material as THREE.MeshStandardMaterial;
+            if (isSleeping) {
+              winMat.color.setHex(0xf59e0b);
+              winMat.emissive.setHex(0xd97706);
+              winMat.emissiveIntensity = 1.6 + Math.sin(this.simTimeSec * 2.5 + f) * 0.3;
+            } else {
+              winMat.color.setHex(0x38bdf8);
+              winMat.emissive.setHex(0x0284c7);
+              winMat.emissiveIntensity = 0.75;
+            }
+          }
+        }
+      } else if (struct.type === 'BIO_FACTORY') {
+        const beacon = group.getObjectByName('BioFactoryBeacon') as THREE.Mesh | undefined;
+        if (beacon) {
+          const mat = beacon.material as THREE.MeshBasicMaterial;
+          mat.color.setHex((Math.sin(this.simTimeSec * 6.0) > 0) ? 0x10b981 : 0x059669);
+        }
+        for (let v = 0; v < 3; v++) {
+          const win = group.getObjectByName(`BioFactoryVatWin_${v}`) as THREE.Mesh | undefined;
+          if (win) {
+            const wMat = win.material as THREE.MeshStandardMaterial;
+            wMat.emissiveIntensity = 1.4 + Math.sin(this.simTimeSec * 3.0 + v * 1.5) * 0.5;
+          }
+        }
+      } else if (struct.type === 'COMMERCIAL_AGORA') {
+        const monument = group.getObjectByName('AgoraHoloMonument');
+        if (monument) {
+          monument.rotation.y += deltaSec * 1.5;
+          monument.rotation.x += deltaSec * 0.6;
+          monument.position.y = 1.35 + Math.sin(this.simTimeSec * 2.5) * 0.1;
+        }
+      } else if (struct.type === 'RESEARCH_CONNECTOME') {
+        const rIn = group.getObjectByName('ConnectomeRingInner');
+        if (rIn) {
+          rIn.rotation.x += deltaSec * 1.8;
+          rIn.rotation.y += deltaSec * 1.2;
+        }
+        const rOut = group.getObjectByName('ConnectomeRingOuter');
+        if (rOut) {
+          rOut.rotation.z += deltaSec * 1.4;
+          rOut.rotation.x -= deltaSec * 0.9;
         }
       } else if (struct.type === 'DEFENSE_BEACON') {
         const lens = group.getObjectByName('BeaconLens');
@@ -2124,9 +2519,11 @@ export class BiocyberneticHabitat3DEngine {
       }
     }
 
+    // ── Renderizado Volumétrico de Calzadas y Avenidas 3D ──
     const highways = telemetry.highways;
     if (highways.length !== this.lastHighwayCount) {
       this.lastHighwayCount = highways.length;
+
       if (this.highwayLines) {
         this.metropolisGroup.remove(this.highwayLines);
         this.highwayLines.geometry.dispose();
@@ -2134,7 +2531,21 @@ export class BiocyberneticHabitat3DEngine {
         this.highwayLines = null;
       }
 
+      if (this.highwayRibbonsGroup) {
+        this.metropolisGroup.remove(this.highwayRibbonsGroup);
+        this.highwayRibbonsGroup.traverse((obj) => {
+          const anyObj = obj as unknown as { geometry?: THREE.BufferGeometry; material?: THREE.Material | THREE.Material[] };
+          if (anyObj.geometry) anyObj.geometry.dispose();
+          if (anyObj.material) {
+            if (Array.isArray(anyObj.material)) anyObj.material.forEach((m) => m.dispose());
+            else anyObj.material.dispose();
+          }
+        });
+        this.highwayRibbonsGroup = null;
+      }
+
       if (highways.length > 0) {
+        // Malla de líneas de compatibilidad
         const positions = new Float32Array(highways.length * 6);
         for (let i = 0; i < highways.length; i++) {
           const hw = highways[i];
@@ -2155,7 +2566,209 @@ export class BiocyberneticHabitat3DEngine {
         });
         this.highwayLines = new THREE.LineSegments(lineGeo, lineMat);
         this.metropolisGroup.add(this.highwayLines);
+
+        // Cintas Volumétricas 3D
+        this.highwayRibbonsGroup = new THREE.Group();
+        this.highwayRibbonsGroup.name = 'HighwayRibbonsGroup';
+
+        for (const hw of highways) {
+          const dx = hw.x2 - hw.x1;
+          const dy = hw.y2 - hw.y1;
+          const length = Math.hypot(dx, dy);
+          if (length < 0.05) continue;
+          const angle = Math.atan2(dy, dx);
+          const midX = (hw.x1 + hw.x2) / 2;
+          const midZ = (hw.y1 + hw.y2) / 2;
+          const roadWidth = hw.widthMeters || 1.1;
+
+          // Asfalto cibernético
+          const roadGeo = new THREE.PlaneGeometry(length, roadWidth);
+          roadGeo.rotateX(-Math.PI / 2);
+          const roadMat = new THREE.MeshStandardMaterial({
+            color: 0x0b1120,
+            roughness: 0.85,
+            metalness: 0.3,
+          });
+          const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+          roadMesh.position.set(midX, 0.012, midZ);
+          roadMesh.rotation.y = -angle;
+          this.highwayRibbonsGroup.add(roadMesh);
+
+          // Aceras bioluminiscentes (bordes izquierdo y derecho)
+          for (const side of [-1, 1]) {
+            const curbGeo = new THREE.PlaneGeometry(length, 0.08);
+            curbGeo.rotateX(-Math.PI / 2);
+            const curbMat = new THREE.MeshBasicMaterial({
+              color: 0x00f0ff,
+              transparent: true,
+              opacity: 0.75,
+              blending: THREE.AdditiveBlending,
+            });
+            const curbMesh = new THREE.Mesh(curbGeo, curbMat);
+            const curbOffset = side * (roadWidth / 2 - 0.04);
+            const curbX = midX + Math.sin(angle) * curbOffset;
+            const curbZ = midZ - Math.cos(angle) * curbOffset;
+            curbMesh.position.set(curbX, 0.016, curbZ);
+            curbMesh.rotation.y = -angle;
+            this.highwayRibbonsGroup.add(curbMesh);
+          }
+
+          // Línea central discontinua dorada
+          const centerGeo = new THREE.PlaneGeometry(length, 0.06);
+          centerGeo.rotateX(-Math.PI / 2);
+          const centerMat = new THREE.MeshBasicMaterial({
+            color: 0xffb703,
+            transparent: true,
+            opacity: 0.85,
+            blending: THREE.AdditiveBlending,
+          });
+          const centerMesh = new THREE.Mesh(centerGeo, centerMat);
+          centerMesh.position.set(midX, 0.018, midZ);
+          centerMesh.rotation.y = -angle;
+          this.highwayRibbonsGroup.add(centerMesh);
+        }
+        this.metropolisGroup.add(this.highwayRibbonsGroup);
       }
+    }
+
+    // ── Renderizado de Farolas Cívicas 3D (Street Lamps) ──
+    const streetLamps = telemetry.streetLamps || [];
+    if (streetLamps.length !== this.lastStreetLampCount) {
+      this.lastStreetLampCount = streetLamps.length;
+      if (this.streetLampsGroup) {
+        this.metropolisGroup.remove(this.streetLampsGroup);
+        this.streetLampsGroup.traverse((obj) => {
+          const anyObj = obj as unknown as { geometry?: THREE.BufferGeometry; material?: THREE.Material | THREE.Material[] };
+          if (anyObj.geometry) anyObj.geometry.dispose();
+          if (anyObj.material) {
+            if (Array.isArray(anyObj.material)) anyObj.material.forEach((m) => m.dispose());
+            else anyObj.material.dispose();
+          }
+        });
+        this.streetLampsGroup = null;
+      }
+
+      if (streetLamps.length > 0) {
+        this.streetLampsGroup = new THREE.Group();
+        this.streetLampsGroup.name = 'StreetLampsGroup';
+
+        const poleMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.85, roughness: 0.3 });
+        const lampHeadMat = new THREE.MeshStandardMaterial({
+          color: 0xffb703,
+          emissive: 0xfb8500,
+          emissiveIntensity: 2.5,
+          roughness: 0.2,
+        });
+
+        for (const lamp of streetLamps) {
+          const lampGroup = new THREE.Group();
+          lampGroup.position.set(lamp.x, 0, lamp.y);
+
+          // Poste vertical de aleación oscura
+          const poleGeo = new THREE.CylinderGeometry(0.035, 0.045, 1.25, 8);
+          const poleMesh = new THREE.Mesh(poleGeo, poleMat);
+          poleMesh.position.y = 0.625;
+          poleMesh.castShadow = true;
+          lampGroup.add(poleMesh);
+
+          // Brazo horizontal hacia la calzada
+          const armGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.35, 6);
+          armGeo.rotateZ(Math.PI / 2);
+          const armMesh = new THREE.Mesh(armGeo, poleMat);
+          armMesh.position.set(0.15, 1.22, 0);
+          lampGroup.add(armMesh);
+
+          // Foco / Linterna de alta luminosidad
+          const headGeo = new THREE.OctahedronGeometry(0.09);
+          const headMesh = new THREE.Mesh(headGeo, lampHeadMat);
+          headMesh.name = `LampHead_${lamp.id}`;
+          headMesh.position.set(0.3, 1.18, 0);
+          lampGroup.add(headMesh);
+
+          // Disco de halo luminoso proyectado en el pavimento
+          const poolGeo = new THREE.CircleGeometry(0.9, 16);
+          poolGeo.rotateX(-Math.PI / 2);
+          const poolMat = new THREE.MeshBasicMaterial({
+            color: 0xffb703,
+            transparent: true,
+            opacity: lamp.isLit ? 0.28 : 0.06,
+            blending: THREE.AdditiveBlending,
+          });
+          const poolMesh = new THREE.Mesh(poolGeo, poolMat);
+          poolMesh.name = `LampPool_${lamp.id}`;
+          poolMesh.position.set(0.3, 0.02, 0);
+          lampGroup.add(poolMesh);
+
+          this.streetLampsGroup.add(lampGroup);
+        }
+        this.metropolisGroup.add(this.streetLampsGroup);
+      }
+    }
+
+    // ── Renderizado de Corredores Aéreos 3D (Skyway Corridors) ──
+    const skyways = telemetry.skywayCorridors || [];
+    if (skyways.length !== this.lastSkywayCount) {
+      this.lastSkywayCount = skyways.length;
+      if (this.skywaysGroup) {
+        this.metropolisGroup.remove(this.skywaysGroup);
+        this.skywaysGroup.traverse((obj) => {
+          const anyObj = obj as unknown as { geometry?: THREE.BufferGeometry; material?: THREE.Material | THREE.Material[] };
+          if (anyObj.geometry) anyObj.geometry.dispose();
+          if (anyObj.material) {
+            if (Array.isArray(anyObj.material)) anyObj.material.forEach((m) => m.dispose());
+            else anyObj.material.dispose();
+          }
+        });
+        this.skywaysGroup = null;
+      }
+
+      if (skyways.length > 0) {
+        this.skywaysGroup = new THREE.Group();
+        this.skywaysGroup.name = 'SkywaysGroup_3D';
+
+        for (const sw of skyways) {
+          const p1 = new THREE.Vector3(sw.fromX, sw.fromAltitude, sw.fromY);
+          const p2 = new THREE.Vector3(sw.toX, sw.toAltitude, sw.toY);
+
+          // Línea aérea discontinua bioluminiscente
+          const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+          const lineMat = new THREE.LineDashedMaterial({
+            color: sw.beaconLightColorHex || 0x00f0ff,
+            dashSize: 0.35,
+            gapSize: 0.18,
+            transparent: true,
+            opacity: 0.55,
+            blending: THREE.AdditiveBlending,
+          });
+          const line = new THREE.Line(lineGeo, lineMat);
+          line.computeLineDistances();
+          this.skywaysGroup.add(line);
+
+          // Anillos de baliza aérea flotantes en los extremos
+          for (const pt of [p1, p2]) {
+            const ringGeo = new THREE.TorusGeometry(0.32, 0.025, 6, 20);
+            const ringMat = new THREE.MeshBasicMaterial({
+              color: sw.beaconLightColorHex || 0x00f0ff,
+              transparent: true,
+              opacity: 0.75,
+              blending: THREE.AdditiveBlending,
+            });
+            const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+            ringMesh.position.copy(pt);
+            ringMesh.name = 'SkywayBeaconRing';
+            this.skywaysGroup.add(ringMesh);
+          }
+        }
+        this.metropolisGroup.add(this.skywaysGroup);
+      }
+    }
+
+    if (this.skywaysGroup) {
+      this.skywaysGroup.traverse((obj) => {
+        if (obj.name === 'SkywayBeaconRing') {
+          obj.rotation.z += deltaSec * 1.6;
+        }
+      });
     }
   }
 
@@ -2176,8 +2789,10 @@ export class BiocyberneticHabitat3DEngine {
 
       if (targetOrg) {
         const isSentinel = targetOrg.species === 'GRAVITY_SENTINEL';
+        const isFly = targetOrg.species === 'DROSOPHILA';
+        const isAerial = isSentinel || isFly;
         const camDist = isSentinel ? 4.2 : 3.6;
-        const orgY = isSentinel ? targetOrg.altitudeMeters || 1.8 : 0;
+        const orgY = isAerial ? targetOrg.altitudeMeters || 0.1 : 0;
         const camHeight = orgY + 2.2;
         const targetX = targetOrg.x - Math.cos(targetOrg.headingRad) * camDist;
         const targetZ = targetOrg.y - Math.sin(targetOrg.headingRad) * camDist;
@@ -2186,8 +2801,29 @@ export class BiocyberneticHabitat3DEngine {
         this.camera.lookAt(targetOrg.x, orgY + 0.35, targetOrg.y);
       }
 
+    } else if (this.cameraMode === 'FLY_COCKPIT_FPV') {
+      const fly =
+        (this.selectedOrgId ? biocyberneticHabitat.getOrganism(this.selectedOrgId) : null) ||
+        biocyberneticHabitat.getAllOrganisms().find(o => o.species === 'DROSOPHILA') ||
+        biocyberneticHabitat.getLeader();
+
+      if (fly) {
+        const alt = fly.altitudeMeters || 0.08;
+        const eyeHeight = alt + 0.14;
+        const headDist = 0.22;
+        const eyeX = fly.x + Math.cos(fly.headingRad) * headDist;
+        const eyeZ = fly.y + Math.sin(fly.headingRad) * headDist;
+        const lookDist = 4.0;
+        const targetX = eyeX + Math.cos(fly.headingRad) * lookDist;
+        const targetZ = eyeZ + Math.sin(fly.headingRad) * lookDist;
+        const pitchJitter = Math.sin(this.simTimeSec * 4.0) * 0.04;
+
+        this.camera.position.set(eyeX, eyeHeight, eyeZ);
+        this.camera.lookAt(targetX, eyeHeight + pitchJitter, targetZ);
+      }
+
     } else if (this.cameraMode === 'TOP_DOWN_GOD') {
-      this.camera.position.lerp(new THREE.Vector3(0, 24, 0.001), 0.1);
+      this.camera.position.lerp(new THREE.Vector3(0, 52, 0.001), 0.1);
       this.camera.lookAt(0, 0, 0);
     }
   }
@@ -2350,7 +2986,7 @@ export class BiocyberneticHabitat3DEngine {
       const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
       if (this.initialPinchDist > 0 && currentDist > 0) {
         const factor = this.initialPinchDist / currentDist;
-        this.camSpherical.radius = Math.max(5.0, Math.min(35.0, this.initialPinchRadius * factor));
+        this.camSpherical.radius = Math.max(3.0, Math.min(65.0, this.initialPinchRadius * factor));
       }
     }
   };
@@ -2363,7 +2999,7 @@ export class BiocyberneticHabitat3DEngine {
         if (groundPt) {
           const dist = Math.hypot(groundPt.x - this.barrierStartPoint.x, groundPt.z - this.barrierStartPoint.y);
           if (dist >= 0.4) {
-            const gridCenter = 10.0;
+            const gridCenter = this.arenaRadius;
             biocyberneticHabitat.diffusionGrid.addBarrier({
               id: `barrier-${Date.now()}`,
               x1: this.barrierStartPoint.x + gridCenter,
@@ -2391,8 +3027,8 @@ export class BiocyberneticHabitat3DEngine {
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
     this.camSpherical.radius = Math.max(
-      5.0,
-      Math.min(35.0, this.camSpherical.radius + e.deltaY * 0.015)
+      3.0,
+      Math.min(65.0, this.camSpherical.radius + e.deltaY * 0.015)
     );
   };
 
@@ -2591,6 +3227,18 @@ export class BiocyberneticHabitat3DEngine {
       this.highwayLines.geometry.dispose();
       (this.highwayLines.material as THREE.Material).dispose();
       this.highwayLines = null;
+    }
+    if (this.highwayRibbonsGroup) {
+      disposeHierarchy(this.highwayRibbonsGroup);
+      this.highwayRibbonsGroup = null;
+    }
+    if (this.streetLampsGroup) {
+      disposeHierarchy(this.streetLampsGroup);
+      this.streetLampsGroup = null;
+    }
+    if (this.skywaysGroup) {
+      disposeHierarchy(this.skywaysGroup);
+      this.skywaysGroup = null;
     }
     disposeHierarchy(this.metropolisGroup);
     disposeHierarchy(this.nestMound);

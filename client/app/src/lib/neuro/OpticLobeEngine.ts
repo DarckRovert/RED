@@ -109,7 +109,13 @@ export class OpticLobeEngine {
   };
 
   private isRunning = false;
+  // Suscriptores reactivos y control de estrangulamiento (~15 Hz / 66 ms)
+  // Preserva el cálculo de correlación H-R continuo y dispara instantáneamente ante amenazas LC4
   private listeners: Set<(telemetry: OpticLobeTelemetry) => void> = new Set();
+  private static readonly TELEMETRY_THROTTLE_MS = 66;
+  private lastNotifyTs = 0;
+  private notifyThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  private clientRefCount = 0;
 
   private constructor() {
     this.currentFrame = new Float32Array(OpticLobeEngine.TOTAL_OMMATIDIA);
@@ -124,14 +130,28 @@ export class OpticLobeEngine {
   }
 
   public start(): void {
+    this.clientRefCount++;
     if (this.isRunning) return;
     this.isRunning = true;
     this.lastFpsCalcTime = Date.now();
+    this.notifyListeners(true);
   }
 
-  public stop(): void {
+  public stop(force = false): void {
+    if (this.clientRefCount > 0 && !force) {
+      this.clientRefCount--;
+      if (this.clientRefCount > 0) return;
+    } else if (force) {
+      this.clientRefCount = 0;
+    }
+
     this.isRunning = false;
     this.hasPreviousFrame = false;
+    if (this.notifyThrottleTimer) {
+      clearTimeout(this.notifyThrottleTimer);
+      this.notifyThrottleTimer = null;
+    }
+    this.notifyListeners(true);
   }
 
   /**
@@ -240,7 +260,8 @@ export class OpticLobeEngine {
     // ── 2. Detector de Looming y Colisión LC4 / LPLC2 ──────────────────────────
     this.evaluateLoomingThreat(dtMs);
 
-    this.notifyListeners();
+    const isLoomingThreat = this.loomingThreatState.isThreatDetected;
+    this.notifyListeners(isLoomingThreat);
     return this.getTelemetry();
   }
 
@@ -332,7 +353,7 @@ export class OpticLobeEngine {
       giantFiberReflex.triggerReflex('VISUAL_LOOMING_THREAT');
     }
 
-    this.notifyListeners();
+    this.notifyListeners(true);
     return isCritical;
   }
 
@@ -388,7 +409,7 @@ export class OpticLobeEngine {
       } catch {}
     }
 
-    this.notifyListeners();
+    this.notifyListeners(isCritical);
   }
 
   public getTelemetry(): OpticLobeTelemetry {
@@ -413,11 +434,41 @@ export class OpticLobeEngine {
 
   public subscribe(callback: (telemetry: OpticLobeTelemetry) => void): () => void {
     this.listeners.add(callback);
+    if (this.listeners.size === 1) {
+      this.start();
+    }
     callback(this.getTelemetry());
-    return () => this.listeners.delete(callback);
+    return () => {
+      this.listeners.delete(callback);
+      if (this.listeners.size === 0) {
+        this.stop();
+      }
+    };
   }
 
-  private notifyListeners(): void {
+  private notifyListeners(force = false): void {
+    if (this.listeners.size === 0) return;
+
+    const now = Date.now();
+    const elapsed = now - this.lastNotifyTs;
+
+    if (force || elapsed >= OpticLobeEngine.TELEMETRY_THROTTLE_MS) {
+      if (this.notifyThrottleTimer) {
+        clearTimeout(this.notifyThrottleTimer);
+        this.notifyThrottleTimer = null;
+      }
+      this.lastNotifyTs = now;
+      this.dispatchTelemetry();
+    } else if (!this.notifyThrottleTimer) {
+      this.notifyThrottleTimer = setTimeout(() => {
+        this.notifyThrottleTimer = null;
+        this.lastNotifyTs = Date.now();
+        this.dispatchTelemetry();
+      }, OpticLobeEngine.TELEMETRY_THROTTLE_MS - elapsed);
+    }
+  }
+
+  private dispatchTelemetry(): void {
     const telem = this.getTelemetry();
     for (const listener of this.listeners) {
       try {
@@ -427,7 +478,7 @@ export class OpticLobeEngine {
   }
 
   public destroy(): void {
-    this.stop();
+    this.stop(true);
     this.listeners.clear();
     OpticLobeEngine.instance = null;
   }

@@ -47,6 +47,7 @@ export interface WorkingMemoryTelemetry {
 export class TacticalWorkingMemoryEngine {
   private static instance: TacticalWorkingMemoryEngine | null = null;
   private static readonly STORAGE_KEY = 'red_working_memory_tasks_v1';
+  public static readonly MAX_WORKING_MEMORY_ITEMS = 9; // Capacidad biológica ejecutiva de Miller (7 ± 2)
 
   private tasks: TacticalTaskItem[] = [];
   private listeners: Set<(telemetry: WorkingMemoryTelemetry) => void> = new Set();
@@ -120,7 +121,10 @@ export class TacticalWorkingMemoryEngine {
   }
 
   public setTasks(tasks: TacticalTaskItem[]): void {
-    this.tasks = [...tasks].sort((a, b) => a.order - b.order);
+    this.tasks = [...tasks]
+      .sort((a, b) => a.order - b.order)
+      .slice(0, TacticalWorkingMemoryEngine.MAX_WORKING_MEMORY_ITEMS);
+    this.persistToStorage();
     this.notifyListeners();
   }
 
@@ -199,6 +203,17 @@ export class TacticalWorkingMemoryEngine {
       targetDurationSeconds?: number;
     }
   ): TacticalTaskItem {
+    // Acotar búfer ejecutivo según la Ley de Miller (máx 9 ítems): purgar la tarea completada más antigua
+    if (this.tasks.length >= TacticalWorkingMemoryEngine.MAX_WORKING_MEMORY_ITEMS) {
+      const oldestCompletedIndex = this.tasks.findIndex(t => t.isCompleted);
+      if (oldestCompletedIndex !== -1) {
+        this.tasks.splice(oldestCompletedIndex, 1);
+      } else {
+        this.tasks.shift();
+      }
+      this.tasks.forEach((t, idx) => { t.order = idx + 1; });
+    }
+
     const newTask: TacticalTaskItem = {
       id: `TASK-${Date.now()}-${this.tasks.length + 1}`,
       order: this.tasks.length + 1,

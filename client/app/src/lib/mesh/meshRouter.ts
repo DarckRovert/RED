@@ -247,6 +247,7 @@ class MeshRouter {
 
   private initialized = false;
   private unsubscribeNetwork: (() => void) | null = null;
+  private unsubscribeKineticStress: (() => void) | null = null;
   private aerSeq = 0;
 
   // ─── Initialization ─────────────────────────────────────────────────────────
@@ -443,7 +444,12 @@ class MeshRouter {
 
     // Dynamic Kinetic Stress & Man-Down Emergency Traffic Governor
     kineticStress.start();
-    kineticStress.subscribe((tel) => {
+    if (this.unsubscribeKineticStress) {
+      this.unsubscribeKineticStress();
+      this.unsubscribeKineticStress = null;
+    }
+    this.unsubscribeKineticStress = kineticStress.subscribe((tel) => {
+      if (!this.isStarted) return;
       if (tel.level === 'CRITICAL_SHOCK' || tel.isManDownActive) {
         console.warn(`[MeshRouter] 🚨 KINETIC STRESS ESCALATION (${tel.level}): Flashing DTN and elevating mesh priority`);
         dtnStorage.forceResetRetryTimers();
@@ -459,6 +465,11 @@ class MeshRouter {
     if (this.pruneInterval) { clearInterval(this.pruneInterval); this.pruneInterval = null; }
     if (this.persistNoncesTimer) { clearTimeout(this.persistNoncesTimer); this.persistNoncesTimer = null; }
     if (this.unsubscribeNetwork) { this.unsubscribeNetwork(); this.unsubscribeNetwork = null; }
+    if (this.unsubscribeKineticStress) {
+      this.unsubscribeKineticStress();
+      this.unsubscribeKineticStress = null;
+    }
+    kineticStress.stop();
     for (const queries of this.pendingIdentityQueries.values()) {
       for (const q of queries) {
         if (q.timer) clearTimeout(q.timer);
@@ -748,9 +759,17 @@ class MeshRouter {
       const okLoRa = await this.sendViaLoRa(frame).catch(() => false);
 
       // 2. Difusión BLE ad-hoc
-      await bluetoothTransport.send('broadcast', frame).catch(() => false);
+      const okBle = await bluetoothTransport.send('broadcast', frame).then(() => true).catch(() => false);
 
-      return okLoRa;
+      // 3. Difusión WiFi Direct / LAN local si está activo
+      let okWifi = false;
+      if (this.wifi && this.wifi.onlinePeers.size > 0) {
+        try {
+          okWifi = await this.wifi.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', frame);
+        } catch {}
+      }
+
+      return okLoRa || okBle || okWifi;
     } catch (e) {
       console.warn('[MeshRouter] Failed to broadcast AER spike:', e);
       return false;
@@ -1394,6 +1413,8 @@ class MeshRouter {
     dtnStorage.enqueue(originalPacket, 5);
 
     const blePeers = Array.from(this.peers.entries()).filter(([_, p]) => p.transport === 'ble');
+    const directBlePeer = blePeers.find(([id]) => id === canonicalRecipient);
+    const primaryBleId = directBlePeer ? directBlePeer[0] : (blePeers.length > 0 ? blePeers[0][0] : null);
     const wifiActive = this.wifi && (this.wifi.onlinePeers.size > 0 || blindRelay.isConnected || this.hasInternetAccess);
     let anyShardSent = false;
 
@@ -1402,9 +1423,9 @@ class MeshRouter {
       this.wifi?.send(canonicalRecipient, encode(shardPackets[0])).catch(() => {});
       this.wifi?.send(canonicalRecipient, encode(shardPackets[1])).catch(() => {});
       anyShardSent = true;
-    } else if (blePeers.length > 0) {
-      bluetoothTransport.send(blePeers[0][0], encode(shardPackets[0])).catch(() => {});
-      bluetoothTransport.send(blePeers[0][0], encode(shardPackets[1])).catch(() => {});
+    } else if (primaryBleId) {
+      bluetoothTransport.send(primaryBleId, encode(shardPackets[0])).catch(() => {});
+      bluetoothTransport.send(primaryBleId, encode(shardPackets[1])).catch(() => {});
       anyShardSent = true;
     }
 
@@ -1415,26 +1436,27 @@ class MeshRouter {
     } else if (wifiActive) {
       this.wifi?.send(canonicalRecipient, encode(shardPackets[2])).catch(() => {});
       anyShardSent = true;
-    } else if (blePeers.length > 0) {
-      bluetoothTransport.send(blePeers[0][0], encode(shardPackets[2])).catch(() => {});
+    } else if (primaryBleId) {
+      bluetoothTransport.send(primaryBleId, encode(shardPackets[2])).catch(() => {});
       anyShardSent = true;
     }
 
     // Shard 3: Local BLE Mesh Neighbor
-    if (blePeers.length > 0) {
-      bluetoothTransport.send(blePeers[0][0], encode(shardPackets[3])).catch(() => {});
+    if (primaryBleId) {
+      bluetoothTransport.send(primaryBleId, encode(shardPackets[3])).catch(() => {});
       anyShardSent = true;
     } else if (wifiActive) {
       this.wifi?.send(canonicalRecipient, encode(shardPackets[3])).catch(() => {});
       anyShardSent = true;
     }
 
-    // Shard 4: LoRa RF or secondary BLE neighbor / fallback
-    if (loraBridge.isConnected) {
-      loraBridge.sendPacket(encode(shardPackets[4])).catch(() => {});
+    // Shard 4: LoRa RF vía planificador TDMA y protocolo compatible, o vecino BLE secundario
+    if (loraBridge.isConnected || loraMeshtastic.isRadioConnected()) {
+      this.sendViaLoRa(encode(shardPackets[4])).catch(() => {});
       anyShardSent = true;
     } else if (blePeers.length > 1) {
-      bluetoothTransport.send(blePeers[1][0], encode(shardPackets[4])).catch(() => {});
+      const secondaryBleId = blePeers[0][0] === primaryBleId ? blePeers[1][0] : blePeers[0][0];
+      bluetoothTransport.send(secondaryBleId, encode(shardPackets[4])).catch(() => {});
       anyShardSent = true;
     } else if (wifiActive) {
       this.wifi?.send(canonicalRecipient, encode(shardPackets[4])).catch(() => {});
@@ -1601,6 +1623,40 @@ class MeshRouter {
 
   // ─── Receiving & Relaying ───────────────────────────────────────────────────
 
+  /**
+   * Ruteo e inyección somática determinista de micro-espigas AER recibidas
+   * hacia los 14 núcleos biológicos del sistema nervioso y el puente autonómico.
+   */
+  private dispatchAerSpike(spike: AerSpikeEvent, senderShortHex: string): void {
+    synapticMeshRouter.recordAerSpikeReceived(spike, senderShortHex);
+
+    // Ruteo biológico instantáneo según dominio somático
+    if (spike.domain === AerDomainCode.CX_COMPASS_HEADING) {
+      const headingDeg = spike.value >= 0 && spike.value < 360 ? spike.value : ((spike.value & 0xFF) * 360 / 256);
+      synapticMeshRouter.touchPeer(senderShortHex, 75, headingDeg);
+    } else if (spike.domain === AerDomainCode.KURAMOTO_PHASE_PULSE) {
+      ringAttractor.injectRemoteKuramotoPhase(
+        senderShortHex,
+        spike.value & 0xFF,
+        Date.now(),
+        0.90
+      );
+    } else if (spike.domain === AerDomainCode.EW_JAMMING_DETECTED) {
+      console.warn(`[MeshRouter] 🛡️ Alerta AER: Interferencia EW Jamming detectada por nodo ${senderShortHex}`);
+      giantFiberReflex.triggerEscape('EW_JAMMING');
+      const targetCh = spike.value < 8 ? `lora_ch_${spike.value}` : 'lora_ch_0';
+      dtnMushroomBody.applyDopaminergicNeuromodulation('PPL1', 0.85, targetCh);
+    } else if (spike.domain === AerDomainCode.CBRN_RADIATION_ALERT) {
+      console.warn(`[MeshRouter] ☢️ Alerta AER: Salto CBRN recibido de nodo ${senderShortHex} (Nivel: ${spike.value})`);
+    } else if (
+      spike.domain === AerDomainCode.KINETIC_SHOCK_MANDOWN ||
+      spike.domain === AerDomainCode.ACOUSTIC_SONAR_CAVITY ||
+      spike.domain === AerDomainCode.SYNAPTIC_DELTA_WEIGHT
+    ) {
+      sensoriomotorAutonomicBridge.handleRemoteSpike(spike, senderShortHex);
+    }
+  }
+
   private async handleRawPacket(raw: Uint8Array, fromTransportId?: string, transportType?: MeshTransport) {
     // 0.0 NEUROMORPHIC AER MICRO-SPIKE FAST-PATH (Magic 0xAE51)
     if (raw && raw.length >= 14 && raw[0] === 0xAE && raw[1] === 0x51) {
@@ -1616,33 +1672,7 @@ class MeshRouter {
         this.seenNonces.set(aerNonce, Date.now());
 
         for (const spike of aerFrame.spikes) {
-          synapticMeshRouter.recordAerSpikeReceived(spike, senderShortHex);
-
-          // Ruteo biológico instantáneo según dominio somático
-          if (spike.domain === AerDomainCode.CX_COMPASS_HEADING) {
-            const headingDeg = spike.value >= 0 && spike.value < 360 ? spike.value : ((spike.value & 0xFF) * 360 / 256);
-            synapticMeshRouter.touchPeer(senderShortHex, 75, headingDeg);
-          } else if (spike.domain === AerDomainCode.KURAMOTO_PHASE_PULSE) {
-            ringAttractor.injectRemoteKuramotoPhase(
-              senderShortHex,
-              spike.value & 0xFF,
-              Date.now(),
-              0.90
-            );
-          } else if (spike.domain === AerDomainCode.EW_JAMMING_DETECTED) {
-            console.warn(`[MeshRouter] 🛡️ Alerta AER: Interferencia EW Jamming detectada por nodo ${senderShortHex}`);
-            giantFiberReflex.triggerEscape('EW_JAMMING');
-            const targetCh = spike.value < 8 ? `lora_ch_${spike.value}` : 'lora_ch_0';
-            dtnMushroomBody.applyDopaminergicNeuromodulation('PPL1', 0.85, targetCh);
-          } else if (spike.domain === AerDomainCode.CBRN_RADIATION_ALERT) {
-            console.warn(`[MeshRouter] ☢️ Alerta AER: Salto CBRN recibido de nodo ${senderShortHex} (Nivel: ${spike.value})`);
-          } else if (
-            spike.domain === AerDomainCode.KINETIC_SHOCK_MANDOWN ||
-            spike.domain === AerDomainCode.ACOUSTIC_SONAR_CAVITY ||
-            spike.domain === AerDomainCode.SYNAPTIC_DELTA_WEIGHT
-          ) {
-            sensoriomotorAutonomicBridge.handleRemoteSpike(spike, senderShortHex);
-          }
+          this.dispatchAerSpike(spike, senderShortHex);
         }
 
         // Reenvío Multi-Salto Neuromórfico (Relay con decaimiento de TTL)
@@ -1901,7 +1931,7 @@ class MeshRouter {
             if (aerFrame) {
               const senderShortHex = aerFrame.senderShortId.toString(16).padStart(8, '0');
               for (const spike of aerFrame.spikes) {
-                synapticMeshRouter.recordAerSpikeReceived(spike, senderShortHex);
+                this.dispatchAerSpike(spike, senderShortHex);
               }
             }
           }
@@ -2633,6 +2663,13 @@ class MeshRouter {
 
   private async sendViaLoRa(payload: Uint8Array): Promise<boolean> {
     try {
+      // Si no hay transceptor LoRa físico conectado (USB-OTG, BLE NUS o Serial), abortar
+      // de inmediato para permitir el fallback automático transparente a WiFi, BLE, DNS y Satélite.
+      const isRadioActive = loraBridge.isConnected || loraMeshtastic.isRadioConnected();
+      if (!isRadioActive) {
+        return false;
+      }
+
       let isEmergency = false;
       try {
         const decodedStr = new TextDecoder().decode(payload.slice(0, 40));
@@ -2641,19 +2678,17 @@ class MeshRouter {
         }
       } catch {}
 
-      // Si el enlace de hardware está activo, encapsular en trama ToRadio Protobuf compatible
-      const framedPayload = (loraBridge.isConnected || loraMeshtastic.isRadioConnected())
-        ? loraMeshtastic.framePacket({
-            from: loraMeshtastic.getLocalNodeNum(),
-            to: 0xFFFFFFFF,
-            channel: 0,
-            portnum: MeshtasticPortNum.RED_SOVEREIGN_MESH_APP,
-            payload,
-            id: (Date.now() & 0xFFFFFFFF) >>> 0,
-            hopLimit: 3,
-            wantAck: false
-          })
-        : payload;
+      // Encapsular en trama ToRadio Protobuf compatible
+      const framedPayload = loraMeshtastic.framePacket({
+        from: loraMeshtastic.getLocalNodeNum(),
+        to: 0xFFFFFFFF,
+        channel: 0,
+        portnum: MeshtasticPortNum.RED_SOVEREIGN_MESH_APP,
+        payload,
+        id: (Date.now() & 0xFFFFFFFF) >>> 0,
+        hopLimit: 3,
+        wantAck: false
+      });
 
       // Canalizar a través del planificador TDMA para mitigar colisiones ALOHA
       const okHardware = await loraTdmaScheduler.scheduleTransmission(framedPayload, isEmergency ? 10 : 5, isEmergency);
@@ -2688,6 +2723,7 @@ class MeshRouter {
   // ─── DTN Store-and-Forward Queue Flusher ──────────────────────────────────────
 
   public async flushPendingQueue(forceAll = false) {
+    if (!this.isStarted) return;
     const items = dtnStorage.getItemsToRetry(forceAll);
     if (items.length === 0) return;
 

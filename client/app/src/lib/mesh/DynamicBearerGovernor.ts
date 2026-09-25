@@ -215,15 +215,17 @@ export class DynamicBearerGovernor {
                 }
             }
 
-            // Determinar primaryBearer real
-            if (wifiPeers > 0) {
-                this.primaryBearer = 'WIFI_DIRECT';
-            } else if (blePeers > 0) {
-                this.primaryBearer = 'BLE';
-            } else if (loraPeers > 0) {
-                this.primaryBearer = 'LORA_RF';
-            } else if (satStat?.isOnline) {
-                this.primaryBearer = 'SATELLITE_LEO';
+            // Determinar primaryBearer real respetando el control manual del operador
+            if (!this.isManualOverride) {
+                if (wifiPeers > 0) {
+                    this.primaryBearer = 'WIFI_DIRECT';
+                } else if (blePeers > 0) {
+                    this.primaryBearer = 'BLE';
+                } else if (loraPeers > 0) {
+                    this.primaryBearer = 'LORA_RF';
+                } else if (satStat?.isOnline) {
+                    this.primaryBearer = 'SATELLITE_LEO';
+                }
             }
 
             this.notify();
@@ -406,6 +408,11 @@ export class DynamicBearerGovernor {
             clearInterval(this.pollingInterval);
             this.pollingInterval = null;
         }
+        if (this.unsubMeshPeers) {
+            this.unsubMeshPeers();
+            this.unsubMeshPeers = undefined;
+        }
+        this.listeners.clear();
     }
 }
 

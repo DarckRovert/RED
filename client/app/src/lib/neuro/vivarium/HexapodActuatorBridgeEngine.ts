@@ -36,6 +36,11 @@ export class HexapodActuatorBridgeEngine {
   private lastSendTime = 0;
   private readonly THROTTLE_MS = 33; // ~30 Hz (tasa estándar óptima para servomotores PWM 50Hz)
 
+  // Amortiguación de re-renders para UI / React (4 Hz = 250 ms)
+  private static readonly HUD_NOTIFY_THROTTLE_MS = 250;
+  private lastNotifyTime = 0;
+  private notifyTimer: ReturnType<typeof setTimeout> | null = null;
+
   private listeners: Set<(t: ActuatorBridgeTelemetry) => void> = new Set();
 
   private constructor() {}
@@ -53,7 +58,27 @@ export class HexapodActuatorBridgeEngine {
     return () => this.listeners.delete(cb);
   }
 
-  private notify(): void {
+  private notify(force = false): void {
+    const now = performance.now();
+    const elapsed = now - this.lastNotifyTime;
+
+    if (force || elapsed >= HexapodActuatorBridgeEngine.HUD_NOTIFY_THROTTLE_MS) {
+      if (this.notifyTimer) {
+        clearTimeout(this.notifyTimer);
+        this.notifyTimer = null;
+      }
+      this.lastNotifyTime = now;
+      this.dispatchTelemetry();
+    } else if (!this.notifyTimer) {
+      this.notifyTimer = setTimeout(() => {
+        this.notifyTimer = null;
+        this.lastNotifyTime = performance.now();
+        this.dispatchTelemetry();
+      }, HexapodActuatorBridgeEngine.HUD_NOTIFY_THROTTLE_MS - elapsed);
+    }
+  }
+
+  private dispatchTelemetry(): void {
     const tel = this.getTelemetry();
     this.listeners.forEach((cb) => {
       try {
@@ -77,7 +102,7 @@ export class HexapodActuatorBridgeEngine {
 
   public setStreaming(enabled: boolean): void {
     this.isStreaming = enabled;
-    this.notify();
+    this.notify(true);
   }
 
   /**
@@ -161,6 +186,16 @@ export class HexapodActuatorBridgeEngine {
     }
 
     this.notify();
+  }
+
+  public destroy(): void {
+    if (this.notifyTimer) {
+      clearTimeout(this.notifyTimer);
+      this.notifyTimer = null;
+    }
+    this.listeners.clear();
+    this.isStreaming = false;
+    HexapodActuatorBridgeEngine.instance = null;
   }
 }
 

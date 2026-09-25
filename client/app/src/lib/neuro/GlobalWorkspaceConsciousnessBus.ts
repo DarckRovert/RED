@@ -85,6 +85,7 @@ export class GlobalWorkspaceConsciousnessBus {
 
   public static readonly THETA_INHIB = 0.60;
   public static readonly UI_THROTTLE_MS = 100; // 10 Hz máximo para reactividad fluida
+  public static readonly EVAL_THROTTLE_MS = 80; // 12.5 Hz deliberación GNWT
 
   private isRunning = false;
   private refCount = 0;
@@ -112,6 +113,9 @@ export class GlobalWorkspaceConsciousnessBus {
 
   private lastNotifyTime = 0;
   private notifyThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private lastEvalTs = 0;
+  private evalThrottleTimer: ReturnType<typeof setTimeout> | null = null;
 
   private isEvaluating = false;
   private lastActuatedFocus: ConsciousFocusType | null = null;
@@ -143,28 +147,55 @@ export class GlobalWorkspaceConsciousnessBus {
     // 2. Suscribirse a la telemetría subcortical de MaleCNS
     const unsubSub = subcortical.subscribe((subSnap) => {
       this.lastSubcorticalSnapshot = subSnap;
-      this.evaluateGlobalWorkspaceCompetition();
+      this.triggerEvaluation();
     });
     this.unsubs.push(unsubSub);
 
     // 3. Suscribirse a la telemetría neocortical humana
     const unsubNeo = neocortical.subscribe((neoSnap) => {
       this.lastNeocorticalSnapshot = neoSnap;
-      this.evaluateGlobalWorkspaceCompetition();
+      this.triggerEvaluation();
     });
     this.unsubs.push(unsubNeo);
 
     // 4. Suscripción a eventos de choque de Johnston Organ y Óptico
     const unsubJo = johnstonOrgan.subscribe(() => {
-      this.evaluateGlobalWorkspaceCompetition();
+      this.triggerEvaluation(true); // Choque súbito es de alta prioridad
     });
     const unsubOptic = opticLobe.subscribe(() => {
-      this.evaluateGlobalWorkspaceCompetition();
+      this.triggerEvaluation(true); // Amenaza looming es de alta prioridad
     });
     this.unsubs.push(unsubJo, unsubOptic);
 
     // Evaluación inicial
     this.evaluateGlobalWorkspaceCompetition();
+  }
+
+  /**
+   * Programa o ejecuta la evaluación de competencia de espacio de trabajo global.
+   * Amortigua ráfagas multimodales de sensores a un ritmo deliberativo de 12.5 Hz (80 ms),
+   * permitiendo evaluación instantánea (force = true) para emergencias o invocaciones manuales.
+   */
+  public triggerEvaluation(force = false): void {
+    if (!this.isRunning) return;
+    const now = Date.now();
+    const elapsed = now - this.lastEvalTs;
+
+    if (force || elapsed >= GlobalWorkspaceConsciousnessBus.EVAL_THROTTLE_MS) {
+      if (this.evalThrottleTimer) {
+        clearTimeout(this.evalThrottleTimer);
+        this.evalThrottleTimer = null;
+      }
+      this.lastEvalTs = now;
+      this.evaluateGlobalWorkspaceCompetition();
+    } else if (!this.evalThrottleTimer) {
+      this.evalThrottleTimer = setTimeout(() => {
+        this.evalThrottleTimer = null;
+        if (!this.isRunning) return;
+        this.lastEvalTs = Date.now();
+        this.evaluateGlobalWorkspaceCompetition();
+      }, GlobalWorkspaceConsciousnessBus.EVAL_THROTTLE_MS - elapsed);
+    }
   }
 
   public stop(force = false): void {
@@ -180,6 +211,11 @@ export class GlobalWorkspaceConsciousnessBus {
     if (this.notifyThrottleTimer) {
       clearTimeout(this.notifyThrottleTimer);
       this.notifyThrottleTimer = null;
+    }
+
+    if (this.evalThrottleTimer) {
+      clearTimeout(this.evalThrottleTimer);
+      this.evalThrottleTimer = null;
     }
 
     for (const unsub of this.unsubs) {
@@ -501,13 +537,19 @@ export class GlobalWorkspaceConsciousnessBus {
   }
 
   /**
-   * Suscribe un listener reactivo con notificación inmediata
+   * Suscribe un listener reactivo con notificación inmediata y gestión de ciclo de vida
    */
   public subscribe(listener: (snapshot: ConsciousnessSnapshot) => void): () => void {
     this.listeners.add(listener);
+    if (this.listeners.size === 1) {
+      this.start();
+    }
     listener(this.getSnapshot());
     return () => {
       this.listeners.delete(listener);
+      if (this.listeners.size === 0) {
+        this.stop();
+      }
     };
   }
 

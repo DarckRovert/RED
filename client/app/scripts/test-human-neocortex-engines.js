@@ -164,6 +164,13 @@ async function main() {
     assert.strictEqual(shouldTransmitB, true, 'Un viraje imprevisto > 22.5° debe disparar un Surprise Spike');
   });
 
+  runTest('3.3 PredictiveCortexEngine: Persistencia Dinámica de F y Métrica Geodésica Circular', () => {
+    assert(predCode.includes('currentFreeEnergy: this.currentFreeEnergy'), 'Debe exponer currentFreeEnergy dinámica y no un valor fijo hardcodeado');
+    assert(!predCode.includes('currentFreeEnergy: 0.12'), 'No debe existir valor hardcodeado 0.12 en la telemetría');
+    assert(predCode.includes('this.stop()'), 'El método destroy() debe invocar stop() para cancelar el heartbeatInterval');
+    assert(predCode.includes('+ 540) % 360) - 180'), 'Debe implementar la métrica circular geodésica en S1 para headingError');
+  });
+
   // ─────────────────────────────────────────────────────────────────────────────
   // 4. Teoría de la Mente mPFC/TPJ (TheoryOfMindEpistemicEngine.ts)
   // ─────────────────────────────────────────────────────────────────────────────

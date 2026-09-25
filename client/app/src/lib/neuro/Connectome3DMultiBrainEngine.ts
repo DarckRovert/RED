@@ -34,6 +34,26 @@ import * as THREE from 'three';
 
 // ── GPU Tier Detection (tier-aware WebGL quality scaling) ────────────────
 function detectGpuTierConnectome(): 'low' | 'mid' | 'high' {
+  try {
+    const probeCanvas = document.createElement('canvas');
+    const gl = (probeCanvas.getContext('webgl2') || probeCanvas.getContext('webgl')) as WebGLRenderingContext | null;
+    if (gl) {
+      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      const renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL).toLowerCase() : '';
+
+      const loseContext = gl.getExtension('WEBGL_lose_context');
+      if (loseContext) loseContext.loseContext();
+
+      if (
+        /powervr|ge8320|ge8300|mali-g31|mali-g51|mali-g52|mali-t|adreno.*(504|505|506|610|612|615)|intel.*(hd|uhd).*graphics.*(400|500|600|605|610)|swiftshader|llvmpipe/i.test(
+          renderer
+        )
+      ) {
+        return 'low';
+      }
+    }
+  } catch {}
+
   const nav = navigator as Navigator & { deviceMemory?: number; hardwareConcurrency?: number };
   const memory   = nav.deviceMemory ?? 4;
   const cores    = nav.hardwareConcurrency ?? 4;
@@ -792,12 +812,22 @@ export class Connectome3DMultiBrainEngine {
     }));
   }
 
-  // ── 6. Bucle de Renderizado y Física Biofísica a 60 FPS ─────────────────────
+  // ── 6. Bucle de Renderizado y Física Biofísica con Cadencia Adaptativa ───────
   private startRenderLoop(): void {
     if (this.animFrameId !== null) return;
+    const targetFps = this.gpuTier === 'low' ? 30 : this.gpuTier === 'mid' ? 45 : 60;
+    const minFrameIntervalMs = 1000 / targetFps;
+    let lastRenderTime = 0;
 
-    const render = () => {
+    const render = (now: number) => {
       this.animFrameId = requestAnimationFrame(render);
+
+      const elapsedSinceRender = now - lastRenderTime;
+      if (elapsedSinceRender < minFrameIntervalMs - 1.5) {
+        return;
+      }
+      lastRenderTime = now;
+
       this.updateSimulationTick();
       if (this.renderer && this.scene && this.camera) {
         this.renderer.render(this.scene, this.camera);
@@ -1053,7 +1083,7 @@ export class Connectome3DMultiBrainEngine {
     this.camera.updateProjectionMatrix();
 
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: this.gpuTier !== 'low',
       powerPreference: 'high-performance',
       alpha: false,
     });
@@ -1121,15 +1151,17 @@ export class Connectome3DMultiBrainEngine {
     this.unsubs.forEach((u) => u());
     this.unsubs = [];
 
-    // Limpieza geométrica y de materiales
+    // Limpieza universal de geometrías y materiales (Mesh, Line, LineSegments, Points)
     this.scene.traverse((obj) => {
-      if ((obj as THREE.Mesh).isMesh) {
-        const m = obj as THREE.Mesh;
-        m.geometry.dispose();
-        if (Array.isArray(m.material)) {
-          m.material.forEach((mat) => mat.dispose());
+      const anyObj = obj as any;
+      if (anyObj.geometry) {
+        anyObj.geometry.dispose();
+      }
+      if (anyObj.material) {
+        if (Array.isArray(anyObj.material)) {
+          anyObj.material.forEach((mat: THREE.Material) => mat.dispose());
         } else {
-          m.material.dispose();
+          anyObj.material.dispose();
         }
       }
     });

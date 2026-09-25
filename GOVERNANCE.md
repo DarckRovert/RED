@@ -1,4 +1,4 @@
-# 🤖 RULESET AUTÓMATA RED v124.0.0 — FLUJO INTEGRAL DE GOBERNANZA
+# 🤖 RULESET AUTÓMATA RED v125.0.0 — FLUJO INTEGRAL DE GOBERNANZA
 
 ## **NIVEL 0: PRE-COMMIT (Git Hooks & Validation)**
 
@@ -769,7 +769,44 @@ ON RELEASE TAG:
 
 ---
 
-## **VALIDACIÃ“N FINAL: CHECKLIST POR SPRINT**
+## **NIVEL 15: OTA UPDATE ENGINE (DISTRIBUCIÓN SOBERANA IN-APP)**
+
+### Regla 15.1: Pipeline Canónico por Nombre Exacto
+- El `updateManager.ts` DEBE buscar el asset del APK en GitHub Release por nombre canónico exacto (`red-latest.apk`) antes de caer en búsquedas genéricas. Prohibido tomar el primer `.apk` disponible sin verificar nombre.
+
+### Regla 15.2: Verificación Criptográfica SHA-256 Pre-Instalación
+- Todo APK descargado vía OTA DEBE verificarse contra `RED_APK_SHA256` de `version.ts` antes de pasar al `PackageInstaller`. Un APK cuyo hash no coincida DEBE rechazarse con error visible al usuario.
+
+### Regla 15.3: Invalidación de Caché Post-Instalación
+- Tras instalar exitosamente, `UpdateManager.cachedUpdateInfo` DEBE ponerse a `null` para que el siguiente `checkForUpdates` refleje la versión recién instalada.
+
+---
+
+## **NIVEL 16: BLINDAJE LEGAL, ATRIBUCIÓN OPEN SOURCE & ECOSISTEMA WEB DE 3 DESTINOS**
+
+### Regla 16.1: Single Source of Truth Legal (Clickwrap Contract)
+- `client/app/src/lib/legal/LegalAgreementManager.ts` constituye la única fuente autorizada (SSOT) para la gobernanza legal y control de consentimiento expreso.
+- `CURRENT_LEGAL_VERSION` debe coincidir de forma unívoca con `RED_VERSION`.
+- El acceso completo al sistema operativo RED está interceptado por `DigitalContractGateModal.tsx` hasta que el operador acepte afirmativamente los 4 descargos obligatorios (EULA/Términos, Emergencias/VHF, Radiofrecuencia/Potencia y Médico/TCCC).
+
+### Regla 16.2: Resiliencia de Consentimiento en Móvil (Native Storage Fallback)
+- Ante recolección de memoria o purga del almacenamiento por el sistema operativo en Android WebView, el estado de aceptación debe persistirse y recuperarse mediante `SecureStoragePlugin` a través de `isContractAcceptedNativeFallback()`, garantizando que el operador no sea bloqueado indebidamente tras reinicios.
+
+### Regla 16.3: Atribución Inmutable y Salón de la Fama
+- En estricto cumplimiento de las licencias AGPLv3, GPLv3, MIT, Apache 2.0 y BSD, el proyecto rinde honores permanentes al creador Rodrigo Alejandro Vega Rojas (alias "DarckRovert") y a los 18 proyectos/autores pioneros del ecosistema global mediante `CREDITS.md`, `credits.html` y `HallOfFameData.ts` / `HallOfFameModal.tsx`.
+- Este salón de la fama debe ser accesible interactivamente en la interfaz de usuario y en los endpoints web del servidor.
+
+### Regla 16.4: Ecosistema Web de 3 Destinos (Triple-Mirror Serving Architecture)
+- Los documentos legales web (`terms.html`, `privacy.html`, `credits.html`) residen simultáneamente en tres destinos operativos:
+  1. **Raíz (`./`):** Respaldo canónico y portal GitHub Pages companion.
+  2. **SPA Next.js (`client/app/public/`):** Activos estáticos públicos para desarrollo local y cliente web.
+  3. **Servidor Rust Axum (`node/src/web/`):** Embebidos físicamente en el binario `red-node` mediante `include_str!()` en `api.rs`.
+- **Prohibición de Edición Dispersa**: Queda estrictamente prohibido editar manualmente los archivos satélite de `public/` o `node/src/web/`. La raíz es el origen canónico; el script `scripts/bump_version.js` replica los cambios atómicamente.
+- **Verificación Automatizada de Paridad 100%**: Tanto `scripts/pre_build_check.js` como `client/app/scripts/check_release_integrity.js` comprueban la igualdad bit-a-bit entre los tres destinos. Cualquier discrepancia aborta inmediatamente el pipeline de compilación y release.
+
+---
+
+## **VALIDACIÓN FINAL: CHECKLIST POR SPRINT**
 
 - âœ… Todas las branchs se deletean despuÃ©s de merge
 - âœ… No hay cÃ³digo muerto o comentarios TODOs sin issue

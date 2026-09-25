@@ -67,6 +67,7 @@ export class PredictiveCortexEngine {
   private packetsSuppressedCount = 0;
   private packetsDispatchedCount = 0;
   private lastReason = 'INIT';
+  private currentFreeEnergy = 0.0;
 
   private listeners: Set<(telemetry: PredictiveCortexTelemetry) => void> = new Set();
 
@@ -137,6 +138,7 @@ export class PredictiveCortexEngine {
 
     // Guard: Ignorar coordenadas Null Island (0,0) sin fix GNSS real
     if (Math.abs(currentLoc.lat) <= 0.0001 && Math.abs(currentLoc.lon) <= 0.0001 && !currentLoc.isEmergency) {
+      this.currentFreeEnergy = 0.0;
       return {
         shouldTransmit: false,
         freeEnergyScore: 0.0,
@@ -149,6 +151,7 @@ export class PredictiveCortexEngine {
 
     // 1. Bypass absoluto ante emergencias vitales
     if (currentLoc.isEmergency) {
+      this.currentFreeEnergy = 1.0;
       this.packetsDispatchedCount++;
       this.lastTransmittedState = { ...this.myLocalState };
       this.lastTransmissionTime = now;
@@ -166,6 +169,7 @@ export class PredictiveCortexEngine {
 
     // 2. Si no hay transmisión previa o el modo de silencio está desactivado
     if (!this.lastTransmittedState || !this.isZeroBandwidthMode) {
+      this.currentFreeEnergy = 0.5;
       this.packetsDispatchedCount++;
       this.lastTransmittedState = { ...this.myLocalState };
       this.lastTransmissionTime = now;
@@ -199,16 +203,16 @@ export class PredictiveCortexEngine {
       predictedPos.lon
     );
 
-    let headingError = Math.abs(curHeading - this.lastTransmittedState.headingDeg);
-    while (headingError > 180) headingError -= 360;
-    headingError = Math.abs(headingError);
+    // Métrica circular geodésica estricta en S1: distancia angular mínima en [0, 180]
+    const headingError = Math.abs(((curHeading - this.lastTransmittedState.headingDeg + 540) % 360) - 180);
 
-    // Energía Libre F normalizada [0.0 - 1.0]
+    // Energía Libre F normalizada [0.0 - 1.0] (Active Inference Prediction Error)
     const freeEnergy = Math.min(
       1.0,
       (posErrorMeters / PredictiveCortexEngine.POSITION_SURPRISE_THRESHOLD_METERS) * 0.7 +
       (headingError / PredictiveCortexEngine.HEADING_SURPRISE_THRESHOLD_DEG) * 0.3
     );
+    this.currentFreeEnergy = Math.round(freeEnergy * 100) / 100;
 
     // 5. Verificación de latido de seguridad temporal
     const isTimeout = (now - this.lastTransmissionTime) >= PredictiveCortexEngine.MAX_SILENT_INTERVAL_MS;
@@ -338,7 +342,7 @@ export class PredictiveCortexEngine {
       packetsSuppressedCount: this.packetsSuppressedCount,
       packetsDispatchedCount: this.packetsDispatchedCount,
       overallBandwidthReductionPct: this.computeBandwidthSavings(),
-      currentFreeEnergy: 0.12,
+      currentFreeEnergy: this.currentFreeEnergy,
       trackedPeersCount: this.trackedPeers.size,
       lastTransmissionReason: this.lastReason,
     };
@@ -358,8 +362,10 @@ export class PredictiveCortexEngine {
   }
 
   public destroy(): void {
+    this.stop();
     this.trackedPeers.clear();
     this.listeners.clear();
+    this.currentFreeEnergy = 0.0;
     PredictiveCortexEngine.instance = null;
   }
 }

@@ -123,8 +123,12 @@ export class CentralPatternGeneratorEngine {
   // Matriz de acoplamiento w_ij (6x6)
   private couplingWeights: number[][] = [];
 
-  // Suscriptores de telemetría
+  // Suscriptores de telemetría y control de estrangulamiento reactivo (~15 Hz / 66 ms)
+  // Preserva integración biológica de 50 Hz en el integrador Kuramoto y erradica sobrecarga de UI
   private listeners: Set<(telem: CpgLocomotionTelemetry) => void> = new Set();
+  private static readonly TELEMETRY_THROTTLE_MS = 66;
+  private lastNotifyTs = 0;
+  private notifyThrottleTimer: ReturnType<typeof setTimeout> | null = null;
 
   private constructor() {
     this.initializeOscillatorMatrices();
@@ -177,15 +181,41 @@ export class CentralPatternGeneratorEngine {
   }
 
   /**
+   * Garantiza que el bucle de integración esté activo si el motor está encendido y hay locomoción activa.
+   * Si está en reposo (forwardSpeed <= 0.001 y !isEmergencyEscape), suspende el timer para liberar CPU.
+   */
+  private syncTimerState(): void {
+    if (!this.isRunning) {
+      if (this.timerId) {
+        clearInterval(this.timerId);
+        this.timerId = null;
+      }
+      return;
+    }
+
+    const isLocomotionActive = this.forwardSpeed > 0.001 || this.isEmergencyEscape;
+    if (isLocomotionActive) {
+      if (!this.timerId) {
+        this.timerId = setInterval(() => {
+          this.integrationStep(this.dtSec);
+        }, this.dtSec * 1000);
+      }
+    } else {
+      if (this.timerId) {
+        clearInterval(this.timerId);
+        this.timerId = null;
+      }
+    }
+  }
+
+  /**
    * Inicia el bucle de integración temporal a 50 Hz.
    */
   public start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
-    this.timerId = setInterval(() => {
-      this.integrationStep(this.dtSec);
-    }, this.dtSec * 1000);
-    this.notifyListeners();
+    this.syncTimerState();
+    this.notifyListeners(true);
   }
 
   public stop(): void {
@@ -193,6 +223,10 @@ export class CentralPatternGeneratorEngine {
     if (this.timerId) {
       clearInterval(this.timerId);
       this.timerId = null;
+    }
+    if (this.notifyThrottleTimer) {
+      clearTimeout(this.notifyThrottleTimer);
+      this.notifyThrottleTimer = null;
     }
   }
 
@@ -209,7 +243,8 @@ export class CentralPatternGeneratorEngine {
     this.forwardSpeed = Math.max(0.0, Math.min(1.0, speed));
     this.steeringBias = Math.max(-1.0, Math.min(1.0, turn));
     this.recomputeFrequencies();
-    this.notifyListeners();
+    this.syncTimerState();
+    this.notifyListeners(true);
   }
 
   /**
@@ -218,7 +253,8 @@ export class CentralPatternGeneratorEngine {
   public setEmergencyEscape(active: boolean): void {
     this.isEmergencyEscape = active;
     this.recomputeFrequencies();
-    this.notifyListeners();
+    this.syncTimerState();
+    this.notifyListeners(true);
   }
 
   /**
@@ -278,7 +314,7 @@ export class CentralPatternGeneratorEngine {
           ).catch(() => {});
         } catch {}
       }
-      this.notifyListeners();
+      this.notifyListeners(true);
     }
   }
 
@@ -339,7 +375,7 @@ export class CentralPatternGeneratorEngine {
 
     this.totalCycles += dt * this.baseFrequencyHz;
     this.hwFrameSeq = (this.hwFrameSeq + 1) & 0xFF;
-    this.notifyListeners();
+    this.notifyListeners(false);
   }
 
   /**
@@ -542,7 +578,29 @@ export class CentralPatternGeneratorEngine {
     return () => this.listeners.delete(callback);
   }
 
-  private notifyListeners(): void {
+  private notifyListeners(force = false): void {
+    if (this.listeners.size === 0) return;
+
+    const now = Date.now();
+    const elapsed = now - this.lastNotifyTs;
+
+    if (force || elapsed >= CentralPatternGeneratorEngine.TELEMETRY_THROTTLE_MS) {
+      if (this.notifyThrottleTimer) {
+        clearTimeout(this.notifyThrottleTimer);
+        this.notifyThrottleTimer = null;
+      }
+      this.lastNotifyTs = now;
+      this.dispatchTelemetry();
+    } else if (!this.notifyThrottleTimer) {
+      this.notifyThrottleTimer = setTimeout(() => {
+        this.notifyThrottleTimer = null;
+        this.lastNotifyTs = Date.now();
+        this.dispatchTelemetry();
+      }, CentralPatternGeneratorEngine.TELEMETRY_THROTTLE_MS - elapsed);
+    }
+  }
+
+  private dispatchTelemetry(): void {
     const telem = this.getTelemetry();
     for (const listener of this.listeners) {
       try {

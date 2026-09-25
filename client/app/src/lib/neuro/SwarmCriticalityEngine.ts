@@ -65,6 +65,7 @@ export class SwarmCriticalityEngine {
   private relayProbability = 1.00;
   private homeostaticInterval: ReturnType<typeof setInterval> | null = null;
   private isRunning = false;
+  private wasQuiescent = false;
 
   // Seguimiento de Avalanchas
   private currentAvalancheSize = 0;
@@ -122,6 +123,7 @@ export class SwarmCriticalityEngine {
    */
   public recordPacketReceived(packetCount = 1): void {
     const count = typeof packetCount === 'number' && Number.isFinite(packetCount) && packetCount > 0 ? Math.floor(packetCount) : 1;
+    this.wasQuiescent = false;
     this.rotateBuckets();
     this.inBuckets[this.currentBucketIndex] += count;
     this.processAvalancheEvent(count);
@@ -132,6 +134,7 @@ export class SwarmCriticalityEngine {
    */
   public recordPacketRelayed(packetCount = 1): void {
     const count = typeof packetCount === 'number' && Number.isFinite(packetCount) && packetCount > 0 ? Math.floor(packetCount) : 1;
+    this.wasQuiescent = false;
     this.rotateBuckets();
     this.outBuckets[this.currentBucketIndex] += count;
     this.processAvalancheEvent(count);
@@ -382,7 +385,22 @@ export class SwarmCriticalityEngine {
     return () => this.listeners.delete(callback);
   }
 
-  private notifyListeners(): void {
+  private notifyListeners(force = false): void {
+    let totalIn = 0;
+    let totalOut = 0;
+    for (let i = 0; i < SwarmCriticalityEngine.BUCKET_COUNT; i++) {
+      totalIn += this.inBuckets[i];
+      totalOut += this.outBuckets[i];
+    }
+
+    const isCurrentlyQuiescent = (totalIn === 0 && totalOut === 0 && this.currentAvalancheSize === 0 && this.relayProbability >= 0.99);
+
+    if (!force && isCurrentlyQuiescent && this.wasQuiescent) {
+      // Reposo absoluto: suspender re-renders redundantes en UI
+      return;
+    }
+
+    this.wasQuiescent = isCurrentlyQuiescent;
     const telem = this.getTelemetry();
     for (const listener of this.listeners) {
       try {

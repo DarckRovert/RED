@@ -1,4 +1,4 @@
-# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v124.0.0
+# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v125.0.0
 
 Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNANCE.md`.
 
@@ -91,6 +91,13 @@ Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNA
     - **Invalidación de Caché Post-Instalación**: Tras instalar exitosamente, `UpdateManager.cachedUpdateInfo` DEBE ponerse a `null` para que el siguiente `checkForUpdates` refleje la versión recién instalada.
     - **Sincronización de `release-assets/red-latest.apk`**: El archivo `release-assets/red-latest.apk` es el que verifica `check_release_integrity.js`. Debe actualizarse junto con `red-latest.apk` en la raíz en cada release.
 
-
-
-
+16. **Nivel 16 - Blindaje Legal, Atribución Open Source & Ecosistema Web de 3 Destinos**:
+    - **Single Source of Truth Legal (Clickwrap Contract)**: `client/app/src/lib/legal/LegalAgreementManager.ts` es el SSOT del marco legal. `CURRENT_LEGAL_VERSION` debe coincidir de forma idéntica con `RED_VERSION`. El acceso al sistema operativo RED está completamente bloqueado por `DigitalContractGateModal.tsx` hasta que el operador acepte afirmativamente los 4 descargos obligatorios (EULA, Emergencias/VHF, Radiofrecuencia/Potencia y Médico/TCCC).
+    - **Resiliencia de Consentimiento en Móvil (Native Storage Fallback)**: En Android WebView, ante recolección de memoria o purga del almacenamiento por el SO, `isContractAcceptedNativeFallback()` recupera transparentemente la firma legal desde el almacenamiento seguro nativo (`SecureStoragePlugin`), evitando bloqueos redundantes al usuario.
+    - **Atribución Inmutable y Salón de la Fama**: En cumplimiento de las licencias AGPLv3, GPLv3, MIT, Apache 2.0 y BSD, el proyecto rinde honores permanentes al creador Rodrigo Alejandro Vega Rojas (alias "DarckRovert") y a los 18 proyectos/autores pioneros del ecosistema global mediante `CREDITS.md`, `credits.html` y `HallOfFameData.ts` / `HallOfFameModal.tsx`.
+    - **Ecosistema Web de 3 Destinos (Triple-Mirror Serving Architecture)**: Los documentos legales web (`terms.html`, `privacy.html`, `credits.html`) residen simultáneamente en:
+      1. Raíz (`./`): Servido como respaldo canónico y GitHub Pages companion.
+      2. SPA Next.js (`client/app/public/`): Servido en desarrollo local y cliente web.
+      3. Servidor Rust Axum (`node/src/web/`): Embebido físicamente en el binario `red-node` mediante `include_str!()` en `api.rs`.
+    - **Prohibición de Edición Dispersa**: Queda estrictamente prohibido editar manualmente los archivos satélite de `public/` o `node/src/web/`. La raíz es el origen canónico; el script `scripts/bump_version.js` replica los cambios automáticamente.
+    - **Verificación Automatizada de Paridad 100%**: Tanto `scripts/pre_build_check.js` como `client/app/scripts/check_release_integrity.js` comprueban la igualdad bit-a-bit entre los tres destinos. Cualquier discrepancia aborta inmediatamente el pipeline.

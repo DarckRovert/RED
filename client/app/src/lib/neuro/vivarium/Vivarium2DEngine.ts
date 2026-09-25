@@ -50,9 +50,7 @@ export class Vivarium2DEngine {
   public zoomFactor = 1.0;
 
   constructor() {
-    this.tdmaTimer = setInterval(() => {
-      this.activeTdmaSlot = (this.activeTdmaSlot + 1) % 10;
-    }, 200);
+    this.activeTdmaSlot = loraTdmaScheduler.getCurrentSlot();
   }
 
   public attach(canvas: HTMLCanvasElement): void {

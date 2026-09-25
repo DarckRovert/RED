@@ -46,6 +46,7 @@ export interface GiantFiberTelemetry {
   lastReflexLatencyMs: number;
   totalEscapesExecuted: number;
   emconLockActive: boolean;
+  lockExpiresAt: number | null;
   evasionChannelIndex: number;
   evasionFrequencyMhz: number;
   covertPayloadsDispatched: number;
@@ -76,6 +77,7 @@ export class GiantFiberReflexEngine {
 
   // Estado del arco reflejo
   private emconLockActive = false;
+  private lockExpiresAt: number | null = null;
   private isReflexActive = false;
   private lastTriggerSource: ReflexTriggerSource | null = null;
   private lastReflexLatencyMs = 0;
@@ -204,6 +206,7 @@ export class GiantFiberReflexEngine {
     }
     this.isReflexActive = false;
     this.emconLockActive = false;
+    this.lockExpiresAt = null;
     this.persistState();
     this.notifyListeners();
   }
@@ -218,6 +221,7 @@ export class GiantFiberReflexEngine {
       lastReflexLatencyMs: this.lastReflexLatencyMs,
       totalEscapesExecuted: this.totalEscapesExecuted,
       emconLockActive: this.emconLockActive,
+      lockExpiresAt: this.lockExpiresAt,
       evasionChannelIndex: this.evasionChannelIndex,
       evasionFrequencyMhz: this.evasionFrequencyMhz,
       covertPayloadsDispatched: this.covertPayloadsDispatched,
@@ -257,19 +261,25 @@ export class GiantFiberReflexEngine {
     return () => this.listeners.delete(listener);
   }
 
-  private armCooldownTimer(): void {
+  private armCooldownTimer(durationMs: number = GiantFiberReflexEngine.DEFAULT_COOLDOWN_MS): void {
     if (this.cooldownTimer) {
       clearTimeout(this.cooldownTimer);
+      this.cooldownTimer = null;
     }
-    if (typeof window !== 'undefined') {
-      this.cooldownTimer = setTimeout(() => {
-        // Enfriamiento gradual: desactiva EMCON automáticamente tras el periodo de silencio
-        this.emconLockActive = false;
-        this.isReflexActive = false;
-        this.persistState();
-        this.notifyListeners();
-      }, GiantFiberReflexEngine.DEFAULT_COOLDOWN_MS);
-    }
+    this.lockExpiresAt = Date.now() + durationMs;
+    const timerFn = typeof globalThis !== 'undefined' && typeof globalThis.setTimeout === 'function'
+      ? globalThis.setTimeout
+      : setTimeout;
+
+    this.cooldownTimer = timerFn(() => {
+      // Enfriamiento gradual: desactiva EMCON automáticamente tras el periodo de silencio
+      this.emconLockActive = false;
+      this.isReflexActive = false;
+      this.lockExpiresAt = null;
+      this.cooldownTimer = null;
+      this.persistState();
+      this.notifyListeners();
+    }, durationMs);
   }
 
   private notifyListeners(): void {
@@ -290,6 +300,7 @@ export class GiantFiberReflexEngine {
         emconLockActive: this.emconLockActive,
         totalEscapesExecuted: this.totalEscapesExecuted,
         lastTriggerSource: this.lastTriggerSource,
+        lockExpiresAt: this.emconLockActive ? this.lockExpiresAt : null,
       };
       localStorage.setItem('red_giant_fiber_state', JSON.stringify(data));
     } catch {}
@@ -302,9 +313,29 @@ export class GiantFiberReflexEngine {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed) {
-          this.emconLockActive = !!parsed.emconLockActive;
           this.totalEscapesExecuted = Number(parsed.totalEscapesExecuted) || 0;
           this.lastTriggerSource = parsed.lastTriggerSource || null;
+
+          if (parsed.emconLockActive) {
+            const expiresAt = Number(parsed.lockExpiresAt);
+            const now = Date.now();
+            if (expiresAt && expiresAt > now) {
+              const remainingMs = expiresAt - now;
+              this.emconLockActive = true;
+              this.isReflexActive = true;
+              this.armCooldownTimer(remainingMs);
+            } else {
+              // El tiempo expiró con la app cerrada o era un registro legado sin expiresAt:
+              // Desbloquear la radio inmediatamente para evitar brickeo de RF permanente.
+              this.emconLockActive = false;
+              this.isReflexActive = false;
+              this.lockExpiresAt = null;
+              this.persistState();
+            }
+          } else {
+            this.emconLockActive = false;
+            this.lockExpiresAt = null;
+          }
         }
       }
     } catch {}
@@ -320,6 +351,7 @@ export class GiantFiberReflexEngine {
     }
     this.emconLockActive = false;
     this.isReflexActive = false;
+    this.lockExpiresAt = null;
     this.lastTriggerSource = null;
     this.lastReflexLatencyMs = 0;
     this.totalEscapesExecuted = 0;

@@ -9,8 +9,28 @@
 
 import * as THREE from 'three';
 
-// ── GPU Tier Detection (replicado de BiocyberneticHabitat3DEngine) ────────────
+// ── GPU Tier Detection (inspección empírica de WebGL) ────────────────────────
 function detectGpuTierVivarium(): 'low' | 'mid' | 'high' {
+  try {
+    const probeCanvas = document.createElement('canvas');
+    const gl = (probeCanvas.getContext('webgl2') || probeCanvas.getContext('webgl')) as WebGLRenderingContext | null;
+    if (gl) {
+      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      const renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL).toLowerCase() : '';
+
+      const loseContext = gl.getExtension('WEBGL_lose_context');
+      if (loseContext) loseContext.loseContext();
+
+      if (
+        /powervr|ge8320|ge8300|mali-g31|mali-g51|mali-g52|mali-t|adreno.*(504|505|506|610|612|615)|intel.*(hd|uhd).*graphics.*(400|500|600|605|610)|swiftshader|llvmpipe/i.test(
+          renderer
+        )
+      ) {
+        return 'low';
+      }
+    }
+  } catch {}
+
   const nav = navigator as Navigator & { deviceMemory?: number; hardwareConcurrency?: number };
   const memory   = nav.deviceMemory ?? 4;
   const cores    = nav.hardwareConcurrency ?? 4;
@@ -130,15 +150,13 @@ export class Vivarium3DEngine {
     this.entities = new VivariumEntities3D(this.floor.arenaRadius);
     this.scene.add(this.entities.rootGroup);
 
-    this.hexapod = new HexapodBody3D();
+    this.hexapod = new HexapodBody3D(this.gpuTier !== 'low');
     this.scene.add(this.hexapod.rootGroup);
 
     this.currentCpgTelemetry = centralPatternGenerator.getTelemetry();
 
-    // Sincronización de supertrama LoRa TDMA con el programador real
-    this.tdmaTimer = setInterval(() => {
-      this.stimulus.activeTdmaSlot = loraTdmaScheduler.getCurrentSlot();
-    }, 100);
+    // Sincronización de supertrama LoRa TDMA bajo demanda (sincronizada en cada tick de renderizado)
+    this.stimulus.activeTdmaSlot = loraTdmaScheduler.getCurrentSlot();
 
     // Escucha de paquetes LoRa físicos para activar pulsos de torres y celosía
     try {
@@ -165,7 +183,7 @@ export class Vivarium3DEngine {
     this.camera.updateProjectionMatrix();
 
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: this.gpuTier !== 'low',
       powerPreference: 'high-performance',
       alpha: false,
     });
@@ -207,9 +225,20 @@ export class Vivarium3DEngine {
     if (this.isRunning) return;
     this.isRunning = true;
     let lastTime = performance.now();
+    const targetFps = this.gpuTier === 'low' ? 30 : this.gpuTier === 'mid' ? 45 : 60;
+    const minFrameIntervalMs = 1000 / targetFps;
+    let lastRenderTime = 0;
 
     const loop = (currentTime: number) => {
       if (!this.isRunning) return;
+      this.animFrameId = requestAnimationFrame(loop);
+
+      const elapsedSinceRender = currentTime - lastRenderTime;
+      if (elapsedSinceRender < minFrameIntervalMs - 1.5) {
+        return;
+      }
+      lastRenderTime = currentTime;
+
       const deltaSec = Math.min((currentTime - lastTime) / 1000, 0.1);
       lastTime = currentTime;
 
@@ -218,7 +247,6 @@ export class Vivarium3DEngine {
       if (this.renderer && this.container) {
         this.renderer.render(this.scene, this.camera);
       }
-      this.animFrameId = requestAnimationFrame(loop);
     };
 
     this.animFrameId = requestAnimationFrame(loop);
@@ -593,6 +621,8 @@ export class Vivarium3DEngine {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+    const maxDpr = this.gpuTier === 'low' ? 1.0 : this.gpuTier === 'mid' ? 1.25 : 1.75;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
   }
 
   public dispose(): void {

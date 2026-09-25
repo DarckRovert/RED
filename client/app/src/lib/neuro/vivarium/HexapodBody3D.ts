@@ -34,7 +34,7 @@ export class HexapodBody3D {
   private readonly rightAntenna: THREE.Group;
   private readonly leftWing: THREE.Mesh;
   private readonly rightWing: THREE.Mesh;
-  private readonly metabolicCore: THREE.PointLight;
+  private readonly metabolicCore?: THREE.PointLight;
 
   private legs: Map<LegIdentifier, LegJoints3D> = new Map();
 
@@ -43,7 +43,7 @@ export class HexapodBody3D {
   private jumpOffsetY = 0;
   private isJumping = false;
 
-  constructor() {
+  constructor(enablePointLight: boolean = true) {
     this.rootGroup = new THREE.Group();
     this.rootGroup.name = 'Drosophila_Hexapod_Root';
 
@@ -92,9 +92,11 @@ export class HexapodBody3D {
     this.bodyGroup.add(this.thoraxMesh);
 
     // Luz metabólica en el núcleo del tórax (pulsada por el gobernador de torpor)
-    this.metabolicCore = new THREE.PointLight(0x00f0ff, 0.8, 2.5);
-    this.metabolicCore.position.set(0, 0, 0);
-    this.bodyGroup.add(this.metabolicCore);
+    if (enablePointLight) {
+      this.metabolicCore = new THREE.PointLight(0x00f0ff, 0.8, 2.5);
+      this.metabolicCore.position.set(0, 0, 0);
+      this.bodyGroup.add(this.metabolicCore);
+    }
 
     // ── 3. Cabeza & Ojos Compuestos (Lóbulos Ópticos) ────────────────────────
     const headGroup = new THREE.Group();
@@ -299,7 +301,8 @@ export class HexapodBody3D {
     headingDeg: number,
     isThreatLooming = false,
     isReflexJumping = false,
-    windIntensity = 0.5
+    windIntensity = 0.5,
+    isFlying = false
   ): void {
     // 1. Orientación azimuthal en el plano X-Z
     const targetRotY = (-headingDeg * Math.PI) / 180;
@@ -325,13 +328,27 @@ export class HexapodBody3D {
     this.leftAntenna.rotation.z = windFlutter;
     this.rightAntenna.rotation.z = -windFlutter;
 
-    // 4. Salto de Escape de la Fibra Gigante (GiantFiberReflexEngine)
+    // 4. Salto de Escape de la Fibra Gigante & Vuelo Activo L9
     if (isReflexJumping && !this.isJumping) {
       this.isJumping = true;
       this.jumpVelocityY = 6.5; // Impulso vertical m/s
     }
 
-    if (this.isJumping) {
+    if (isFlying) {
+      // ── MODO VUELO AÉREO ACTIVO ──
+      const flightFlap = Math.sin(Date.now() * 0.1) * 0.42;
+      this.leftWing.rotation.y = 0.92;
+      this.rightWing.rotation.y = -0.92;
+      this.leftWing.rotation.z = -0.15 + flightFlap;
+      this.rightWing.rotation.z = 0.15 - flightFlap;
+      this.leftWing.rotation.x = -0.12;
+      this.rightWing.rotation.x = -0.12;
+
+      // Inclinación de cabeceo aerodinámico y alabeo suave
+      this.bodyGroup.position.y = 0.55;
+      this.bodyGroup.rotation.x = 0.15; // Cabeceo hacia adelante para avance
+
+    } else if (this.isJumping) {
       this.jumpOffsetY += this.jumpVelocityY * deltaSec;
       this.jumpVelocityY -= 19.6 * deltaSec; // Gravedad 2G de escape
 
@@ -352,8 +369,11 @@ export class HexapodBody3D {
         this.leftWing.rotation.set(-0.04, -0.06, 0.04);
         this.rightWing.rotation.set(-0.04, 0.06, -0.04);
       }
+      this.bodyGroup.position.y = 0.55 + this.jumpOffsetY;
+      this.bodyGroup.rotation.x = 0;
     } else {
       // Reposo y marcha en suelo
+      this.bodyGroup.rotation.x = 0;
       if (cpgTelemetry.gaitMode !== 'QUIESCENT') {
         const wingBuzz = Math.sin(Date.now() * 0.04) * 0.015;
         this.leftWing.rotation.x = -0.04 + wingBuzz;
@@ -366,12 +386,22 @@ export class HexapodBody3D {
         this.leftWing.rotation.set(-0.04, -0.06, 0.04);
         this.rightWing.rotation.set(-0.04, 0.06, -0.04);
       }
+      this.bodyGroup.position.y = 0.55;
     }
-
-    this.bodyGroup.position.y = 0.55 + this.jumpOffsetY;
 
     // 5. Aplicación Cinemática de Ángulos Articulares 3-DOF por Pata
     for (const [legId, legJoints] of this.legs.entries()) {
+      if (isFlying) {
+        // En vuelo, patas recogidas aerodinámicamente hacia atrás
+        const isLeft = legId.startsWith('L');
+        const sign = isLeft ? 1 : -1;
+        legJoints.coxaPivot.rotation.z = -0.25 * sign;
+        legJoints.femurPivot.rotation.y = 0.55 * sign;
+        legJoints.tibiaPivot.rotation.y = -0.75 * sign;
+        const tarsusMat = legJoints.tarsusTip.material as THREE.MeshBasicMaterial;
+        tarsusMat.color.setHex(0x00e5ff);
+        continue;
+      }
       const legState = cpgTelemetry.legs[legId as LegIdentifier];
       if (!legState) continue;
 
@@ -402,8 +432,10 @@ export class HexapodBody3D {
     }
 
     // 6. Pulso de núcleo metabólico (Gobernador de torpor)
-    const pulseSpeed = cpgTelemetry.gaitMode === 'ESCAPE_SPRINT' ? 0.015 : 0.005;
-    this.metabolicCore.intensity = 0.7 + Math.sin(Date.now() * pulseSpeed) * 0.3;
+    if (this.metabolicCore) {
+      const pulseSpeed = cpgTelemetry.gaitMode === 'ESCAPE_SPRINT' ? 0.015 : 0.005;
+      this.metabolicCore.intensity = 0.7 + Math.sin(Date.now() * pulseSpeed) * 0.3;
+    }
   }
 
   public getFlatJointAngles(cpgTelemetry: CpgLocomotionTelemetry): number[] {
@@ -421,14 +453,22 @@ export class HexapodBody3D {
   }
 
   public dispose(): void {
+    if (this.metabolicCore) {
+      if (this.metabolicCore.parent) {
+        this.metabolicCore.parent.remove(this.metabolicCore);
+      }
+      this.metabolicCore.dispose();
+    }
     this.rootGroup.traverse((obj) => {
-      if ((obj as THREE.Mesh).isMesh) {
-        const mesh = obj as THREE.Mesh;
-        mesh.geometry.dispose();
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach((m) => m.dispose());
+      const anyObj = obj as any;
+      if (anyObj.geometry) {
+        anyObj.geometry.dispose();
+      }
+      if (anyObj.material) {
+        if (Array.isArray(anyObj.material)) {
+          anyObj.material.forEach((m: THREE.Material) => m.dispose());
         } else {
-          mesh.material.dispose();
+          anyObj.material.dispose();
         }
       }
     });

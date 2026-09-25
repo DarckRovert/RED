@@ -109,6 +109,8 @@ async fn verify_session_token(
         "/privacy",
         "/terms.html",
         "/terms",
+        "/credits.html",
+        "/credits",
         "/api/ai/status",
         "/api/tags",
         "/v1/models",
@@ -771,6 +773,8 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/privacy", get(serve_privacy))
         .route("/terms.html", get(serve_terms))
         .route("/terms", get(serve_terms))
+        .route("/credits.html", get(serve_credits))
+        .route("/credits", get(serve_credits))
         .with_state(state.clone())
         .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024))
         .layer(axum::middleware::from_fn_with_state(
@@ -829,6 +833,14 @@ async fn serve_privacy() -> impl IntoResponse {
 
 async fn serve_terms() -> impl IntoResponse {
     let html = include_str!("web/terms.html");
+    Response::builder()
+        .header("Content-Type", "text/html; charset=utf-8")
+        .body(html.to_string())
+        .unwrap_or_else(|_| Response::new(String::new()))
+}
+
+async fn serve_credits() -> impl IntoResponse {
+    let html = include_str!("web/credits.html");
     Response::builder()
         .header("Content-Type", "text/html; charset=utf-8")
         .body(html.to_string())

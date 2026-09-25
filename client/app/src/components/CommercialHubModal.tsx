@@ -195,16 +195,14 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
     const handleBroadcastBazaarSync = async () => {
         TacticalAudioEngine.playTap();
         try {
-            const envelope = bazaarSync.exportCrdtEnvelope();
-            const payloadBytes = new TextEncoder().encode(JSON.stringify({
-                type: 'BAZAAR_CRDT_SYNC',
-                envelope,
-                sender: identity?.nickname || 'OPERADOR_RED',
-                timestamp: Date.now()
-            }));
-            await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", payloadBytes);
-            TacticalAudioEngine.playMessageSent();
-            toast.success("📡 Catálogo Bazaar difundido por la malla P2P");
+            const success = await bazaarSync.broadcastCatalog(identity?.nickname || 'OPERADOR_RED');
+            if (success) {
+                TacticalAudioEngine.playMessageSent();
+                toast.success("📡 Catálogo Bazaar difundido por la malla P2P");
+            } else {
+                TacticalAudioEngine.playWarning();
+                toast.error("Error al difundir catálogo por la malla");
+            }
         } catch (e: any) {
             TacticalAudioEngine.playWarning();
             toast.error("Error al difundir catálogo por la malla");

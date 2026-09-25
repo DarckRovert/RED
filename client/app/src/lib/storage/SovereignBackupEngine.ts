@@ -14,6 +14,7 @@ import { toast } from '../../components/Toast';
 import { sha256 } from '@noble/hashes/sha2.js';
 
 import { BIP39_WORDS, validateBip39Checksum, isBip39Word } from './bip39EnglishWordlist';
+import { RED_VERSION, RED_PROTOCOL_VERSION } from '../version';
 export { BIP39_WORDS, validateBip39Checksum, isBip39Word };
 
 export interface SovereignVaultCapsule {
@@ -167,8 +168,8 @@ export class SovereignBackupEngine {
         const pqcKeys = this.getJSON("red_pqc_hybrid_keys") || null;
 
         const capsule: SovereignVaultCapsule = {
-            version: "50.0.0",
-            protocol: "RED/50.0-SOVEREIGN-VAULT",
+            version: RED_VERSION,
+            protocol: `RED/${RED_VERSION}-SOVEREIGN-VAULT`,
             timestamp: Date.now(),
             did: parsedIdentity.identity_hash.startsWith("did:red:") ? parsedIdentity.identity_hash : `did:red:${parsedIdentity.identity_hash}`,
             identity: parsedIdentity,
@@ -422,10 +423,17 @@ export class SovereignBackupEngine {
 
             // Save encrypted buffer in local sovereign IPFS cache for instant offline restore
             if (typeof window !== "undefined") {
-                const u8 = new Uint8Array(buffer);
-                let binary = "";
-                for (let i = 0; i < u8.length; i++) binary += String.fromCharCode(u8[i]);
-                localStorage.setItem(`red_ipfs_vault_${cid}`, btoa(binary));
+                try {
+                    const u8 = new Uint8Array(buffer);
+                    let binary = "";
+                    const chunkSize = 0x8000;
+                    for (let i = 0; i < u8.length; i += chunkSize) {
+                        binary += String.fromCharCode.apply(null, u8.subarray(i, i + chunkSize) as unknown as number[]);
+                    }
+                    localStorage.setItem(`red_ipfs_vault_${cid}`, btoa(binary));
+                } catch (e) {
+                    console.warn('[SovereignBackupEngine] Caché local de respaldo IPFS omitida por límite de cuota:', e);
+                }
             }
             
             return {

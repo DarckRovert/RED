@@ -62,6 +62,9 @@ export class ConnectomeEcosystemOrchestrator {
   private lastNotifyTime = 0;
   private notifyThrottleTimer: ReturnType<typeof setTimeout> | null = null;
   public static readonly UI_THROTTLE_MS = 100;
+  public static readonly SNAPSHOT_CACHE_TTL_MS = 50;
+  private cachedSnapshot: EcosystemConnectomeSnapshot | null = null;
+  private lastSnapshotTime = 0;
 
   private constructor() {}
 
@@ -90,9 +93,11 @@ export class ConnectomeEcosystemOrchestrator {
     swarmCriticality.start();
 
     // 2. Acoplar Johnston's Organ con Giant Fiber Reflex
-    // Si Johnston Organ detecta choque extremo -> alerta y refuerzo aversivo PPL1
+    // Si Johnston Organ detecta choque extremo -> alerta, refuerzo aversivo PPL1 y despacho al orquestador
     const unSubJo = johnstonOrgan.subscribe((joTelem: JohnstonOrganTelemetry) => {
       if (joTelem.lastShockEvent && joTelem.lastShockEvent.triggeredReflex) {
+        this.cachedSnapshot = null;
+        this.lastSnapshotTime = 0;
         dtnMushroomBody.reinforceAversion(
           'ENVIRONMENT_SHOCK',
           0.85,
@@ -100,15 +105,22 @@ export class ConnectomeEcosystemOrchestrator {
         );
         dtnMushroomBody.applyDopaminergicNeuromodulation('PPL1', 0.70, 'lora_ch_0');
       }
+      this.notifyListeners();
     });
     this.unsubs.push(unSubJo);
 
     // 3. Acoplar Gobernador Metabólico con Frecuencia de Notificación
     const unSubMetabolic = metabolicGovernor.subscribe((metTelem: MetabolicGovernorTelemetry) => {
-      // Si entra en TORPOR, silenciar advertencias superfluas y consolidar estado
+      // Si conmuta de régimen (e.g. TORPOR o CONSERVATIVE), purgar caché para retorno inmediato
+      this.cachedSnapshot = null;
+      this.lastSnapshotTime = 0;
       if (metTelem.regime === 'TORPOR') {
-        // En torpor se activa mitigación de energía
+        // En torpor desactivar ráfagas motoras para preservación extrema de hardware
+        tacticalMotorActuator.stop();
+      } else if (this.isRunning) {
+        tacticalMotorActuator.start();
       }
+      this.notifyListeners();
     });
     this.unsubs.push(unSubMetabolic);
 
@@ -156,6 +168,8 @@ export class ConnectomeEcosystemOrchestrator {
   public triggerEmergencyBurst(reason: string = 'MANUAL_OVERRIDE'): void {
     const VALID_SOURCES = ['EW_JAMMING', 'IMSI_CATCHER', 'ROGUE_CARRIER_DOWNGRADE', 'GONIOMETRIC_PING', 'VISUAL_LOOMING_THREAT', 'MANUAL_TACTICAL_SCRAM'] as const;
     const safeReason = VALID_SOURCES.includes(reason as any) ? reason as (typeof VALID_SOURCES)[number] : 'MANUAL_TACTICAL_SCRAM';
+    this.cachedSnapshot = null;
+    this.lastSnapshotTime = 0;
     giantFiberReflex.triggerEmergencyJump(safeReason);
     tacticalMotorActuator.triggerEmergencyBurst();
     this.notifyListeners();
@@ -181,13 +195,24 @@ export class ConnectomeEcosystemOrchestrator {
     swarmCriticality.stop();
     bioCompassDualFusion.stop();
     sensoriomotorAutonomicBridge.stop();
-    this.dispatchSnapshot();
+    this.cachedSnapshot = null;
+    this.lastSnapshotTime = 0;
+    if (this.listeners.size > 0) {
+      this.dispatchSnapshot();
+    }
   }
 
   /**
    * Genera la instantánea integral del organismo bio-cibernético completo.
+   * Cuenta con un caché determinista de 50ms para soportar consultas de alta frecuencia (e.g. 60 FPS de física)
+   * y un getter memoizado para 'tacticalSummary' que evita asignaciones de strings innecesarias en V8.
    */
-  public getOrganismSnapshot(): EcosystemConnectomeSnapshot {
+  public getOrganismSnapshot(forceFresh = false): EcosystemConnectomeSnapshot {
+    const now = Date.now();
+    if (!forceFresh && this.cachedSnapshot && (now - this.lastSnapshotTime < ConnectomeEcosystemOrchestrator.SNAPSHOT_CACHE_TTL_MS)) {
+      return this.cachedSnapshot;
+    }
+
     const compass = ringAttractor.getTelemetry();
     const fb = fanShapedBody.getTelemetry();
     const synapticRouter = synapticMeshRouter.getTelemetry();
@@ -221,21 +246,9 @@ export class ConnectomeEcosystemOrchestrator {
     if (optic.loomingThreat.isThreatDetected) healthScore -= 25;
     healthScore = Math.max(10, healthScore);
 
-    const tacticalSummary = `Conectoma Drosophila MaleCNS: Estado ${organismState} (Salud ${healthScore}%). ` +
-      `Brújula E-PG a ${compass.headingDeg}° (${compass.cardinal}). ` +
-      `Home Vector FB a ${fb.homeVector.distanceMeters}m rumbo ${fb.homeVector.bearingDeg}° (${fb.homeVector.cardinal}). ` +
-      `Red: ${synapticRouter.totalSynapses} sinapsis, ${mushroomBody.totalEnqueuedRecords} engramas MB (${mushroomBody.behavioralDrive}). ` +
-      `Visión T4/T5: Flujo ${optic.translationalFlow.magnitude} m/s, Looming: ${optic.loomingThreat.isThreatDetected ? 'AMENAZA' : 'DESPEJADO'}. ` +
-      `Actuador Háptico DNa: Modo ${motor.currentHapticMode}. ` +
-      `CPG Hexápodo: Modo ${cpg.gaitMode} (${cpg.meanFrequencyHz} Hz, Coherencia R=${cpg.tripodCoherenceIndex}). ` +
-      `Criticalidad SOC: Estado ${criticality.criticalityState} (σ=${criticality.branchingRatio.toFixed(2)}, α=${criticality.estimatedAlpha.toFixed(2)}, Prelay=${(criticality.relayProbability * 100).toFixed(0)}%). ` +
-      `Compás Dual: Coherencia ${(bioCompassDual.phaseCoherence * 100).toFixed(0)}% (${bioCompassDual.phaseCoherenceState}), Deriva ${bioCompassDual.estimatedDriftMeters}m, Resets ${bioCompassDual.hippocampalResetsCount}. ` +
-      `Mecanorrecepción JO: ${jo.acousticEnergyLevel > 0.5 ? 'ALERTA' : 'NOMINAL'}. ` +
-      `Metabolismo: ${metabolic.regime} (Batería ${metabolic.batteryPct}%, Autonomía est. ${metabolic.estimatedStandbyHours}h). ` +
-      `Bridge SAB: ${autonomicBridge.isRunning ? 'ONLINE' : 'OFFLINE'} — Espigas emitidas: ${autonomicBridge.totalSpikesEmitted}, Rx remotas: ${autonomicBridge.totalRemoteSpikesReceived}, CBRN: ${autonomicBridge.lastCbrnLevel}.`;
-
-    return {
-      timestamp: Date.now(),
+    let memoSummary: string | null = null;
+    const snapshot: EcosystemConnectomeSnapshot = {
+      timestamp: now,
       organismState,
       healthScore,
       compass,
@@ -251,18 +264,44 @@ export class ConnectomeEcosystemOrchestrator {
       criticality,
       bioCompassDual,
       autonomicBridge,
-      tacticalSummary,
+      get tacticalSummary(): string {
+        if (memoSummary === null) {
+          memoSummary = `Conectoma Drosophila MaleCNS: Estado ${organismState} (Salud ${healthScore}%). ` +
+            `Brújula E-PG a ${compass.headingDeg}° (${compass.cardinal}). ` +
+            `Home Vector FB a ${fb.homeVector.distanceMeters}m rumbo ${fb.homeVector.bearingDeg}° (${fb.homeVector.cardinal}). ` +
+            `Red: ${synapticRouter.totalSynapses} sinapsis, ${mushroomBody.totalEnqueuedRecords} engramas MB (${mushroomBody.behavioralDrive}). ` +
+            `Visión T4/T5: Flujo ${optic.translationalFlow.magnitude} m/s, Looming: ${optic.loomingThreat.isThreatDetected ? 'AMENAZA' : 'DESPEJADO'}. ` +
+            `Actuador Háptico DNa: Modo ${motor.currentHapticMode}. ` +
+            `CPG Hexápodo: Modo ${cpg.gaitMode} (${cpg.meanFrequencyHz} Hz, Coherencia R=${cpg.tripodCoherenceIndex}). ` +
+            `Criticalidad SOC: Estado ${criticality.criticalityState} (σ=${criticality.branchingRatio.toFixed(2)}, α=${criticality.estimatedAlpha.toFixed(2)}, Prelay=${(criticality.relayProbability * 100).toFixed(0)}%). ` +
+            `Compás Dual: Coherencia ${(bioCompassDual.phaseCoherence * 100).toFixed(0)}% (${bioCompassDual.phaseCoherenceState}), Deriva ${bioCompassDual.estimatedDriftMeters}m, Resets ${bioCompassDual.hippocampalResetsCount}. ` +
+            `Mecanorrecepción JO: ${jo.acousticEnergyLevel > 0.5 ? 'ALERTA' : 'NOMINAL'}. ` +
+            `Metabolismo: ${metabolic.regime} (Batería ${metabolic.batteryPct}%, Autonomía est. ${metabolic.estimatedStandbyHours}h). ` +
+            `Bridge SAB: ${autonomicBridge.isRunning ? 'ONLINE' : 'OFFLINE'} — Espigas emitidas: ${autonomicBridge.totalSpikesEmitted}, Rx remotas: ${autonomicBridge.totalRemoteSpikesReceived}, CBRN: ${autonomicBridge.lastCbrnLevel}.`;
+        }
+        return memoSummary;
+      },
     };
+
+    this.cachedSnapshot = snapshot;
+    this.lastSnapshotTime = now;
+    return snapshot;
   }
 
   public subscribe(callback: (snapshot: EcosystemConnectomeSnapshot) => void): () => void {
     this.listeners.add(callback);
-    callback(this.getOrganismSnapshot());
-    return () => this.listeners.delete(callback);
+    callback(this.getOrganismSnapshot(true));
+    return () => {
+      this.listeners.delete(callback);
+      if (this.listeners.size === 0 && this.notifyThrottleTimer) {
+        clearTimeout(this.notifyThrottleTimer);
+        this.notifyThrottleTimer = null;
+      }
+    };
   }
 
   private notifyListeners(): void {
-    if (!this.isRunning) return;
+    if (!this.isRunning || this.listeners.size === 0) return;
     const now = Date.now();
     const elapsed = now - this.lastNotifyTime;
 
@@ -276,7 +315,7 @@ export class ConnectomeEcosystemOrchestrator {
     } else if (!this.notifyThrottleTimer) {
       this.notifyThrottleTimer = setTimeout(() => {
         this.notifyThrottleTimer = null;
-        if (!this.isRunning) return;
+        if (!this.isRunning || this.listeners.size === 0) return;
         this.lastNotifyTime = Date.now();
         this.dispatchSnapshot();
       }, ConnectomeEcosystemOrchestrator.UI_THROTTLE_MS - elapsed);
@@ -284,7 +323,8 @@ export class ConnectomeEcosystemOrchestrator {
   }
 
   private dispatchSnapshot(): void {
-    const snap = this.getOrganismSnapshot();
+    if (this.listeners.size === 0) return;
+    const snap = this.getOrganismSnapshot(true);
     for (const cb of this.listeners) {
       try {
         cb(snap);

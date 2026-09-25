@@ -457,6 +457,10 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
             📜 Términos de Servicio
           </a>
           <span>•</span>
+          <a href="./credits.html" target="_blank" rel="noreferrer" style={{ color: "#F59E0B", textDecoration: "none", fontWeight: 700 }}>
+            🎖️ Salón de la Fama & Atribución
+          </a>
+          <span>•</span>
           <a href="https://github.com/DarckRovert/RED/blob/main/LICENSE" target="_blank" rel="noreferrer" style={{ color: "#A855F7", textDecoration: "none" }}>
             📄 Licencia AGPLv3
           </a>

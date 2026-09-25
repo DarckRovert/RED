@@ -26,7 +26,7 @@
             line-height: 1.65;
         }
         .container {
-            max-width: 880px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 40px 20px;
         }
@@ -105,6 +105,13 @@
             padding: 16px;
             margin: 14px 0;
         }
+        .info-box {
+            background: rgba(0, 229, 255, 0.06);
+            border: 1px solid rgba(0, 229, 255, 0.25);
+            border-radius: 10px;
+            padding: 16px;
+            margin: 14px 0;
+        }
         footer {
             border-top: 1px solid rgba(255, 255, 255, 0.08);
             padding-top: 24px;
@@ -126,6 +133,16 @@
             margin-bottom: 20px;
             font-size: 0.85rem;
         }
+        .hash-badge {
+            font-family: monospace;
+            font-size: 0.72rem;
+            background: rgba(0,0,0,0.5);
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.1);
+            word-break: break-all;
+            color: var(--accent-cyan);
+        }
     </style>
 </head>
 <body>
@@ -133,89 +150,146 @@
         <div class="nav-links">
             <a href="./index.html">← Volver a RED Web Companion</a>
             <span>·</span>
-            <a href="./privacy.html">Política de Privacidad →</a>
+            <a href="./privacy.html">Política de Privacidad</a>
+            <span>·</span>
+            <a href="./credits.html">🎖️ Salón de la Fama & Créditos →</a>
         </div>
 
         <header>
             <img src="./red_icon.png" alt="RED Logo">
             <div>
                 <h1>RED — Términos de Servicio & EULA</h1>
-                <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
-                    <span class="version-badge">TERMS & EULA v105.0.0</span>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
+                    <span class="version-badge">TERMS & EULA v125.0.0</span>
                     <span style="font-size: 0.8rem; color: var(--text-muted);">Vigencia canónica: 2026</span>
                 </div>
             </div>
         </header>
 
         <div class="card">
-            <h2>📜 1. Aceptación de los Términos y Licencia de Código Abierto</h2>
+            <h2>📜 1. Aceptación de los Términos y Licencia AGPL-3.0</h2>
             <p>
-                Al descargar, instalar o utilizar <strong>RED (Sovereign Tactical Mesh OS)</strong>, usted acepta estos Términos de Servicio y Acuerdo de Licencia de Usuario Final (EULA). 
-                RED es un sistema distribuido de código abierto publicado bajo la licencia <strong>GNU Affero General Public License v3.0 (AGPL-3.0)</strong>.
+                Al descargar, compilar, instalar, ejecutar o interactuar con cualquier componente de <strong>RED (Sovereign Tactical Mesh OS)</strong>,
+                usted celebra un acuerdo digitalmente vinculante y acepta expresamente estos Términos de Servicio y Acuerdo de Licencia de Usuario Final (EULA).
             </p>
             <p>
-                Usted es libre de inspeccionar, auditar, compilar y ejecutar el software conforme a los derechos que otorga la licencia AGPL-3.0, manteniendo siempre la soberanía del código y la transparencia del protocolo.
+                RED es un software soberano de código abierto publicado bajo la licencia <strong>GNU Affero General Public License v3.0 (AGPL-3.0)</strong>.
+                Usted cuenta con la libertad de auditar, bifurcar y ejecutar el código, manteniendo siempre la apertura y soberanía comunitaria de sus modificaciones.
+            </p>
+            <p>
+                El software se entrega bajo la cláusula universal <strong>"TAL CUAL" ("AS IS")</strong>, sin garantías explícitas ni implícitas de comerciabilidad,
+                rendimiento o idoneidad para situaciones tácticas o de supervivencia.
             </p>
         </div>
 
         <div class="card">
-            <h2>⚠️ 2. Descargo de Responsabilidad para Escenarios de Emergencia & Rescate</h2>
+            <h2>⚠️ 2. Descargo Operativo: No-Sustitución de Servicios de Emergencia (911 / 112 / SAMU / INDECI)</h2>
             <div class="disclaimer-box">
-                <strong style="color: var(--accent-red);">AVISO CRÍTICO DE SEGURIDAD OPERATIVA:</strong>
+                <strong style="color: var(--accent-red);">AVISO CRÍTICO DE VIDA O MUERTE:</strong>
                 <p style="margin: 8px 0 0 0; font-size: 0.90rem;">
-                    RED es una plataforma descentralizada diseñada como tecnología de contingencia y resiliencia para comunicaciones ad-hoc fuera de línea (Off-Grid). 
-                    <strong>RED NO REEMPLAZA a los servicios oficiales de socorro gubernamentales (911, 112 u organismos de protección civil)</strong> cuando estos se encuentren operativos.
+                    RED es una herramienta tecnológica experimental de contingencia para comunicaciones fuera de línea (Off-Grid).
+                    <strong>RED NO ES UN SERVICIO PÚBLICO REGULADO DE TELECOMUNICACIONES NI UN SISTEMA CERTIFICADO DE BÚSQUEDA Y RESCATE (COSPAS-SARSAT / SOLAS).</strong>
                 </p>
             </div>
             <p>
-                El alcance, entrega de paquetes y continuidad del enrutamiento en malla dependen de variables físicas externas ajenas al software: topografía del terreno, obstáculos urbanos, densidad de nodos repetidores, estado de la batería del terminal y regulaciones locales del espectro electromagnético.
-                Ni los desarrolladores ni los mantenedores del proyecto asumen responsabilidad civil o penal por pérdidas materiales, lesiones o fallos de entrega de mensajes en situaciones críticas.
+                En emergencias con riesgo inminente para la vida o la integridad física, usted debe contactar primordialmente a las autoridades de auxilio del Estado
+                (en Perú: Policía 105, Bomberos 116, SAMU 106, INDECI 115; en otros países: 911 / 112).
+            </p>
+            <p>
+                La entrega de paquetes de socorro a través de la malla ad-hoc (LoRa, Bluetooth Low Energy, Wi-Fi Direct) depende de variables físicas ambientales
+                (alcance óptico, topografía, saturación RF, estado de batería de nodos repetidores). <strong>No existe garantía matemática ni contractual de recepción de mensajes.</strong>
+                Los mantenedores del proyecto renuncian a cualquier responsabilidad por pérdidas de vidas, lesiones o daños derivados del uso del software en situaciones de desastre.
             </p>
         </div>
 
         <div class="card">
-            <h2>🔑 3. Custodia Exclusiva de Identidades y Claves Criptográficas</h2>
+            <h2>📻 3. Uso del Espectro Radioeléctrico & Transceptores LoRa/RF</h2>
             <p>
-                RED no utiliza cuentas centralizadas, nombres de usuario administrados ni recuperación por correo electrónico. Su identidad criptográfica está vinculada exclusivamente a un par de claves Ed25519 / ML-KEM-768 almacenadas en su hardware local.
+                Al conectar módems o transceptores de radiofrecuencia (Semtech SX1262, ESP32, balizas RF):
             </p>
             <ul>
-                <li><strong>Responsabilidad del Usuario:</strong> Usted es el único custodio de su semilla de recuperación mnemónica BIP-39 y sus fragmentos Shamir Secret Sharing (SSS).</li>
-                <li><strong>Irrecuperabilidad:</strong> Si olvida su PIN, pierde su dispositivo o activa el protocolo de pánico (Zeroize Wipe) sin haber respaldado sus fragmentos, <strong>es matemáticamente imposible restaurar el acceso</strong>. No existe ninguna "puerta trasera" ni soporte técnico capaz de eludir este principio.</li>
+                <li><strong>Responsabilidad del Operador:</strong> Usted es el único responsable legal del cumplimiento de las normativas de telecomunicaciones en su país (en Perú: MTC / PNAF; en EE.UU.: FCC Part 15; en Europa: CE RED).</li>
+                <li><strong>Bandas ISM no licenciadas:</strong> Debe asegurarse de operar exclusivamente en las frecuencias autorizadas para su región (433 MHz, 868 MHz, 915 MHz).</li>
+                <li><strong>Potencia y Ciclo de Trabajo:</strong> Es su obligación configurar los límites de potencia radiada (ERP en dBm) y respetar las restricciones de ciclo de trabajo (duty cycle) para evitar interferencias perjudiciales en canales de socorro público.</li>
             </ul>
         </div>
 
         <div class="card">
-            <h2>📻 4. Cumplimiento del Espectro Radioeléctrico & Dispositivos LoRa</h2>
+            <h2>🏥 4. Descargo Médico y Triage MARCH / TCCC Heurístico</h2>
+            <div class="disclaimer-box">
+                <strong style="color: var(--accent-red);">NO ES UN DISPOSITIVO MÉDICO CERTIFICADO:</strong>
+                <p style="margin: 8px 0 0 0; font-size: 0.90rem;">
+                    Los módulos de triaje táctico (MARCH / PAWS), temporizadores de torniquete e interocepción vagal (Box Breathing) son herramientas heurísticas de simulación y referencia educativa para contingencias extremas.
+                </p>
+            </div>
             <p>
-                Al vincular módems de radiofrecuencia (LoRaWAN, ESP32, transceptores ISM):
+                Este software no ha sido certificado ni homologado por la FDA, EMA, DIGEMID ni agencias de salud. No sustituye la intervención ni el diagnóstico de profesionales sanitarios calificados. El usuario asume toda responsabilidad por los procedimientos aplicados en campo.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>☢️ 5. Descargo Radiológico CBRN y Sensores Ópticos CMOS</h2>
+            <p>
+                La detección de radiación ionizante mediante pixeles centelleantes del sensor CMOS de la cámara es una aproximación experimental.
+                <strong>NO CONSTITUYE UN DOSÍMETRO CALIBRADO NI UN TUBO GEIGER-MÜLLER CERTIFICADO.</strong> No debe utilizarse para evaluar la seguridad radiológica de una zona ni para determinar tiempos seguros de permanencia en áreas con sospecha de fuga nuclear o radiológica.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>🛡️ 6. Inmunidad de Mero Conducto (Mere Conduit) para Tráfico en Malla</h2>
+            <div class="info-box">
+                <strong style="color: var(--accent-cyan);">DOCTRINA DE REPETIDOR CIEGO (MERE CONDUIT):</strong>
+                <p style="margin: 8px 0 0 0; font-size: 0.90rem;">
+                    Los nodos RED operan automáticamente como repetidores de almacenamiento y reenvío (DTN Store-and-Forward) de paquetes cifrados de terceros sin descifrarlos ni inspeccionarlos.
+                </p>
+            </div>
+            <p>
+                De conformidad con la doctrina de <em>Mero Conducto</em> (DMCA 17 U.S.C. § 512(a), CDA 47 U.S.C. § 230, Directiva de Comercio Electrónico de la UE 2000/31/CE Art. 12 y leyes homólogas), los operadores de nodos no son legalmente responsables de la información en tránsito ni del uso indebido que terceros realicen sobre la infraestructura distribuida.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>🔑 7. Custodia Exclusiva de Identidades y Claves Criptográficas</h2>
+            <p>
+                RED opera bajo una estricta arquitectura <strong>Zero-Knowledge</strong>: no existen servidores centrales, telemetría corporativa ni cuentas administradas.
             </p>
             <ul>
-                <li>El usuario es responsable de operar en las frecuencias no licenciadas asignadas a su región (ej. 868 MHz en Europa, 915 MHz en América).</li>
-                <li>No se debe exceder la potencia de transmisión (dBm) ni el ciclo de trabajo (duty-cycle) permitido por las normativas de telecomunicaciones de su país.</li>
+                <li><strong>Responsabilidad Total:</strong> Su identidad reside exclusivamente en su par de claves Ed25519 y algoritmos post-cuánticos ML-KEM-768 almacenados localmente.</li>
+                <li><strong>Irrecuperabilidad:</strong> Si olvida sus factores de autenticación, pierde su terminal o activa el protocolo de coacción <code>DuressWipeEngine</code> (Zeroize destructivo), <strong>la recuperación es matemáticamente imposible</strong>.</li>
             </ul>
         </div>
 
         <div class="card">
-            <h2>🛑 5. Usos Prohibidos y Código de Conducta</h2>
+            <h2>🪙 8. Naturaleza No Financiera de Créditos y Vouchers P2P</h2>
             <p>
-                Queda expresamente prohibido utilizar RED para:
+                Los créditos RED, tokens de incentivo Proof-of-Relay y vales criptográficos fuera de línea (Offline Vouchers) son herramientas comunitarias de contabilidad y trueque entre pares (P2P Barter).
             </p>
             <ul>
-                <li>Interferir deliberadamente con infraestructuras críticas de emergencia o socorro.</li>
-                <li>Ataques de denegación de servicio por saturación RF (Broadcast Storm attacks) contra nodos vecinos.</li>
-                <li>Actividades ilícitas que vulneren los derechos humanos fundamentales reconocidos por el derecho internacional.</li>
+                <li>No constituyen moneda fiduciaria de curso legal, depósitos bancarios ni instrumentos de inversión regulados ante la SBS, SEC o MiCA.</li>
+                <li>El proyecto no opera servicios de custodia ni plataformas de intercambio fiduciario.</li>
             </ul>
         </div>
 
         <div class="card">
-            <h2>⚖️ 6. Modificaciones, Jurisdicción y Contacto</h2>
+            <h2>🛑 9. Usos Expresamente Prohibidos</h2>
             <p>
-                Cualquier controversia legal derivada del uso de este software se regirá bajo los principios de arbitraje internacional y la legislación de software de código abierto.
+                Queda terminantemente prohibido utilizar RED para:
             </p>
+            <ul>
+                <li>Interferir intencionadamente con frecuencias de auxilio público, aeronáuticas o de defensa civil.</li>
+                <li>Ataques de denegación de servicio RF (Broadcast Storming) para inhabilitar nodos de socorro comunitario.</li>
+                <li>Cualquier actividad que vulnere el derecho internacional humanitario o los derechos fundamentales.</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>⚖️ 10. Jurisdicción, Arbitraje y Validez</h2>
             <p>
-                Repositorio Oficial: <a href="https://github.com/DarckRovert/RED" target="_blank" rel="noopener noreferrer">https://github.com/DarckRovert/RED</a><br>
-                Portal Oficial: <a href="https://darckrovert.github.io/RED/" target="_blank" rel="noopener noreferrer">https://darckrovert.github.io/RED/</a>
+                Este acuerdo se interpretará de conformidad con los principios del software de código abierto y las leyes de la República del Perú. Cualquier controversia será dirimida mediante arbitraje de derecho en Lima, Perú, con renuncia a acciones colectivas o fueros extraordinarios.
             </p>
+            <div style="margin-top: 14px;">
+                <span class="hash-badge">HASH DEL CONTRATO: c5b290df628f80424564c7e75fef2e255f013d5cf5990264101e0ce5e9d997f6</span>
+            </div>
         </div>
 
         <footer>

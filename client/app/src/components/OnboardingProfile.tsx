@@ -24,7 +24,7 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
     const [avatarColor, setAvatarColor] = useState("#FF3355");
     const [saving, setSaving] = useState(false);
     const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
-    const [legalTab, setLegalTab] = useState<"privacy" | "terms" | "data_safety">("privacy");
+    const [legalTab, setLegalTab] = useState<"privacy" | "terms" | "disclaimers" | "data_safety" | "certificate" | "hall_of_fame">("privacy");
     // Step 4: QR real generado desde la librería qrcode
     const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
@@ -252,31 +252,20 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                         {t('common.confirm')} →
                     </button>
 
-                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", lineHeight: 1.5, marginTop: "-4px" }}>
-                        Al continuar, aceptas los{" "}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "0.72rem", color: "var(--accent-emerald)", lineHeight: 1.5, marginTop: "-4px" }}>
+                        <span>✓</span>
+                        <span>Contrato Digital & EULA AGPLv3 suscrito.</span>
                         <button
                             type="button"
                             onClick={() => {
                                 TacticalAudioEngine.playTap();
-                                setLegalTab("terms");
+                                setLegalTab("certificate");
                                 setIsLegalModalOpen(true);
                             }}
                             style={{ background: "none", border: "none", color: "var(--accent-cyan)", textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: "inherit", fontWeight: 700 }}
                         >
-                            Términos de Servicio
-                        </button>{" "}
-                        y la{" "}
-                        <button
-                            type="button"
-                            onClick={() => {
-                                TacticalAudioEngine.playTap();
-                                setLegalTab("privacy");
-                                setIsLegalModalOpen(true);
-                            }}
-                            style={{ background: "none", border: "none", color: "var(--accent-emerald)", textDecoration: "underline", cursor: "pointer", padding: 0, fontSize: "inherit", fontWeight: 700 }}
-                        >
-                            Política de Privacidad Zero-Data (AGPL-3.0)
-                        </button>.
+                            Ver Certificado Legal
+                        </button>
                     </div>
                 </div>
             )}

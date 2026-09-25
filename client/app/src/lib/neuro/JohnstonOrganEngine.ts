@@ -64,8 +64,13 @@ export class JohnstonOrganEngine {
   private audioStream: MediaStream | null = null;
   private animationFrameId: any = null;
 
-  // Suscriptores reactivos
+  // Suscriptores reactivos y control de estrangulamiento (~15 Hz / 66 ms)
+  // Erradica saturación de 120 FPS en dispositivos con pantallas de alta tasa de refresco (Redmi Note 14)
   private listeners: Set<(telemetry: JohnstonOrganTelemetry) => void> = new Set();
+  private static readonly TELEMETRY_THROTTLE_MS = 66;
+  private lastNotifyTs = 0;
+  private notifyThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  private clientRefCount = 0;
 
   private constructor() {}
 
@@ -80,6 +85,7 @@ export class JohnstonOrganEngine {
    * Inicia la vigilancia mecanosensorial y acústica del Órgano de Johnston.
    */
   public start(): void {
+    this.clientRefCount++;
     if (this.isListening) return;
     this.isListening = true;
 
@@ -104,17 +110,27 @@ export class JohnstonOrganEngine {
         // Detección de impacto mecánico súbito (golpe, caída, explosión cercana)
         if (mag > 18.0) { // > 1.8G súbito
           this.processShockDetection(Math.min(1.0, mag / 25.0), 60.0, 'SEISMIC_TREMOR', this.windDeflectionAngle);
+        } else {
+          this.notifyListeners(false);
         }
       };
 
-      window.addEventListener('devicemotion', this.motionHandler);
+      window.addEventListener('devicemotion', this.motionHandler, { passive: true });
     }
 
     // 2. Intentar capturar audio ambiente de micrófono si AudioContext está disponible
     this.initAudioCaptureSafe();
+    this.notifyListeners(true);
   }
 
-  public stop(): void {
+  public stop(force = false): void {
+    if (this.clientRefCount > 0 && !force) {
+      this.clientRefCount--;
+      if (this.clientRefCount > 0) return;
+    } else if (force) {
+      this.clientRefCount = 0;
+    }
+
     this.isListening = false;
     if (typeof window !== 'undefined' && this.motionHandler) {
       window.removeEventListener('devicemotion', this.motionHandler);
@@ -128,9 +144,14 @@ export class JohnstonOrganEngine {
       this.audioStream.getTracks().forEach(t => t.stop());
       this.audioStream = null;
     }
+    if (this.notifyThrottleTimer) {
+      clearTimeout(this.notifyThrottleTimer);
+      this.notifyThrottleTimer = null;
+    }
     AudioContextManager.releaseDedicatedContext('johnston_organ').catch(() => {});
     this.audioContext = null;
-    this.notifyListeners();
+    this.audioAnalyser = null;
+    this.notifyListeners(true);
   }
 
   /**
@@ -183,9 +204,10 @@ export class JohnstonOrganEngine {
         // Si la energía acústica supera el umbral de choque acústico / detonación
         if (energy >= this.sensitivityThreshold) {
           this.processShockDetection(energy, domFreq, 'ACOUSTIC_BLAST', this.windDeflectionAngle);
+        } else {
+          this.notifyListeners(false);
         }
 
-        this.notifyListeners();
         this.animationFrameId = requestAnimationFrame(pollLoop);
       };
 
@@ -219,7 +241,7 @@ export class JohnstonOrganEngine {
       // Decaimiento exponencial si la feromona disminuye
       this.acousticEnergy = Math.max(0, this.acousticEnergy * 0.92);
     }
-    this.notifyListeners();
+    this.notifyListeners(true);
   }
 
   /**
@@ -285,12 +307,12 @@ export class JohnstonOrganEngine {
       triggeredReflex,
     };
 
-    this.notifyListeners();
+    this.notifyListeners(true);
   }
 
   public setSensitivityThreshold(threshold: number): void {
     this.sensitivityThreshold = Math.min(0.95, Math.max(0.20, threshold));
-    this.notifyListeners();
+    this.notifyListeners(true);
   }
 
   public getTelemetry(): JohnstonOrganTelemetry {
@@ -310,11 +332,41 @@ export class JohnstonOrganEngine {
 
   public subscribe(callback: (telemetry: JohnstonOrganTelemetry) => void): () => void {
     this.listeners.add(callback);
+    if (this.listeners.size === 1) {
+      this.start();
+    }
     callback(this.getTelemetry());
-    return () => this.listeners.delete(callback);
+    return () => {
+      this.listeners.delete(callback);
+      if (this.listeners.size === 0) {
+        this.stop();
+      }
+    };
   }
 
-  private notifyListeners(): void {
+  private notifyListeners(force = false): void {
+    if (this.listeners.size === 0) return;
+
+    const now = Date.now();
+    const elapsed = now - this.lastNotifyTs;
+
+    if (force || elapsed >= JohnstonOrganEngine.TELEMETRY_THROTTLE_MS) {
+      if (this.notifyThrottleTimer) {
+        clearTimeout(this.notifyThrottleTimer);
+        this.notifyThrottleTimer = null;
+      }
+      this.lastNotifyTs = now;
+      this.dispatchTelemetry();
+    } else if (!this.notifyThrottleTimer) {
+      this.notifyThrottleTimer = setTimeout(() => {
+        this.notifyThrottleTimer = null;
+        this.lastNotifyTs = Date.now();
+        this.dispatchTelemetry();
+      }, JohnstonOrganEngine.TELEMETRY_THROTTLE_MS - elapsed);
+    }
+  }
+
+  private dispatchTelemetry(): void {
     const telem = this.getTelemetry();
     for (const listener of this.listeners) {
       try {
@@ -324,7 +376,7 @@ export class JohnstonOrganEngine {
   }
 
   public destroy(): void {
-    this.stop();
+    this.stop(true);
     this.listeners.clear();
     this.shockEventsCount = 0;
     this.lastShock = null;

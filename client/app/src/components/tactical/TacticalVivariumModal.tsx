@@ -94,9 +94,25 @@ export const TacticalVivariumModal: React.FC<TacticalVivariumModalProps> = ({ on
       engine3D.pause();
     }
 
-    // 3. Suscripciones Reactivas a los Cerebros del Workspace
+    // 3. Suscripciones Reactivas a los Cerebros del Workspace (Optimizada con Compuerta de Histéresis)
+    let lastGait = '';
+    let lastFreqRounded = -1;
+    let lastCpgDispatch = 0;
+
     const unsubCpg = centralPatternGenerator.subscribe((telem) => {
-      setCpgTelemetry(telem);
+      const now = Date.now();
+      const currentFreq = Math.round(telem.meanFrequencyHz * 10) / 10;
+      const gaitChanged = telem.gaitMode !== lastGait;
+      const freqChanged = currentFreq !== lastFreqRounded;
+      const timeElapsed = now - lastCpgDispatch >= 250;
+
+      // Disparar re-render de React solo ante cambios cualitativos reales o cadencia HUD (4 FPS)
+      if (gaitChanged || (freqChanged && timeElapsed) || timeElapsed) {
+        lastGait = telem.gaitMode;
+        lastFreqRounded = currentFreq;
+        lastCpgDispatch = now;
+        setCpgTelemetry(telem);
+      }
     });
 
     const humanOrchestrator = humanBrainOrchestrator;

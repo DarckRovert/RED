@@ -8,6 +8,7 @@ import { BiometricLockEngine, BiometricTimeout } from "../../lib/crypto/Biometri
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
 import { LegalComplianceModal } from "../legal/LegalComplianceModal";
+import { HallOfFameModal } from "../legal/HallOfFameModal";
 import { RED_VERSION } from "../../lib/version";
 
 export const PrivacyTab: React.FC = () => {
@@ -15,6 +16,7 @@ export const PrivacyTab: React.FC = () => {
     const { t } = useTranslation();
     const [, forceUpdate] = useState({});
     const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+    const [isHallOfFameOpen, setIsHallOfFameOpen] = useState(false);
     const [bioHardware, setBioHardware] = useState<{ isAvailable: boolean; biometryType: string }>({
         isAvailable: false,
         biometryType: "Verificando...",
@@ -229,10 +231,38 @@ export const PrivacyTab: React.FC = () => {
                 </button>
             </div>
 
+            <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span>🎖️</span> Salón de la Fama & Atribución Open Source
+                    </div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                        Honores al creador y pioneros de la criptografía, LoRa, neurocomputación y software libre.
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => {
+                        SettingsManager.triggerHaptic("light");
+                        setIsHallOfFameOpen(true);
+                    }}
+                    className="btn-tactical-secondary"
+                    style={{ padding: "8px 14px", fontSize: "0.74rem", whiteSpace: "nowrap", border: "1px solid var(--accent-amber)", color: "var(--accent-amber)" }}
+                >
+                    Salón de la Fama
+                </button>
+            </div>
+
             {/* Modal de Cumplimiento Legal y Privacidad */}
             <LegalComplianceModal
                 isOpen={isLegalModalOpen}
                 onClose={() => setIsLegalModalOpen(false)}
+            />
+
+            {/* Modal de Salón de la Fama */}
+            <HallOfFameModal
+                isOpen={isHallOfFameOpen}
+                onClose={() => setIsHallOfFameOpen(false)}
             />
         </div>
     );

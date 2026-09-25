@@ -148,6 +148,42 @@ const filesToCheck = [
         filePath: 'client/Cargo.toml',
         check: (c) => c.includes(`version = "${authoritativeVersion}"`),
         expected: `version = "${authoritativeVersion}"`
+    },
+    {
+        name: 'client/app/src/lib/legal/LegalAgreementManager.ts',
+        filePath: 'client/app/src/lib/legal/LegalAgreementManager.ts',
+        check: (c) => c.includes(`export const CURRENT_LEGAL_VERSION = "${authoritativeVersion}";`),
+        expected: `export const CURRENT_LEGAL_VERSION = "${authoritativeVersion}";`
+    },
+    {
+        name: 'DISCLAIMER.md',
+        filePath: 'DISCLAIMER.md',
+        check: (c) => c.includes(`Versión Canónica: v${authoritativeVersion}`),
+        expected: `Versión Canónica: v${authoritativeVersion}`
+    },
+    {
+        name: 'CREDITS.md',
+        filePath: 'CREDITS.md',
+        check: (c) => c.includes(`Versión Canónica: v${authoritativeVersion}`),
+        expected: `Versión Canónica: v${authoritativeVersion}`
+    },
+    {
+        name: 'terms.html (Root)',
+        filePath: 'terms.html',
+        check: (c) => c.includes(`TERMS & EULA v${authoritativeVersion}`),
+        expected: `TERMS & EULA v${authoritativeVersion}`
+    },
+    {
+        name: 'privacy.html (Root)',
+        filePath: 'privacy.html',
+        check: (c) => c.includes(`PRIVACY POLICY v${authoritativeVersion}`),
+        expected: `PRIVACY POLICY v${authoritativeVersion}`
+    },
+    {
+        name: 'credits.html (Root)',
+        filePath: 'credits.html',
+        check: (c) => c.includes(`HALL OF FAME v${authoritativeVersion}`),
+        expected: `HALL OF FAME v${authoritativeVersion}`
     }
 ];
 
@@ -165,6 +201,41 @@ filesToCheck.forEach(item => {
         console.error(`  ❌ [DESFASADO] ${item.name} no coincide con v${authoritativeVersion} (Esperado: ${item.expected})`);
         hasError = true;
     }
+});
+
+// ── PASO 3.1: Verificación de Paridad Bit-a-Bit de Archivos Satélites Web (Ecosistema 3 Destinos)
+console.log("\n🌐 3.1. Verificando paridad bit-a-bit del ecosistema web de 3 destinos (Root vs public/ vs node/src/web/)...");
+
+const satelliteTriplets = [
+    { name: 'terms.html', root: 'terms.html', satellites: ['client/app/public/terms.html', 'node/src/web/terms.html'] },
+    { name: 'privacy.html', root: 'privacy.html', satellites: ['client/app/public/privacy.html', 'node/src/web/privacy.html'] },
+    { name: 'credits.html', root: 'credits.html', satellites: ['client/app/public/credits.html', 'node/src/web/credits.html'] }
+];
+
+satelliteTriplets.forEach(triplet => {
+    const rootPath = path.join(ROOT_DIR, triplet.root);
+    if (!fs.existsSync(rootPath)) {
+        console.error(`  ❌ [MISSING ROOT] ${triplet.root} no existe.`);
+        hasError = true;
+        return;
+    }
+    const rootContent = fs.readFileSync(rootPath, 'utf8');
+
+    triplet.satellites.forEach(satRel => {
+        const satPath = path.join(ROOT_DIR, satRel);
+        if (!fs.existsSync(satPath)) {
+            console.error(`  ❌ [MISSING SATELLITE] Archivo satélite no encontrado: ${satRel}`);
+            hasError = true;
+            return;
+        }
+        const satContent = fs.readFileSync(satPath, 'utf8');
+        if (rootContent === satContent) {
+            console.log(`  ✅ [PARIDAD 100%] ${triplet.name} === ${satRel}`);
+        } else {
+            console.error(`  ❌ [DISCREPANCIA SATÉLITE] ${satRel} difiere del archivo canónico raíz ${triplet.root} (${satContent.length} bytes vs ${rootContent.length} bytes)`);
+            hasError = true;
+        }
+    });
 });
 
 // ── PASO 4: Verificación de Integridad del Workspace de Cargo & Crate Names ─

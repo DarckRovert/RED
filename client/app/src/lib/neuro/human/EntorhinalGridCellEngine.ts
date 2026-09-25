@@ -73,7 +73,7 @@ export class EntorhinalGridCellEngine {
   private breadcrumbs: CognitiveWaypoint[] = [];
   private lastBreadcrumbDistance = 0.0;
   private totalTraveledMeters = 0.0;
-  private lastPdrDistance = 0.0;
+  private lastPdrDistance = -1;
   private driftCorrectionOffset = 0.0;
 
   private static readonly STORAGE_BREADCRUMBS_KEY = 'red_entorhinal_breadcrumbs_v1';
@@ -130,9 +130,10 @@ export class EntorhinalGridCellEngine {
     // 1. Suscripción a PDR (Pedestrian Dead Reckoning inercial)
     const unsubPdr = pedestrianDeadReckoning.subscribe((pdr: PdrState) => {
       // pdr.distanceMeters es el total acumulado desde inicio.
-      // Si el PDR se reinicia a 0, sincronizar base sin integrar delta espurio.
-      if (pdr.distanceMeters < this.lastPdrDistance) {
+      // Si el PDR se reinicia a 0 o es primera inicialización, sincronizar base sin integrar delta espurio.
+      if (this.lastPdrDistance < 0 || pdr.distanceMeters < this.lastPdrDistance) {
         this.lastPdrDistance = pdr.distanceMeters;
+        return;
       }
       const delta = pdr.distanceMeters - this.lastPdrDistance;
       if (delta >= 0.01) {
@@ -155,6 +156,7 @@ export class EntorhinalGridCellEngine {
 
   public stop(): void {
     this.isRunning = false;
+    this.lastPdrDistance = -1;
     this.unsubs.forEach(u => {
       try { u(); } catch {}
     });

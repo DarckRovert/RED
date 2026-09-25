@@ -49,6 +49,7 @@ const BRIDGE_UPDATE_INTERVAL_MS = 50; // 20 Hz de bridge sensorial
 let lastBridgeUpdateMs = 0;
 let lastThreatAngleRad: number | null = null;
 let activeConnectomeClients = 0;
+let isBridgeEnabled = false;
 
 // ─── Función Auxiliar ──────────────────────────────────────────────────────────
 
@@ -86,6 +87,7 @@ export function injectSensoryStimuli(
   chemicalGradientDelta: number = 0,
   threatAngleRad?: number
 ): void {
+  if (!isBridgeEnabled) return;
   if (typeof threatAngleRad === 'number' && Number.isFinite(threatAngleRad)) {
     lastThreatAngleRad = threatAngleRad;
   }
@@ -131,6 +133,7 @@ export function injectSensoryStimuli(
  */
 export function applyMotorCommands(org: HabitatOrganism, isFeeding: boolean = false): EcosystemConnectomeSnapshot {
   const snap = connectomeOrchestrator.getOrganismSnapshot();
+  if (!isBridgeEnabled) return snap;
 
   // 1. Reflejo de escape Giant Fiber — máxima prioridad, anula todo lo demás
   //    Tiempo de respuesta real del GF en Drosophila: < 8 ms.
@@ -191,26 +194,26 @@ export function applyMotorCommands(org: HabitatOrganism, isFeeding: boolean = fa
 }
 
 /**
- * Devuelve si el orquestador del conectoma está activo y debe controlar el organismo.
+ * Devuelve si el puente bio-sensoriomotor está activo y enlazado al orquestador.
  */
 export function isConnectomeActive(): boolean {
-  return connectomeOrchestrator.isOrganismRunning();
+  return isBridgeEnabled && connectomeOrchestrator.isOrganismRunning();
 }
 
 /**
- * Inicia el orquestador del conectoma en segundo plano para activar el lazo cerrado.
- * Utiliza conteo de referencias para coexistencia entre múltiples vistas modales.
+ * Enlaza un cliente visual/modal al puente y garantiza la vitalidad del orquestador del SO.
  */
 export function startConnectome(): void {
   activeConnectomeClients++;
+  isBridgeEnabled = true;
   if (!connectomeOrchestrator.isOrganismRunning()) {
     connectomeOrchestrator.start();
   }
 }
 
 /**
- * Detiene el orquestador del conectoma.
- * @param force Si es true, ignora el contador y detiene inmediatamente.
+ * Desacopla el cliente del puente sin destruir el organismo vivo del sistema operativo RED.
+ * @param force Si es true, ignora el contador y desacopla inmediatamente.
  */
 export function stopConnectome(force = false): void {
   if (activeConnectomeClients > 0 && !force) {
@@ -219,9 +222,12 @@ export function stopConnectome(force = false): void {
   } else if (force) {
     activeConnectomeClients = 0;
   }
-  if (connectomeOrchestrator.isOrganismRunning()) {
-    connectomeOrchestrator.stop();
-  }
+  isBridgeEnabled = false;
+  lastThreatAngleRad = null;
+  // NOTA ARQUITECTÓNICA L9: connectomeOrchestrator es el servicio daemon nuclear del OS
+  // (gobierna la brújula biofísica E-PG, enrutador de malla hebbiano, CPG, puente autonómico
+  // de hardware y estado metabólico). Desactivar el puente sensoriomotor del hábitat/HUD
+  // jamás debe matar el organismo neuro-cibernético del sistema operativo.
 }
 
 export const connectomeBioBridge = {

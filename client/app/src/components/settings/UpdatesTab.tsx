@@ -16,6 +16,7 @@ export const UpdatesTab: React.FC = () => {
     const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
     const [cachedApk, setCachedApk] = useState<{ exists: boolean; filePath?: string; size?: number } | null>(null);
     const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+    const [legalTab, setLegalTab] = useState<"privacy" | "terms" | "disclaimers" | "data_safety" | "certificate" | "hall_of_fame">("terms");
 
     const refreshStatus = async () => {
         try {
@@ -312,23 +313,39 @@ export const UpdatesTab: React.FC = () => {
                         Términos de servicio, política de privacidad Zero-Knowledge y seguridad de datos.
                     </div>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => {
-                        SettingsManager.triggerHaptic("light");
-                        setIsLegalModalOpen(true);
-                    }}
-                    className="btn-tactical-secondary"
-                    style={{ padding: "8px 14px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
-                >
-                    Ver Términos
-                </button>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            SettingsManager.triggerHaptic("light");
+                            setLegalTab("terms");
+                            setIsLegalModalOpen(true);
+                        }}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "8px 12px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
+                    >
+                        Ver Términos
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            SettingsManager.triggerHaptic("light");
+                            setLegalTab("hall_of_fame");
+                            setIsLegalModalOpen(true);
+                        }}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "8px 12px", fontSize: "0.74rem", whiteSpace: "nowrap", border: "1px solid rgba(245,158,11,0.5)", color: "#F59E0B" }}
+                    >
+                        🎖️ Salón de la Fama
+                    </button>
+                </div>
             </div>
 
             {/* Modal de Cumplimiento Legal */}
             <LegalComplianceModal
                 isOpen={isLegalModalOpen}
                 onClose={() => setIsLegalModalOpen(false)}
+                initialTab={legalTab}
             />
         </div>
     );

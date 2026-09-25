@@ -175,6 +175,7 @@ export class InsularTcccInteroceptionEngine {
 
   private dispatchPhaseHaptic(phaseIndex: number): void {
     if (typeof navigator === 'undefined' || !navigator.vibrate) return;
+    if (typeof document !== 'undefined' && document.hidden) return; // Suspender pulsos si la pantalla está bloqueada o en segundo plano
     // Patrones hápticos suaves de transición vagal
     switch (phaseIndex) {
       case 0: // Inhalar: vibración ascendente corta
@@ -257,10 +258,14 @@ export class InsularTcccInteroceptionEngine {
     if (this.tourniquetInterval) return;
     // Monitor de verificación de tiempo de torniquete cada minuto
     this.tourniquetInterval = setInterval(() => {
+      if (this.casualties.size === 0) return; // Si no hay bajas registradas, reposo absoluto
+
       const now = Date.now();
       let hasWarning = false;
+      let hasTourniquets = false;
 
       for (const casualty of this.casualties.values()) {
+        if (casualty.tourniquets.length > 0) hasTourniquets = true;
         for (const tq of casualty.tourniquets) {
           tq.elapsedMinutes = Math.round((now - tq.appliedAtTimestamp) / 60000);
           if (tq.elapsedMinutes >= 120) {
@@ -270,9 +275,11 @@ export class InsularTcccInteroceptionEngine {
         }
       }
 
+      if (!hasTourniquets) return; // Si no hay torniquetes activos, evitar re-renders innecesarios
+
       if (hasWarning) {
         TacticalAudioEngine.playEmergencyAlarm();
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        if (typeof navigator !== 'undefined' && navigator.vibrate && !(typeof document !== 'undefined' && document.hidden)) {
           navigator.vibrate([300, 100, 300]);
         }
       }

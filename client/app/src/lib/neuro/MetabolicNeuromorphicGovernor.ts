@@ -54,6 +54,12 @@ export class MetabolicNeuromorphicGovernor {
   private temperatureC = 25.0;
   private overrideRegime: MetabolicRegime | null = null;
   private batteryListenersAttached = false;
+  private clientRefCount = 0;
+  private batteryObj: any = null;
+  private batteryLevelHandler: (() => void) | null = null;
+  private batteryChargingHandler: (() => void) | null = null;
+  private capacitorDevicePlugin: any = null;
+  private hasResolvedCapacitor = false;
 
   // Temporizadores
   private pollIntervalId: any = null;
@@ -71,6 +77,7 @@ export class MetabolicNeuromorphicGovernor {
   }
 
   public start(): void {
+    this.clientRefCount++;
     if (this.pollIntervalId) return;
     this.checkMetabolicStatus();
     // Auditar telemetría de batería y temperatura cada 10 segundos
@@ -79,11 +86,32 @@ export class MetabolicNeuromorphicGovernor {
     }, 10_000);
   }
 
-  public stop(): void {
+  public stop(force = false): void {
+    if (this.clientRefCount > 0 && !force) {
+      this.clientRefCount--;
+      if (this.clientRefCount > 0) return;
+    } else if (force) {
+      this.clientRefCount = 0;
+    }
+
     if (this.pollIntervalId) {
       clearInterval(this.pollIntervalId);
       this.pollIntervalId = null;
     }
+
+    // Limpiar listeners nativos de batería W3C
+    if (this.batteryObj) {
+      if (this.batteryLevelHandler) {
+        try { this.batteryObj.removeEventListener('levelchange', this.batteryLevelHandler); } catch {}
+        this.batteryLevelHandler = null;
+      }
+      if (this.batteryChargingHandler) {
+        try { this.batteryObj.removeEventListener('chargingchange', this.batteryChargingHandler); } catch {}
+        this.batteryChargingHandler = null;
+      }
+      this.batteryObj = null;
+    }
+    this.batteryListenersAttached = false;
   }
 
   /**
@@ -161,26 +189,37 @@ export class MetabolicNeuromorphicGovernor {
 
               if (!this.batteryListenersAttached) {
                 this.batteryListenersAttached = true;
-                battery.addEventListener('levelchange', () => {
+                this.batteryObj = battery;
+                this.batteryLevelHandler = () => {
                   this.batteryPct = Math.round(battery.level * 100);
                   this.recalculateRegime();
                   this.notifyListeners();
-                });
-                battery.addEventListener('chargingchange', () => {
+                };
+                this.batteryChargingHandler = () => {
                   this.isCharging = !!battery.charging;
                   this.recalculateRegime();
                   this.notifyListeners();
-                });
+                };
+                battery.addEventListener('levelchange', this.batteryLevelHandler);
+                battery.addEventListener('chargingchange', this.batteryChargingHandler);
               }
             }
           } catch {}
         }
 
-        // 2. Fallback: Plugin nativo Device de Capacitor
-        const { Capacitor } = await import('@capacitor/core');
-        const devicePlugin = (Capacitor as any)?.Plugins?.Device || (window as any).Capacitor?.Plugins?.Device;
-        if (devicePlugin && typeof devicePlugin.getBatteryInfo === 'function') {
-          const info = await devicePlugin.getBatteryInfo();
+        // 2. Fallback: Plugin nativo Device de Capacitor (memoizado lazy una sola vez)
+        if (!this.hasResolvedCapacitor) {
+          this.hasResolvedCapacitor = true;
+          try {
+            const { Capacitor } = await import('@capacitor/core');
+            this.capacitorDevicePlugin = (Capacitor as any)?.Plugins?.Device || (window as any).Capacitor?.Plugins?.Device;
+          } catch {
+            this.capacitorDevicePlugin = null;
+          }
+        }
+
+        if (this.capacitorDevicePlugin && typeof this.capacitorDevicePlugin.getBatteryInfo === 'function') {
+          const info = await this.capacitorDevicePlugin.getBatteryInfo();
           if (info && typeof info.batteryLevel === 'number') {
             this.batteryPct = Math.round(info.batteryLevel * 100);
             this.isCharging = !!info.isCharging;
@@ -288,8 +327,16 @@ export class MetabolicNeuromorphicGovernor {
 
   public subscribe(callback: (telemetry: MetabolicGovernorTelemetry) => void): () => void {
     this.listeners.add(callback);
+    if (this.listeners.size === 1) {
+      this.start();
+    }
     callback(this.getTelemetry());
-    return () => this.listeners.delete(callback);
+    return () => {
+      this.listeners.delete(callback);
+      if (this.listeners.size === 0) {
+        this.stop();
+      }
+    };
   }
 
   private notifyListeners(): void {
@@ -302,7 +349,7 @@ export class MetabolicNeuromorphicGovernor {
   }
 
   public destroy(): void {
-    this.stop();
+    this.stop(true);
     this.listeners.clear();
     this.overrideRegime = null;
     MetabolicNeuromorphicGovernor.instance = null;

@@ -145,6 +145,23 @@ export interface HabitatOrganism {
   // Urbanismo Estigmérgico y Metrópolis Biocibernética
   caste: CivilianCaste;
   biopolymerCarried: number;
+  civicJob?: import('./BiocyberneticMetropolisEngine').CivicJobType;
+  homeStructureId?: string;
+  workplaceStructureId?: string;
+  dailySchedulePhase?: import('./BiocyberneticMetropolisEngine').DailySchedulePhase;
+  flightAltitudeTargetMeters?: number;
+  civicTargetX?: number;
+  civicTargetY?: number;
+  civicActionDescription?: string;
+  // Ontogénesis, Billetera Cívica y Cognición BDI
+  lifeStage?: 'EGG' | 'LARVA' | 'PUPA' | 'ADULT_IMAGO';
+  stageProgressPercent?: number;
+  microAtpWallet?: number;
+  homeCellId?: string;
+  airCorridorTargetNodeId?: string | null;
+  bdiBeliefSummary?: string;
+  bdiDesire?: string;
+  bdiIntention?: string;
 }
 
 export type HabitatToolType =
@@ -233,8 +250,8 @@ export interface HabitatTelemetry {
 export class BiocyberneticHabitatEngine {
   private static instance: BiocyberneticHabitatEngine | null = null;
 
-  public static readonly ARENA_RADIUS_METERS = 10.0;
-  public static readonly ARENA_DIAMETER_METERS = 20.0;
+  public static readonly ARENA_RADIUS_METERS = 24.0;
+  public static readonly ARENA_DIAMETER_METERS = 48.0;
   public static readonly FIXED_TIMESTEP_SEC = 1.0 / 60.0; // 60 Hz exactos (~16.66 ms)
   public static readonly MAX_PHYSICS_SUB_STEPS = 3; // Prevenir "Spiral of Death" en hardware móvil
   private static readonly TELEMETRY_INTERVAL_SEC = 0.1; // 10 Hz para HUD y React
@@ -618,6 +635,11 @@ export class BiocyberneticHabitatEngine {
       personality = 'Obrera Leal';
     }
 
+    // ── Asignación Atómica de Identidad Cívica y Domicilio Urbano (L9) ──
+    const caste = this.metropolisEngine.determineCasteFromGenome(genome, species);
+    const civicIdentity = this.metropolisEngine.assignCitizenCivicIdentity(species, caste, id);
+    const homeCell = this.metropolisEngine.assignCitizenCell(id, civicIdentity.homeId);
+
     const org: HabitatOrganism = {
       id,
       species,
@@ -635,7 +657,7 @@ export class BiocyberneticHabitatEngine {
       metabolism: new BiocyberneticMetabolismEngine(1.0),
       eye: new OmmatidialCompoundEye(),
       plasticity: new PersistentSynapticPlasticityEngine(),
-      isLeader,
+      isLeader: isLeader || !this.getLeader(),
       legAnglesDeg: new Array(18).fill(90),
       sinusoidalPhase: Math.random() * Math.PI * 2,
       wormJoints,
@@ -660,8 +682,22 @@ export class BiocyberneticHabitatEngine {
       curiosityScore: 0.85,
       isDreaming: false,
       sleepReplayTicks: 0,
-      caste: this.metropolisEngine.determineCasteFromGenome(genome, species),
+      caste,
       biopolymerCarried: 0,
+      civicJob: civicIdentity.job,
+      homeStructureId: civicIdentity.homeId,
+      workplaceStructureId: civicIdentity.workplaceId,
+      homeCellId: homeCell?.id,
+      dailySchedulePhase: 'WORK_DUTY',
+      flightAltitudeTargetMeters: species === 'DROSOPHILA' ? 1.8 : initialAltitude,
+      civicActionDescription: 'Iniciando turno cívico en la metrópolis',
+      lifeStage: 'ADULT_IMAGO',
+      stageProgressPercent: 100,
+      microAtpWallet: 15.0,
+      airCorridorTargetNodeId: null,
+      bdiBeliefSummary: 'Topografía urbana reconocida; sinapsis al 100%',
+      bdiDesire: 'Labor cívica y supervivencia metabólica',
+      bdiIntention: 'Incorporación al sistema de transporte cívico',
     };
 
     this.organisms.set(id, org);
@@ -810,18 +846,23 @@ export class BiocyberneticHabitatEngine {
       this.autoSporeCooldownSec = 5.0;
       const centerOffset = BiocyberneticHabitatEngine.ARENA_RADIUS_METERS;
       const springs = [
-        { x: -3.5, y: -3.5 },
-        { x: 3.5, y: -3.5 },
-        { x: -3.5, y: 3.5 },
-        { x: 3.5, y: 3.5 },
+        { x: -10.0, y: -10.0 },
+        { x: 10.0, y: -10.0 },
+        { x: -10.0, y: 10.0 },
+        { x: 10.0, y: 10.0 },
+        { x: 0, y: 16.0 },
+        { x: 0, y: -16.0 },
+        { x: 16.0, y: 0 },
+        { x: -16.0, y: 0 },
       ];
       for (const sp of springs) {
-        this.diffusionGrid.injectChemical(sp.x + centerOffset, sp.y + centerOffset, 2.8, 'GLUCOSE');
+        this.diffusionGrid.injectChemical(sp.x + centerOffset, sp.y + centerOffset, 3.5, 'GLUCOSE');
       }
     }
 
-    // 4. Actualizar organismos
+    // 4. Actualizar organismos (asegurar liderazgo activo continuo)
     const centerOffset = BiocyberneticHabitatEngine.ARENA_RADIUS_METERS;
+    this.ensureLeaderSuccession();
 
     for (const [id, org] of this.organisms.entries()) {
       org.ageSec += dt;
@@ -835,7 +876,11 @@ export class BiocyberneticHabitatEngine {
         this.diffusionGrid.injectChemical(gridX, gridY, 0.05 * dt, 'GLUCOSE');
         if (org.decompositionRemainingSec <= 0) {
           this.metropolisEngine.recycleDecomposedCorpse(org.x, org.y, 4.0);
+          if (org.homeCellId) {
+            this.metropolisEngine.setCellOccupancy(org.homeCellId, false, false);
+          }
           this.organisms.delete(id);
+          this.ensureLeaderSuccession();
         }
         continue;
       }
@@ -843,8 +888,10 @@ export class BiocyberneticHabitatEngine {
       // Senescencia celular biológica (límite de longevidad)
       if (org.ageSec >= org.genome.longevityGene && !org.isDecomposing) {
         org.isDecomposing = true;
+        org.isLeader = false;
         org.behaviorState = 'SENESCENT_DECAY';
         this.totalDeaths++;
+        this.ensureLeaderSuccession();
         this.addEvolutionChronicle({
           type: 'SENESCENCE',
           species: org.species,
@@ -859,8 +906,10 @@ export class BiocyberneticHabitatEngine {
 
       if (org.metabolism.getTelemetry().isDead && !org.isDecomposing) {
         org.isDecomposing = true;
+        org.isLeader = false;
         org.behaviorState = 'DECAYING_BIOMASS';
         this.totalDeaths++;
+        this.ensureLeaderSuccession();
         this.addEvolutionChronicle({
           type: 'STARVATION',
           species: org.species,
@@ -1071,19 +1120,193 @@ export class BiocyberneticHabitatEngine {
               if (org.behaviorState === 'FORAGING_WALK') org.behaviorState = 'TERRITORIAL_SPACING';
             }
 
-            // Calibración de velocidad según estado biológico:
-            if (isNearGlucose) {
-              // DETENCIÓN PARA ALIMENTARSE (evita correr velozmente sobre el alimento)
-              targetSpeed = 0.08 * org.metabolism.getLocomotionFactor();
-              if (!nearestFly || nearestFly.dist >= 0.65) {
-                turnRateRadPerSec = (Math.random() - 0.5) * 0.4;
-              }
-            } else if (antennalSample.meanConcentration > 0.008) {
-              targetSpeed = 0.6 * org.metabolism.getLocomotionFactor();
-              org.behaviorState = 'GLUCOSE_CHEMOTAXIS';
+            // ── ARQUITECTURA COGNITIVA BDI & URBANISMO DE ALTA PRECISIÓN (L9) ──
+            const circadian = biocyberneticEdenParadise.getCircadianState();
+            const atpLevel = org.metabolism.getTelemetry().atpLevel;
+
+            // 1. BELIEFS (Creencias sobre el entorno y su propio estado)
+            if (!org.homeCellId) {
+              const cell = this.metropolisEngine.assignCitizenCell(org.id, org.homeStructureId || 'tower-nexus') ||
+                           this.metropolisEngine.assignCitizenCell(org.id, 'tower-helix') ||
+                           this.metropolisEngine.assignCitizenCell(org.id, 'tower-apex');
+              if (cell) org.homeCellId = cell.id;
+            }
+
+            org.bdiBeliefSummary = `Ciclo: ${circadian.isDaytime ? 'Día' : 'Noche'} | ATP: ${(atpLevel * 100).toFixed(0)}% | Celda: ${org.homeCellId || 'Asignada'}`;
+
+            // 2. DESIRES (Jerarquía de deseos y prioridades Maslow-A-Life)
+            if (atpLevel < 0.20) {
+              org.dailySchedulePhase = 'COMMUTE_TO_BREAKFAST';
+              org.bdiDesire = 'SUPERVIVENCIA_NUTRICIONAL_URGENTE';
+            } else if (!circadian.isDaytime) {
+              org.dailySchedulePhase = 'SLEEP_AT_HOME';
+              org.bdiDesire = 'REPOSO_CIRCADIANO_RESIDENCIAL';
+            } else if (atpLevel < 0.60) {
+              org.dailySchedulePhase = 'COMMUTE_TO_BREAKFAST';
+              org.bdiDesire = 'DESAYUNO_COMUNITARIO_EN_SILO';
             } else {
-              targetSpeed = 0.75 * org.metabolism.getLocomotionFactor();
-              turnRateRadPerSec += (Math.random() - 0.5) * 1.4; // Meandro exploratorio
+              org.dailySchedulePhase = 'WORK_DUTY';
+              org.bdiDesire = `LABOR_CIVICA_${org.civicJob || 'GENERAL'}`;
+            }
+
+            // 3. INTENTIONS & WAYPOINT MAPPING (Plan de acción espacial 3D)
+            let targetX = 0;
+            let targetY = 0;
+            let targetAltitude = 0.1;
+            let goalDescription = '';
+
+            if (org.dailySchedulePhase === 'SLEEP_AT_HOME') {
+              const home = this.metropolisEngine.getStructure(org.homeStructureId || 'tower-nexus') ||
+                           this.metropolisEngine.getNearestStructureOfType(org.x, org.y, 'BIO_TOWER_DWELLING');
+              if (home) {
+                targetX = home.x;
+                targetY = home.y;
+                targetAltitude = home.heightMeters ? home.heightMeters * 0.72 : 4.5;
+                goalDescription = `Regresando a descansar en ${home.name} [Piso residencial] 🏠`;
+              }
+            } else if (org.dailySchedulePhase === 'COMMUTE_TO_BREAKFAST') {
+              const silo = this.metropolisEngine.getStructure('silo-alpha') ||
+                           this.metropolisEngine.getNearestStructureOfType(org.x, org.y, 'CENTRAL_SILO');
+              if (silo) {
+                targetX = silo.x;
+                targetY = silo.y;
+                targetAltitude = 0.6;
+                goalDescription = `Volando al ${silo.name} a desayunar glucosa 🍓`;
+              }
+            } else {
+              // Turno laboral según la profesión cívica
+              if (org.civicJob === 'AERIAL_COURIER') {
+                if (org.biopolymerCarried > 0) {
+                  const buildSite = this.metropolisEngine.getStructuresByType('BIO_TOWER_DWELLING').find(s => s.constructionProgress < 1.0) ||
+                                    this.metropolisEngine.getStructure('tower-apex') ||
+                                    this.metropolisEngine.getStructure('tower-helix') ||
+                                    this.metropolisEngine.getStructure('tower-nexus');
+                  if (buildSite) {
+                    targetX = buildSite.x;
+                    targetY = buildSite.y;
+                    targetAltitude = 2.4;
+                    goalDescription = `Mensajería aérea: transportando biopolímeros a ${buildSite.name} 📦`;
+                  }
+                } else {
+                  const factory = this.metropolisEngine.getStructure('bio-factory-alpha') ||
+                                  this.metropolisEngine.getStructure('silo-alpha');
+                  if (factory) {
+                    targetX = factory.x;
+                    targetY = factory.y;
+                    targetAltitude = 1.2;
+                    goalDescription = `Recogiendo lote de biopolímero en ${factory.name} 🏭`;
+                  }
+                }
+              } else if (org.civicJob === 'RESEARCH_SCHOLAR') {
+                const lab = this.metropolisEngine.getStructure('research-connectome') ||
+                            this.metropolisEngine.getNearestStructureOfType(org.x, org.y, 'RESEARCH_CONNECTOME');
+                if (lab) {
+                  targetX = lab.x;
+                  targetY = lab.y;
+                  targetAltitude = 1.5;
+                  goalDescription = `Investigando sinapsis cuánticas en el Laboratorio Conectoma 🔬`;
+                }
+              } else {
+                // NECTAR_FORAGER / CIVIC_CITIZEN
+                const springs = biocyberneticEdenParadise.nectarSprings;
+                if (springs.length > 0) {
+                  const targetSpring = springs[Math.abs(Math.floor(org.ageSec * 0.1)) % springs.length];
+                  targetX = targetSpring.x;
+                  targetY = targetSpring.y;
+                  targetAltitude = 0.4;
+                  goalDescription = `Cosechando néctar en ${targetSpring.name} 🍯`;
+                }
+              }
+            }
+
+            org.civicTargetX = targetX;
+            org.civicTargetY = targetY;
+            org.civicActionDescription = goalDescription;
+            org.bdiIntention = `Vuelo hacia ${goalDescription}`;
+
+            const distToCivicTarget = Math.hypot(targetX - org.x, targetY - org.y);
+
+            if (distToCivicTarget > 0.85) {
+              // 4. VUELO AÉREO ACTIVO EN RED DE CORREDORES AÉREOS 3D
+              let steerTargetX = targetX;
+              let steerTargetY = targetY;
+              let cruiseAltitude = 2.4 + Math.sin(this.simTimeSec * 3.5) * 0.3;
+
+              if (distToCivicTarget > 2.2) {
+                const corridorWp = this.metropolisEngine.findNearestAirCorridorWaypoint(org.x, org.y, org.altitudeMeters);
+                if (corridorWp && Math.hypot(corridorWp.x - org.x, corridorWp.y - org.y) > 0.5) {
+                  steerTargetX = corridorWp.x;
+                  steerTargetY = corridorWp.y;
+                  cruiseAltitude = corridorWp.altitude;
+                  org.airCorridorTargetNodeId = corridorWp.id;
+                }
+              }
+
+              const toTargetAngle = Math.atan2(steerTargetY - org.y, steerTargetX - org.x);
+              const angleDiff = shortestAngleDiff(toTargetAngle, org.headingRad);
+              turnRateRadPerSec = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), 4.5);
+              targetSpeed = 2.8 * org.metabolism.getLocomotionFactor();
+              org.flightAltitudeTargetMeters = cruiseAltitude;
+              org.behaviorState = 'URBAN_AERIAL_TRANSIT';
+
+              // Si estaba durmiendo y ahora vuela, liberar estado de sueño en celda
+              if (org.homeCellId) {
+                this.metropolisEngine.setCellOccupancy(org.homeCellId, true, false);
+              }
+              org.isDreaming = false;
+            } else {
+              // 5. LLEGADA Y OPERACIONES LOCALES (Aterrizaje, Descanso o Trabajo)
+              org.airCorridorTargetNodeId = null;
+
+              if (org.dailySchedulePhase === 'SLEEP_AT_HOME') {
+                org.flightAltitudeTargetMeters = targetAltitude;
+                targetSpeed = 0.05;
+                org.speedMps = 0.05;
+                org.behaviorState = 'SLEEPING_AT_HOME';
+                org.isDreaming = true;
+                org.mood = 'DREAMING';
+                org.metabolism.ingestNutrient(0.08 * dt);
+                if (org.homeCellId) {
+                  this.metropolisEngine.setCellOccupancy(org.homeCellId, true, true);
+                }
+                org.currentThought = 'Reposo celular en torre residencial; sincronizando memorias nocturnas 💤🏠';
+              } else if (org.dailySchedulePhase === 'COMMUTE_TO_BREAKFAST') {
+                org.flightAltitudeTargetMeters = 0.3;
+                targetSpeed = 0.1;
+                org.speedMps = 0.1;
+                org.behaviorState = 'BREAKFAST_FEEDING';
+                org.metabolism.ingestNutrient(0.16 * dt);
+                org.plasticity.injectDopamine(2.5 * dt);
+                if (org.homeCellId) {
+                  this.metropolisEngine.setCellOccupancy(org.homeCellId, true, false);
+                }
+                org.currentThought = 'Desayunando glucosa pura en el Silo Central 🍓';
+              } else if (org.civicJob === 'AERIAL_COURIER') {
+                targetSpeed = 0.15;
+                org.flightAltitudeTargetMeters = targetAltitude;
+                if (org.biopolymerCarried > 0) {
+                  org.biopolymerCarried = 0;
+                  this.metropolisEngine.biopolymerStockpile += 0.8;
+                  org.microAtpWallet = (org.microAtpWallet || 0) + 2.5;
+                  this.metropolisEngine.addCivicEvent(`📦 Mosca #${org.id.slice(-4)} entregó biopolímeros (+2.5 µATP)`);
+                  org.currentThought = 'Carga de biopolímeros entregada en obra; recibida recompensa cívica 📦⚡';
+                } else {
+                  org.biopolymerCarried = 1.0;
+                  org.currentThought = 'Lote de biopolímero cargado en bodega. Despegando hacia rascacielos 🛫';
+                }
+              } else if (org.civicJob === 'RESEARCH_SCHOLAR') {
+                targetSpeed = 0.08;
+                org.flightAltitudeTargetMeters = 0.5;
+                org.behaviorState = 'RESEARCHING_CONNECTOME';
+                org.microAtpWallet = (org.microAtpWallet || 0) + 0.15 * dt;
+                org.metabolism.ingestNutrient(0.05 * dt);
+                org.currentThought = 'Calculando tensores MaleCNS en la plaza del Conectoma Cuántico 🔬🧬';
+              } else {
+                org.flightAltitudeTargetMeters = 0.1;
+                targetSpeed = 0.1;
+                org.behaviorState = 'CIVIC_INTERACTION';
+                org.metabolism.ingestNutrient(0.04 * dt);
+              }
             }
           }
         }
@@ -1463,6 +1686,12 @@ export class BiocyberneticHabitatEngine {
         org.y = nextY;
       }
 
+      if (org.species === 'DROSOPHILA') {
+        const targetAlt = org.flightAltitudeTargetMeters !== undefined ? org.flightAltitudeTargetMeters : 0.05;
+        org.altitudeMeters += (targetAlt - org.altitudeMeters) * Math.min(1.0, dt * 4.0);
+        org.z = org.altitudeMeters;
+      }
+
       // 4.45 Interacciones Cívicas y Urbanismo Estigmérgico
       if (org.caste === 'HARVESTER' && (org.isCarryingFood || org.metabolism.getTelemetry().glucoseLevel > 0.75)) {
         const dep = this.metropolisEngine.depositInNearestSilo(org.x, org.y, 3.5, 1.8);
@@ -1507,6 +1736,9 @@ export class BiocyberneticHabitatEngine {
             org.generation,
             org.plasticity.quantizeForMeshExport()
           );
+          if (org.homeCellId) {
+            this.metropolisEngine.setCellOccupancy(org.homeCellId, false, false);
+          }
           this.organisms.delete(id);
           continue;
         } else {
@@ -1745,12 +1977,54 @@ export class BiocyberneticHabitatEngine {
     hexapodActuatorBridge.setStreaming(streaming);
   }
 
+  /**
+   * Asegura la sucesión dinástica ininterrumpida del organismo líder.
+   * Si el líder actual fenece o entra en descomposición, transfiere el rol
+   * preferentemente a la Drosophila viva más madura/apta (o a cualquier espécimen vivo),
+   * garantizando que el lazo sensoriomotor cerrado con el conectoma MaleCNS no quede huérfano.
+   */
+  private ensureLeaderSuccession(): void {
+    // 1. Si ya existe un líder vivo no en descomposición, no hay vacancia
+    for (const org of this.organisms.values()) {
+      if (org.isLeader && !org.isDecomposing) return;
+    }
+
+    // 2. Limpiar banderas de líder en organismos en descomposición
+    for (const org of this.organisms.values()) {
+      if (org.isDecomposing) org.isLeader = false;
+    }
+
+    // 3. Prioridad 1: Candidato vivo DROSOPHILA no en descomposición más maduro
+    let bestCandidate: HabitatOrganism | null = null;
+    for (const org of this.organisms.values()) {
+      if (org.isDecomposing) continue;
+      if (org.species === 'DROSOPHILA') {
+        if (!bestCandidate || org.ageSec > bestCandidate.ageSec) {
+          bestCandidate = org;
+        }
+      }
+    }
+
+    // 4. Prioridad 2: Si no hay Drosophila, promover el organismo vivo más maduro de cualquier especie
+    if (!bestCandidate) {
+      for (const org of this.organisms.values()) {
+        if (!org.isDecomposing) {
+          if (!bestCandidate || org.ageSec > bestCandidate.ageSec) {
+            bestCandidate = org;
+          }
+        }
+      }
+    }
+
+    if (bestCandidate) {
+      bestCandidate.isLeader = true;
+    }
+  }
+
   public getLeader(): HabitatOrganism | undefined {
+    this.ensureLeaderSuccession();
     for (const org of this.organisms.values()) {
       if (org.isLeader && !org.isDecomposing) return org;
-    }
-    for (const org of this.organisms.values()) {
-      if (!org.isDecomposing) return org;
     }
     return undefined;
   }
@@ -1869,13 +2143,17 @@ export class BiocyberneticHabitatEngine {
       } else {
         mood = Math.random() < 0.5 ? 'CURIOUS' : 'ZEN';
         if (org.species === 'DROSOPHILA') {
-          const flyThoughts = [
-            'Brújula E-PG centrada en rumbo 180°. Navegando sin deriva 🧭',
-            'Limpiando mis alas translúcidas con las patas traseras ✨',
-            'Sintiendo corrientes de aire con el órgano de Johnston 🍃',
-            'Marcha trípode sincronizada a 2.4 Hz. Todo en orden 🪰',
-          ];
-          thought = flyThoughts[Math.floor(Math.random() * flyThoughts.length)];
+          if (org.civicActionDescription && Math.random() < 0.75) {
+            thought = org.civicActionDescription;
+          } else {
+            const flyThoughts = [
+              'Brújula E-PG centrada en rumbo cívico. Navegando la metrópolis 🧭',
+              'Limpiando mis alas translúcidas en el helipuerto de la torre ✨',
+              'Sintiendo corrientes térmicas entre los rascacielos 🍃',
+              'Vuelo rasante por la avenida principal sincronizado 🪰',
+            ];
+            thought = flyThoughts[Math.floor(Math.random() * flyThoughts.length)];
+          }
         } else if (org.species === 'GRAVITY_SENTINEL') {
           const sentinelThoughts = [
             'Malla soberana RED: 0 vulnerabilidades. Cero telemetry leaks 🛡️',

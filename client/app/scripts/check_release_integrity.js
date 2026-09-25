@@ -315,6 +315,36 @@ function checkSSotVersionParity(version) {
             path: path.join(CLIENT_APP, 'package-lock.json'),
             regex: /"version"\s*:\s*"([^"]+)"/,
         },
+        {
+            label: 'LegalAgreementManager.ts (SSOT contrato digital)',
+            path: path.join(CLIENT_APP, 'src', 'lib', 'legal', 'LegalAgreementManager.ts'),
+            regex: /CURRENT_LEGAL_VERSION\s*=\s*["']([^"']+)["']/,
+        },
+        {
+            label: 'DISCLAIMER.md (descargo legal canónico)',
+            path: path.join(ROOT, 'DISCLAIMER.md'),
+            regex: /\*Versión Canónica:\s*v([^\*\s\r\n]+)/,
+        },
+        {
+            label: 'CREDITS.md (salón de la fama canónico)',
+            path: path.join(ROOT, 'CREDITS.md'),
+            regex: /\*Versión Canónica:\s*v([^\*\s\r\n]+)/,
+        },
+        {
+            label: 'terms.html (Root, versión web)',
+            path: path.join(ROOT, 'terms.html'),
+            regex: /TERMS & EULA v(\d+\.\d+\.\d+)/,
+        },
+        {
+            label: 'privacy.html (Root, versión web)',
+            path: path.join(ROOT, 'privacy.html'),
+            regex: /PRIVACY POLICY v(\d+\.\d+\.\d+)/,
+        },
+        {
+            label: 'credits.html (Root, versión web)',
+            path: path.join(ROOT, 'credits.html'),
+            regex: /HALL OF FAME v(\d+\.\d+\.\d+)/,
+        },
     ];
 
     for (const check of checks) {
@@ -387,6 +417,46 @@ function checkGeneratedFilesNotTracked() {
 }
 
 // =============================================================================
+// [6] VERIFICACIÓN: Paridad Bit-a-Bit de Ecosistema Web Satélite de 3 Destinos
+// =============================================================================
+function checkSatelliteTripleParity() {
+    header('CHECK 6 — Paridad Bit-a-Bit Ecosistema Web de 3 Destinos');
+
+    const triplets = [
+        { name: 'terms.html', root: 'terms.html', satellites: ['client/app/public/terms.html', 'node/src/web/terms.html'] },
+        { name: 'privacy.html', root: 'privacy.html', satellites: ['client/app/public/privacy.html', 'node/src/web/privacy.html'] },
+        { name: 'credits.html', root: 'credits.html', satellites: ['client/app/public/credits.html', 'node/src/web/credits.html'] }
+    ];
+
+    let allOk = true;
+    for (const triplet of triplets) {
+        const rootPath = path.join(ROOT, triplet.root);
+        if (!fs.existsSync(rootPath)) {
+            fail(`Archivo canónico raíz no encontrado: ${triplet.root}`);
+            allOk = false;
+            continue;
+        }
+        const rootContent = fs.readFileSync(rootPath, 'utf-8');
+
+        for (const satRel of triplet.satellites) {
+            const satPath = path.join(ROOT, satRel);
+            if (!fs.existsSync(satPath)) {
+                fail(`Archivo satélite faltante: ${satRel}`);
+                allOk = false;
+                continue;
+            }
+            const satContent = fs.readFileSync(satPath, 'utf-8');
+            if (rootContent === satContent) {
+                pass(`${triplet.name} === ${satRel} (100% paridad)`);
+            } else {
+                fail(`Discrepancia en satélite ${satRel} respecto a raíz ${triplet.root} (${satContent.length} B ≠ ${rootContent.length} B)`);
+                allOk = false;
+            }
+        }
+    }
+}
+
+// =============================================================================
 // EJECUCIÓN PRINCIPAL
 // =============================================================================
 console.log('\n' + '='.repeat(70));
@@ -405,6 +475,7 @@ checkHardcodedVersions(version);
 checkReleaseNotes(version);
 checkSSotVersionParity(version);
 checkGeneratedFilesNotTracked();
+checkSatelliteTripleParity();
 
 // ── Resumen ───────────────────────────────────────────────────────────────────
 console.log('\n' + '='.repeat(70));

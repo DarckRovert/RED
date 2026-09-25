@@ -127,11 +127,16 @@ export class BiocyberneticMetabolismEngine {
     } else if (atpRatio > 0.04) {
       this.state = 'TORPOR';
       this.timeInTorpor += dt;
+      // Letargo crítico: si permanece en coma más de 45 segundos, entra en colapso celular irreversible
+      if (this.timeInTorpor >= BiocyberneticMetabolismEngine.TORPOR_CRITICAL_TIMEOUT_SEC) {
+        this.state = 'APOPTOSIS';
+        this.isDead = true;
+      }
     } else {
-      // Lisis celular y muerte por fallo bioenergético prolongado
+      // Lisis celular y muerte por fallo bioenergético terminal (ATP agotado <= 4%)
       this.state = 'APOPTOSIS';
       this.timeInTorpor += dt;
-      if (this.timeInTorpor >= BiocyberneticMetabolismEngine.TORPOR_CRITICAL_TIMEOUT_SEC) {
+      if (this.timeInTorpor >= Math.min(10.0, BiocyberneticMetabolismEngine.TORPOR_CRITICAL_TIMEOUT_SEC)) {
         this.isDead = true;
       }
     }
@@ -169,12 +174,21 @@ export class BiocyberneticMetabolismEngine {
   }
 
   public revive(energyRatio: number = 0.8): void {
-    this.isDead = false;
-    this.timeInTorpor = 0;
-    this.atp = BiocyberneticMetabolismEngine.MAX_ATP * energyRatio;
-    this.glucose = BiocyberneticMetabolismEngine.MAX_GLUCOSE * energyRatio;
-    this.trehalose = BiocyberneticMetabolismEngine.MAX_TREHALOSE * energyRatio;
-    this.state = 'OPTIMAL';
+    const ratio = Math.max(0.1, Math.min(1.0, energyRatio));
+    if (this.isDead) {
+      // Reanimación post-mortem completa: restaura depósitos iniciales
+      this.isDead = false;
+      this.timeInTorpor = 0;
+      this.atp = BiocyberneticMetabolismEngine.MAX_ATP * ratio;
+      this.glucose = BiocyberneticMetabolismEngine.MAX_GLUCOSE * ratio;
+      this.trehalose = BiocyberneticMetabolismEngine.MAX_TREHALOSE * ratio;
+      this.state = 'OPTIMAL';
+    } else {
+      // Rescate médico de organismo vivo en coma/letargo: reactiva ATP sin inflar trehalosa espuria
+      this.timeInTorpor = 0;
+      this.atp = Math.max(this.atp, BiocyberneticMetabolismEngine.MAX_ATP * ratio);
+      this.state = this.atp / BiocyberneticMetabolismEngine.MAX_ATP > 0.60 ? 'OPTIMAL' : 'ENERGY_SAVING';
+    }
   }
 
   /**

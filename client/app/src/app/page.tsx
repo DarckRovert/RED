@@ -86,6 +86,8 @@ const BiometricShieldOverlay      = dynamic(() => import("../components/Biometri
 const IncomingContactRequestModal = dynamic(() => import("../components/IncomingContactRequestModal").then(m => ({ default: m.IncomingContactRequestModal })), { ssr: false, loading: () => null });
 const LiveStreamViewer            = dynamic(() => import("../components/LiveStreamViewer").then(m => ({ default: m.LiveStreamViewer })),           { ssr: false, loading: () => null });
 const TacticalQuickActionHUD      = dynamic(() => import("../components/navigation/TacticalQuickActionHUD").then(m => ({ default: m.TacticalQuickActionHUD })), { ssr: false, loading: () => null });
+const DigitalContractGateModal    = dynamic(() => import("../components/legal/DigitalContractGateModal").then(m => ({ default: m.DigitalContractGateModal })), { ssr: false, loading: () => <FullScreenTacticalLoader /> });
+import { legalAgreementManager } from "../lib/legal/LegalAgreementManager";
 
 // ── ErrorBoundary ─────────────────────────────────────────────────────────────
 interface EBState { hasError: boolean; error: Error | null; }
@@ -140,10 +142,11 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
 export default function AppRouter() {
   const { currentScreen, activeLiveStreamId, navigate, activeTab = "chats" } = useRedStore();
 
-  const [mounted,      setMounted]      = useState(false);
-  const [isTablet,     setIsTablet]     = useState(false);
-  const [needsProfile, setNeedsProfile] = useState<boolean | null>(null);
-  const [showLanding,  setShowLanding]  = useState<boolean>(true);
+  const [mounted,          setMounted]          = useState(false);
+  const [isTablet,         setIsTablet]         = useState(false);
+  const [needsProfile,     setNeedsProfile]     = useState<boolean | null>(null);
+  const [showLanding,      setShowLanding]      = useState<boolean>(true);
+  const [isLegalAccepted,  setIsLegalAccepted]  = useState<boolean | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -312,18 +315,51 @@ export default function AppRouter() {
     checkLanding();
     checkProfile();
 
+    const checkLegal = async () => {
+      try {
+        let accepted = legalAgreementManager.isContractAccepted();
+        if (!accepted) {
+          accepted = await legalAgreementManager.isContractAcceptedNativeFallback();
+        }
+        setIsLegalAccepted(accepted);
+      } catch {
+        setIsLegalAccepted(false);
+      }
+    };
+    checkLegal();
+
+    const handleLegalAccepted = () => setIsLegalAccepted(true);
+    const handleLegalRevoked = () => setIsLegalAccepted(false);
+    window.addEventListener("red:legal_terms_accepted", handleLegalAccepted);
+    window.addEventListener("red:legal_terms_revoked", handleLegalRevoked);
+
     return () => {
       window.removeEventListener("resize",              checkViewport);
       window.removeEventListener("red:switch_layout",   handleSwitchLayout);
       window.removeEventListener("red:open_conversation", handleNativeOpenConv);
       window.removeEventListener("red:open_landing",    handleOpenLanding);
+      window.removeEventListener("red:legal_terms_accepted", handleLegalAccepted);
+      window.removeEventListener("red:legal_terms_revoked", handleLegalRevoked);
       window.removeEventListener("popstate",            handlePopState);
       if (removeBackHandler) removeBackHandler();
     };
   }, []);
 
   // ── Render guards ─────────────────────────────────────────────────────────
-  if (!mounted)            return <FullScreenTacticalLoader />;
+  if (!mounted)                 return <FullScreenTacticalLoader />;
+  if (isLegalAccepted === null) return <FullScreenTacticalLoader />;
+
+  if (!isLegalAccepted) {
+    return (
+      <ErrorBoundary>
+        <DigitalContractGateModal
+          isOpen={true}
+          onAccepted={() => setIsLegalAccepted(true)}
+        />
+      </ErrorBoundary>
+    );
+  }
+
   if (needsProfile === null) return <FullScreenTacticalLoader />;
 
   if (showLanding) {

@@ -83,9 +83,9 @@ export class LoraSerialBridgeEngine {
     private bleCharacteristicChangedHandler: any = null;
     private nativeBleDeviceId: string | null = null;
 
-    // Mutex booleano para serializar escrituras en la rama Web Serial.
-    // La API Web Serial lanza TypeError si se llama getWriter() mientras el stream ya está bloqueado.
-    private serialWriteLocked: boolean = false;
+    // Cola atómica de transmisión FIFO para serializar escrituras físicas (Web Serial, USB-OTG y BLE NUS)
+    // Erradica la pérdida de paquetes por colisión de mutex y la intercalación de fragmentos en el aire.
+    private txQueue: Promise<boolean> = Promise.resolve(true);
 
     public static readonly NORDIC_UART_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
     public static readonly NORDIC_UART_RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
@@ -513,6 +513,16 @@ export class LoraSerialBridgeEngine {
     }
 
     public async sendRawBytes(bytes: Uint8Array): Promise<boolean> {
+        const executeTask = async (): Promise<boolean> => {
+            return await this.executeRawWrite(bytes);
+        };
+
+        // Encadenar atómicamente: garantiza que cada paquete termine su escritura física antes del siguiente
+        this.txQueue = this.txQueue.then(executeTask, executeTask);
+        return this.txQueue;
+    }
+
+    private async executeRawWrite(bytes: Uint8Array): Promise<boolean> {
         if (this.telemetry.transportType === 'BLE_NUS') {
             // Rama Nativa Android / iOS vía BleClient
             if (this.nativeBleDeviceId && Capacitor.isNativePlatform()) {
@@ -573,13 +583,7 @@ export class LoraSerialBridgeEngine {
         }
 
         if (this.serialPort && this.serialPort.writable) {
-            // Mutex de escritura: la Web Serial API lanza si getWriter() se llama con el stream bloqueado
-            if (this.serialWriteLocked) {
-                console.warn('[LoRa] Escritura serie ignorada: mutex activo (transmisión concurrente en curso)');
-                return false;
-            }
             try {
-                this.serialWriteLocked = true;
                 this.serialWriter = this.serialPort.writable.getWriter();
                 await this.serialWriter.write(bytes);
                 this.serialWriter.releaseLock();
@@ -595,8 +599,6 @@ export class LoraSerialBridgeEngine {
                     this.serialWriter = null;
                 }
                 return false;
-            } finally {
-                this.serialWriteLocked = false;
             }
         }
 
@@ -663,6 +665,7 @@ export class LoraSerialBridgeEngine {
         this.telemetry.transportType = 'NONE';
         this.telemetry.driverInfo = undefined;
         this.rxBuffer = [];
+        this.txQueue = Promise.resolve(true);
         if (this.serialReader) {
             await this.serialReader.cancel().catch(() => {});
             this.serialReader = null;
@@ -700,6 +703,7 @@ export class LoraSerialBridgeEngine {
     public async destroy(): Promise<void> {
         await this.disconnect();
         this.rxCallbacks.clear();
+        this.rawStreamConsumers.clear();
         LoraSerialBridgeEngine.instance = null as any;
     }
 }

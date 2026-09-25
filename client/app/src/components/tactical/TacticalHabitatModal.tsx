@@ -17,6 +17,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   biocyberneticHabitat,
+  BiocyberneticHabitatEngine,
   HabitatTelemetry,
   HabitatToolType,
   OrganismSpecies,
@@ -48,14 +49,36 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
   const [showChessHUD, setShowChessHUD] = useState<boolean>(false);
   const [activeMainTab, setActiveMainTab] = useState<'VIEWPORT' | 'EVOLUTION' | 'METROPOLIS'>('VIEWPORT');
   const [timeScale, setTimeScale] = useState<number>(biocyberneticHabitat.getTimeScale());
+  const [chronoExpanded, setChronoExpanded] = useState<boolean>(true);
+  const previousTimeScaleRef = useRef<number>(1.0);
 
   const handleSetTimeScale = (scale: number) => {
     TacticalAudioEngine.playTap();
-    biocyberneticHabitat.setTimeScale(scale);
-    setTimeScale(scale);
-    if (scale === 0) triggerAlert('⏸️ Simulación pausada');
-    else if (scale === 1) triggerAlert('▶️ Tiempo Real 1X');
-    else triggerAlert(`⚡ Acelerador Temporal activo: ${scale}X`);
+    const clamped = Math.max(0, Math.min(10.0, Math.round(scale * 100) / 100));
+    biocyberneticHabitat.setTimeScale(clamped);
+    setTimeScale(clamped);
+    if (clamped > 0) {
+      previousTimeScaleRef.current = clamped;
+    }
+    if (clamped === 0) triggerAlert('⏸️ Simulación pausada');
+    else if (clamped === 1) triggerAlert('▶️ Tiempo Real 1X');
+    else if (clamped < 1) triggerAlert(`🐢 Cámara lenta activa: ${clamped}X`);
+    else triggerAlert(`⚡ Acelerador Temporal activo: ${clamped}X`);
+  };
+
+  const togglePlayPause = () => {
+    TacticalAudioEngine.playTap();
+    if (timeScale > 0) {
+      previousTimeScaleRef.current = timeScale;
+      biocyberneticHabitat.setTimeScale(0);
+      setTimeScale(0);
+      triggerAlert('⏸️ Simulación pausada');
+    } else {
+      const resumeSpeed = previousTimeScaleRef.current || 1.0;
+      biocyberneticHabitat.setTimeScale(resumeSpeed);
+      setTimeScale(resumeSpeed);
+      triggerAlert(`▶️ Simulación reanudada (${resumeSpeed}X)`);
+    }
   };
 
   const handleForceMitosis = (orgId: string) => {
@@ -396,7 +419,8 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
 
     const centerX = canvas.width * 0.5;
     const centerY = canvas.height * 0.5;
-    const scale = (canvas.width * 0.45) / 10.0;
+    const arenaRadius = BiocyberneticHabitatEngine.ARENA_RADIUS_METERS;
+    const scale = (canvas.width * 0.45) / arenaRadius;
 
     const worldX = (canvasPixelX - centerX) / scale;
     const worldY = (canvasPixelY - centerY) / scale;
@@ -475,7 +499,7 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
       const startWorldY = pointerStartPosRef.current.y;
 
       if (Math.hypot(worldX - startWorldX, worldY - startWorldY) > 0.4) {
-        const gridCenter = 10.0;
+        const gridCenter = BiocyberneticHabitatEngine.ARENA_RADIUS_METERS;
         biocyberneticHabitat.diffusionGrid.addBarrier({
           id: `barrier-${Date.now()}`,
           x1: startWorldX + gridCenter,
@@ -497,7 +521,8 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
     const centerX = width * 0.5;
     const centerY = height * 0.5;
     const radiusPx = width * 0.45;
-    const scale = radiusPx / 10.0; // Píxeles por metro
+    const arenaRadius = BiocyberneticHabitatEngine.ARENA_RADIUS_METERS;
+    const scale = radiusPx / arenaRadius; // Píxeles por metro
 
     // 0. Fondo táctico oscuro
     ctx.fillStyle = '#020610';
@@ -506,7 +531,7 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
     // 1. Rejilla y Arena Circular
     ctx.strokeStyle = 'rgba(0, 240, 255, 0.08)';
     ctx.lineWidth = 1;
-    for (let r = 2; r <= 10; r += 2) {
+    for (let r = 4; r <= arenaRadius; r += 4) {
       ctx.beginPath();
       ctx.arc(centerX, centerY, r * scale, 0, Math.PI * 2);
       ctx.stroke();
@@ -554,8 +579,8 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
     // 3. Fuentes Químicas Discretas
     const sources = biocyberneticHabitat.diffusionGrid.getAllSources();
     for (const src of sources) {
-      const px = centerX + (src.x - 10.0) * scale;
-      const py = centerY + (src.y - 10.0) * scale;
+      const px = centerX + (src.x - arenaRadius) * scale;
+      const py = centerY + (src.y - arenaRadius) * scale;
 
       ctx.fillStyle = '#00ff88';
       ctx.beginPath();
@@ -572,10 +597,10 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
     // 4. Barreras Acústicas Reflectoras
     const barriers = biocyberneticHabitat.diffusionGrid.getBarriers();
     for (const b of barriers) {
-      const px1 = centerX + (b.x1 - 10.0) * scale;
-      const py1 = centerY + (b.y1 - 10.0) * scale;
-      const px2 = centerX + (b.x2 - 10.0) * scale;
-      const py2 = centerY + (b.y2 - 10.0) * scale;
+      const px1 = centerX + (b.x1 - arenaRadius) * scale;
+      const py1 = centerY + (b.y1 - arenaRadius) * scale;
+      const px2 = centerX + (b.x2 - arenaRadius) * scale;
+      const py2 = centerY + (b.y2 - arenaRadius) * scale;
 
       ctx.strokeStyle = '#00f0ff';
       ctx.lineWidth = 3;
@@ -604,6 +629,54 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
 
     // 5.8 Autopistas de Feromonas de la Metrópolis en 2D Radar
     if (telemetry.metropolis) {
+      // 5.81 Distritos Urbanos Soberanos (Zonas funcionales)
+      if (telemetry.metropolis.districts) {
+        for (const dist of telemetry.metropolis.districts) {
+          const dx = centerX + dist.centerX * scale;
+          const dy = centerY + dist.centerY * scale;
+          const dRad = dist.radiusMeters * scale;
+
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.arc(dx, dy, dRad, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.font = '8px monospace';
+          ctx.fillStyle = 'rgba(148, 163, 184, 0.45)';
+          ctx.textAlign = 'center';
+          ctx.fillText(dist.name.toUpperCase(), dx, dy - dRad + 8);
+        }
+      }
+
+      // 5.82 Corredores Aéreos 3D (Rutas de Vuelo de Drosophila)
+      if (telemetry.metropolis.skywayCorridors) {
+        for (const sw of telemetry.metropolis.skywayCorridors) {
+          const sx1 = centerX + sw.fromX * scale;
+          const sy1 = centerY + sw.fromY * scale;
+          const sx2 = centerX + sw.toX * scale;
+          const sy2 = centerY + sw.toY * scale;
+
+          ctx.strokeStyle = 'rgba(0, 240, 255, 0.35)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([3, 5]);
+          ctx.beginPath();
+          ctx.moveTo(sx1, sy1);
+          ctx.lineTo(sx2, sy2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.fillStyle = '#00f0ff';
+          ctx.beginPath();
+          ctx.arc(sx1, sy1, 2.5, 0, Math.PI * 2);
+          ctx.arc(sx2, sy2, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // 5.83 Autopistas Terrestres de Feromonas
       for (const hw of telemetry.metropolis.highways) {
         const hx1 = centerX + hw.x1 * scale;
         const hy1 = centerY + hw.y1 * scale;
@@ -638,6 +711,12 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
             ? '#a855f7'
             : s.type === 'BIO_COMPOSTER'
             ? '#10b981'
+            : s.type === 'COMMERCIAL_AGORA'
+            ? '#f43f5e'
+            : s.type === 'RESEARCH_CONNECTOME'
+            ? '#06b6d4'
+            : s.type === 'BIO_FACTORY'
+            ? '#6366f1'
             : '#38bdf8';
 
         ctx.fillStyle = 'rgba(10, 18, 30, 0.85)';
@@ -659,8 +738,26 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
             ? '🗼'
             : s.type === 'BIO_COMPOSTER'
             ? '♻️'
+            : s.type === 'COMMERCIAL_AGORA'
+            ? '🛒'
+            : s.type === 'RESEARCH_CONNECTOME'
+            ? '🔬'
+            : s.type === 'BIO_FACTORY'
+            ? '🏭'
             : '📡';
         ctx.fillText(icon, sx, sy);
+      }
+
+      // 5.95 Farolas Cívicas de la Metrópolis en 2D Radar
+      if (telemetry.metropolis.streetLamps) {
+        for (const lamp of telemetry.metropolis.streetLamps) {
+          const lx = centerX + lamp.x * scale;
+          const ly = centerY + lamp.y * scale;
+          ctx.fillStyle = lamp.isLit ? '#fbbf24' : '#64748b';
+          ctx.beginPath();
+          ctx.arc(lx, ly, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
 
@@ -2413,7 +2510,7 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
                 backdropFilter: 'blur(8px)',
               }}
             >
-              {(['ORBITAL', 'FOLLOW_AGENT', 'TOP_DOWN_GOD'] as HabitatCameraMode[]).map((mode) => (
+              {(['ORBITAL', 'FOLLOW_AGENT', 'FLY_COCKPIT_FPV', 'TOP_DOWN_GOD'] as HabitatCameraMode[]).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => handleSelectCameraMode(mode)}
@@ -2430,6 +2527,7 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
                 >
                   {mode === 'ORBITAL' && '🪐 ORBITAL'}
                   {mode === 'FOLLOW_AGENT' && '👁️ SEGUIR'}
+                  {mode === 'FLY_COCKPIT_FPV' && '🪰 CABINA FPV'}
                   {mode === 'TOP_DOWN_GOD' && '📐 CENITAL'}
                 </button>
               ))}
@@ -2621,6 +2719,61 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
                   </span>
                 )}
 
+                {selectedOrganism.civicJob && (
+                  <span
+                    style={{
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: 'rgba(56, 189, 248, 0.15)',
+                      border: '1px solid rgba(56, 189, 248, 0.4)',
+                      color: '#38bdf8',
+                      fontWeight: 800,
+                      fontSize: '9.5px',
+                    }}
+                  >
+                    OFICIO: {selectedOrganism.civicJob === 'AERIAL_COURIER' && '✈️ MENSAJERO AÉREO'}
+                    {selectedOrganism.civicJob === 'NECTAR_FORAGER' && '🍯 COSECHADOR NÉCTAR'}
+                    {selectedOrganism.civicJob === 'RESEARCH_SCHOLAR' && '🔬 ERUDITO CONECTOMA'}
+                    {selectedOrganism.civicJob === 'BUILDER_ARCHITECT' && '👷 ARQUITECTO URBANO'}
+                    {selectedOrganism.civicJob === 'CIVIC_CITIZEN' && '🏙️ CIUDADANO'}
+                  </span>
+                )}
+
+                {selectedOrganism.dailySchedulePhase && (
+                  <span
+                    style={{
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: selectedOrganism.dailySchedulePhase === 'SLEEP_AT_HOME' ? 'rgba(192, 132, 252, 0.15)' : 'rgba(0, 240, 255, 0.15)',
+                      border: `1px solid ${selectedOrganism.dailySchedulePhase === 'SLEEP_AT_HOME' ? '#c084fc' : '#00f0ff'}`,
+                      color: selectedOrganism.dailySchedulePhase === 'SLEEP_AT_HOME' ? '#c084fc' : '#00f0ff',
+                      fontWeight: 800,
+                      fontSize: '9.5px',
+                    }}
+                  >
+                    RUTINA: {selectedOrganism.dailySchedulePhase === 'SLEEP_AT_HOME' && '💤 SUEÑO EN CELDA'}
+                    {selectedOrganism.dailySchedulePhase === 'COMMUTE_TO_BREAKFAST' && '🍓 RUTA A DESAYUNO'}
+                    {selectedOrganism.dailySchedulePhase === 'WORK_DUTY' && '⚡ TURNO LABORAL'}
+                    {selectedOrganism.dailySchedulePhase === 'LEISURE_SOCIAL' && '☕ OCIO EN EL ÁGORA'}
+                  </span>
+                )}
+
+                {selectedOrganism.species === 'DROSOPHILA' && (
+                  <span
+                    style={{
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: 'rgba(0, 229, 255, 0.12)',
+                      border: '1px solid rgba(0, 229, 255, 0.35)',
+                      color: '#00e5ff',
+                      fontWeight: 700,
+                      fontSize: '9.5px',
+                    }}
+                  >
+                    ALTITUD: {(selectedOrganism.altitudeMeters || 0).toFixed(2)}m {(selectedOrganism.altitudeMeters || 0) > 0.3 ? '🪰 EN VUELO' : '🐾 ATERRIZADO'}
+                  </span>
+                )}
+
                 {selectedOrganism.biopolymerCarried !== undefined && selectedOrganism.biopolymerCarried > 0 && (
                   <span
                     style={{
@@ -2637,10 +2790,72 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
                   </span>
                 )}
 
+                {selectedOrganism.homeCellId && (
+                  <span
+                    style={{
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: 'rgba(168, 85, 247, 0.15)',
+                      border: '1px solid rgba(168, 85, 247, 0.4)',
+                      color: '#c084fc',
+                      fontWeight: 800,
+                      fontSize: '9.5px',
+                    }}
+                  >
+                    🏠 CELDA: {selectedOrganism.homeCellId}
+                  </span>
+                )}
+
+                {selectedOrganism.microAtpWallet !== undefined && (
+                  <span
+                    style={{
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: 'rgba(234, 179, 8, 0.15)',
+                      border: '1px solid rgba(234, 179, 8, 0.4)',
+                      color: '#facc15',
+                      fontWeight: 800,
+                      fontSize: '9.5px',
+                    }}
+                  >
+                    ⚡ WALLET: {selectedOrganism.microAtpWallet.toFixed(1)} µATP
+                  </span>
+                )}
+
                 <span style={{ color: '#64748b', marginLeft: 'auto', fontSize: '9px' }}>
                   {selectedOrganism.behaviorState}
                 </span>
               </div>
+
+              {/* BDI Cognitive Mind State (Creencias, Deseos, Intenciones L9) */}
+              {selectedOrganism.bdiIntention && (
+                <div
+                  style={{
+                    background: 'rgba(2, 132, 199, 0.12)',
+                    border: '1px solid rgba(14, 165, 233, 0.35)',
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    fontSize: '9.5px',
+                    color: '#e0f2fe',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '2px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#38bdf8', fontWeight: 800 }}>
+                    <span>🧠 COGNICIÓN BDI (4 NIVELES)</span>
+                    <span style={{ color: '#94a3b8' }}>{selectedOrganism.bdiDesire}</span>
+                  </div>
+                  <div style={{ color: '#f8fafc', fontWeight: 600 }}>
+                    🎯 INTENCIÓN: {selectedOrganism.bdiIntention}
+                  </div>
+                  {selectedOrganism.bdiBeliefSummary && (
+                    <div style={{ color: '#94a3b8', fontSize: '8.5px', fontStyle: 'italic' }}>
+                      👁️ CREENCIAS: {selectedOrganism.bdiBeliefSummary}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Bocadillo de Pensamiento en Vivo */}
               <div
@@ -2850,6 +3065,175 @@ export const TacticalHabitatModal: React.FC<TacticalHabitatModalProps> = ({ onCl
               </div>
             </div>
           )}
+
+          {/* ── Chrono-Engine HUD: Controlador Táctico de Dilatación Temporal Soberano ── */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '20px',
+              right: '20px',
+              zIndex: 28,
+              background: 'rgba(6, 12, 24, 0.92)',
+              border: '1px solid rgba(0, 240, 255, 0.35)',
+              boxShadow: '0 4px 25px rgba(0, 0, 0, 0.75), 0 0 15px rgba(0, 240, 255, 0.15)',
+              borderRadius: '10px',
+              padding: '8px 12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              backdropFilter: 'blur(10px)',
+              minWidth: chronoExpanded ? '250px' : 'auto',
+              maxWidth: '320px',
+              userSelect: 'none',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {/* Encabezado con estado dinámico y botón colapsar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <div
+                onClick={() => setChronoExpanded((prev) => !prev)}
+                style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}
+                title="Expandir / Minimizar Chrono-Engine"
+              >
+                <span style={{ fontSize: '11px' }}>⏱️</span>
+                <span style={{ fontSize: '10px', fontWeight: 800, color: '#00f0ff', letterSpacing: '0.5px' }}>
+                  CHRONO-WARP
+                </span>
+                <span style={{ fontSize: '8px', color: '#64748b' }}>{chronoExpanded ? '▼' : '▲'}</span>
+              </div>
+              <span
+                style={{
+                  fontSize: '9px',
+                  fontWeight: 800,
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  background:
+                    timeScale === 0
+                      ? 'rgba(245, 158, 11, 0.2)'
+                      : timeScale < 0.95
+                      ? 'rgba(45, 212, 191, 0.2)'
+                      : timeScale <= 1.05
+                      ? 'rgba(0, 255, 136, 0.2)'
+                      : timeScale <= 3.5
+                      ? 'rgba(0, 240, 255, 0.2)'
+                      : 'rgba(232, 121, 249, 0.25)',
+                  color:
+                    timeScale === 0
+                      ? '#fbbf24'
+                      : timeScale < 0.95
+                      ? '#2dd4bf'
+                      : timeScale <= 1.05
+                      ? '#00ff88'
+                      : timeScale <= 3.5
+                      ? '#00f0ff'
+                      : '#f472b6',
+                  border: `1px solid ${
+                    timeScale === 0
+                      ? '#f59e0b'
+                      : timeScale < 0.95
+                      ? '#2dd4bf'
+                      : timeScale <= 1.05
+                      ? '#00ff88'
+                      : timeScale <= 3.5
+                      ? '#00f0ff'
+                      : '#e879f9'
+                  }`,
+                }}
+              >
+                {timeScale === 0
+                  ? '⏸️ PAUSADO'
+                  : timeScale < 0.95
+                  ? `🐢 LENTO (${timeScale.toFixed(2)}x)`
+                  : timeScale <= 1.05
+                  ? '⏱️ 1.0x REAL'
+                  : timeScale <= 3.5
+                  ? `⏩ RÁPIDO (${timeScale.toFixed(1)}x)`
+                  : `⚡ WARP (${timeScale.toFixed(1)}x)`}
+              </span>
+            </div>
+
+            {chronoExpanded && (
+              <>
+                {/* Fila Slider + Botón Play/Pause */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    onClick={togglePlayPause}
+                    title={timeScale === 0 ? 'Reanudar Simulación' : 'Pausar Simulación'}
+                    style={{
+                      background: timeScale === 0 ? 'rgba(245, 158, 11, 0.25)' : 'rgba(0, 240, 255, 0.18)',
+                      border: `1px solid ${timeScale === 0 ? '#f59e0b' : '#00f0ff'}`,
+                      color: timeScale === 0 ? '#fbbf24' : '#00f0ff',
+                      borderRadius: '6px',
+                      padding: '4px 8px',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: '32px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {timeScale === 0 ? '▶️' : '⏸️'}
+                  </button>
+
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="10.0"
+                      step="0.1"
+                      value={timeScale === 0 ? (previousTimeScaleRef.current || 1.0) : timeScale}
+                      onChange={(e) => handleSetTimeScale(parseFloat(e.target.value))}
+                      style={{
+                        width: '100%',
+                        height: '5px',
+                        borderRadius: '3px',
+                        background: 'rgba(25, 40, 65, 0.8)',
+                        accentColor: '#00f0ff',
+                        cursor: 'pointer',
+                        outline: 'none',
+                      }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '7px', color: '#64748b' }}>
+                      <span>0.1x</span>
+                      <span>1.0x</span>
+                      <span>5.0x</span>
+                      <span>10.0x</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botones Presets Rápidos */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '4px' }}>
+                  {[0.25, 0.5, 1.0, 2.0, 5.0, 10.0].map((preset) => {
+                    const isActive = timeScale === preset;
+                    return (
+                      <button
+                        key={preset}
+                        onClick={() => handleSetTimeScale(preset)}
+                        style={{
+                          background: isActive ? 'rgba(0, 255, 136, 0.25)' : 'rgba(15, 23, 42, 0.75)',
+                          border: `1px solid ${isActive ? '#00ff88' : 'rgba(148, 163, 184, 0.2)'}`,
+                          color: isActive ? '#00ff88' : '#94a3b8',
+                          borderRadius: '4px',
+                          padding: '3px 0',
+                          fontSize: '8px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {preset}x
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* ── 3. Panel Inferior de Instrumental & Malla con Scroll Touch ──────── */}

@@ -257,16 +257,39 @@ export default function ChatWindow() {
 
     useEffect(() => {
         if (typeof window === "undefined" || !window.visualViewport) return;
-        const updateHeight = () => {
-            if (window.visualViewport) {
-                setViewportHeight(`${window.visualViewport.height}px`);
-            }
+
+        let rafId: number | null = null;
+        let lastHeight = -1;
+
+        const handleResize = () => {
+            if (rafId !== null) return;
+            rafId = window.requestAnimationFrame(() => {
+                rafId = null;
+                const vv = window.visualViewport;
+                if (!vv) return;
+
+                const roundedHeight = Math.round(vv.height);
+                if (Math.abs(roundedHeight - lastHeight) < 1) return;
+
+                lastHeight = roundedHeight;
+
+                // Si el viewport visual abarca casi toda la ventana (teclado cerrado o full view),
+                // restauramos "100%" para evitar fijar alturas inline estáticas que causen desalineación al rotar
+                if (Math.abs(roundedHeight - window.innerHeight) <= 4) {
+                    setViewportHeight("100%");
+                } else {
+                    setViewportHeight(`${roundedHeight}px`);
+                }
+            });
         };
-        window.visualViewport.addEventListener("resize", updateHeight);
-        window.visualViewport.addEventListener("scroll", updateHeight);
+
+        window.visualViewport.addEventListener("resize", handleResize);
+
         return () => {
-            window.visualViewport?.removeEventListener("resize", updateHeight);
-            window.visualViewport?.removeEventListener("scroll", updateHeight);
+            window.visualViewport?.removeEventListener("resize", handleResize);
+            if (rafId !== null) {
+                window.cancelAnimationFrame(rafId);
+            }
         };
     }, []);
 

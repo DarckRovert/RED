@@ -58,6 +58,7 @@ export interface SynapticLink {
   failedDeliveries: number;
   totalTransmissions: number;
   lastInteractionTs: number;
+  lastDecayTs?: number;           // Marca de tiempo del último decaimiento pasivo aplicado o interacción
   rttMs: number;
   lqs: number;                    // Link Quality Score [0, 100]
   isRichClubHub: boolean;
@@ -134,6 +135,12 @@ export class SynapticMeshRouterEngine {
 
   // Suscriptores al bus de telemetría reactivo
   private listeners: Set<(telemetry: SynapticMeshTelemetry) => void> = new Set();
+  private lastNotifyTs = 0;
+  private notifyThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly TELEMETRY_THROTTLE_MS = 150;
+
+  // Persistencia diferida en almacenamiento flash
+  private persistTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Neuromorphic AER (Address-Event Representation) Metrics & Listeners
   private aerSpikesEmitted = 0;
@@ -191,13 +198,15 @@ export class SynapticMeshRouterEngine {
         Math.max(SynapticMeshRouterEngine.MIN_WEIGHT, SynapticMeshRouterEngine.INITIAL_WEIGHT * (safeLqs / 100))
       );
 
+      const now = Date.now();
       link = {
         peerId: cleanId,
         weight: Number(initialWeight.toFixed(4)),
         successfulDeliveries: 0,
         failedDeliveries: 0,
         totalTransmissions: 0,
-        lastInteractionTs: Date.now(),
+        lastInteractionTs: now,
+        lastDecayTs: now,
         rttMs: 100,
         lqs: safeLqs,
         isRichClubHub: false,
@@ -214,7 +223,9 @@ export class SynapticMeshRouterEngine {
       this.synapses.set(cleanId, link);
       this.recalculateTopology();
     } else {
-      link.lastInteractionTs = Date.now();
+      const now = Date.now();
+      link.lastInteractionTs = now;
+      link.lastDecayTs = now;
       if (isFinite(initialLqs)) {
         link.lqs = Math.max(0, Math.min(100, initialLqs));
       }
@@ -244,11 +255,14 @@ export class SynapticMeshRouterEngine {
   ): void {
     if (!peerId) return;
     const cleanId = peerId.trim().toLowerCase();
+    const existing = this.synapses.get(cleanId);
+    const prevInteractionTs = existing ? existing.lastInteractionTs : null;
     const link = this.touchPeer(cleanId, measuredLqs, currentHeading);
 
     const now = Date.now();
-    const dt = Math.max(0, now - link.lastInteractionTs);
+    const dt = prevInteractionTs !== null ? Math.max(0, now - prevInteractionTs) : 0;
     link.lastInteractionTs = now;
+    link.lastDecayTs = now;
     link.totalTransmissions++;
 
     // Factor temporal atenuador e^(-Δt / τ)
@@ -311,9 +325,18 @@ export class SynapticMeshRouterEngine {
       SynapticMeshRouterEngine.MIN_WEIGHT,
       Math.min(SynapticMeshRouterEngine.MAX_WEIGHT, link.weight + dW)
     );
-    link.isPruned = link.weight < SynapticMeshRouterEngine.PRUNE_THRESHOLD;
+    link.weight = Number(link.weight.toFixed(4));
+
+    // Histéresis de dos umbrales (Schmitt trigger) para prevenir route flapping
+    if (link.isPruned && link.weight >= SynapticMeshRouterEngine.RESTORE_THRESHOLD) {
+      link.isPruned = false;
+    } else if (!link.isPruned && link.weight < SynapticMeshRouterEngine.PRUNE_THRESHOLD) {
+      link.isPruned = true;
+    }
+
     link.isRichClubHub = link.weight >= SynapticMeshRouterEngine.HIGH_CONDUCTANCE_THRESHOLD;
     this.recalculateTopology();
+    this.persistToStorage();
     this.notifyListeners();
   }
 
@@ -483,9 +506,9 @@ export class SynapticMeshRouterEngine {
 
       // Modulación por STDP 3-Factores del Mushroom Body (Drosophila Learning Center)
       try {
-        const mb = getDtnMushroomBody();
-        if (mb) {
-          const drive = mb.getPeerBehavioralDrive(cleanId);
+        const dtnMushroomBody = getDtnMushroomBody();
+        if (dtnMushroomBody) {
+          const drive = dtnMushroomBody.getPeerBehavioralDrive(cleanId);
           if (drive.drive === 'AVOID') {
             score -= 0.60; // Fuerte penalización si el par está marcado con aversión PPL1 (Jamming/Malicioso)
           } else if (drive.drive === 'APPROACH') {
@@ -551,14 +574,19 @@ export class SynapticMeshRouterEngine {
     for (const link of this.synapses.values()) {
       const idleTime = now - link.lastInteractionTs;
       if (idleTime > 60_000) { // Inactivo por más de 1 minuto
-        const decayFactor = Math.exp(-idleTime / SynapticMeshRouterEngine.DECAY_TAU_MS);
+        const lastDecay = link.lastDecayTs || link.lastInteractionTs;
+        const dt = Math.max(0, now - lastDecay);
+        link.lastDecayTs = now;
+
+        // Decaimiento temporal incremental discreto e^(-Δt / τ)
+        const decayFactor = Math.exp(-dt / SynapticMeshRouterEngine.DECAY_TAU_MS);
         const oldWeight = link.weight;
 
-        // Decae asintóticamente hacia el baseline
+        // Decae asintóticamente hacia el baseline de forma matemáticamente consistente
         link.weight = link.weight * decayFactor + SynapticMeshRouterEngine.PASSIVE_BASELINE * (1 - decayFactor);
         link.weight = Number(Math.max(SynapticMeshRouterEngine.MIN_WEIGHT, link.weight).toFixed(4));
 
-        if (Math.abs(link.weight - oldWeight) > 0.01) {
+        if (Math.abs(link.weight - oldWeight) > 0.001) {
           changed = true;
         }
 
@@ -571,6 +599,7 @@ export class SynapticMeshRouterEngine {
 
     if (changed) {
       this.recalculateTopology();
+      this.persistToStorage();
       this.notifyListeners();
     }
   }
@@ -703,9 +732,33 @@ export class SynapticMeshRouterEngine {
     return () => this.listeners.delete(listener);
   }
 
+  /**
+   * Notificación estrangulada a suscriptores (máximo 6.6 Hz).
+   * Elimina el recálculo intensivo de topología de grafos en cada paquete unitario.
+   */
   private notifyListeners(): void {
+    const now = Date.now();
+    const elapsed = now - this.lastNotifyTs;
+
+    if (elapsed >= SynapticMeshRouterEngine.TELEMETRY_THROTTLE_MS) {
+      if (this.notifyThrottleTimer) {
+        clearTimeout(this.notifyThrottleTimer);
+        this.notifyThrottleTimer = null;
+      }
+      this.lastNotifyTs = now;
+      this.dispatchTelemetry();
+    } else if (!this.notifyThrottleTimer) {
+      this.notifyThrottleTimer = setTimeout(() => {
+        this.notifyThrottleTimer = null;
+        this.lastNotifyTs = Date.now();
+        this.dispatchTelemetry();
+      }, SynapticMeshRouterEngine.TELEMETRY_THROTTLE_MS - elapsed);
+    }
+  }
+
+  private dispatchTelemetry(): void {
     const telemetry = this.getTelemetry();
-    this.listeners.forEach(fn => {
+    this.listeners.forEach((fn) => {
       try {
         fn(telemetry);
       } catch (err) {
@@ -714,13 +767,21 @@ export class SynapticMeshRouterEngine {
     });
   }
 
+  /**
+   * Persistencia consolidada diferida en almacenamiento local soberano.
+   * Amortigua ráfagas intensas de tráfico de malla evitando congelamiento de I/O en eMMC 5.1.
+   */
   private persistToStorage(): void {
-    if (typeof window !== 'undefined') {
+    if (typeof window === 'undefined') return;
+    if (this.persistTimer) return; // Ya existe una consolidación encolada
+
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
       try {
         const serialized = Array.from(this.synapses.entries()).slice(-100);
         localStorage.setItem('red_synaptic_mesh_matrix', JSON.stringify(serialized));
       } catch {}
-    }
+    }, 2000); // Consolidar tras 2 segundos de estabilización de tráfico
   }
 
   private hydrateFromStorage(): void {
@@ -737,6 +798,7 @@ export class SynapticMeshRouterEngine {
                   peerId: id.toLowerCase(),
                   weight: Math.max(SynapticMeshRouterEngine.MIN_WEIGHT, Math.min(1.0, link.weight)),
                   lastInteractionTs: link.lastInteractionTs || Date.now(),
+                  lastDecayTs: link.lastDecayTs || link.lastInteractionTs || Date.now(),
                 });
               }
             }
@@ -1083,6 +1145,14 @@ export class SynapticMeshRouterEngine {
     if (this.lifWatchdogTimer) {
       clearTimeout(this.lifWatchdogTimer);
       this.lifWatchdogTimer = null;
+    }
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    if (this.notifyThrottleTimer) {
+      clearTimeout(this.notifyThrottleTimer);
+      this.notifyThrottleTimer = null;
     }
     this.lifPacketQueue = [];
     this.lifMembranePotentialMv = -70.0;
