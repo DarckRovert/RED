@@ -59,13 +59,14 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
     const basePath = isGhPages ? "/RED" : "";
     const heroBannerUrl = `${basePath}/assets/red_hero_tactical_mesh.png`;
 
-    const handleEnter = (targetScreen?: ScreenView) => {
+    const handleEnter = (targetScreen?: any) => {
+        const validScreen: ScreenView | undefined = (typeof targetScreen === 'string') ? (targetScreen as ScreenView) : undefined;
         if (onEnterVault) {
-            onEnterVault(targetScreen);
+            onEnterVault(validScreen);
         } else if (onEnterApp) {
-            onEnterApp(targetScreen);
+            onEnterApp(validScreen);
         } else {
-            navigate(targetScreen || 'chat');
+            navigate(validScreen || 'sidebar');
         }
     };
 

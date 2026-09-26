@@ -63,28 +63,38 @@ export const TacticalCommandCenter: React.FC = () => {
     // ── Intercepción Jerárquica LIFO de navegación Atrás ───────────────────
     useEffect(() => {
         const unregister = BackHandlerRegistry.register(() => {
-            TacticalAudioEngine.playTap();
             if (isSearchOpen) {
+                TacticalAudioEngine.playTap();
                 setIsSearchOpen(false);
                 return true;
             }
             if (showConnectomeHUD) {
+                TacticalAudioEngine.playTap();
                 setShowConnectomeHUD(false);
                 return true;
             }
             if (showSwarmHUD) {
+                TacticalAudioEngine.playTap();
                 setShowSwarmHUD(false);
                 return true;
             }
             if (searchQuery.trim()) {
+                TacticalAudioEngine.playTap();
                 setSearchQuery('');
                 return true;
             }
+            // Si hay otra pantalla activa en el workspace (ej. en tablet o subpantalla mobile),
+            // no consumir el botón atrás para filtros internos; permitir que el workspace navegue
+            if (currentScreen !== 'sidebar' && currentScreen !== 'commandCenter') {
+                return false;
+            }
             if (activeDomain !== 'favs') {
+                TacticalAudioEngine.playTap();
                 setActiveDomain('favs');
                 return true;
             }
             if (currentScreen === 'commandCenter') {
+                TacticalAudioEngine.playTap();
                 goBack();
                 return true;
             }

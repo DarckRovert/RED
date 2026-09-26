@@ -36,7 +36,7 @@ export default function Sidebar() {
     const { 
         conversations: rawConvs, contacts: rawConts, groups: rawGrps, navigate,
         peerStories, addContact, pendingContactRequests: rawPending,
-        preferences, updatePreferences,
+        preferences, updatePreferences, setActiveTab: setNavTab,
     } = useRedStore();
 
     const conversations = Array.isArray(rawConvs) ? rawConvs : [];
@@ -503,7 +503,7 @@ export default function Sidebar() {
                                 <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>{t('tactical_modules.updater_badge') || 'P2P OTA'}</span>
                             </button>
                             <button
-                                onClick={() => { setMenuOpen(false); navigate("settings"); }}
+                                onClick={() => { setMenuOpen(false); setNavTab("settings"); }}
                                 style={{
                                     padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: "3px",
                                     background: "rgba(255, 255, 255, 0.06)",

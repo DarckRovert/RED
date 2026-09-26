@@ -29,7 +29,7 @@ function legacyCopy(text: string, label: string): void {
 
 export function ZkBarterSubsurfaceModal() {
     const { t } = useTranslation();
-    const { navigate, identity, goBack } = useRedStore();
+    const { identity, goBack } = useRedStore();
 
     const [subsurface, setSubsurface] = useState<SubsurfaceTelemetry>(() => subsurfaceAcoustic.getTelemetry());
     const [activeTab, setActiveTab] = useState<"zkBarter" | "subsurface">("zkBarter");
@@ -341,17 +341,35 @@ export function ZkBarterSubsurfaceModal() {
             )}
             {/* Header */}
             <div style={{
-                padding: "12px 16px", background: "rgba(10, 15, 30, 0.95)",
+                padding: "calc(10px + var(--safe-top, 0px)) 16px 10px 16px",
+                background: "rgba(10, 15, 30, 0.95)",
                 borderBottom: "1px solid rgba(0, 229, 255, 0.3)",
-                display: "flex", justifyContent: "space-between", alignItems: "center"
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "10px",
+                flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "1.2rem" }}>🪙</span>
-                    <div>
-                        <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flex: 1 }}>
+                    <span style={{ fontSize: "1.2rem", flexShrink: 0 }}>🪙</span>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{
+                            fontSize: "0.88rem",
+                            fontWeight: 900,
+                            color: "#00E5FF",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis"
+                        }}>
                             {t('zk_barter_modal.title')}
                         </div>
-                        <div style={{ fontSize: "0.65rem", color: "#AAA" }}>
+                        <div style={{
+                            fontSize: "0.65rem",
+                            color: "#AAA",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis"
+                        }}>
                             {t('zk_barter_modal.subtitle')}
                         </div>
                     </div>
@@ -364,10 +382,15 @@ export function ZkBarterSubsurfaceModal() {
                         }
                     }}
                     style={{
-
-                        background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
-                        color: "#FFF", padding: "6px 12px", borderRadius: "8px",
-                        cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"
+                        background: "rgba(232, 33, 58, 0.2)",
+                        border: "1px solid #E8213A",
+                        color: "#FFF",
+                        padding: "6px 12px",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        fontWeight: 800,
+                        fontSize: "0.75rem",
+                        flexShrink: 0
                     }}
                 >
                     ✕ {t('common.close')}
@@ -375,16 +398,33 @@ export function ZkBarterSubsurfaceModal() {
             </div>
 
             {/* Tab Selector */}
-            <div style={{ display: "flex", background: "rgba(15, 23, 42, 0.8)", padding: "6px 16px", gap: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            <div className="scroll-container" style={{
+                display: "flex",
+                background: "rgba(15, 23, 42, 0.8)",
+                padding: "6px 16px",
+                gap: "8px",
+                borderBottom: "1px solid rgba(255,255,255,0.08)",
+                overflowX: "auto",
+                WebkitOverflowScrolling: "touch",
+                flexShrink: 0
+            }}>
                 <button
                     onClick={() => {
                         TacticalAudioEngine.playTap();
                         setActiveTab("zkBarter");
                     }}
                     style={{
-                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.76rem", fontWeight: 800,
+                        flex: "1 0 auto",
+                        minWidth: "140px",
+                        whiteSpace: "nowrap",
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        fontSize: "0.76rem",
+                        fontWeight: 800,
                         background: activeTab === "zkBarter" ? "#00E5FF" : "transparent",
-                        color: activeTab === "zkBarter" ? "#000" : "#AAA", border: "none", cursor: "pointer"
+                        color: activeTab === "zkBarter" ? "#000" : "#AAA",
+                        border: "none",
+                        cursor: "pointer"
                     }}
                 >
                     {t('zk_barter_modal.tab_zk_barter')}
@@ -395,9 +435,17 @@ export function ZkBarterSubsurfaceModal() {
                         setActiveTab("subsurface");
                     }}
                     style={{
-                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.76rem", fontWeight: 800,
+                        flex: "1 0 auto",
+                        minWidth: "140px",
+                        whiteSpace: "nowrap",
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        fontSize: "0.76rem",
+                        fontWeight: 800,
                         background: activeTab === "subsurface" ? "#FFB300" : "transparent",
-                        color: activeTab === "subsurface" ? "#000" : "#AAA", border: "none", cursor: "pointer"
+                        color: activeTab === "subsurface" ? "#000" : "#AAA",
+                        border: "none",
+                        cursor: "pointer"
                     }}
                 >
                     {t('zk_barter_modal.tab_subsurface')}
@@ -405,7 +453,19 @@ export function ZkBarterSubsurfaceModal() {
             </div>
 
             {/* Content Body */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "14px", maxWidth: "640px", margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
+            <div className="scroll-container" style={{
+                flex: 1,
+                overflowY: "auto",
+                WebkitOverflowScrolling: "touch",
+                padding: "16px 16px calc(16px + var(--safe-bottom, 0px)) 16px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "14px",
+                maxWidth: "640px",
+                margin: "0 auto",
+                width: "100%",
+                boxSizing: "border-box"
+            }}>
                 
                 {/* ── TAB 1: ZK-BARTER ── */}
                 {activeTab === "zkBarter" && (
@@ -418,11 +478,11 @@ export function ZkBarterSubsurfaceModal() {
                         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
                             <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "#00E5FF" }}>1. {t('zk_barter_modal.my_offer')}:</div>
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                <div style={{ display: "flex", gap: "8px" }}>
+                                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                                     <select
                                         value={resourceType}
                                         onChange={(e) => setResourceType(e.target.value)}
-                                        style={{ flex: 2, padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.74rem" }}
+                                        style={{ flex: "2 1 160px", minWidth: "150px", padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.74rem" }}
                                     >
                                         <option value="RACION_TACTICA_MRE">Ración Táctica MRE</option>
                                         <option value="ANTIBIOTICO_KIT">Kit Antibióticos</option>
@@ -437,7 +497,7 @@ export function ZkBarterSubsurfaceModal() {
                                         min="1"
                                         value={amount}
                                         onChange={(e) => setAmount(parseInt(e.target.value) || 1)}
-                                        style={{ flex: 1, padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.74rem" }}
+                                        style={{ flex: "1 1 70px", minWidth: "60px", padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.74rem" }}
                                     />
                                 </div>
                                 {resourceType === "CUSTOM" && (
@@ -465,6 +525,7 @@ export function ZkBarterSubsurfaceModal() {
                                         {t('zk_barter_modal.commitment_created')}
                                     </div>
                                     {proofQrUrl && (
+                                        // eslint-disable-next-line @next/next/no-img-element
                                         <img src={proofQrUrl} alt="QR Prueba ZK" style={{ width: 180, height: 180, borderRadius: "10px", border: "1.5px solid #00E5FF" }} />
                                     )}
                                     <div style={{ fontSize: "0.62rem", color: "#AAA", wordBreak: "break-all", width: "100%" }}>
@@ -560,7 +621,7 @@ export function ZkBarterSubsurfaceModal() {
                                 <label style={{ fontSize: "0.7rem", color: "#AAA" }}>{t('zk_barter_modal.medium_label')}</label>
                                 <select
                                     value={medium}
-                                    onChange={(e: any) => setMedium(e.target.value)}
+                                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMedium(e.target.value as "REINFORCED_CONCRETE" | "RUBBLE_EARTH" | "WATER_FLOODED")}
                                     style={{ padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.74rem" }}
                                 >
                                     <option value="REINFORCED_CONCRETE">{t('zk_barter_modal.medium_concrete')}</option>

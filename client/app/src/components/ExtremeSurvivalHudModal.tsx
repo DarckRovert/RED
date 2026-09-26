@@ -208,9 +208,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                 return true;
             }
             if (isSosActive) {
-                toggleSos();
-                TacticalAudioEngine.playWarning();
-                return true;
+                toast.info("🚨 Baliza SOS activa continuando en segundo plano");
             }
             TacticalAudioEngine.playTap();
             goBack();
@@ -711,16 +709,25 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                 </button>
             </div>
 
-            {/* CUERPO PRINCIPAL: 3 TARJETAS GIGANTES DE ALTO CONTRASTE */}
-            <div style={{
-                flex: 1, padding: "12px", display: "flex",
-                flexDirection: "column", gap: "12px", justifyContent: "space-between"
-            }}>
+            {/* CUERPO PRINCIPAL: 3 TARJETAS GIGANTES CON SCROLL TÁCTICO */}
+            <div
+                className="scroll-container"
+                style={{
+                    flex: 1,
+                    minHeight: 0,
+                    padding: "12px 12px calc(24px + env(safe-area-inset-bottom, 12px)) 12px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "12px",
+                    overflowY: "auto",
+                    WebkitOverflowScrolling: "touch"
+                }}
+            >
                 {/* BOTÓN 1: SOS MÉDICO & BALIZA */}
                 <button
                     onClick={toggleSos}
                     style={{
-                        flex: 1, width: "100%", borderRadius: "18px",
+                        flex: "1 0 auto", minHeight: "140px", width: "100%", borderRadius: "18px",
                         background: isSosActive ? "linear-gradient(135deg, #FF1E40 0%, #B3001E 100%)" : "rgba(30, 8, 12, 0.95)",
                         border: isSosActive ? "3px solid #FFFFFF" : "2px solid #FF1E40",
                         color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -748,7 +755,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                     onTouchStart={handlePttStart}
                     onTouchEnd={handlePttEnd}
                     style={{
-                        flex: 1, width: "100%", borderRadius: "18px",
+                        flex: "1 0 auto", minHeight: "140px", width: "100%", borderRadius: "18px",
                         background: isPttPressed ? "linear-gradient(135deg, #00FF88 0%, #009944 100%)" : "rgba(5, 25, 18, 0.95)",
                         border: isPttPressed ? "3px solid #FFFFFF" : "2px solid #00FF88",
                         color: isPttPressed ? "#000000" : "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -772,11 +779,11 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                 {/* BOTÓN 3: RUTA DE EVACUACIÓN / BRÚJULA HACIA OBJETIVO REAL */}
                 <div
                     style={{
-                        flex: 1, width: "100%", borderRadius: "18px",
+                        flex: "1 0 auto", minHeight: "170px", width: "100%", borderRadius: "18px",
                         background: "rgba(8, 16, 32, 0.95)",
                         border: "2px solid #00E5FF",
                         color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "space-between",
-                        padding: "0 24px"
+                        padding: "16px 24px"
                     }}
                 >
                     <div style={{ textAlign: "left", flex: 1 }}>

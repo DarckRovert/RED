@@ -1,7 +1,7 @@
 # AVISO LEGAL Y DESCARGO DE RESPONSABILIDAD TÁCTICA / LEGAL DISCLAIMER
 
 **PROYECTO RED (RED Sovereign Mesh OS)**  
-*Versión Canónica: v125.0.0 (Septiembre 2026)*  
+*Versión Canónica: v126.0.0 (Septiembre 2026)*  
 *Copyright (C) 2026 Rodrigo Alejandro Vega Rojas (alias "DarckRovert") / RED Sovereign Mesh Team*  
 *Licencia: GNU Affero General Public License v3.0 (AGPL-3.0)*  
 *Identificador Criptográfico SHA-256 del Contrato: `c5b290df628f80424564c7e75fef2e255f013d5cf5990264101e0ce5e9d997f6`*
@@ -121,4 +121,4 @@ El software contiene criptografía de clave pública de grado militar y algoritm
 
 ---
 
-*RED — Sovereign Tactical Mesh OS © 2026. Documento Canónico v125.0.0.*
+*RED — Sovereign Tactical Mesh OS © 2026. Documento Canónico v126.0.0.*

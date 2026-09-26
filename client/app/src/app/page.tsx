@@ -8,7 +8,10 @@
  *   2. Flujo de onboarding / perfil de identidad
  *   3. Layout responsivo: single-column mobile | master-detail tablet (768px)
  *   4. Hardware back-button Android (Capacitor) + popstate web
- *   5. Overlays globales: ToastProvider, IncomingCallBanner, FloatingCallPIP,
+ *   5. Tecla Escape global (Web/Desktop): único listener centralizado que delega
+ *      a BackHandlerRegistry.executeTop() → goBack(). Reemplaza ~7 listeners
+ *      duplicados en modales individuales y cubre los ~55+ que no tenían soporte.
+ *   6. Overlays globales: ToastProvider, IncomingCallBanner, FloatingCallPIP,
  *      BiometricShieldOverlay, IncomingContactRequestModal, LiveStreamViewer
  *
  * El enrutamiento de las 65 pantallas modulares está delegado a WorkspaceScreens.
@@ -20,6 +23,7 @@ import dynamic from "next/dynamic";
 import { useRedStore, ScreenView } from "../store/useRedStore";
 import { toast } from "../components/Toast";
 import { WorkspaceScreens } from "../components/navigation/WorkspaceScreens";
+import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 
 // ── Loaders ───────────────────────────────────────────────────────────────────
 function AppLoader() {
@@ -140,13 +144,25 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
 
 // ── AppRouter ─────────────────────────────────────────────────────────────────
 export default function AppRouter() {
-  const { currentScreen, activeLiveStreamId, navigate, activeTab = "chats" } = useRedStore();
+  const { 
+    currentScreen, activeLiveStreamId, navigate, activeTab = "chats",
+    isAuthenticated, pendingChatNavigation, setPendingChatNavigation,
+  } = useRedStore();
 
   const [mounted,          setMounted]          = useState(false);
   const [isTablet,         setIsTablet]         = useState(false);
   const [needsProfile,     setNeedsProfile]     = useState<boolean | null>(null);
   const [showLanding,      setShowLanding]      = useState<boolean>(true);
   const [isLegalAccepted,  setIsLegalAccepted]  = useState<boolean | null>(null);
+
+  // ── Auto-navegar al chat pendiente tras autenticación (Notificaciones / Deep Links) ──
+  useEffect(() => {
+    if (isAuthenticated && pendingChatNavigation) {
+      const target = pendingChatNavigation;
+      setPendingChatNavigation(null);
+      navigate("chat", target);
+    }
+  }, [isAuthenticated, pendingChatNavigation, setPendingChatNavigation, navigate]);
 
   useEffect(() => {
     setMounted(true);
@@ -242,9 +258,48 @@ export default function AppRouter() {
       } catch {}
     };
 
-    // ── Web popstate (browser back) ─────────────────────────────────────────
-    const handlePopState = () => {
-      try { useRedStore.getState().goBack({ fromPopState: true }); } catch {}
+    // ── Escape key global (Web / Desktop / Tablet con teclado físico) ─────────
+    // Listener único y centralizado. Evita el doble-cierre que ocurría cuando
+    // dos modales simultáneos registraban cada uno su propio listener de Escape.
+    const handleGlobalEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // No interceptar si el foco está dentro de un <input>, <textarea> o elemento editable
+      // a menos que el usuario haya presionado Escape explícitamente para cerrar la UI.
+      // ConfirmDialog ya maneja Tab-trap internamente; Escape lo gestionamos aquí.
+      e.preventDefault();
+      const handled = BackHandlerRegistry.executeTop();
+      if (!handled) {
+        // Fallback: si no hay interceptores LIFO, delegar a la pila de navegación
+        useRedStore.getState().goBack({ skipInterceptors: true });
+      }
+    };
+    window.addEventListener('keydown', handleGlobalEscape, { capture: true });
+
+    // ── Web popstate (Navegación bidireccional Atrás/Adelante en Web SPA) ────
+    const handlePopState = (event: PopStateEvent) => {
+      try {
+        if (BackHandlerRegistry.hasInterceptors()) {
+          const handled = BackHandlerRegistry.executeTop();
+          if (handled) return;
+        }
+
+        const store = useRedStore.getState();
+        const state = event.state;
+        if (state && state.screen) {
+          if (state.activeTab && state.activeTab !== store.activeTab) {
+            store.setActiveTab(state.activeTab);
+          }
+          store.navigate(state.screen, state.contextId, { skipHistory: true });
+        } else {
+          // Retorno al estado raíz inicial
+          if (store.activeTab !== "chats") {
+            store.setActiveTab("chats");
+          }
+          store.navigate("sidebar", undefined, { skipHistory: true });
+        }
+      } catch (err) {
+        console.warn("[RED] PopState navigation error:", err);
+      }
     };
     window.addEventListener("popstate", handlePopState);
 
@@ -341,6 +396,7 @@ export default function AppRouter() {
       window.removeEventListener("red:legal_terms_accepted", handleLegalAccepted);
       window.removeEventListener("red:legal_terms_revoked", handleLegalRevoked);
       window.removeEventListener("popstate",            handlePopState);
+      window.removeEventListener('keydown',             handleGlobalEscape, { capture: true });
       if (removeBackHandler) removeBackHandler();
     };
   }, []);
@@ -366,8 +422,8 @@ export default function AppRouter() {
     return (
       <ErrorBoundary>
         <RedShowcaseLanding
-          onEnterVault={(s) => { setShowLanding(false); if (s) navigate(s); }}
-          onEnterApp={(s)   => { setShowLanding(false); if (s) navigate(s); }}
+          onEnterVault={(s) => { setShowLanding(false); if (typeof s === 'string') navigate(s); }}
+          onEnterApp={(s)   => { setShowLanding(false); if (typeof s === 'string') navigate(s); }}
         />
       </ErrorBoundary>
     );

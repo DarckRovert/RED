@@ -164,19 +164,7 @@ export const RedHyperBrowserModal: React.FC<RedHyperBrowserModalProps> = ({
             onClose();
             return true;
         });
-
-        const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                BackHandlerRegistry.executeTop();
-            }
-        };
-        document.addEventListener('keydown', handleEsc);
-
-        return () => {
-            unregister();
-            document.removeEventListener('keydown', handleEsc);
-        };
+        return unregister;
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeCheckoutIntent, showSecurityShield, activeTab.historyIndex]);
 

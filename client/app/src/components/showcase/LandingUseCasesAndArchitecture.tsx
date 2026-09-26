@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { RED_VERSION } from '../../lib/version';
+import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
+import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
 
 interface LandingUseCasesAndArchitectureProps {
     handleCopy: (text: string) => void;
@@ -44,13 +46,12 @@ export const LandingUseCasesAndArchitecture: React.FC<LandingUseCasesAndArchitec
 
     useEffect(() => {
         if (!isSchematicModalOpen) return;
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape") {
-                setIsSchematicModalOpen(false);
-            }
-        };
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            setIsSchematicModalOpen(false);
+            return true;
+        });
+        return unregister;
     }, [isSchematicModalOpen]);
 
     const architectureLayers = [

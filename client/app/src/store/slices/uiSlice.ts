@@ -60,9 +60,9 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
         const prevContext = current.activeConversationId;
         const prevTab = current.activeTab;
 
-        // Push to history unless skipped or replacing
+        // Push to history unless skipped or replacing, or if returning to root sidebar
         const isSameState = prevScreen === screen && (contextId !== undefined ? prevContext === contextId : true);
-        if (!options?.skipHistory && !options?.replace && !isSameState) {
+        if (!options?.skipHistory && !options?.replace && !isSameState && screen !== 'sidebar') {
             const newEntry: NavigationEntry = {
                 screen: prevScreen,
                 contextId: prevContext,
@@ -73,11 +73,15 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
             const trimmed = [...currentHistory, newEntry].slice(-MAX_HISTORY_LENGTH);
             set({ navigationHistory: trimmed });
 
-            if (typeof window !== 'undefined' && window.history && typeof window.history.pushState === 'function') {
+            // Solo sincronizar el historial del navegador en entornos Web puros (evitar polución en Android WebView)
+            const isNative = typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.();
+            if (!isNative && typeof window !== 'undefined' && window.history && typeof window.history.pushState === 'function') {
                 try {
                     window.history.pushState({ screen, contextId, activeTab: prevTab }, '');
                 } catch {}
             }
+        } else if (screen === 'sidebar') {
+            set({ navigationHistory: [] });
         }
         // Overlay screens: navigate without touching activeConversationId unless contextId provided
         if (OVERLAY_SCREENS.has(screen)) {

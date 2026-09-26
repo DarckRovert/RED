@@ -263,6 +263,16 @@ export class TacticalAudioEngine {
         this.playWarning();
     }
 
+    /** Tono de notificación táctica */
+    public static playNotification(): void {
+        this.playMessageReceived();
+    }
+
+    /** Tono táctico de finalización de llamada / liberación de portadora */
+    public static playHangup(): void {
+        this.playSquelchTail();
+    }
+
     /** Ping de sonar acústico / detección de proximidad ultrasónica (2048Hz -> 1024Hz, 120ms) */
     public static playSonarPing(): void {
         const prefs = SettingsManager.getPreferences();

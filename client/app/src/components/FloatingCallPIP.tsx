@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { TacIcon } from "./ui/TacIcon";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
 export const FloatingCallPIP: React.FC = () => {
     const { t } = useTranslation();
@@ -21,6 +22,25 @@ export const FloatingCallPIP: React.FC = () => {
     const [dragging, setDragging] = useState(false);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
     const [isMuted, setIsMuted] = useState(false);
+
+    // Re-clampeo dinámico ante rotación de pantalla o redimensionamiento (previene PiP fuera de pantalla)
+    useEffect(() => {
+        const handleResize = () => {
+            if (typeof window === "undefined") return;
+            const maxX = Math.max(10, window.innerWidth - 165);
+            const maxY = Math.max(60, window.innerHeight - 195);
+            setPos(prev => ({
+                x: Math.max(10, Math.min(maxX, prev.x)),
+                y: Math.max(60, Math.min(maxY, prev.y))
+            }));
+        };
+        window.addEventListener("resize", handleResize);
+        window.addEventListener("orientationchange", handleResize);
+        return () => {
+            window.removeEventListener("resize", handleResize);
+            window.removeEventListener("orientationchange", handleResize);
+        };
+    }, []);
 
     if (!isCallPipMinimized || !activeCallPeer) return null;
 
@@ -42,7 +62,7 @@ export const FloatingCallPIP: React.FC = () => {
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
         if (!dragging) return;
         const maxX = typeof window !== "undefined" ? window.innerWidth - 165 : 300;
-        const maxY = typeof window !== "undefined" ? window.innerHeight - 200 : 500;
+        const maxY = typeof window !== "undefined" ? window.innerHeight - 195 : 500;
         setPos({
             x: Math.max(10, Math.min(maxX, e.clientX - dragOffset.x)),
             y: Math.max(60, Math.min(maxY, e.clientY - dragOffset.y)),
@@ -57,12 +77,14 @@ export const FloatingCallPIP: React.FC = () => {
     };
 
     const handleExpand = () => {
+        TacticalAudioEngine.playTap();
         setCallPipMinimized(false);
         navigate("call", activeCallPeer);
     };
 
     const toggleMute = (e: React.MouseEvent) => {
         e.stopPropagation();
+        TacticalAudioEngine.playTap();
         const nextMuted = !isMuted;
         setIsMuted(nextMuted);
         if (typeof window !== "undefined") {
@@ -72,6 +94,7 @@ export const FloatingCallPIP: React.FC = () => {
 
     const handleEndCall = (e: React.MouseEvent) => {
         e.stopPropagation();
+        TacticalAudioEngine.playHangup();
         setCallPipMinimized(false);
         const currentCallId = useRedStore.getState().activeCallId;
         RedAPI.sendMessage(activeCallPeer, JSON.stringify({

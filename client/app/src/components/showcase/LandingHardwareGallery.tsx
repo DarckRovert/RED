@@ -527,7 +527,7 @@ export const LandingHardwareGallery: React.FC<LandingHardwareGalleryProps> = ({ 
                         {/* Launch Action Button */}
                         <div style={{ display: 'flex', gap: '14px', marginTop: '4px', flexWrap: 'wrap' }}>
                             <button
-                                onClick={onEnterApp}
+                                onClick={() => onEnterApp()}
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',

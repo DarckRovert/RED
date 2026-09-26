@@ -17,6 +17,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRedStore, ScreenView } from "../../store/useRedStore";
 import { TacIcon, TacIconName } from "../ui/TacIcon";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 
 interface QuickActionItem {
     id: string;
@@ -39,6 +40,17 @@ export const TacticalQuickActionHUD: React.FC<TacticalQuickActionHUDProps> = ({ 
         if (preferences?.operationalMode === "stealth") return "recon";
         return "tactical";
     });
+
+    // Intercepción LIFO de botón de retroceso físico / Escape cuando el HUD está expandido
+    useEffect(() => {
+        if (!isExpanded) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playTap();
+            setIsExpanded(false);
+            return true;
+        });
+        return unregister;
+    }, [isExpanded]);
 
     // Detectar si el teclado o un input de texto está enfocado para no obstruir
     const [isKeyboardOpen, setIsKeyboardOpen] = useState<boolean>(false);
@@ -139,157 +151,187 @@ export const TacticalQuickActionHUD: React.FC<TacticalQuickActionHUDProps> = ({ 
             : "calc(16px + env(safe-area-inset-bottom, 0px))");
 
     return (
-        <aside
-            aria-label="Tactical Quick Action HUD"
-            className="tactical-quick-hud"
-            style={{
-                position: "fixed",
-                bottom: bottomPosition,
-                right: "16px",
-                zIndex: 85,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "flex-end",
-                gap: "8px",
-                pointerEvents: "none", // Contenedor pasante, solo los elementos interactivos capturan clicks
-                transition: "bottom 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
-            }}
-        >
-            {/* ── EXPANDED ACTION STRIP ─────────────────────────────────────────── */}
+        <>
+            {/* Telón interceptor táctico contra click-through accidental */}
             {isExpanded && (
                 <div
-                    style={{
-                        pointerEvents: "auto",
-                        background: "rgba(4, 6, 14, 0.94)",
-                        border: "1px solid rgba(0, 229, 255, 0.35)",
-                        borderRadius: "16px",
-                        padding: "10px 12px",
-                        boxShadow: "0 12px 36px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 229, 255, 0.15)",
-                        backdropFilter: "var(--glass-blur, blur(24px))",
-                        WebkitBackdropFilter: "var(--glass-blur, blur(24px))",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "10px",
-                        animation: "popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-                        maxWidth: "calc(100vw - 32px)",
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setIsExpanded(false);
                     }}
-                >
-                    {/* Header del HUD con selector de perfil táctico */}
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: 84,
+                        background: "rgba(0, 0, 0, 0.25)",
+                        backdropFilter: "blur(2px)",
+                        WebkitBackdropFilter: "blur(2px)",
+                        pointerEvents: "auto",
+                    }}
+                    aria-hidden="true"
+                />
+            )}
+
+            <aside
+                aria-label="Tactical Quick Action HUD"
+                className="tactical-quick-hud"
+                style={{
+                    position: "fixed",
+                    bottom: bottomPosition,
+                    right: "16px",
+                    zIndex: 85,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-end",
+                    gap: "8px",
+                    pointerEvents: "none", // Contenedor pasante, solo los elementos interactivos capturan clicks
+                    transition: "bottom 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+                }}
+            >
+                {/* ── EXPANDED ACTION STRIP ─────────────────────────────────────────── */}
+                {isExpanded && (
                     <div
                         style={{
+                            pointerEvents: "auto",
+                            background: "rgba(4, 6, 14, 0.94)",
+                            border: "1px solid rgba(0, 229, 255, 0.35)",
+                            borderRadius: "16px",
+                            padding: "10px clamp(8px, 2vw, 12px)",
+                            boxShadow: "0 12px 36px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 229, 255, 0.15)",
+                            backdropFilter: "var(--glass-blur, blur(24px))",
+                            WebkitBackdropFilter: "var(--glass-blur, blur(24px))",
                             display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-                            paddingBottom: "6px",
-                            gap: "12px",
+                            flexDirection: "column",
+                            gap: "10px",
+                            animation: "popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+                            maxWidth: "calc(100vw - 32px)",
+                            overflowX: "auto",
                         }}
                     >
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span
-                                style={{
-                                    width: "6px",
-                                    height: "6px",
-                                    borderRadius: "50%",
-                                    background: selectedProfile === "medical" 
-                                        ? "var(--accent-cyan)" 
-                                        : (selectedProfile === "recon" ? "var(--accent-amber)" : "var(--accent-crimson)"),
-                                    boxShadow: "0 0 8px currentColor",
-                                    animation: "pulse 1.5s infinite",
-                                }}
-                            />
-                            <span
-                                style={{
-                                    fontSize: "0.65rem",
-                                    fontWeight: 900,
-                                    letterSpacing: "1px",
-                                    fontFamily: "JetBrains Mono, monospace",
-                                    color: "var(--text-secondary)",
-                                }}
-                            >
-                                HUD TÁCTICO: {selectedProfile.toUpperCase()}
-                            </span>
-                        </div>
-
-                        {/* Botón de ciclo de perfil */}
-                        <button
-                            type="button"
-                            onClick={cycleProfile}
-                            title="Cambiar perfil operacional del HUD"
+                        {/* Header del HUD con selector de perfil táctico */}
+                        <div
                             style={{
-                                background: "rgba(255, 255, 255, 0.06)",
-                                border: "1px solid rgba(255, 255, 255, 0.15)",
-                                borderRadius: "6px",
-                                color: "var(--text-muted)",
-                                cursor: "pointer",
-                                fontSize: "0.60rem",
-                                fontWeight: 800,
-                                padding: "2px 6px",
-                                fontFamily: "JetBrains Mono, monospace",
                                 display: "flex",
                                 alignItems: "center",
-                                gap: "4px",
+                                justifyContent: "space-between",
+                                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                                paddingBottom: "6px",
+                                gap: "12px",
                             }}
                         >
-                            <TacIcon name="refresh" size={10} color="currentColor" /> MODO
-                        </button>
-                    </div>
-
-                    {/* Botones de acción 1-Tap */}
-                    <div
-                        style={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(5, 1fr)",
-                            gap: "8px",
-                        }}
-                    >
-                        {actions.map((act) => {
-                            const isCurrent = currentScreen === act.screen;
-                            return (
-                                <button
-                                    key={act.id}
-                                    type="button"
-                                    onClick={() => handleActionClick(act.screen)}
-                                    title={act.label}
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span
                                     style={{
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        width: "56px",
-                                        height: "56px",
-                                        borderRadius: "12px",
-                                        background: isCurrent 
-                                            ? `rgba(${act.id === 'sos' ? '255,51,85,0.25' : '0,229,255,0.22'})`
-                                            : "rgba(255, 255, 255, 0.04)",
-                                        border: isCurrent 
-                                            ? `1px solid ${act.accentColor}`
-                                            : "1px solid rgba(255, 255, 255, 0.08)",
-                                        color: act.accentColor,
-                                        cursor: "pointer",
-                                        gap: "4px",
-                                        transition: "all 0.15s ease",
-                                        position: "relative",
+                                        width: "6px",
+                                        height: "6px",
+                                        borderRadius: "50%",
+                                        background: selectedProfile === "medical" 
+                                            ? "var(--accent-cyan)" 
+                                            : (selectedProfile === "recon" ? "var(--accent-amber)" : "var(--accent-crimson)"),
+                                        boxShadow: "0 0 8px currentColor",
+                                        animation: "pulse 1.5s infinite",
+                                    }}
+                                />
+                                <span
+                                    style={{
+                                        fontSize: "0.65rem",
+                                        fontWeight: 900,
+                                        letterSpacing: "1px",
+                                        fontFamily: "JetBrains Mono, monospace",
+                                        color: "var(--text-secondary)",
                                     }}
                                 >
-                                    <TacIcon name={act.icon} size={20} color={act.accentColor} />
-                                    <span
+                                    HUD TÁCTICO: {selectedProfile.toUpperCase()}
+                                </span>
+                            </div>
+
+                            {/* Botón de ciclo de perfil */}
+                            <button
+                                type="button"
+                                onClick={cycleProfile}
+                                title="Cambiar perfil operacional del HUD"
+                                style={{
+                                    background: "rgba(255, 255, 255, 0.06)",
+                                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                                    borderRadius: "6px",
+                                    color: "var(--text-muted)",
+                                    cursor: "pointer",
+                                    fontSize: "0.60rem",
+                                    fontWeight: 800,
+                                    padding: "2px 6px",
+                                    fontFamily: "JetBrains Mono, monospace",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                }}
+                            >
+                                <TacIcon name="refresh" size={10} color="currentColor" /> MODO
+                            </button>
+                        </div>
+
+                        {/* Botones de acción 1-Tap con grid responsivo fluido */}
+                        <div
+                            style={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(5, minmax(46px, 56px))",
+                                gap: "clamp(4px, 1.2vw, 8px)",
+                                justifyContent: "center",
+                            }}
+                        >
+                            {actions.map((act) => {
+                                const isCurrent = currentScreen === act.screen;
+                                return (
+                                    <button
+                                        key={act.id}
+                                        type="button"
+                                        onClick={() => handleActionClick(act.screen)}
+                                        title={act.label}
                                         style={{
-                                            fontSize: "0.58rem",
-                                            fontWeight: 800,
-                                            letterSpacing: "0.5px",
-                                            fontFamily: "JetBrains Mono, monospace",
-                                            color: "var(--text-primary)",
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            width: "100%",
+                                            minWidth: "46px",
+                                            maxWidth: "56px",
+                                            height: "56px",
+                                            borderRadius: "12px",
+                                            background: isCurrent 
+                                                ? `rgba(${act.id === 'sos' ? '255,51,85,0.25' : '0,229,255,0.22'})`
+                                                : "rgba(255, 255, 255, 0.04)",
+                                            border: isCurrent 
+                                                ? `1px solid ${act.accentColor}`
+                                                : "1px solid rgba(255, 255, 255, 0.08)",
+                                            color: act.accentColor,
+                                            cursor: "pointer",
+                                            gap: "4px",
+                                            transition: "all 0.15s ease",
+                                            position: "relative",
+                                            padding: "4px 2px",
                                         }}
                                     >
-                                        {act.label}
-                                    </span>
-                                </button>
-                            );
-                        })}
+                                        <TacIcon name={act.icon} size={18} color={act.accentColor} />
+                                        <span
+                                            style={{
+                                                fontSize: "0.56rem",
+                                                fontWeight: 800,
+                                                letterSpacing: "0.3px",
+                                                fontFamily: "JetBrains Mono, monospace",
+                                                color: "var(--text-primary)",
+                                                whiteSpace: "nowrap",
+                                                overflow: "hidden",
+                                                textOverflow: "ellipsis",
+                                                maxWidth: "100%",
+                                            }}
+                                        >
+                                            {act.label}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
             {/* ── COLLAPSED / TRIGGER FAB ───────────────────────────────────────── */}
             <button
@@ -344,5 +386,6 @@ export const TacticalQuickActionHUD: React.FC<TacticalQuickActionHUDProps> = ({ 
                 )}
             </button>
         </aside>
+    </>
     );
 };

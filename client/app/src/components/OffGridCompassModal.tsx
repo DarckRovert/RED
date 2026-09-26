@@ -21,7 +21,7 @@ import { synapticMeshRouter, RfPeerBearing } from "../lib/neuro/SynapticMeshRout
 import { fanShapedBody, FanShapedBodyTelemetry } from "../lib/neuro/FanShapedBodyEngine";
 
 export function OffGridCompassModal() {
-    const { navigate, identity } = useRedStore();
+    const { navigate, identity, goBack } = useRedStore();
     const { t } = useTranslation();
 
     const [activeTab, setActiveTab] = useState<"radar" | "map" | "resection" | "waypoints">("radar");
@@ -33,11 +33,11 @@ export function OffGridCompassModal() {
                 setActiveTab("radar");
                 return true;
             }
-            navigate('sidebar');
+            goBack();
             return true;
         });
         return () => unregister();
-    }, [activeTab, navigate]);
+    }, [activeTab, goBack]);
 
     // Magnetic Anomaly State
     const [magTelemetry, setMagTelemetry] = useState<MagneticTelemetry>(() => magneticDetector.getTelemetry());
@@ -1098,7 +1098,7 @@ export function OffGridCompassModal() {
                     </div>
                 </div>
                 <button
-                    onClick={() => navigate('sidebar')}
+                    onClick={goBack}
                     style={{
                         background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
                         color: '#fff', padding: '8px 14px', borderRadius: '10px',

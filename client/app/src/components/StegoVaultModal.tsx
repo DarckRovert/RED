@@ -14,7 +14,7 @@ import { meshRouter } from "../lib/mesh/meshRouter";
 type StegoTab = "embed" | "extract" | "vault";
 
 export function StegoVaultModal() {
-    const { navigate, identity } = useRedStore();
+    const { navigate, identity, goBack } = useRedStore();
     const { t } = useTranslation();
     const [mode, setMode] = useState<StegoTab>("embed");
 
@@ -68,10 +68,10 @@ export function StegoVaultModal() {
                 return true;
             }
             TacticalAudioEngine.playTap();
-            navigate("sidebar");
+            goBack();
             return true;
         });
-    }, [deletingId, extractResult, stegoResultUrl, mode, navigate]);
+    }, [deletingId, extractResult, stegoResultUrl, mode, goBack]);
 
     const loadVault = useCallback(async () => {
         setIsLoadingVault(true);
@@ -476,7 +476,7 @@ export function StegoVaultModal() {
                         🔒 ZERO-TRUST LSB
                     </span>
                     <button
-                        onClick={() => navigate("sidebar")}
+                        onClick={goBack}
                         className="btn-icon"
                         title={t.common?.close || "Cerrar bóveda"}
                         style={{ width: 38, height: 38 }}

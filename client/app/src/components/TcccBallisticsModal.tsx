@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { tacticalTccc, TourniquetRecord, LimbLocation } from "../lib/tactical/TacticalTcccEngine";
-import { tacticalBallistics, BallisticSolution, TacticalBallisticsEngine } from "../lib/tactical/TacticalBallisticsEngine";
+import { tacticalBallistics, BallisticSolution } from "../lib/tactical/TacticalBallisticsEngine";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
-import { useTranslation } from "../lib/i18n/i18nEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
@@ -25,7 +24,6 @@ function calculateHaversineDistanceMeters(lat1: number, lon1: number, lat2: numb
 
 export function TcccBallisticsModal() {
     const { navigate, goBack, identity } = useRedStore();
-    const { t } = useTranslation();
     const [tourniquets, setTourniquets] = useState<TourniquetRecord[]>(() => tacticalTccc.getActiveTourniquets());
     const [activeTab, setActiveTab] = useState<"tccc" | "ballistics">("tccc");
 
@@ -88,9 +86,10 @@ export function TcccBallisticsModal() {
     };
 
     useEffect(() => {
-        const handleVaultUpdate = (e: any) => {
-            if (e.detail !== undefined) {
-                setMedicalVault(e.detail);
+        const handleVaultUpdate = (e: Event) => {
+            const customEv = e as CustomEvent;
+            if (customEv.detail !== undefined) {
+                setMedicalVault(customEv.detail);
             } else {
                 try {
                     const raw = localStorage.getItem("red_identity_vault_v1");
@@ -246,42 +245,9 @@ export function TcccBallisticsModal() {
             await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", alertPayload);
             TacticalAudioEngine.playEmergencyAlarm();
             toast.success("📡 ¡Alerta 9-Line MEDEVAC difundida a la malla y registrada en SITREP!");
-        } catch (e: any) {
-            toast.error("Error al difundir alerta MEDEVAC: " + e.message);
-        }
-    };
-
-    const handleExportCasualtyCard = () => {
-        const name = identity?.nickname || "Operador RED";
-        const roster = identity?.identity_hash ? `OP-${identity.identity_hash.slice(0, 6).toUpperCase()}` : `OP-${Date.now().toString(36).toUpperCase()}`;
-        const cardText = tacticalTccc.generateDdForm1380({
-            id: `CARD-${Date.now()}`,
-            casualtyName: name,
-            rosterNumber: roster,
-            evacPriority: "URGENT",
-            massiveBleedingControlled: true,
-            tourniquets,
-            airwayStatus: "INTACT",
-            respirationStatus: "VENTED_CHEST_SEAL",
-            circulationPulsePresent: true,
-            txaAdministered: true,
-            hypothermiaCoverApplied: true,
-            painMedication: "Fentanilo transmucoso 800mcg",
-            antibioticsGiven: true,
-            splintApplied: false,
-            createdTimestamp: Date.now(),
-            bloodType: medicalVault?.bloodType,
-            allergies: medicalVault?.allergies,
-            emergencyContact: medicalVault?.emergencyContact,
-        });
-
-        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(cardText).then(() => {
-                TacticalAudioEngine.playMessageSent();
-                toast.success("📋 Tarjeta de Baja DD Form 1380 copiada al portapapeles");
-            }).catch(() => fallbackCopyCard(cardText));
-        } else {
-            fallbackCopyCard(cardText);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Fallo de radio';
+            toast.error("Error al difundir alerta MEDEVAC: " + msg);
         }
     };
 
@@ -308,6 +274,41 @@ export function TcccBallisticsModal() {
         }
     };
 
+    const handleExportCasualtyCard = useCallback(() => {
+        const nowMs = Date.now();
+        const name = identity?.nickname || "Operador RED";
+        const roster = identity?.identity_hash ? `OP-${identity.identity_hash.slice(0, 6).toUpperCase()}` : `OP-${nowMs.toString(36).toUpperCase()}`;
+        const cardText = tacticalTccc.generateDdForm1380({
+            id: `CARD-${nowMs}`,
+            casualtyName: name,
+            rosterNumber: roster,
+            evacPriority: "URGENT",
+            massiveBleedingControlled: true,
+            tourniquets,
+            airwayStatus: "INTACT",
+            respirationStatus: "VENTED_CHEST_SEAL",
+            circulationPulsePresent: true,
+            txaAdministered: true,
+            hypothermiaCoverApplied: true,
+            painMedication: "Fentanilo transmucoso 800mcg",
+            antibioticsGiven: true,
+            splintApplied: false,
+            createdTimestamp: nowMs,
+            bloodType: medicalVault?.bloodType,
+            allergies: medicalVault?.allergies,
+            emergencyContact: medicalVault?.emergencyContact,
+        });
+
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(cardText).then(() => {
+                TacticalAudioEngine.playMessageSent();
+                toast.success("📋 Tarjeta de Baja DD Form 1380 copiada al portapapeles");
+            }).catch(() => fallbackCopyCard(cardText));
+        } else {
+            fallbackCopyCard(cardText);
+        }
+    }, [identity, tourniquets, medicalVault]);
+
     return (
         <div className="modal-viewport-adaptive" style={{
             background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
@@ -321,9 +322,9 @@ export function TcccBallisticsModal() {
                 borderBottom: "1.5px solid rgba(255, 51, 85, 0.35)",
                 display: "flex", justifyContent: "space-between", alignItems: "center",
                 backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
-                zIndex: 10, flexShrink: 0
+                zIndex: 10, flexShrink: 0, gap: "10px"
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
                     <button
                         onClick={() => {
                             TacticalAudioEngine.playTap();
@@ -333,65 +334,59 @@ export function TcccBallisticsModal() {
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
                             color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
-                            display: "flex", alignItems: "center", justifyContent: "center"
+                            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
                         }}
                     >
                         ‹
                     </button>
                     <div style={{
-                        width: 38, height: 38, borderRadius: "12px",
+                        width: 36, height: 36, borderRadius: "10px",
                         background: "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(200, 30, 60, 0.15) 100%)",
                         border: "1px solid rgba(255, 51, 85, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(255, 51, 85, 0.3)"
+                        fontSize: "1.15rem", boxShadow: "0 0 15px rgba(255, 51, 85, 0.3)", flexShrink: 0
                     }}>🩸</div>
-                    <div>
-                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             TCCC TRIAGE & BALÍSTICA
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "#FF3355", fontWeight: 800 }}>
+                        <div style={{ fontSize: "0.66rem", color: "#FF3355", fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             PROTOCOLOS MARCH-PAWS · CÁLCULO MRAD
                         </div>
                     </div>
                 </div>
 
-                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <div
+                    className="scroll-container"
+                    style={{
+                        display: "flex", gap: "6px", alignItems: "center",
+                        overflowX: "auto", WebkitOverflowScrolling: "touch",
+                        flexShrink: 0, maxWidth: "50%"
+                    }}
+                >
                     <button
                         onClick={handleBroadcastMedevac}
                         style={{
-                            padding: "6px 12px", borderRadius: "10px",
+                            padding: "6px 10px", borderRadius: "8px",
                             background: "linear-gradient(135deg, rgba(255, 51, 85, 0.3) 0%, rgba(200, 30, 60, 0.2) 100%)",
                             border: "1.5px solid #FF3355",
-                            color: "#FF3355", fontSize: "0.74rem", fontWeight: 900, cursor: "pointer",
-                            display: "flex", alignItems: "center", gap: "4px"
+                            color: "#FF3355", fontSize: "0.72rem", fontWeight: 900, cursor: "pointer",
+                            display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap", flexShrink: 0
                         }}
                         title="Difundir Alerta Urgente 9-Line MEDEVAC por la Malla"
                     >
-                        <span>📡</span> 9-LINE MEDEVAC
+                        <span>📡</span> MEDEVAC
                     </button>
                     <button
                         onClick={handleExportCasualtyCard}
                         style={{
-                            padding: "6px 12px", borderRadius: "10px",
+                            padding: "6px 10px", borderRadius: "8px",
                             background: "rgba(255, 51, 85, 0.15)", border: "1px solid rgba(255, 51, 85, 0.4)",
-                            color: "#FF3355", fontSize: "0.74rem", fontWeight: 900, cursor: "pointer"
+                            color: "#FF3355", fontSize: "0.72rem", fontWeight: 900, cursor: "pointer",
+                            whiteSpace: "nowrap", flexShrink: 0
                         }}
                     >
                         📋 FORM 1380
-                    </button>
-                    <button
-                        onClick={() => {
-                            TacticalAudioEngine.playTap();
-                            goBack();
-                        }}
-                        style={{
-                            width: 34, height: 34, borderRadius: "9px",
-                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
-                            color: "#FFFFFF", cursor: "pointer", fontSize: "0.9rem", fontWeight: 800,
-                            display: "flex", alignItems: "center", justifyContent: "center"
-                        }}
-                    >
-                        ✕
                     </button>
                 </div>
             </header>
@@ -494,9 +489,10 @@ export function TcccBallisticsModal() {
                             {/* Ficha Médica Soberana Sincronizada */}
                             <div style={{
                                 background: "rgba(255, 51, 85, 0.06)", border: "1px solid rgba(255, 51, 85, 0.3)",
-                                borderRadius: "14px", padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center"
+                                borderRadius: "14px", padding: "12px 14px", display: "flex", flexWrap: "wrap",
+                                justifyContent: "space-between", alignItems: "center", gap: "10px"
                             }}>
-                                <div>
+                                <div style={{ minWidth: 0, flex: "1 1 200px" }}>
                                     <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "#FF3355", display: "flex", alignItems: "center", gap: "6px" }}>
                                         <span>🫀</span> FICHA MÉDICA SOBERANA SINCRONIZADA
                                     </div>
@@ -514,7 +510,7 @@ export function TcccBallisticsModal() {
                                     style={{
                                         padding: "6px 12px", borderRadius: "8px", background: "rgba(255, 51, 85, 0.15)",
                                         border: "1px solid rgba(255, 51, 85, 0.4)", color: "#FF3355", fontSize: "0.7rem", fontWeight: 800, cursor: "pointer",
-                                        whiteSpace: "nowrap"
+                                        whiteSpace: "nowrap", flexShrink: 0
                                     }}
                                 >
                                     ✏️ EDITAR FICHA
@@ -533,7 +529,7 @@ export function TcccBallisticsModal() {
                             <div style={{ display: "flex", gap: "8px" }}>
                                 <select
                                     value={selectedLimb}
-                                    onChange={(e: any) => setSelectedLimb(e.target.value)}
+                                    onChange={(e) => setSelectedLimb(e.target.value as LimbLocation)}
                                     style={{
                                         flex: 1, padding: "10px 14px", background: "rgba(0, 0, 0, 0.5)",
                                         border: "1px solid rgba(255, 51, 85, 0.4)", borderRadius: "10px",
@@ -616,24 +612,25 @@ export function TcccBallisticsModal() {
                             {/* Solution Display */}
                             <div style={{
                                 background: "rgba(0, 229, 255, 0.08)", border: "1.5px solid rgba(0, 229, 255, 0.3)",
-                                borderRadius: "16px", padding: "16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
+                                borderRadius: "16px", padding: "14px 10px", display: "grid",
+                                gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))",
                                 gap: "8px", textAlign: "center"
                             }}>
                                 <div>
                                     <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>ELEVACIÓN</div>
-                                    <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "#00E5FF", marginTop: "2px" }}>
+                                    <div style={{ fontSize: "clamp(0.95rem, 3.2vw, 1.25rem)", fontWeight: 900, color: "#00E5FF", marginTop: "2px", whiteSpace: "nowrap" }}>
                                         {solution.elevationMrad > 0 ? `+${solution.elevationMrad.toFixed(1)}` : solution.elevationMrad.toFixed(1)} MRAD
                                     </div>
                                 </div>
                                 <div>
                                     <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>DERIVA VIENTO</div>
-                                    <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "#FFB300", marginTop: "2px" }}>
+                                    <div style={{ fontSize: "clamp(0.95rem, 3.2vw, 1.25rem)", fontWeight: 900, color: "#FFB300", marginTop: "2px", whiteSpace: "nowrap" }}>
                                         {solution.windageMrad.toFixed(1)} MRAD
                                     </div>
                                 </div>
                                 <div>
                                     <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>TIEMPO VUELO</div>
-                                    <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "#00E676", marginTop: "2px" }}>
+                                    <div style={{ fontSize: "clamp(0.95rem, 3.2vw, 1.25rem)", fontWeight: 900, color: "#00E676", marginTop: "2px", whiteSpace: "nowrap" }}>
                                         {solution.timeOfFlightSec.toFixed(2)}s
                                     </div>
                                 </div>

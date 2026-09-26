@@ -11,7 +11,6 @@ import {
 import { bluetoothTransport, RedDevice } from "../lib/mesh/bluetoothTransport";
 import { getRfMetrics, triggerChannelHop, setRfFecMode, RfMetricsResponse } from "../lib/api";
 import { toast } from "./Toast";
-import { useTranslation } from "../lib/i18n/i18nEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { AudioContextManager } from "../lib/audio/AudioContextManager";
@@ -20,13 +19,12 @@ import { meshRouter } from "../lib/mesh/meshRouter";
 type RfTab = "spectrum" | "jamming" | "devices";
 
 export function RfSpectrumModal() {
-    const { navigate, goBack } = useRedStore();
-    const { t } = useTranslation();
+    const { goBack } = useRedStore();
     const [activeTab, setActiveTab] = useState<RfTab>("spectrum");
 
     const [bandMode, setBandMode] = useState<RfBandMode>("BLE_2_4GHZ");
     const [metrics, setMetrics] = useState<RfSpectrumMetrics>(() => RfSpectrumAnalyzerEngine.getInitialMetrics("BLE_2_4GHZ"));
-    const [isScanning, setIsScanning] = useState(true);
+    const [isScanning] = useState(true);
     const [scannedBleDevices, setScannedBleDevices] = useState<Map<string, RedDevice>>(new Map());
     const [acousticChannels, setAcousticChannels] = useState<ChannelSignalData[]>([]);
     
@@ -333,9 +331,9 @@ export function RfSpectrumModal() {
                 borderBottom: "1.5px solid rgba(0, 229, 255, 0.35)",
                 display: "flex", justifyContent: "space-between", alignItems: "center",
                 backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
-                zIndex: 10, flexShrink: 0
+                zIndex: 10, flexShrink: 0, gap: "10px"
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
                     <button
                         onClick={() => {
                             if (!BackHandlerRegistry.executeTop()) {
@@ -343,11 +341,13 @@ export function RfSpectrumModal() {
                                 goBack();
                             }
                         }}
+                        aria-label="Volver"
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
                             color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
-                            display: "flex", alignItems: "center", justifyContent: "center"
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            flexShrink: 0
                         }}
                     >
                         ‹
@@ -357,26 +357,34 @@ export function RfSpectrumModal() {
                         background: "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(0, 150, 255, 0.15) 100%)",
                         border: "1px solid rgba(0, 229, 255, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 229, 255, 0.25)"
+                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 229, 255, 0.25)",
+                        flexShrink: 0
                     }}>📊</div>
-                    <div>
-                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{
+                            fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF",
+                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                        }}>
                             ANALIZADOR DE ESPECTRO RF
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan, #00E5FF)", fontWeight: 800 }}>
+                        <div style={{
+                            fontSize: "0.68rem", color: "var(--accent-cyan, #00E5FF)", fontWeight: 800,
+                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                        }}>
                             BLE 2.4 GHZ · LORA SUB-GHZ · ULTRASONIDO FFT
                         </div>
                     </div>
                 </div>
 
-                <div style={{ display: "flex", gap: "6px" }}>
+                <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
                     <button
                         onClick={handleTriggerHop}
                         disabled={isHopping}
                         style={{
                             padding: "6px 12px", borderRadius: "10px",
                             background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.4)",
-                            color: "var(--accent-cyan, #00E5FF)", fontSize: "0.74rem", fontWeight: 900, cursor: "pointer"
+                            color: "var(--accent-cyan, #00E5FF)", fontSize: "0.74rem", fontWeight: 900, cursor: "pointer",
+                            whiteSpace: "nowrap"
                         }}
                     >
                         {isHopping ? "SALTANDO..." : "⚡ SALTO FHSS"}
@@ -385,22 +393,26 @@ export function RfSpectrumModal() {
             </header>
 
             {/* Selector de Pestañas Segmentadas */}
-            <div style={{
-                display: "flex", background: "rgba(8, 10, 20, 0.95)",
-                padding: "8px 16px", gap: "6px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-                flexShrink: 0
-            }}>
+            <div
+                className="scroll-container"
+                style={{
+                    display: "flex", background: "rgba(8, 10, 20, 0.95)",
+                    padding: "8px 16px", gap: "8px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                    flexShrink: 0, overflowX: "auto", WebkitOverflowScrolling: "touch"
+                }}
+            >
                 <button
                     onClick={() => {
                         TacticalAudioEngine.playTap();
                         setActiveTab("spectrum");
                     }}
                     style={{
-                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        flex: "1 0 auto", minWidth: "155px", padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "spectrum" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(10, 35, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
                         border: activeTab === "spectrum" ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
                         color: activeTab === "spectrum" ? "#00E5FF" : "var(--text-secondary)",
-                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                        whiteSpace: "nowrap"
                     }}
                 >
                     <span>📊</span> CASCADA ESPECTRAL
@@ -411,11 +423,12 @@ export function RfSpectrumModal() {
                         setActiveTab("jamming");
                     }}
                     style={{
-                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        flex: "1 0 auto", minWidth: "155px", padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "jamming" ? "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(180, 20, 40, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
                         border: activeTab === "jamming" ? "1.5px solid #FF3355" : "1px solid rgba(255, 255, 255, 0.08)",
                         color: activeTab === "jamming" ? "#FF3355" : "var(--text-secondary)",
-                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                        whiteSpace: "nowrap"
                     }}
                 >
                     <span>🛡️</span> JAMMING & FEC {metrics.isJammingSuspected && "🚨"}
@@ -426,11 +439,12 @@ export function RfSpectrumModal() {
                         setActiveTab("devices");
                     }}
                     style={{
-                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        flex: "1 0 auto", minWidth: "145px", padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "devices" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(10, 35, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
                         border: activeTab === "devices" ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
                         color: activeTab === "devices" ? "#00E5FF" : "var(--text-secondary)",
-                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                        whiteSpace: "nowrap"
                     }}
                 >
                     <span>📡</span> DISPOSITIVOS ({scannedBleDevices.size})
@@ -450,8 +464,8 @@ export function RfSpectrumModal() {
                             boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8)"
                         }}>
                             {/* Selector de Banda */}
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                                <div style={{ minWidth: 0, flex: "1 1 140px" }}>
                                     <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF" }}>BANDA DE MONITOREO</div>
                                     <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>{bandMode} · ISM & SoundMesh</div>
                                 </div>
@@ -461,7 +475,8 @@ export function RfSpectrumModal() {
                                     style={{
                                         background: "rgba(0,0,0,0.6)", border: "1px solid rgba(0, 229, 255, 0.4)",
                                         color: "#FFFFFF", borderRadius: "8px", padding: "6px 10px", fontSize: "0.75rem",
-                                        fontFamily: "JetBrains Mono, monospace"
+                                        fontFamily: "JetBrains Mono, monospace",
+                                        flex: "1 1 auto", minWidth: "180px"
                                     }}
                                 >
                                     <option value="BLE_2_4GHZ">Bluetooth LE (2.4 GHz)</option>
@@ -486,17 +501,17 @@ export function RfSpectrumModal() {
                             </div>
 
                             {/* Spectrum Stats */}
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", textAlign: "center" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "8px", textAlign: "center" }}>
                                 <div style={{ padding: "10px", background: "rgba(0,0,0,0.4)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.06)" }}>
-                                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>RSSI PROMEDIO</div>
+                                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>RSSI PROMEDIO</div>
                                     <div style={{ fontSize: "1rem", fontWeight: 900, color: "#00E5FF", marginTop: "2px" }}>{metrics.averageRssiDb} dBm</div>
                                 </div>
                                 <div style={{ padding: "10px", background: "rgba(0,0,0,0.4)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.06)" }}>
-                                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>CANAL ÓPTIMO</div>
+                                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>CANAL ÓPTIMO</div>
                                     <div style={{ fontSize: "1rem", fontWeight: 900, color: "#00E676", marginTop: "2px" }}>CH {metrics.optimalChannelNumber}</div>
                                 </div>
                                 <div style={{ padding: "10px", background: "rgba(0,0,0,0.4)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.06)" }}>
-                                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>ESTADO BANDA</div>
+                                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>ESTADO BANDA</div>
                                     <div style={{ fontSize: "1rem", fontWeight: 900, color: metrics.isJammingSuspected ? "#FF3355" : "#00E676", marginTop: "2px" }}>
                                         {metrics.isJammingSuspected ? "JAMMED" : "CLEAR"}
                                     </div>

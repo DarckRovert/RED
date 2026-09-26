@@ -32,7 +32,7 @@ function calculateHaversineDistanceMeters(lat1: number, lon1: number, lat2: numb
 }
 
 export const P2PCompassModal: React.FC = () => {
-    const { navigate } = useRedStore();
+    const { navigate, goBack } = useRedStore();
     const { t } = useTranslation();
     const [heading, setHeading] = useState<number>(0);
     const [headingSource, setHeadingSource] = useState<"sensor" | "manual">("manual");
@@ -78,11 +78,11 @@ export const P2PCompassModal: React.FC = () => {
                 setActiveTab("compass");
                 return true;
             }
-            navigate("sidebar");
+            goBack();
             return true;
         });
         return () => unregister();
-    }, [activeTab, navigate]);
+    }, [activeTab, goBack]);
 
     // Load real proximity nodes from backend API
     const loadNodes = useCallback(async (isManual: boolean = false) => {
@@ -309,7 +309,7 @@ export const P2PCompassModal: React.FC = () => {
                         <TacIcon name="refresh" size={16} className={isScanning ? "spin-pulse" : ""} />
                     </button>
                     <button
-                        onClick={() => navigate("sidebar")}
+                        onClick={goBack}
                         className="btn-icon"
                         title={t('common.close') || "Cerrar"}
                         style={{ width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}

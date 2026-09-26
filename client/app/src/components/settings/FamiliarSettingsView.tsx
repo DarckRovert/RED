@@ -18,6 +18,7 @@ import { UpdatesTab } from "./UpdatesTab";
 import { PaymentsTab } from "./PaymentsTab";
 import { LinkedDevicesView } from "./LinkedDevicesView";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 import { TacIcon } from "../ui/TacIcon";
 import { LegalComplianceModal } from "../legal/LegalComplianceModal";
 
@@ -34,23 +35,23 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
     const [legalModalOpen, setLegalModalOpen] = useState(false);
     const [activeSection, setActiveSection] = useState<SubSection>(null);
 
-    // Register back interceptor for sub-sections
+    // Register back interceptor (Hierarchical LIFO: Sub-section > Base Close)
     useEffect(() => {
-        if (activeSection === null) return;
-        return BackHandlerRegistry.register(() => {
-            setActiveSection(null);
-            return true;
+        const unregister = BackHandlerRegistry.register(() => {
+            if (activeSection !== null) {
+                SettingsManager.triggerHaptic("light");
+                setActiveSection(null);
+                return true;
+            }
+            if (onClose) {
+                TacticalAudioEngine.playTap();
+                onClose();
+                return true;
+            }
+            return false;
         });
-    }, [activeSection]);
-
-    // Register back interceptor for QR modal
-    useEffect(() => {
-        if (!qrModalOpen) return;
-        return BackHandlerRegistry.register(() => {
-            setQrModalOpen(false);
-            return true;
-        });
-    }, [qrModalOpen]);
+        return unregister;
+    }, [activeSection, onClose]);
 
     const isFamiliar = (preferences?.uiMode ?? "familiar") !== "tactical";
 

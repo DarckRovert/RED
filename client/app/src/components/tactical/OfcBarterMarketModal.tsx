@@ -10,6 +10,7 @@ import {
 } from "../../lib/neuro/human/OrbitofrontalValuationEngine";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { toast } from "../Toast";
 
 interface OfcBarterMarketModalProps {
   isOpen: boolean;
@@ -30,16 +31,21 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
   const [peerNodeId, setPeerNodeId] = useState<string>('PEER-BROADCAST');
   const [isBroadcasting, setIsBroadcasting] = useState(false);
 
-  // Registro del botón físico de Atrás en Android (LIFO)
+  // Registro del botón físico de Atrás en Android (LIFO) protegido durante emisión
   useEffect(() => {
     if (!isOpen) return;
     const unregister = BackHandlerRegistry.register(() => {
+      if (isBroadcasting) {
+        TacticalAudioEngine.playWarning();
+        toast.info("⏳ Transmitiendo contrato de trueque por la malla RF...");
+        return true;
+      }
       TacticalAudioEngine.playTap();
       onClose();
       return true;
     });
     return unregister;
-  }, [isOpen, onClose]);
+  }, [isOpen, isBroadcasting, onClose]);
 
   useEffect(() => {
     const unsub = ofc.subscribe((t) => {
@@ -68,6 +74,7 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
 
   const handleProposeTrade = async () => {
     setIsBroadcasting(true);
+    TacticalAudioEngine.playTap();
     try {
       const contract = await ofc.evaluateTradeProposal(
         'SELF',
@@ -80,17 +87,27 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
       await ofc.broadcastTradeProposal(contract);
       setContracts(ofc.getContracts());
       setActiveTab('contracts');
+      TacticalAudioEngine.playRogerBeep();
+      toast.success("Propuesta de trueque firmada y emitida por la malla");
     } catch (e) {
       console.warn('[OFC Modal] Error al proponer trueque:', e);
+      toast.error("Error al emitir propuesta de trueque");
     } finally {
       setIsBroadcasting(false);
     }
   };
 
   const handleAcceptContract = async (contractId: string) => {
-    await ofc.broadcastContractAccept(contractId);
-    ofc.settleContract(contractId);
-    setContracts(ofc.getContracts());
+    TacticalAudioEngine.playTap();
+    try {
+      await ofc.broadcastContractAccept(contractId);
+      ofc.settleContract(contractId);
+      setContracts(ofc.getContracts());
+      TacticalAudioEngine.playRogerBeep();
+      toast.success("Contrato aceptado y asentado en almacén");
+    } catch {
+      toast.error("Error al procesar contrato");
+    }
   };
 
   return (
@@ -101,20 +118,27 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
         zIndex: 99999,
         background: "rgba(2, 4, 10, 0.92)",
         backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: "16px",
         fontFamily: "'JetBrains Mono', monospace",
         color: "#F1F5F9",
+        animation: "fadeIn 0.15s ease-out",
       }}
-      onClick={onClose}
+      onClick={() => {
+        if (isBroadcasting) return;
+        TacticalAudioEngine.playTap();
+        onClose();
+      }}
     >
       <div
+        className="animate-enter"
         style={{
           width: "100%",
           maxWidth: "840px",
-          maxHeight: "92vh",
+          maxHeight: "min(92vh, 720px)",
           background: "linear-gradient(180deg, #090E17 0%, #04070D 100%)",
           border: "1px solid #1E293B",
           borderRadius: "14px",
@@ -122,10 +146,11 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
           flexDirection: "column",
           overflow: "hidden",
           boxShadow: "0 25px 60px rgba(0,0,0,0.8), 0 0 25px rgba(20, 184, 166, 0.15)",
+          boxSizing: "border-box"
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* Header con contención elíptica */}
         <div
           style={{
             padding: "14px 20px",
@@ -134,47 +159,81 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
+            gap: "12px",
+            flexShrink: 0
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "1.3rem" }}>⚖️</span>
-            <div>
-              <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#14B8A6", letterSpacing: "1px" }}>
-                MERCADO DE TRUEQUE OFC (ECONOMÍA DE ASIEDO)
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
+            <span style={{ fontSize: "1.3rem", flexShrink: 0 }}>⚖️</span>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{
+                fontSize: "0.95rem",
+                fontWeight: 800,
+                color: "#14B8A6",
+                letterSpacing: "0.5px",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
+              }}>
+                MERCADO DE TRUEQUE OFC (ECONOMÍA DE ASEDIO)
               </div>
-              <div style={{ fontSize: "0.70rem", color: "#94A3B8" }}>
-                Corteza Orbitofrontal • Paridad Subjetiva Sin Dinero Fiduciario • Autarquía: <strong style={{ color: "#38BDF8" }}>{telemetry.autarkyDaysRemaining} días</strong>
+              <div style={{
+                fontSize: "0.70rem",
+                color: "#94A3B8",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
+              }}>
+                Corteza Orbitofrontal · Autarquía: <strong style={{ color: "#38BDF8" }}>{telemetry.autarkyDaysRemaining} días</strong>
               </div>
             </div>
           </div>
           <button
             onClick={() => {
+              if (isBroadcasting) return;
               TacticalAudioEngine.playTap();
               onClose();
             }}
+            disabled={isBroadcasting}
             style={{
               background: "#1E293B",
               border: "none",
-              color: "#94A3B8",
+              color: isBroadcasting ? "#475569" : "#94A3B8",
               width: "32px",
               height: "32px",
               borderRadius: "8px",
-              cursor: "pointer",
+              cursor: isBroadcasting ? "not-allowed" : "pointer",
               fontSize: "1rem",
               fontWeight: 700,
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
             }}
+            title="Cerrar"
           >
             ✕
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div style={{ display: "flex", borderBottom: "1px solid #1E293B", background: "#050811" }}>
+        {/* Tab Navigation táctil con scroll horizontal continuo */}
+        <div
+          className="scroll-container"
+          style={{
+            display: "flex",
+            borderBottom: "1px solid #1E293B",
+            background: "#050811",
+            overflowX: "auto",
+            flexWrap: "nowrap",
+            flexShrink: 0,
+            WebkitOverflowScrolling: "touch"
+          }}
+        >
           {[
-            { key: 'matrix', label: '📊 PARIDADES DE TRUEQUE' },
-            { key: 'propose', label: '🤝 PROPONER INTERCAMBIO' },
+            { key: 'matrix', label: '📊 PARIDADES' },
+            { key: 'propose', label: '🤝 PROPONER TRUEQUE' },
             { key: 'contracts', label: `📜 CONTRATOS (${contracts.length})` },
-            { key: 'inventory', label: '📦 RESERVA & ALMACÉN' },
+            { key: 'inventory', label: '📦 ALMACÉN' },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -183,8 +242,8 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
                 setActiveTab(tab.key as any);
               }}
               style={{
-                flex: 1,
-                padding: "10px 4px",
+                flexShrink: 0,
+                padding: "10px 16px",
                 background: activeTab === tab.key ? "#0B132B" : "transparent",
                 border: "none",
                 borderBottom: activeTab === tab.key ? "2px solid #14B8A6" : "2px solid transparent",
@@ -192,6 +251,7 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
                 fontSize: "0.72rem",
                 fontWeight: 800,
                 cursor: "pointer",
+                whiteSpace: "nowrap"
               }}
             >
               {tab.label}
@@ -199,9 +259,20 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
           ))}
         </div>
 
-        {/* Body Content */}
-        <div className="scroll-container" style={{ padding: "18px", overflowY: "auto", flex: 1, minHeight: 0, WebkitOverflowScrolling: "touch", display: "flex", flexDirection: "column", gap: "16px" }}>
-          
+        {/* Body Content con Scroll Aislado */}
+        <div
+          className="scroll-container"
+          style={{
+            padding: "18px",
+            overflowY: "auto",
+            flex: "1 1 0%",
+            minHeight: 0,
+            WebkitOverflowScrolling: "touch",
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px"
+          }}
+        >
           {/* TAB 1: PARIDADES DE TRUEQUE */}
           {activeTab === 'matrix' && (
             <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
@@ -209,7 +280,7 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
                 Valuación marginal calculada por la ley de Gossen neuromórfica en base al consumo del escuadrón (4 operadores) y días de meta de reserva (14 días).
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "10px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "10px" }}>
                 {commodities.map((comm) => {
                   const spec = COMMODITY_SPECS[comm];
                   const stock = telemetry.localInventory[comm] || 0;
@@ -254,7 +325,7 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
           {/* TAB 2: PROPONER INTERCAMBIO */}
           {activeTab === 'propose' && (
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px" }}>
                 {/* Lo que ofreces */}
                 <div style={{ background: "#080E1A", border: "1px solid #1E293B", borderRadius: "10px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
                   <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "#38BDF8" }}>⬆️ BIEN OFRECIDO (MI STOCK)</span>
@@ -265,7 +336,7 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
                     style={{ background: "#0F172A", border: "1px solid #334155", borderRadius: "6px", color: "#FFF", padding: "8px", fontSize: "0.75rem", fontFamily: "inherit" }}
                   >
                     {commodities.map((c) => (
-                      <option key={c} value={c}>{COMMODITY_SPECS[c].name} ({telemetry.localInventory[c] || 0} disponibles)</option>
+                      <option key={c} value={c}>{COMMODITY_SPECS[c].name} ({telemetry.localInventory[c] || 0} disp.)</option>
                     ))}
                   </select>
 
@@ -317,12 +388,12 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
                   gap: "6px",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
                   <span style={{ fontSize: "0.75rem", fontWeight: 800, color: isFairOrFavorable ? "#10B981" : "#EF4444" }}>
-                    {isFairOrFavorable ? "✅ TRATO JUSTO / EQUILIBRADO SEGÚN OFC" : "⚠️ TRATO DESFAVORABLE O LEONINO"}
+                    {isFairOrFavorable ? "✅ TRATO JUSTO SEGÚN OFC" : "⚠️ TRATO DESFAVORABLE"}
                   </span>
                   <span style={{ fontSize: "0.70rem", color: "#94A3B8" }}>
-                    Ratio Propuesto: <strong>{proposedRatio.toFixed(2)}</strong> vs Paridad Justa: <strong>{fairRatio.toFixed(2)}</strong>
+                    Ratio: <strong>{proposedRatio.toFixed(2)}</strong> vs Paridad: <strong>{fairRatio.toFixed(2)}</strong>
                   </span>
                 </div>
                 <div style={{ fontSize: "0.68rem", color: "#CBD5E1" }}>
@@ -353,7 +424,7 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
                   color: "#FFF",
                   fontSize: "0.80rem",
                   fontWeight: 800,
-                  cursor: isBroadcasting ? "default" : "pointer",
+                  cursor: isBroadcasting ? "not-allowed" : "pointer",
                   letterSpacing: "1px",
                   boxShadow: "0 0 15px rgba(20, 184, 166, 0.3)",
                 }}

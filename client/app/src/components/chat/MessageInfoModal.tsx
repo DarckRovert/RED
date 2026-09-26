@@ -39,7 +39,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
     if (!message) return null;
 
     const isDelivered = message.status === "Delivered" || (message as any).delivered === true;
-    const isRead = message.status === "Read" || (message as any).read === true;
+    const isRead = !isMine ? true : (message.status === "Read" || (message as any).read === true);
 
     const formatFullDate = (ts: number) => {
         if (!ts) return "—";
@@ -59,10 +59,14 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
     const sentDateStr = formatFullDate(message.timestamp);
     const deliveredDateStr = isDelivered 
         ? ((message as any).delivered_at ? formatFullDate((message as any).delivered_at) : sentDateStr)
-        : (t('chat_modals.waiting_recipient_confirm') || "Esperando confirmación del receptor...");
-    const readDateStr = isRead
-        ? ((message as any).read_at ? formatFullDate((message as any).read_at) : t('message_info.read_recently'))
-        : (t('chat_modals.not_read_yet') || "Aún no leído");
+        : (isMine 
+            ? (t('chat_modals.waiting_recipient_confirm') || "Esperando confirmación del receptor...")
+            : sentDateStr);
+    const readDateStr = isMine
+        ? (isRead 
+            ? ((message as any).read_at ? formatFullDate((message as any).read_at) : t('message_info.read_recently'))
+            : (t('chat_modals.not_read_yet') || "Aún no leído"))
+        : (t('message_info.read_by_me') || "Leído en este dispositivo");
 
     return (
         <div
@@ -77,6 +81,8 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                 alignItems: "center",
                 justifyContent: "center",
                 padding: "16px",
+                overflowY: "auto",
+                WebkitOverflowScrolling: "touch",
                 animation: "fadeIn 0.18s ease-out"
             }}
             onClick={() => {
@@ -89,6 +95,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                 style={{
                     width: "100%",
                     maxWidth: "460px",
+                    maxHeight: "min(90vh, 640px)",
                     backgroundColor: "#111B21",
                     border: "1px solid rgba(255, 255, 255, 0.12)",
                     borderRadius: "20px",
@@ -96,6 +103,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                     overflow: "hidden",
                     display: "flex",
                     flexDirection: "column",
+                    margin: "auto"
                 }}
                 onClick={e => e.stopPropagation()}
             >
@@ -106,7 +114,8 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                     alignItems: "center",
                     justifyContent: "space-between",
                     borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-                    backgroundColor: "#1F2C34"
+                    backgroundColor: "#1F2C34",
+                    flexShrink: 0
                 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                         <span style={{ fontSize: "1.2rem", color: "#00A884" }}>ℹ️</span>
@@ -133,14 +142,26 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                     </button>
                 </div>
 
-                {/* Message Bubble Preview */}
-                <div style={{
-                    padding: "20px",
-                    backgroundColor: "#0B141A",
-                    display: "flex",
-                    justifyContent: isMine ? "flex-end" : "flex-start",
-                    borderBottom: "1px solid rgba(255, 255, 255, 0.06)"
-                }}>
+                {/* Cuerpo deslizable táctico */}
+                <div
+                    className="scroll-container"
+                    style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        overflowY: "auto",
+                        WebkitOverflowScrolling: "touch",
+                        flex: 1,
+                        minHeight: 0
+                    }}
+                >
+                    {/* Message Bubble Preview */}
+                    <div style={{
+                        padding: "20px",
+                        backgroundColor: "#0B141A",
+                        display: "flex",
+                        justifyContent: isMine ? "flex-end" : "flex-start",
+                        borderBottom: "1px solid rgba(255, 255, 255, 0.06)"
+                    }}>
                     <div style={{
                         maxWidth: "85%",
                         padding: "8px 14px",
@@ -187,7 +208,9 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                             </svg>
                         </div>
                         <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>{t('chat_modals.read_timestamp')}</div>
+                            <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
+                                {isMine ? t('chat_modals.read_timestamp') : (t('chat_modals.read_by_me_title') || "Leído")}
+                            </div>
                             <div style={{ fontSize: "0.78rem", color: isRead ? "#8696A0" : "#667781", marginTop: "2px" }}>
                                 {readDateStr}
                             </div>
@@ -209,7 +232,9 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                             </svg>
                         </div>
                         <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>{t('chat_modals.delivered_timestamp')}</div>
+                            <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
+                                {isMine ? t('chat_modals.delivered_timestamp') : (t('chat_modals.delivered_to_me_title') || "Recibido")}
+                            </div>
                             <div style={{ fontSize: "0.78rem", color: "#8696A0", marginTop: "2px" }}>
                                 {deliveredDateStr}
                             </div>
@@ -230,7 +255,9 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                             </svg>
                         </div>
                         <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>{t('chat_modals.sent_timestamp')}</div>
+                            <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
+                                {isMine ? t('chat_modals.sent_timestamp') : (t('chat_modals.sent_by_peer_title') || "Enviado por contacto")}
+                            </div>
                             <div style={{ fontSize: "0.78rem", color: "#8696A0", marginTop: "2px" }}>
                                 {sentDateStr}
                             </div>
@@ -261,9 +288,10 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                         </div>
                     </div>
                 </div>
+                </div>
 
                 {/* Footer Button */}
-                <div style={{ padding: "12px 20px 16px 20px" }}>
+                <div style={{ padding: "12px 20px 16px 20px", flexShrink: 0, borderTop: "1px solid rgba(255, 255, 255, 0.06)" }}>
                     <button
                         onClick={() => {
                             TacticalAudioEngine.playTap();

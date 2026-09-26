@@ -3,7 +3,6 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
-import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 
 interface VectorStroke {
@@ -31,7 +30,6 @@ type TacticalTool = "pen" | "marker" | "arrow" | "box" | "eraser";
 
 export const LiveCanvasModal: React.FC = () => {
     const { goBack, identity } = useRedStore();
-    const { t } = useTranslation();
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [color, setColor] = useState("#00E5FF");
@@ -44,6 +42,17 @@ export const LiveCanvasModal: React.FC = () => {
     const snapshotImageDataRef = useRef<ImageData | null>(null);
     const pendingStrokesRef = useRef<VectorStroke[]>([]);
     const flushTimerRef = useRef<any>(null);
+
+    // Búfer histórico acotado para replay resiliente en rotaciones de pantalla (anti-borrado)
+    const MAX_STROKES_HISTORY = 1200;
+    const strokesHistoryRef = useRef<VectorStroke[]>([]);
+
+    const addStrokeToHistory = useCallback((stroke: VectorStroke) => {
+        if (strokesHistoryRef.current.length >= MAX_STROKES_HISTORY) {
+            strokesHistoryRef.current.shift();
+        }
+        strokesHistoryRef.current.push(stroke);
+    }, []);
 
     const myNickname = identity?.nickname || "Operador RED";
 
@@ -151,7 +160,12 @@ export const LiveCanvasModal: React.FC = () => {
         canvas.height = rect.height || 600;
 
         renderBackgroundAndGrid(ctx, canvas.width, canvas.height);
-    }, [renderBackgroundAndGrid]);
+
+        // Replay resiliente anti-borrado en rotación de pantalla / redimensionamiento
+        for (const stroke of strokesHistoryRef.current) {
+            drawStrokeOnCanvas(ctx, canvas, stroke);
+        }
+    }, [renderBackgroundAndGrid, drawStrokeOnCanvas]);
 
     useEffect(() => {
         initCanvas();
@@ -170,6 +184,7 @@ export const LiveCanvasModal: React.FC = () => {
             if (!ctx) return;
 
             if (detail.type === "canvas_clear") {
+                strokesHistoryRef.current = [];
                 renderBackgroundAndGrid(ctx, canvas.width, canvas.height);
                 toast.info("🧹 Pizarra limpiada por un operador de la malla");
                 return;
@@ -177,19 +192,22 @@ export const LiveCanvasModal: React.FC = () => {
 
             if (detail.type === "canvas_stroke_batch" && Array.isArray(detail.strokes)) {
                 for (const stroke of detail.strokes) {
+                    addStrokeToHistory(stroke);
                     drawStrokeOnCanvas(ctx, canvas, stroke);
                 }
                 return;
             }
 
             if (detail.type === "canvas_stroke" || detail.x0 !== undefined) {
-                drawStrokeOnCanvas(ctx, canvas, detail as VectorStroke);
+                const stroke = detail as VectorStroke;
+                addStrokeToHistory(stroke);
+                drawStrokeOnCanvas(ctx, canvas, stroke);
             }
         };
 
         window.addEventListener("red_canvas_remote_event", handleRemoteEvent);
         return () => window.removeEventListener("red_canvas_remote_event", handleRemoteEvent);
-    }, [drawStrokeOnCanvas]);
+    }, [drawStrokeOnCanvas, renderBackgroundAndGrid, addStrokeToHistory]);
 
     // ─── 6. Micro-Agrupación (Stroke Batching) Anti-Saturación ────────────────
     const flushPendingStrokes = useCallback(async () => {
@@ -312,6 +330,7 @@ export const LiveCanvasModal: React.FC = () => {
             };
 
             drawStrokeOnCanvas(ctx, canvas, strokeData);
+            addStrokeToHistory(strokeData);
             queueStroke(strokeData);
         }
         lastPosRef.current = currentPos;
@@ -345,6 +364,7 @@ export const LiveCanvasModal: React.FC = () => {
                     drawStrokeOnCanvas(ctx, canvas, strokeData);
                 }
 
+                addStrokeToHistory(strokeData);
                 queueStroke(strokeData);
             } else if (snapshotImageDataRef.current) {
                 // Toque accidental menor a 4 píxeles: restaurar estado limpio previo
@@ -373,6 +393,7 @@ export const LiveCanvasModal: React.FC = () => {
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
+        strokesHistoryRef.current = [];
         renderBackgroundAndGrid(ctx, canvas.width, canvas.height);
         broadcastClear();
         toast.success("Pizarra limpiada");
@@ -402,49 +423,52 @@ export const LiveCanvasModal: React.FC = () => {
         }}>
             {/* Header Táctico */}
             <header style={{
-                padding: "12px 20px",
-                height: "var(--header-h)",
+                padding: "8px 14px",
+                minHeight: "52px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
+                gap: "10px",
                 borderBottom: "1px solid var(--glass-border)",
                 background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
                 backdropFilter: "blur(20px)",
                 zIndex: 10, flexShrink: 0,
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
                     <div style={{
-                        width: 38, height: 38, borderRadius: "12px",
+                        width: 34, height: 34, borderRadius: "10px", flexShrink: 0,
                         background: "linear-gradient(135deg, rgba(0,229,255,0.2) 0%, rgba(217,70,239,0.3) 100%)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.3rem", border: "1px solid var(--glass-border)"
+                        fontSize: "1.2rem", border: "1px solid var(--glass-border)"
                     }}>
                         🎨
                     </div>
-                    <div>
-                        <div style={{ fontSize: "1.02rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span>Lienzo Táctico Colaborativo</span>
+                    <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: "0.92rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Lienzo Táctico</span>
                             <span style={{
-                                fontSize: "0.65rem",
-                                padding: "2px 8px",
-                                borderRadius: "10px",
+                                fontSize: "0.62rem",
+                                padding: "2px 6px",
+                                borderRadius: "8px",
                                 background: peerCount > 0 ? "rgba(0, 230, 118, 0.2)" : "rgba(255, 179, 0, 0.2)",
                                 color: peerCount > 0 ? "var(--accent-emerald)" : "var(--accent-amber)",
                                 border: `1px solid ${peerCount > 0 ? "var(--accent-emerald)" : "var(--accent-amber)"}`,
-                                fontWeight: 800
+                                fontWeight: 800,
+                                flexShrink: 0,
+                                whiteSpace: "nowrap"
                             }}>
-                                {peerCount > 0 ? `🟢 ${peerCount} PARES EN MALLA` : "🟡 MODO LOCAL / ESPERANDO"}
+                                {peerCount > 0 ? `🟢 ${peerCount} MALLA` : "🟡 LOCAL"}
                             </span>
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                            SINCRONIZACIÓN VECTORIAL EN TIEMPO REAL · MICRO-LOTES ANTI-SATURACIÓN (45ms)
+                        <div style={{ fontSize: "0.64rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            SINCRONIZACIÓN VECTORIAL TIEMPO REAL · 45ms
                         </div>
                     </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
                     <button
                         onClick={handleExportSnapshot}
                         className="btn-tactical-secondary"
-                        style={{ padding: "6px 12px", fontSize: "0.74rem" }}
+                        style={{ padding: "6px 10px", fontSize: "0.72rem", whiteSpace: "nowrap" }}
                         title="Exportar imagen PNG"
                     >
                         📸 Exportar
@@ -452,7 +476,7 @@ export const LiveCanvasModal: React.FC = () => {
                     <button
                         onClick={handleClearCanvas}
                         className="btn-tactical-secondary"
-                        style={{ padding: "6px 12px", fontSize: "0.74rem", borderColor: "rgba(255,23,68,0.4)", color: "var(--accent-crimson)" }}
+                        style={{ padding: "6px 10px", fontSize: "0.72rem", borderColor: "rgba(255,23,68,0.4)", color: "var(--accent-crimson)", whiteSpace: "nowrap" }}
                         title="Limpiar pizarra"
                     >
                         🧹 Limpiar
@@ -460,71 +484,76 @@ export const LiveCanvasModal: React.FC = () => {
                     <button
                         onClick={goBack}
                         className="btn-icon"
-                        style={{ width: 36, height: 36 }}
+                        style={{ width: 34, height: 34, flexShrink: 0 }}
+                        aria-label="Cerrar lienzo"
                     >
                         ✕
                     </button>
                 </div>
             </header>
 
-            {/* Toolbar Táctica */}
-            <div style={{
-                padding: "8px 16px",
+            {/* Toolbar Táctica: 1 fila con scroll horizontal touch en pantallas compactas */}
+            <div className="scroll-container" style={{
+                padding: "8px 12px",
                 background: "rgba(10, 12, 22, 0.95)",
                 borderBottom: "1px solid var(--glass-border)",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                gap: "12px", flexWrap: "wrap", flexShrink: 0
+                display: "flex", alignItems: "center",
+                gap: "12px", flexWrap: "nowrap", flexShrink: 0,
+                overflowX: "auto", overflowY: "hidden",
+                WebkitOverflowScrolling: "touch"
             }}>
                 {/* Herramientas Tácticas */}
-                <div style={{ display: "flex", gap: "6px" }}>
+                <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
                     <button
                         onClick={() => setTool("pen")}
                         className={tool === "pen" ? "glow-pill-active" : "btn-ghost"}
-                        style={{ padding: "6px 10px", fontSize: "0.74rem", borderRadius: "8px" }}
+                        style={{ padding: "6px 10px", fontSize: "0.72rem", borderRadius: "8px", whiteSpace: "nowrap" }}
                     >
                         ✏️ Pluma
                     </button>
                     <button
                         onClick={() => setTool("marker")}
                         className={tool === "marker" ? "glow-pill-active" : "btn-ghost"}
-                        style={{ padding: "6px 10px", fontSize: "0.74rem", borderRadius: "8px" }}
+                        style={{ padding: "6px 10px", fontSize: "0.72rem", borderRadius: "8px", whiteSpace: "nowrap" }}
                     >
                         🖌️ Resaltador
                     </button>
                     <button
                         onClick={() => setTool("arrow")}
                         className={tool === "arrow" ? "glow-pill-active" : "btn-ghost"}
-                        style={{ padding: "6px 10px", fontSize: "0.74rem", borderRadius: "8px" }}
+                        style={{ padding: "6px 10px", fontSize: "0.72rem", borderRadius: "8px", whiteSpace: "nowrap" }}
                         title="Vector táctico de maniobra"
                     >
-                        ↗️ Flecha Táctica
+                        ↗️ Flecha
                     </button>
                     <button
                         onClick={() => setTool("box")}
                         className={tool === "box" ? "glow-pill-active" : "btn-ghost"}
-                        style={{ padding: "6px 10px", fontSize: "0.74rem", borderRadius: "8px" }}
+                        style={{ padding: "6px 10px", fontSize: "0.72rem", borderRadius: "8px", whiteSpace: "nowrap" }}
                         title="Perímetro de zona de operaciones"
                     >
-                        ▢ Zona Táctica
+                        ▢ Zona
                     </button>
                     <button
                         onClick={() => setTool("eraser")}
                         className={tool === "eraser" ? "glow-pill-active" : "btn-ghost"}
-                        style={{ padding: "6px 10px", fontSize: "0.74rem", borderRadius: "8px" }}
+                        style={{ padding: "6px 10px", fontSize: "0.72rem", borderRadius: "8px", whiteSpace: "nowrap" }}
                     >
                         🧹 Borrador
                     </button>
                 </div>
 
+                <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
+
                 {/* Paleta de Colores */}
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
                     {COLOR_PALETTE.map(c => (
                         <div
                             key={c.value}
                             onClick={() => { setColor(c.value); if (tool === "eraser") setTool("pen"); }}
                             title={c.label}
                             style={{
-                                width: 22, height: 22, borderRadius: "50%",
+                                width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
                                 background: c.value, cursor: "pointer",
                                 border: color === c.value && tool !== "eraser" ? "2px solid #FFFFFF" : "1px solid rgba(0,0,0,0.5)",
                                 boxShadow: color === c.value && tool !== "eraser" ? `0 0 10px ${c.value}` : "none",
@@ -535,15 +564,17 @@ export const LiveCanvasModal: React.FC = () => {
                     ))}
                 </div>
 
+                <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
+
                 {/* Grosor de Línea */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <span style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>Grosor:</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                    <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>Grosor:</span>
                     {[2, 4, 8, 14].map(w => (
                         <button
                             key={w}
                             onClick={() => setLineWidth(w)}
                             style={{
-                                width: 24, height: 24, borderRadius: "6px",
+                                width: 24, height: 24, borderRadius: "6px", flexShrink: 0,
                                 background: lineWidth === w ? "rgba(0, 229, 255, 0.2)" : "rgba(255,255,255,0.05)",
                                 border: lineWidth === w ? "1px solid var(--accent-cyan)" : "1px solid transparent",
                                 color: lineWidth === w ? "var(--accent-cyan)" : "var(--text-muted)",
@@ -557,7 +588,7 @@ export const LiveCanvasModal: React.FC = () => {
             </div>
 
             {/* Canvas Interactivo de Alta Sensibilidad */}
-            <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "#080A14" }}>
+            <div style={{ flex: "1 1 0%", minHeight: 0, position: "relative", overflow: "hidden", background: "#080A14" }}>
                 <canvas
                     ref={canvasRef}
                     onMouseDown={startDrawing}

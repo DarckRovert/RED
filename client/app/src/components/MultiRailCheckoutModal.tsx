@@ -57,11 +57,16 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
     useEffect(() => {
         if (!isOpen) return;
         return BackHandlerRegistry.register(() => {
+            if (isProcessing) {
+                TacticalAudioEngine.playWarning();
+                toast.warning("⏳ Procesando pago criptográfico. Por favor espera...");
+                return true;
+            }
             TacticalAudioEngine.playTap();
             onClose();
             return true;
         });
-    }, [isOpen, onClose]);
+    }, [isOpen, isProcessing, onClose]);
 
     // Subscribe to Web3 Bridge state changes
     useEffect(() => {
@@ -248,6 +253,11 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
         <div
             onClick={(e) => {
                 if (e.target === e.currentTarget) {
+                    if (isProcessing) {
+                        TacticalAudioEngine.playWarning();
+                        toast.warning("⏳ Procesando pago criptográfico. Por favor espera...");
+                        return;
+                    }
                     TacticalAudioEngine.playTap();
                     onClose();
                 }
@@ -279,33 +289,64 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
             }}>
                 {/* Header */}
                 <div style={{
-                    padding: '16px 20px',
+                    padding: '14px 18px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                    background: 'rgba(255, 255, 255, 0.02)'
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    gap: '10px'
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '1.4rem' }}>{product.icon || '📦'}</span>
-                        <div>
-                            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#FFF' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                        <span style={{ fontSize: '1.4rem', flexShrink: 0 }}>{product.icon || '📦'}</span>
+                        <div style={{ minWidth: 0 }}>
+                            <h3 style={{
+                                margin: 0,
+                                fontSize: '1rem',
+                                fontWeight: 800,
+                                color: '#FFF',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }}>
                                 {product.title}
                             </h3>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                                <span style={{ fontSize: '0.78rem', color: '#00E5FF', fontWeight: 700 }}>
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                marginTop: '2px',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }}>
+                                <span style={{ fontSize: '0.78rem', color: '#00E5FF', fontWeight: 700, flexShrink: 0 }}>
                                     {product.priceEst}
                                 </span>
-                                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary, #8A92A6)' }}>
+                                <span style={{
+                                    fontSize: '0.72rem',
+                                    color: 'var(--text-secondary, #8A92A6)',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                }}>
                                     • Por: {product.authorName || 'Operador RED'}
                                 </span>
                             </div>
                         </div>
                     </div>
                     <button
-                        onClick={() => { TacticalAudioEngine.playTap(); onClose(); }}
+                        onClick={() => {
+                            if (isProcessing) {
+                                TacticalAudioEngine.playWarning();
+                                toast.warning("⏳ Procesando pago criptográfico. Por favor espera...");
+                                return;
+                            }
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
                         className="btn-icon"
-                        style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.06)' }}
+                        style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.06)', flexShrink: 0 }}
                         aria-label="Cerrar modal"
                     >
                         <TacIcon name="x" size={16} color="#FFF" />
@@ -426,14 +467,18 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
                 </div>
 
                 {/* Tab Content Body */}
-                <div style={{
-                    flex: 1,
-                    overflowY: 'auto',
-                    padding: '20px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '16px'
-                }}>
+                <div
+                    className="scroll-container"
+                    style={{
+                        flex: '1 1 0%',
+                        minHeight: 0,
+                        overflowY: 'auto',
+                        padding: 'clamp(14px, 3vw, 20px)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '16px'
+                    }}
+                >
                     {/* ── TAB 1: FIAT LOCAL (Yape, Plin, PayPal, Pix, Bizum) ── */}
                     {activeTab === 'fiat' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', textAlign: 'center' }}>

@@ -3,6 +3,7 @@ import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { TacticalEmojiPicker } from "./TacticalEmojiPicker";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { toast } from "../Toast";
 
 interface MediaSendPreviewModalProps {
     file: File | null;
@@ -25,11 +26,53 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
     const [caption, setCaption] = useState("");
     const [emojiOpen, setEmojiOpen] = useState(false);
     const [isSending, setIsSending] = useState(false);
+    const [viewportHeight, setViewportHeight] = useState<string>("100%");
+
+    // Sincronización reactiva con visualViewport para esquivar el teclado virtual en Android/iOS
+    useEffect(() => {
+        if (typeof window === "undefined" || !window.visualViewport) return;
+
+        let rafId: number | null = null;
+        let lastHeight = -1;
+
+        const handleResize = () => {
+            if (rafId !== null) return;
+            rafId = window.requestAnimationFrame(() => {
+                rafId = null;
+                const vv = window.visualViewport;
+                if (!vv) return;
+
+                const roundedHeight = Math.round(vv.height);
+                if (Math.abs(roundedHeight - lastHeight) < 1) return;
+
+                lastHeight = roundedHeight;
+
+                if (Math.abs(roundedHeight - window.innerHeight) <= 4) {
+                    setViewportHeight("100%");
+                } else {
+                    setViewportHeight(`${roundedHeight}px`);
+                }
+            });
+        };
+
+        window.visualViewport.addEventListener("resize", handleResize);
+
+        return () => {
+            window.visualViewport?.removeEventListener("resize", handleResize);
+            if (rafId !== null) {
+                window.cancelAnimationFrame(rafId);
+            }
+        };
+    }, []);
 
     // Intercepción LIFO (retroceso físico / Esc)
     useEffect(() => {
         const unregister = BackHandlerRegistry.register(() => {
-            if (isSending) return false;
+            if (isSending) {
+                TacticalAudioEngine.playWarning();
+                toast.info("⏳ Cifrando y transmitiendo archivo multimedia...");
+                return true; // Blindar la transmisión en vuelo consumiendo el evento
+            }
             TacticalAudioEngine.playTap();
             if (emojiOpen) {
                 setEmojiOpen(false);
@@ -52,12 +95,16 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
         <div
             style={{
                 position: "fixed",
-                inset: 0,
+                top: 0,
+                left: 0,
+                right: 0,
+                height: viewportHeight,
                 backgroundColor: "#0B141A",
                 zIndex: 99999,
                 display: "flex",
                 flexDirection: "column",
-                animation: "fadeIn 0.15s ease-out"
+                animation: "fadeIn 0.15s ease-out",
+                overflow: "hidden",
             }}
         >
             {/* Top Bar */}
@@ -69,10 +116,12 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
                 justifyContent: "space-between",
                 background: "rgba(11, 20, 26, 0.9)",
                 zIndex: 10,
-                flexShrink: 0
+                flexShrink: 0,
+                gap: "12px"
             }}>
                 <button
                     onClick={() => {
+                        if (isSending) return;
                         TacticalAudioEngine.playTap();
                         onCancel();
                     }}
@@ -82,26 +131,39 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
                         border: "none",
                         color: "#FFFFFF",
                         fontSize: "1.4rem",
-                        cursor: "pointer",
-                        padding: "4px 8px"
+                        cursor: isSending ? "not-allowed" : "pointer",
+                        opacity: isSending ? 0.4 : 1,
+                        padding: "4px 8px",
+                        flexShrink: 0
                     }}
                     title={t('common.cancel')}
                 >
                     ✕
                 </button>
-                <div style={{ color: "#E9EDEF", fontSize: "0.95rem", fontWeight: 600 }}>
+                <div style={{
+                    color: "#E9EDEF",
+                    fontSize: "0.95rem",
+                    fontWeight: 600,
+                    flex: 1,
+                    textAlign: "center",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    minWidth: 0
+                }}>
                     Enviar a {recipientName}
                 </div>
-                <div style={{ width: 36 }} />
+                <div style={{ width: 36, flexShrink: 0 }} />
             </header>
 
             {/* Media Content Area */}
             <div style={{
-                flex: 1,
+                flex: "1 1 0%",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 padding: "16px",
+                minHeight: 0,
                 overflow: "hidden",
                 position: "relative"
             }}>
@@ -113,7 +175,8 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
                             maxWidth: "100%",
                             maxHeight: "100%",
                             borderRadius: "12px",
-                            boxShadow: "0 8px 32px rgba(0,0,0,0.5)"
+                            boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                            objectFit: "contain"
                         }}
                     />
                 ) : (
@@ -133,6 +196,7 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
 
             {/* Bottom Caption Input Bar */}
             <div style={{
+                position: "relative",
                 padding: "12px 16px",
                 paddingBottom: "max(14px, env(safe-area-inset-bottom, 14px))",
                 background: "#111B21",
@@ -150,7 +214,8 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
                     background: "#2A3942",
                     borderRadius: "24px",
                     padding: "6px 14px",
-                    minHeight: "46px"
+                    minHeight: "46px",
+                    minWidth: 0
                 }}>
                     <button
                         onClick={() => {
@@ -165,7 +230,8 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
                             cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
-                            padding: "2px"
+                            padding: "2px",
+                            flexShrink: 0
                         }}
                         title="Emojis"
                     >
@@ -188,9 +254,9 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
                             border: "none",
                             outline: "none",
                             color: "#FFFFFF",
-                            fontSize: "0.95rem"
+                            fontSize: "0.95rem",
+                            minWidth: 0
                         }}
-                        autoFocus
                     />
                 </div>
 
@@ -218,16 +284,16 @@ export const MediaSendPreviewModal: React.FC<MediaSendPreviewModalProps> = ({
                         <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
                     </svg>
                 </button>
-            </div>
 
-            {/* Emoji Picker Popover */}
-            <TacticalEmojiPicker
-                isOpen={emojiOpen}
-                onClose={() => setEmojiOpen(false)}
-                onSelectEmoji={emoji => {
-                    setCaption(prev => prev + emoji);
-                }}
-            />
+                {/* Emoji Picker Popover anclado a la barra de entrada */}
+                <TacticalEmojiPicker
+                    isOpen={emojiOpen}
+                    onClose={() => setEmojiOpen(false)}
+                    onSelectEmoji={emoji => {
+                        setCaption(prev => prev + emoji);
+                    }}
+                />
+            </div>
         </div>
     );
 };

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 import { legalAgreementManager, CURRENT_LEGAL_VERSION, LEGAL_CONTRACT_SHA256 } from "../../lib/legal/LegalAgreementManager";
-import { RED_VERSION_NAME } from "../../lib/version";
+import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { toast } from "../Toast";
 
 interface DigitalContractGateModalProps {
     isOpen: boolean;
@@ -19,6 +20,17 @@ export const DigitalContractGateModal: React.FC<DigitalContractGateModalProps> =
     const [ackRadio, setAckRadio] = useState(false);
     const [ackCustody, setAckCustody] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Blindaje LIFO de botón de retroceso físico / Esc
+    useEffect(() => {
+        if (!isOpen) return;
+        const unregister = BackHandlerRegistry.register(() => {
+            TacticalAudioEngine.playWarning();
+            toast.warning("Debe suscribir las cláusulas del contrato digital para acceder a RED OS.");
+            return true;
+        });
+        return unregister;
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
@@ -51,6 +63,7 @@ export const DigitalContractGateModal: React.FC<DigitalContractGateModalProps> =
 
     return (
         <div
+            className="scroll-container"
             style={{
                 position: "fixed",
                 inset: 0,
@@ -60,7 +73,9 @@ export const DigitalContractGateModal: React.FC<DigitalContractGateModalProps> =
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                padding: "16px",
+                padding: "clamp(8px, 2vh, 16px)",
+                overflowY: "auto",
+                WebkitOverflowScrolling: "touch",
             }}
             role="dialog"
             aria-modal="true"
@@ -80,6 +95,7 @@ export const DigitalContractGateModal: React.FC<DigitalContractGateModalProps> =
                     flexDirection: "column",
                     overflow: "hidden",
                     boxShadow: "0 28px 70px rgba(0,0,0,0.95), 0 0 35px rgba(0,230,118,0.2)",
+                    margin: "auto",
                 }}
             >
                 {/* Header */}
@@ -430,14 +446,14 @@ export const DigitalContractGateModal: React.FC<DigitalContractGateModalProps> =
                 <div
                     style={{
                         flexShrink: 0,
-                        padding: "14px 20px",
+                        padding: "12px clamp(12px, 3vw, 20px)",
                         borderTop: "1px solid rgba(255,255,255,0.08)",
                         background: "rgba(0,0,0,0.85)",
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center",
                         flexWrap: "wrap",
-                        gap: "14px",
+                        gap: "12px",
                     }}
                 >
                     <div style={{ display: "flex", gap: "14px", fontSize: "0.74rem" }}>
@@ -464,8 +480,8 @@ export const DigitalContractGateModal: React.FC<DigitalContractGateModalProps> =
                         disabled={!canSubmit || isSubmitting}
                         className={canSubmit ? "btn-tactical-primary" : "btn-tactical-disabled"}
                         style={{
-                            padding: "12px 28px",
-                            fontSize: "0.85rem",
+                            padding: "12px clamp(16px, 4vw, 28px)",
+                            fontSize: "clamp(0.76rem, 2.5vw, 0.85rem)",
                             fontWeight: 900,
                             letterSpacing: "0.5px",
                             cursor: canSubmit ? "pointer" : "not-allowed",
@@ -478,6 +494,9 @@ export const DigitalContractGateModal: React.FC<DigitalContractGateModalProps> =
                             color: canSubmit ? "#04060A" : "var(--text-muted)",
                             boxShadow: canSubmit ? "0 0 20px rgba(0, 230, 118, 0.4)" : "none",
                             transition: "all 0.2s ease",
+                            maxWidth: "100%",
+                            whiteSpace: "normal",
+                            textAlign: "center",
                         }}
                     >
                         {isSubmitting ? "REGISTRANDO FIRMA..." : "FIRMAR DIGITALMENTE Y ENTRAR A RED OS →"}

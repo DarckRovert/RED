@@ -9,12 +9,10 @@ import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { meshSosBeacon } from "../lib/emergency/MeshSosBeaconEngine";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
-import { useTranslation } from "../lib/i18n/i18nEngine";
 import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
 
 export function SonarSeismicModal() {
     const { navigate, goBack, identity } = useRedStore();
-    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<"sonar" | "seismic" | "structural">("sonar");
     
     // Structural Health State
@@ -32,7 +30,7 @@ export function SonarSeismicModal() {
     // Live Physical Geophone Sensor State
     const [isListeningGeophone, setIsListeningGeophone] = useState<boolean>(false);
     const [currentVibrationG, setCurrentVibrationG] = useState<number>(0);
-    const [localNodeCoords, setLocalNodeCoords] = useState<{ x: number; y: number }>({ x: 3.0, y: 2.6 });
+    const [localNodeCoords] = useState<{ x: number; y: number }>({ x: 3.0, y: 2.6 });
     const [lastImpact, setLastImpact] = useState<{ timestamp: number; amplitudeG: number; nodeName: string } | null>(null);
     const gravityEmaRef = useRef<number>(9.81);
     const lastTapTsRef = useRef<number>(0);
@@ -155,8 +153,8 @@ export function SonarSeismicModal() {
 
     // Escucha de impactos sísmicos remotos transmitidos por otros nodos de la malla
     useEffect(() => {
-        const handleRemoteSeismic = (e: any) => {
-            const detail = e.detail;
+        const handleRemoteSeismic = (e: Event) => {
+            const detail = (e as CustomEvent<{ nodeId?: string; xMeters?: number; yMeters?: number; timestamp?: number; amplitudeG?: number }>).detail;
             if (!detail || !detail.nodeId) return;
             const myLocalId = identity?.identity_hash ? `geo_${identity.identity_hash.slice(0, 8)}` : "geophone-local";
             if (detail.nodeId === myLocalId) return;
@@ -332,8 +330,9 @@ export function SonarSeismicModal() {
             }, callerId, callerName);
             TacticalAudioEngine.playEmergencyAlarm();
             toast.success("🚨 Localización de víctima transmitida por Malla SOS");
-        } catch (e: any) {
-            toast.error("Error al difundir SOS: " + e.message);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            toast.error("Error al difundir SOS: " + msg);
         }
     };
 
@@ -365,16 +364,18 @@ export function SonarSeismicModal() {
                 borderBottom: "1.5px solid rgba(0, 229, 255, 0.35)",
                 display: "flex", justifyContent: "space-between", alignItems: "center",
                 backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
-                zIndex: 10, flexShrink: 0
+                zIndex: 10, flexShrink: 0, gap: "10px"
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
                     <button
                         onClick={goBack}
+                        aria-label="Volver"
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
                             color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
-                            display: "flex", alignItems: "center", justifyContent: "center"
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            flexShrink: 0
                         }}
                     >
                         ‹
@@ -384,24 +385,32 @@ export function SonarSeismicModal() {
                         background: "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(0, 150, 255, 0.15) 100%)",
                         border: "1px solid rgba(0, 229, 255, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 229, 255, 0.25)"
+                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 229, 255, 0.25)",
+                        flexShrink: 0
                     }}>📡</div>
-                    <div>
-                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{
+                            fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF",
+                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                        }}>
                             SONAR ACÚSTICO & SÍSMICA
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan, #00E5FF)", fontWeight: 800 }}>
+                        <div style={{
+                            fontSize: "0.68rem", color: "var(--accent-cyan, #00E5FF)", fontWeight: 800,
+                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                        }}>
                             ECO FMCW ToF · TRIANGULACIÓN SÍSMICA TDoA
                         </div>
                     </div>
                 </div>
 
-                <div style={{ display: "flex", gap: "6px" }}>
+                <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
                     <span style={{
                         fontSize: "0.62rem", fontWeight: 900, padding: "3px 8px", borderRadius: "6px",
                         background: sonarState.isScanning ? "rgba(0, 230, 118, 0.2)" : "rgba(255, 255, 255, 0.05)",
                         color: sonarState.isScanning ? "#00E676" : "var(--text-secondary)",
-                        border: `1px solid ${sonarState.isScanning ? '#00E676' : 'rgba(255,255,255,0.1)'}50`
+                        border: `1px solid ${sonarState.isScanning ? '#00E676' : 'rgba(255,255,255,0.1)'}50`,
+                        whiteSpace: "nowrap"
                     }}>
                         {sonarState.isScanning ? "SONAR ACTIVO" : "STANDBY"}
                     </span>
@@ -409,19 +418,23 @@ export function SonarSeismicModal() {
             </header>
 
             {/* Selector de Pestañas Segmentadas */}
-            <div style={{
-                display: "flex", background: "rgba(8, 10, 20, 0.95)",
-                padding: "8px 16px", gap: "6px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-                flexShrink: 0
-            }}>
+            <div
+                className="scroll-container"
+                style={{
+                    display: "flex", background: "rgba(8, 10, 20, 0.95)",
+                    padding: "8px 16px", gap: "8px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                    flexShrink: 0, overflowX: "auto", WebkitOverflowScrolling: "touch"
+                }}
+            >
                 <button
                     onClick={() => setActiveTab("sonar")}
                     style={{
-                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        flex: "1 0 auto", minWidth: "125px", padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "sonar" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(10, 35, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
                         border: activeTab === "sonar" ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
                         color: activeTab === "sonar" ? "#00E5FF" : "var(--text-secondary)",
-                        fontWeight: 900, fontSize: "0.76rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                        fontWeight: 900, fontSize: "0.76rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                        whiteSpace: "nowrap"
                     }}
                 >
                     <span>📡</span> SONAR ToF {sonarState.isScanning && "▶"}
@@ -429,11 +442,12 @@ export function SonarSeismicModal() {
                 <button
                     onClick={() => setActiveTab("seismic")}
                     style={{
-                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        flex: "1 0 auto", minWidth: "135px", padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "seismic" ? "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(180, 20, 40, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
                         border: activeTab === "seismic" ? "1.5px solid #FF3355" : "1px solid rgba(255, 255, 255, 0.08)",
                         color: activeTab === "seismic" ? "#FF3355" : "var(--text-secondary)",
-                        fontWeight: 900, fontSize: "0.76rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                        fontWeight: 900, fontSize: "0.76rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                        whiteSpace: "nowrap"
                     }}
                 >
                     <span>🪨</span> SÍSMICA TDoA ({nodes.length})
@@ -441,11 +455,12 @@ export function SonarSeismicModal() {
                 <button
                     onClick={() => setActiveTab("structural")}
                     style={{
-                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        flex: "1 0 auto", minWidth: "130px", padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "structural" ? "linear-gradient(135deg, rgba(255, 179, 0, 0.25) 0%, rgba(180, 120, 0, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
                         border: activeTab === "structural" ? "1.5px solid #FFB300" : "1px solid rgba(255, 255, 255, 0.08)",
                         color: activeTab === "structural" ? "#FFB300" : "var(--text-secondary)",
-                        fontWeight: 900, fontSize: "0.76rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                        fontWeight: 900, fontSize: "0.76rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                        whiteSpace: "nowrap"
                     }}
                 >
                     <span>🏢</span> ANTI-COLAPSO {structTelemetry.isMonitoring && "●"}
@@ -475,7 +490,7 @@ export function SonarSeismicModal() {
                                 </div>
                                 <select
                                     value={medium}
-                                    onChange={(e: any) => setMedium(e.target.value)}
+                                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMedium(e.target.value as SonarMediumType)}
                                     style={{
                                         width: "100%", padding: "10px 14px", background: "rgba(0, 0, 0, 0.5)",
                                         border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "10px",
@@ -561,7 +576,7 @@ export function SonarSeismicModal() {
                                         {lastPing?.isRealAudioTof ? "🎙️ RETORNO ACÚSTICO MICRO" : "📐 MODELO LAPLACE"}
                                     </span>
                                 </div>
-                                <div style={{ fontSize: "2.8rem", fontWeight: 900, color: "#00E5FF" }}>
+                                <div style={{ fontSize: "clamp(2rem, 8vw, 2.8rem)", fontWeight: 900, color: "#00E5FF" }}>
                                     {lastPing ? `${lastPing.distanceMeters.toFixed(2)} m` : "-- m"}
                                 </div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
@@ -590,11 +605,11 @@ export function SonarSeismicModal() {
                             </div>
 
                             {/* Actions */}
-                            <div style={{ display: "flex", gap: "10px" }}>
+                            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                                 <button
                                     onClick={handleEmitPing}
                                     style={{
-                                        flex: 1, padding: "12px", borderRadius: "12px",
+                                        flex: "1 1 140px", minWidth: "140px", padding: "12px", borderRadius: "12px",
                                         background: "linear-gradient(135deg, #00E5FF 0%, #00897B 100%)",
                                         color: "#000000", fontWeight: 900, fontSize: "0.82rem", border: "none", cursor: "pointer",
                                         boxShadow: "0 0 16px rgba(0, 229, 255, 0.3)"
@@ -605,7 +620,7 @@ export function SonarSeismicModal() {
                                 <button
                                     onClick={handleToggleContinuous}
                                     style={{
-                                        flex: 1, padding: "12px", borderRadius: "12px",
+                                        flex: "1 1 140px", minWidth: "140px", padding: "12px", borderRadius: "12px",
                                         background: sonarState.isScanning ? "rgba(255, 51, 85, 0.15)" : "rgba(255, 255, 255, 0.05)",
                                         border: `1px solid ${sonarState.isScanning ? '#FF3355' : 'rgba(255, 255, 255, 0.15)'}`,
                                         color: sonarState.isScanning ? "#FF3355" : "#FFFFFF",
@@ -679,7 +694,7 @@ export function SonarSeismicModal() {
                                     <line x1="30" y1="15" x2="30" y2="130" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="1" />
 
                                     {/* Sensores Geófonos */}
-                                    {nodes.map((n, idx) => {
+                                    {nodes.map((n) => {
                                         const px = 30 + n.xMeters * 25;
                                         const py = 130 - n.yMeters * 20;
                                         return (
@@ -733,7 +748,7 @@ export function SonarSeismicModal() {
                                     </span>
                                 </div>
 
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.7rem", color: "var(--text-secondary)" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.7rem", color: "var(--text-secondary)", flexWrap: "wrap", gap: "6px" }}>
                                     <div>Vibración Cinética: <strong style={{ color: currentVibrationG > 0.5 ? "#FFB300" : "#00E5FF" }}>{currentVibrationG} G</strong></div>
                                     {lastImpact && (
                                         <div style={{ color: "#00E676" }}>
@@ -929,11 +944,11 @@ export function SonarSeismicModal() {
                                 </div>
                             </div>
 
-                            <div style={{ display: "flex", gap: "10px" }}>
+                            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                                 <button
                                     onClick={handleToggleStructuralMonitoring}
                                     style={{
-                                        flex: 1, padding: "10px", borderRadius: "10px",
+                                        flex: "1 1 150px", minWidth: "140px", padding: "10px", borderRadius: "10px",
                                         background: structTelemetry.isMonitoring ? "rgba(255,51,85,0.2)" : "rgba(0,230,118,0.2)",
                                         border: `1.5px solid ${structTelemetry.isMonitoring ? "#FF3355" : "#00E676"}`,
                                         color: structTelemetry.isMonitoring ? "#FF3355" : "#00E676",
@@ -945,7 +960,7 @@ export function SonarSeismicModal() {
                                 <button
                                     onClick={handleCalibrateStructuralBaseline}
                                     style={{
-                                        padding: "10px 14px", borderRadius: "10px",
+                                        flex: "1 1 120px", minWidth: "120px", padding: "10px 14px", borderRadius: "10px",
                                         background: "rgba(255,179,0,0.15)", border: "1.5px solid #FFB300",
                                         color: "#FFB300", fontWeight: 800, fontSize: "0.78rem", cursor: "pointer"
                                     }}

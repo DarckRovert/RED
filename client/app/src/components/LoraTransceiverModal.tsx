@@ -7,7 +7,6 @@ import { meshRouter } from "../lib/mesh/meshRouter";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { fetchWithFallback } from "../api/core";
 import { toast } from "./Toast";
-import { useTranslation } from "../lib/i18n/i18nEngine";
 import { useRedStore } from "../store/useRedStore";
 import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
 import { AudioContextManager } from "../lib/audio/AudioContextManager";
@@ -20,8 +19,6 @@ type MeshtasticPreset = 'CUSTOM' | 'LONG_FAST' | 'LONG_SLOW' | 'MEDIUM_FAST' | '
 type LogFilter = 'ALL' | 'TX' | 'RX' | 'VOCODER' | 'COT';
 
 export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
-    const { t } = useTranslation();
-
     const [config, setConfig] = useState<LoraConfig>(() => loraBridge.getConfig());
     const [telemetry, setTelemetry] = useState<LoraTelemetry>(() => loraBridge.getTelemetry());
     const [isConnecting, setIsConnecting] = useState(false);
@@ -37,7 +34,7 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
     const activeStreamRef = React.useRef<MediaStream | null>(null);
     const activeProcessorRef = React.useRef<ScriptProcessorNode | null>(null);
     const activeAudioCtxRef = React.useRef<AudioContext | null>(null);
-    const recordTimeoutRef = React.useRef<any>(null);
+    const recordTimeoutRef = React.useRef<NodeJS.Timeout | number | null>(null);
 
     const cleanupVocoderRecorder = React.useCallback(() => {
         if (recordTimeoutRef.current) {
@@ -123,14 +120,15 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
         };
     }, []);
 
-    const syncConfigToBackend = async (conf: LoraConfig) => {
+    const syncConfigToBackend = async (conf?: LoraConfig) => {
         try {
             await fetchWithFallback('/api/settings/lora', {
                 method: 'POST',
                 body: JSON.stringify({
                     port: loraBridge.getTelemetry().transportType === 'BLE_NUS' ? 'BLE_NUS' : 'USB_SERIAL',
                     baud: 115200,
-                    enabled: true
+                    enabled: true,
+                    config: conf
                 })
             }, () => ({ ok: true }));
         } catch {}
@@ -153,8 +151,9 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                     toast.error("No se pudo conectar al puerto USB/Serie. Verifique permisos.");
                 }
             }
-        } catch (e: any) {
-            toast.error(e.message || "Error al conectar LoRa USB");
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            toast.error(msg || "Error al conectar LoRa USB");
         } finally {
             setIsConnecting(false);
             setTelemetry(loraBridge.getTelemetry());
@@ -171,8 +170,9 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
             } else {
                 toast.error("No se pudo conectar al transceptor BLE LoRa");
             }
-        } catch (e: any) {
-            toast.error(e.message || "Error al conectar BLE LoRa");
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            toast.error(msg || "Error al conectar BLE LoRa");
         } finally {
             setIsConnecting(false);
             setTelemetry(loraBridge.getTelemetry());
@@ -209,7 +209,7 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
         setTelemetry(loraBridge.getTelemetry());
     };
 
-    const handleConfigChange = (key: keyof LoraConfig, val: any) => {
+    const handleConfigChange = <K extends keyof LoraConfig>(key: K, val: LoraConfig[K]) => {
         const updated = { ...config, [key]: val };
         setConfig(updated);
         setPreset('CUSTOM');
@@ -264,7 +264,7 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                padding: "16px",
+                padding: "calc(10px + var(--safe-top, 0px)) 12px calc(10px + var(--safe-bottom, 0px)) 12px",
                 userSelect: "none"
             }}
         >
@@ -273,6 +273,9 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                     position: "relative",
                     width: "100%",
                     maxWidth: "720px",
+                    maxHeight: "min(92vh, 840px)",
+                    display: "flex",
+                    flexDirection: "column",
                     background: "linear-gradient(180deg, rgba(14,18,34,0.98) 0%, rgba(6,8,16,0.99) 100%)",
                     border: "1.5px solid rgba(0, 230, 118, 0.35)",
                     borderRadius: "20px",
@@ -282,21 +285,34 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                 }}
             >
                 {/* Header */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid rgba(255, 255, 255, 0.12)", background: "rgba(6, 8, 16, 0.95)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: telemetry.connected ? "var(--accent-emerald)" : "#666666", boxShadow: telemetry.connected ? "0 0 12px var(--accent-emerald)" : "none" }} />
-                        <div>
-                            <h2 style={{ fontSize: "0.95rem", fontWeight: 900, letterSpacing: "0.5px", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", margin: 0 }}>
-                                📡 TRANSCEPTOR LORA TÁCTICO (SX1262 / MESHTASTIC)
+                <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "14px 16px", borderBottom: "1px solid rgba(255, 255, 255, 0.12)",
+                    background: "rgba(6, 8, 16, 0.95)", flexShrink: 0, gap: "10px"
+                }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: 1 }}>
+                        <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: telemetry.connected ? "var(--accent-emerald)" : "#666666", boxShadow: telemetry.connected ? "0 0 12px var(--accent-emerald)" : "none", flexShrink: 0 }} />
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                            <h2 style={{
+                                fontSize: "0.95rem", fontWeight: 900, letterSpacing: "0.5px",
+                                color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", margin: 0,
+                                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                            }}>
+                                📡 TRANSCEPTOR LORA TÁCTICO
                             </h2>
-                            <p style={{ fontSize: "0.7rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace", margin: "2px 0 0 0" }}>
-                                Enlace de Largo Alcance (15–25 km) · Frecuencia ISM 915/868 MHz · PQC Encapsulation
+                            <p style={{
+                                fontSize: "0.68rem", color: "var(--text-secondary)",
+                                fontFamily: "JetBrains Mono, monospace", margin: "2px 0 0 0",
+                                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                            }}>
+                                Enlace Largo Alcance (15–25 km) · ISM 915/868 MHz · SX1262 / Meshtastic
                             </p>
                         </div>
                     </div>
                     {onClose && (
                         <button
                             onClick={onClose}
+                            aria-label="Cerrar modal"
                             style={{
                                 background: "rgba(255, 255, 255, 0.08)",
                                 border: "1px solid rgba(255, 255, 255, 0.15)",
@@ -306,7 +322,11 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                                 borderRadius: "8px",
                                 cursor: "pointer",
                                 fontSize: "0.85rem",
-                                fontWeight: 900
+                                fontWeight: 900,
+                                flexShrink: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center"
                             }}
                         >
                             ✕
@@ -314,7 +334,12 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                     )}
                 </div>
 
-                <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px", maxHeight: "80vh", overflowY: "auto", fontFamily: "JetBrains Mono, monospace", fontSize: "0.75rem" }}>
+                <div className="scroll-container" style={{
+                    padding: "16px", display: "flex", flexDirection: "column",
+                    gap: "16px", flex: "1 1 auto", minHeight: 0, overflowY: "auto",
+                    WebkitOverflowScrolling: "touch",
+                    fontFamily: "JetBrains Mono, monospace", fontSize: "0.75rem"
+                }}>
                     {/* Connection Panel */}
                     <div style={{ padding: "14px", borderRadius: "14px", border: "1px solid rgba(255, 255, 255, 0.12)", background: "rgba(0, 0, 0, 0.5)", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
                         <div>
@@ -611,7 +636,7 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                     )}
 
                     {/* Mode & Interoperability Controls */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px" }}>
                         <button
                             disabled={isRecordingVocoder}
                             onClick={async () => {
@@ -679,15 +704,17 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
 
                                             toast.success(`🎙️ Ráfaga de Voz Vocoder transmitida por LoRa (${compressedBytes.length}B, 1.2 kbps)`);
                                             setLogs(prev => [`[TX-VOICE] ${new Date().toLocaleTimeString()} · ${compressedBytes.length}B · Ráfaga Vocoder LoRa Port 64`, ...prev.slice(0, 99)]);
-                                        } catch (err: any) {
-                                            toast.error("Error al procesar audio Vocoder: " + err.message);
+                                        } catch (err: unknown) {
+                                            const msg = err instanceof Error ? err.message : String(err);
+                                            toast.error("Error al procesar audio Vocoder: " + msg);
                                         } finally {
                                             cleanupVocoderRecorder();
                                         }
                                     }, 1000);
-                                } catch (e: any) {
+                                } catch (e: unknown) {
                                     cleanupVocoderRecorder();
-                                    toast.error("Error al capturar/transmitir voz LoRa: " + e.message);
+                                    const msg = e instanceof Error ? e.message : String(e);
+                                    toast.error("Error al capturar/transmitir voz LoRa: " + msg);
                                 }
                             }}
                             style={{
@@ -728,8 +755,9 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                                     } catch {}
                                     
                                     let batt = 100;
-                                    if (typeof window !== 'undefined' && typeof (window as any).__red_last_battery === 'number') {
-                                        batt = (window as any).__red_last_battery;
+                                    const win = typeof window !== 'undefined' ? (window as unknown as { __red_last_battery?: number }) : null;
+                                    if (win && typeof win.__red_last_battery === 'number') {
+                                        batt = win.__red_last_battery;
                                     }
                                     
                                     const nodeId = identity?.identity_hash ? `RED-${identity.identity_hash.slice(0, 8)}` : 'RED-TACTICAL-NODE';
@@ -740,8 +768,9 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                                     await loraMeshtastic.broadcastCompactCot(cotBinary);
                                     toast.success("🎯 Baliza ATAK Compact-PLI emitida por LoRa (28 Bytes, -94.9%)");
                                     setLogs(prev => [`[TX-CoT] ${new Date().toLocaleTimeString()} · ${cotBinary.length}B (MTU Opt) · Ultra-Compact PLI Broadcast`, ...prev.slice(0, 99)]);
-                                } catch (e: any) {
-                                    toast.error("Error al emitir CoT: " + e.message);
+                                } catch (e: unknown) {
+                                    const msg = e instanceof Error ? e.message : String(e);
+                                    toast.error("Error al emitir CoT: " + msg);
                                 }
                             }}
                             style={{

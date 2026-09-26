@@ -8,7 +8,7 @@
  * US Electronic Signatures in Global and National Commerce Act - E-SIGN, y Ley Peruana 27269).
  */
 
-export const CURRENT_LEGAL_VERSION = "125.0.0";
+export const CURRENT_LEGAL_VERSION = "126.0.0";
 export const LEGAL_CONTRACT_SHA256 = "c5b290df628f80424564c7e75fef2e255f013d5cf5990264101e0ce5e9d997f6";
 
 export interface LegalAcceptanceRecord {

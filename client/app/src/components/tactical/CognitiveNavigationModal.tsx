@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { EntorhinalGridCellEngine, EntorhinalTelemetry, CognitiveWaypoint } from "../../lib/neuro/human/EntorhinalGridCellEngine";
 import { ringAttractor, RingAttractorTelemetry } from "../../lib/neuro/RingAttractorEngine";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
@@ -98,11 +98,10 @@ export const CognitiveNavigationModal: React.FC<CognitiveNavigationModalProps> =
         flexDirection: 'column',
         color: '#E0E7FF',
         fontFamily: 'monospace',
-        overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch'
+        overflow: 'hidden'
       }}
     >
-      {/* Barra de cabecera táctica */}
+      {/* Barra de cabecera táctica fija */}
       <div
         style={{
           display: 'flex',
@@ -110,18 +109,20 @@ export const CognitiveNavigationModal: React.FC<CognitiveNavigationModalProps> =
           justifyContent: 'space-between',
           padding: '12px 16px',
           background: '#0B0F19',
-          borderBottom: '1px solid #1E293B'
+          borderBottom: '1px solid #1E293B',
+          flexShrink: 0,
+          gap: '12px'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ color: '#06B6D4' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+          <div style={{ color: '#06B6D4', flexShrink: 0 }}>
             <TacIcon name="crosshair" size={22} />
           </div>
-          <div>
-            <div style={{ fontSize: '0.90rem', fontWeight: 'bold', color: '#F8FAFC', letterSpacing: '0.05em' }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: '0.90rem', fontWeight: 'bold', color: '#F8FAFC', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               CORTEZA ENTORRINAL • RED
             </div>
-            <div style={{ fontSize: '0.65rem', color: '#06B6D4' }}>
+            <div style={{ fontSize: '0.65rem', color: '#06B6D4', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               ODOMETRÍA COGNITIVA HEXAGONAL 2D/3D (CERO GNSS)
             </div>
           </div>
@@ -142,7 +143,8 @@ export const CognitiveNavigationModal: React.FC<CognitiveNavigationModalProps> =
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            fontSize: '0.75rem'
+            fontSize: '0.75rem',
+            flexShrink: 0
           }}
         >
           <TacIcon name="x" size={16} />
@@ -150,7 +152,24 @@ export const CognitiveNavigationModal: React.FC<CognitiveNavigationModalProps> =
         </button>
       </div>
 
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '640px', margin: '0 auto', width: '100%' }}>
+      {/* Cuerpo scrolleable aislado */}
+      <div
+        className="scroll-container"
+        style={{
+          flex: '1 1 0%',
+          minHeight: 0,
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          maxWidth: '640px',
+          margin: '0 auto',
+          width: '100%',
+          boxSizing: 'border-box'
+        }}
+      >
         
         {/* Banner de alerta de proximidad de obstáculos */}
         {telemetry.borderProximityWarning && (
@@ -214,8 +233,10 @@ export const CognitiveNavigationModal: React.FC<CognitiveNavigationModalProps> =
             borderRadius: '8px',
             padding: '12px 16px',
             display: 'flex',
+            flexWrap: 'wrap',
             alignItems: 'center',
-            justifyContent: 'space-between'
+            justifyContent: 'space-between',
+            gap: '8px'
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -363,14 +384,15 @@ export const CognitiveNavigationModal: React.FC<CognitiveNavigationModalProps> =
 
         {/* Acciones de Campo: Fijar Waypoint y Retorno Guiado */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             <input
               type="text"
               placeholder="Nombre del hito (ej: BIFURCACIÓN ESTE)..."
               value={waypointLabelInput}
               onChange={(e) => setWaypointLabelInput(e.target.value)}
               style={{
-                flex: 1,
+                flex: '1 1 180px',
+                minWidth: '150px',
                 background: '#0F172A',
                 border: '1px solid #334155',
                 borderRadius: '6px',
@@ -383,6 +405,8 @@ export const CognitiveNavigationModal: React.FC<CognitiveNavigationModalProps> =
             <button
               onClick={handleDropWaypoint}
               style={{
+                flex: '0 0 auto',
+                minWidth: '110px',
                 background: '#065F46',
                 border: '1px solid #10B981',
                 borderRadius: '6px',
@@ -393,6 +417,7 @@ export const CognitiveNavigationModal: React.FC<CognitiveNavigationModalProps> =
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '6px'
               }}
             >
@@ -401,7 +426,7 @@ export const CognitiveNavigationModal: React.FC<CognitiveNavigationModalProps> =
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
             <button
               onClick={handleToggleReverse}
               style={{
@@ -409,14 +434,16 @@ export const CognitiveNavigationModal: React.FC<CognitiveNavigationModalProps> =
                 border: `1px solid ${isReverseNavigationActive ? '#EF4444' : '#475569'}`,
                 borderRadius: '6px',
                 color: isReverseNavigationActive ? '#FEE2E2' : '#E2E8F0',
-                padding: '10px',
+                padding: '10px 8px',
                 fontSize: '0.75rem',
                 fontWeight: 'bold',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '6px'
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                textAlign: 'center'
               }}
             >
               <TacIcon name="refresh" size={16} />
@@ -430,14 +457,16 @@ export const CognitiveNavigationModal: React.FC<CognitiveNavigationModalProps> =
                 border: '1px solid #475569',
                 borderRadius: '6px',
                 color: '#E2E8F0',
-                padding: '10px',
+                padding: '10px 8px',
                 fontSize: '0.75rem',
                 fontWeight: 'bold',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '6px'
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                textAlign: 'center'
               }}
             >
               <TacIcon name="crosshair" size={16} />
@@ -461,10 +490,20 @@ export const CognitiveNavigationModal: React.FC<CognitiveNavigationModalProps> =
 
           {breadcrumbs.length === 0 ? (
             <div style={{ fontSize: '0.75rem', color: '#475569', textAlign: 'center', padding: '10px' }}>
-              No hay hitos fijados aún. Avanza y pulsa "FIJAR HITO".
+              No hay hitos fijados aún. Avanza y pulsa &quot;FIJAR HITO&quot;.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '160px', overflowY: 'auto' }}>
+            <div
+              className="scroll-container"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+                maxHeight: '160px',
+                overflowY: 'auto',
+                WebkitOverflowScrolling: 'touch'
+              }}
+            >
               {breadcrumbs.map((b, i) => (
                 <div
                   key={`list-wp-${b.id}`}

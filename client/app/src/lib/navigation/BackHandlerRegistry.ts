@@ -41,11 +41,21 @@ export class BackHandlerRegistry {
 
         this.isExecuting = true;
         try {
-            const topHandler = this.handlers[this.handlers.length - 1];
-            return Boolean(topHandler());
+            // Cascada LIFO: iterar desde el más reciente hacia la base hasta que uno consuma el evento
+            for (let i = this.handlers.length - 1; i >= 0; i--) {
+                try {
+                    const handler = this.handlers[i];
+                    if (handler && handler()) {
+                        return true;
+                    }
+                } catch (err) {
+                    console.warn("[BackHandlerRegistry] Error executing back interceptor at index", i, err);
+                    this.handlers.splice(i, 1);
+                }
+            }
+            return false;
         } catch (err) {
             console.warn("[BackHandlerRegistry] Error executing back interceptor:", err);
-            // Remove failing handler to prevent permanent lock
             this.handlers.pop();
             return false;
         } finally {

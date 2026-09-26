@@ -86,9 +86,7 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
             handleClose();
             return true;
         });
-        const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); BackHandlerRegistry.executeTop(); } };
-        document.addEventListener('keydown', onEsc);
-        return () => { unregister(); document.removeEventListener('keydown', onEsc); };
+        return unregister;
     }, [activeTab, handleClose]);
 
     const handleRunTest = async (overrideText?: string) => {

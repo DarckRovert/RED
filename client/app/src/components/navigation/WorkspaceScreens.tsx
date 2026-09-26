@@ -101,6 +101,7 @@ const BackupRestoreModal     = dynamic(() => import("../BackupRestoreModal").the
 const WebCompanionLinkModal  = dynamic(() => import("../WebCompanionLinkModal").then(m => ({ default: m.WebCompanionLinkModal })), { ssr: false, loading: () => <AppLoader /> });
 const LinkedDevicesView      = dynamic(() => import("../settings/LinkedDevicesView").then(m => ({ default: m.LinkedDevicesView })), { ssr: false, loading: () => <AppLoader /> });
 const SettingsModal          = dynamic(() => import("../SettingsModal").then(m => ({ default: m.SettingsModal })),               { ssr: false, loading: () => <AppLoader /> });
+const FamiliarSettingsView   = dynamic(() => import("../settings/FamiliarSettingsView").then(m => ({ default: m.FamiliarSettingsView })), { ssr: false, loading: () => <AppLoader /> });
 const UpdateModal            = dynamic(() => import("../UpdateModal").then(m => ({ default: m.UpdateModal })),                   { ssr: false, loading: () => <AppLoader /> });
 const CommercialHubModal     = dynamic(() => import("../CommercialHubModal").then(m => ({ default: m.CommercialHubModal })),     { ssr: false, loading: () => <AppLoader /> });
 const SwarmHealthHUD         = dynamic(() => import("../SwarmHealthHUD").then(m => ({ default: m.SwarmHealthHUD })),             { ssr: false, loading: () => <AppLoader /> });
@@ -574,7 +575,20 @@ export function WorkspaceScreens({ isTablet, onOpenTool }: WorkspaceScreensProps
       )}
       {(currentScreen === "health" || currentScreen === "systemHealth")        && <SystemHealthModal onClose={goBack} />}
       {(currentScreen === "nodeLogs" || currentScreen === "logs")              && <NodeLogsModal onClose={goBack} />}
-      {currentScreen === "settings"                                            && <SettingsModal onClose={goBack} />}
+      {currentScreen === "settings" && (
+        (preferences?.uiMode ?? 'familiar') === 'familiar' ? (
+          <div
+            style={{
+              position: "fixed", inset: 0, zIndex: 1000,
+              background: "#111B21", display: "flex", flexDirection: "column"
+            }}
+          >
+            <FamiliarSettingsView onClose={goBack} />
+          </div>
+        ) : (
+          <SettingsModal onClose={goBack} />
+        )
+      )}
       {currentScreen === "updater"                                             && <UpdateModal onClose={goBack} />}
       {currentScreen === "ecoMesh"                                             && <EcoMeshPanel />}
       {currentScreen === "status"                                              && <StatusView />}

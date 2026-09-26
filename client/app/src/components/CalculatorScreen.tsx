@@ -59,7 +59,9 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
                 goBack();
                 return true;
             }
-            return false;
+            // En modo camuflaje (AuthWall / Disguise), retener el evento para proteger el señuelo
+            TacticalAudioEngine.playTap();
+            return true;
         });
         return unregister;
     }, [display, equation, prevValue, currentScreen, goBack]);
@@ -204,9 +206,9 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
     // Ajuste dinámico de tamaño de fuente
     const getFontSize = () => {
         const len = display.length;
-        if (len > 12) return "2.2rem";
-        if (len > 8) return "3.0rem";
-        return "4.2rem";
+        if (len > 12) return "clamp(1.5rem, 5vw, 2.2rem)";
+        if (len > 8) return "clamp(2rem, 7vw, 3.0rem)";
+        return "clamp(2.5rem, 9vw, 4.2rem)";
     };
 
     // Teclado físico
@@ -219,7 +221,7 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
             else if (e.key === "*") performOperation("×");
             else if (e.key === "/") performOperation("÷");
             else if (e.key === "Enter" || e.key === "=") handleEquals();
-            else if (e.key === "Escape" || e.key === "c" || e.key === "C") clearAll();
+            else if (e.key === "c" || e.key === "C") clearAll();
             else if (e.key === "Backspace") deleteLastDigit();
         };
 
@@ -228,25 +230,33 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
     }, [display, prevValue, operator, waitingForOperand]);
 
     return (
-        <div style={{
-            position: "fixed", inset: 0,
-            background: "#000000", color: "#ffffff",
-            display: "flex", flexDirection: "column",
-            fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif",
-            zIndex: 99999,
-            userSelect: "none",
-            touchAction: "manipulation",
-            paddingTop: "var(--safe-top, 0px)",
-            paddingBottom: "var(--safe-bottom, 0px)"
-        }}>
+        <div 
+            className="scroll-container"
+            style={{
+                position: "fixed", inset: 0,
+                background: "#000000", color: "#ffffff",
+                display: "flex", flexDirection: "column",
+                fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif",
+                zIndex: 99999,
+                userSelect: "none",
+                touchAction: "manipulation",
+                paddingTop: "var(--safe-top, 0px)",
+                paddingBottom: "var(--safe-bottom, 0px)",
+                overflowY: "auto",
+                WebkitOverflowScrolling: "touch",
+            }}
+        >
             {/* Barra Superior / Modo Test Exit */}
             <div style={{
-                height: "44px",
+                height: "clamp(34px, 5vh, 44px)",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 padding: "0 16px",
-                opacity: 0.6
+                opacity: 0.6,
+                flexShrink: 0
             }}>
-                <span style={{ fontSize: "0.80rem", fontWeight: 600 }}>{t('calculator_decoy_modal.title')}</span>
+                <span style={{ fontSize: "0.80rem", fontWeight: 600 }}>
+                    {currentScreen === "calculator" ? t('calculator_decoy_modal.title') : "Calculadora"}
+                </span>
                 {currentScreen === "calculator" && (
                     <button
                         onClick={() => { TacticalAudioEngine.playTap(); goBack(); }}
@@ -262,16 +272,17 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
 
             {/* Pantalla de Resultados y Ecuación */}
             <div style={{
-                flex: 1,
+                flex: "1 1 auto",
                 display: "flex", flexDirection: "column", justifyContent: "flex-end",
-                padding: "16px 24px",
-                minHeight: "140px"
+                padding: "clamp(8px, 2vh, 16px) 24px",
+                minHeight: "clamp(60px, 12vh, 140px)",
+                flexShrink: 0
             }}>
                 <div style={{
                     textAlign: "right",
-                    fontSize: "1.1rem",
+                    fontSize: "clamp(0.85rem, 2.5vh, 1.1rem)",
                     color: "#888888",
-                    minHeight: "24px",
+                    minHeight: "20px",
                     fontFamily: "JetBrains Mono, monospace"
                 }}>
                     {equation}
@@ -293,10 +304,11 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
 
             {/* Teclado Táctico / Clean iOS Style */}
             <div style={{
-                padding: "0 16px 36px 16px",
+                padding: "0 16px clamp(14px, 3vh, 36px) 16px",
                 maxWidth: "440px", width: "100%", margin: "0 auto",
                 display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
-                gap: "12px"
+                gap: "clamp(6px, 1.2vh, 12px)",
+                flexShrink: 0
             }}>
                 {/* Fila 1 */}
                 <button
@@ -363,9 +375,9 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
                     style={{
                         ...digitBtnStyle,
                         gridColumn: "span 2",
-                        borderRadius: "38px",
+                        borderRadius: "clamp(23px, 5vh, 38px)",
                         justifyContent: "flex-start",
-                        paddingLeft: "30px"
+                        paddingLeft: "clamp(18px, 4vw, 30px)"
                     }}
                 >
                     0
@@ -383,9 +395,9 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
 }
 
 const baseBtnStyle: React.CSSProperties = {
-    height: "72px",
-    borderRadius: "50%",
-    fontSize: "1.75rem",
+    height: "clamp(46px, 9.2vh, 72px)",
+    borderRadius: "clamp(23px, 4.6vh, 36px)",
+    fontSize: "clamp(1.15rem, 3.4vh, 1.75rem)",
     fontWeight: 400,
     border: "none",
     cursor: "pointer",

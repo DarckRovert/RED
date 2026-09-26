@@ -17,12 +17,14 @@ interface ContactQrModalProps {
     isOpen?: boolean;
     onClose: () => void;
     initialTab?: "my_qr" | "scan";
+    onSelectContact?: (data: { hash: string; name?: string; pk?: string }) => void;
 }
 
 export const ContactQrModal: React.FC<ContactQrModalProps> = ({
     isOpen = true,
     onClose,
-    initialTab = "my_qr"
+    initialTab = "my_qr",
+    onSelectContact
 }) => {
     const { t } = useTranslation();
     const { identity, contacts, addContact, navigate } = useRedStore();
@@ -244,6 +246,17 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
             await stopCamera();
             const finalName = targetName || `Contacto ${targetHash.substring(0, 8)}`;
             const isAlready = contacts.some((c: any) => c.identity_hash === targetHash || c.short_id === targetHash);
+
+            if (onSelectContact) {
+                onSelectContact({
+                    hash: targetHash,
+                    name: targetName,
+                    pk: targetPk
+                });
+                onClose();
+                return;
+            }
+
             setDetectedContact({
                 hash: targetHash,
                 pk: targetPk,

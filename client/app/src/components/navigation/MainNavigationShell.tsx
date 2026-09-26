@@ -60,14 +60,6 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
         });
     }, [storyCreatorOpen]);
 
-    // Interceptor de navegación Atrás para retornar a la pestaña 'chats' desde pestañas secundarias
-    useEffect(() => {
-        if (activeTab === "chats") return;
-        return BackHandlerRegistry.register(() => {
-            setActiveTab("chats");
-            return true;
-        });
-    }, [activeTab, setActiveTab]);
 
     // Listen for tab switch requests
     useEffect(() => {

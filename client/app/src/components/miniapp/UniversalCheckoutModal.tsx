@@ -37,7 +37,9 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
     useEffect(() => {
         const unregister = BackHandlerRegistry.register(() => {
             if (isProcessing) {
-                return false; // Evitar interrumpir pasarela de pago en vuelo
+                TacticalAudioEngine.playWarning();
+                toast.warning("⏳ Procesando pago criptográfico. Por favor espera...");
+                return true; // Blindar la transacción en vuelo consumiendo el evento
             }
             TacticalAudioEngine.playTap();
             onClose();
@@ -137,24 +139,28 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                 alignItems: "center",
                 justifyContent: "center",
                 padding: "12px",
-                userSelect: "none"
+                userSelect: "none",
+                overflowY: "auto",
+                WebkitOverflowScrolling: "touch"
             }}
         >
             <div 
                 style={{
                     width: "100%",
                     maxWidth: "460px",
+                    maxHeight: "min(92vh, 680px)",
                     borderRadius: "20px",
                     overflow: "hidden",
                     boxShadow: "0 16px 50px rgba(0,0,0,0.85), 0 0 30px rgba(0, 230, 118, 0.15)",
                     display: "flex",
                     flexDirection: "column",
                     border: "1.5px solid rgba(0, 230, 118, 0.35)",
-                    background: "linear-gradient(180deg, rgba(14,16,30,0.98) 0%, rgba(8,10,18,0.99) 100%)"
+                    background: "linear-gradient(180deg, rgba(14,16,30,0.98) 0%, rgba(8,10,18,0.99) 100%)",
+                    margin: "auto"
                 }}
             >
                 {/* ── HEADER DE PASARELA MULTI-RAIL ── */}
-                <div style={{ padding: "14px 16px", background: "rgba(6, 8, 16, 0.95)", borderBottom: "1px solid rgba(255, 255, 255, 0.12)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ flexShrink: 0, padding: "14px 16px", background: "rgba(6, 8, 16, 0.95)", borderBottom: "1px solid rgba(255, 255, 255, 0.12)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                         <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg, rgba(0,230,118,0.2) 0%, rgba(0,229,255,0.2) 100%)", border: "1px solid rgba(0,230,118,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem", boxShadow: "0 0 12px rgba(0,230,118,0.2)" }}>
                             💳
@@ -191,7 +197,21 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
 
                 {/* ── ESTADO: RECIBO CRIPTOGRÁFICO FINAL ── */}
                 {completedReceipt ? (
-                    <div style={{ padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: "14px" }}>
+                    <div
+                        className="scroll-container"
+                        style={{
+                            padding: "20px",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            textAlign: "center",
+                            gap: "14px",
+                            overflowY: "auto",
+                            WebkitOverflowScrolling: "touch",
+                            flex: 1,
+                            minHeight: 0
+                        }}
+                    >
                         <div style={{ width: "64px", height: "64px", borderRadius: "20px", background: "rgba(0, 230, 118, 0.2)", border: "2px solid var(--accent-emerald)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem", boxShadow: "0 0 25px rgba(0,230,118,0.4)" }}>
                             ✅
                         </div>
@@ -262,7 +282,18 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                 ) : (
                     /* ── ESTADO: FORMULARIO DE SELECCIÓN DE RIEL ── */
                     <>
-                        {/* Intent Summary Box */}
+                        <div
+                            className="scroll-container"
+                            style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                overflowY: "auto",
+                                WebkitOverflowScrolling: "touch",
+                                flex: 1,
+                                minHeight: 0
+                            }}
+                        >
+                            {/* Intent Summary Box */}
                         <div style={{ padding: "14px 16px", background: "rgba(0, 0, 0, 0.4)", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div>
                                 <h4 style={{ fontSize: "0.88rem", fontWeight: 800, color: "#FFFFFF", margin: 0 }}>{intent.title}</h4>
@@ -428,9 +459,10 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                                 </div>
                             )}
                         </div>
+                        </div>
 
                         {/* Footer Confirm Buttons */}
-                        <div style={{ padding: "14px 16px", background: "rgba(6, 8, 16, 0.95)", borderTop: "1px solid rgba(255, 255, 255, 0.12)", display: "flex", gap: "8px" }}>
+                        <div style={{ flexShrink: 0, padding: "14px 16px", background: "rgba(6, 8, 16, 0.95)", borderTop: "1px solid rgba(255, 255, 255, 0.12)", display: "flex", gap: "8px" }}>
                             <button
                                 type="button"
                                 onClick={() => {

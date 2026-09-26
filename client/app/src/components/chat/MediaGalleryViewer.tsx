@@ -121,16 +121,12 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
     // Keyboard navigation
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape") {
-                TacticalAudioEngine.playTap();
-                onClose();
-            }
             if (e.key === "ArrowLeft") handlePrev();
             if (e.key === "ArrowRight") handleNext();
         };
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
-    }, [onClose, handlePrev, handleNext]);
+    }, [handlePrev, handleNext]);
 
     const handleDoubleTap = () => {
         TacticalAudioEngine.playTap();

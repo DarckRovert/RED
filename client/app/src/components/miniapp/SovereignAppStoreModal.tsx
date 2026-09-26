@@ -274,24 +274,7 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
             return true;
         });
 
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                if (activeTab !== 'catalog') {
-                    TacticalAudioEngine.playTap();
-                    setActiveTab('catalog');
-                } else {
-                    TacticalAudioEngine.playTap();
-                    onClose();
-                }
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-
-        return () => {
-            unregister();
-            window.removeEventListener('keydown', handleKeyDown);
-        };
+        return unregister;
     }, [activeTab, onClose]);
 
     // ─── Real-time P2P Mesh App Reception ─────────────────────────────────────

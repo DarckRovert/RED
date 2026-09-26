@@ -50,7 +50,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
         { id: "faq", label: "FAQ" },
     ];
 
-    const handleEnter = onEnterApp;
+    const handleEnter = () => onEnterApp();
 
     return (
       <header

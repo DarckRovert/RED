@@ -6,12 +6,10 @@ import { tacticalBinaural, TacticalBinauralEngine } from "../lib/sensors/Tactica
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
-import { useTranslation } from "../lib/i18n/i18nEngine";
 import { TacIcon } from "./ui/TacIcon";
 
 export function AcousticWarfareModal() {
-    const { navigate, goBack } = useRedStore();
-    const { t } = useTranslation();
+    const { goBack } = useRedStore();
     const [activeTab, setActiveTab] = useState<"scrambler" | "binaural">("scrambler");
     const [scramblerState, setScramblerState] = useState(() => acousticScrambler.getState());
     const [binauralState, setBinauralState] = useState(() => tacticalBinaural.getState());
@@ -167,18 +165,20 @@ export function AcousticWarfareModal() {
                 borderBottom: "1.5px solid rgba(255, 51, 85, 0.35)",
                 display: "flex", justifyContent: "space-between", alignItems: "center",
                 backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
-                zIndex: 10, flexShrink: 0
+                zIndex: 10, flexShrink: 0, gap: "10px"
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
                     <button
                         onClick={goBack}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
                             color: "#FFFFFF", cursor: "pointer",
-                            display: "flex", alignItems: "center", justifyContent: "center"
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            flexShrink: 0
                         }}
                         title="Regresar"
+                        aria-label="Regresar"
                     >
                         <TacIcon name="chevron-left" size={16} />
                     </button>
@@ -187,26 +187,34 @@ export function AcousticWarfareModal() {
                         background: "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(200, 30, 60, 0.15) 100%)",
                         border: "1px solid rgba(255, 51, 85, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        boxShadow: "0 0 15px rgba(255, 51, 85, 0.3)"
+                        boxShadow: "0 0 15px rgba(255, 51, 85, 0.3)",
+                        flexShrink: 0
                     }}>
                         <TacIcon name="volume-x" size={20} color="#FF3355" />
                     </div>
-                    <div>
-                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{
+                            fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF",
+                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                        }}>
                             GUERRA ACÚSTICA & BINAURAL
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "#FF3355", fontWeight: 800 }}>
+                        <div style={{
+                            fontSize: "0.68rem", color: "#FF3355", fontWeight: 800,
+                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                        }}>
                             SATURACIÓN MEMS 20.5 KHZ · ENFOQUE COGNITIVO
                         </div>
                     </div>
                 </div>
 
-                <div style={{ display: "flex", gap: "6px" }}>
+                <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
                     <span style={{
                         fontSize: "0.62rem", fontWeight: 900, padding: "3px 8px", borderRadius: "6px",
                         background: (scramblerState.isRunning || binauralState.isRunning) ? "rgba(255, 51, 85, 0.2)" : "rgba(0, 230, 118, 0.15)",
                         color: (scramblerState.isRunning || binauralState.isRunning) ? "#FF3355" : "#00E676",
-                        border: `1px solid ${(scramblerState.isRunning || binauralState.isRunning) ? '#FF3355' : '#00E676'}50`
+                        border: `1px solid ${(scramblerState.isRunning || binauralState.isRunning) ? '#FF3355' : '#00E676'}50`,
+                        whiteSpace: "nowrap"
                     }}>
                         {(scramblerState.isRunning || binauralState.isRunning) ? "ACTIVO" : "STANDBY"}
                     </span>
@@ -214,19 +222,23 @@ export function AcousticWarfareModal() {
             </header>
 
             {/* Selector de Pestañas Segmentadas */}
-            <div style={{
-                display: "flex", background: "rgba(8, 10, 20, 0.95)",
-                padding: "8px 16px", gap: "6px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-                flexShrink: 0
-            }}>
+            <div
+                className="scroll-container"
+                style={{
+                    display: "flex", background: "rgba(8, 10, 20, 0.95)",
+                    padding: "8px 16px", gap: "8px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                    flexShrink: 0, overflowX: "auto", WebkitOverflowScrolling: "touch"
+                }}
+            >
                 <button
                     onClick={() => setActiveTab("scrambler")}
                     style={{
-                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        flex: "1 0 auto", minWidth: "165px", padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "scrambler" ? "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(180, 20, 40, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
                         border: activeTab === "scrambler" ? "1.5px solid #FF3355" : "1px solid rgba(255, 255, 255, 0.08)",
                         color: activeTab === "scrambler" ? "#FF3355" : "var(--text-secondary)",
-                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                        whiteSpace: "nowrap"
                     }}
                 >
                     <TacIcon name="volume-x" size={14} color={activeTab === "scrambler" ? "#FF3355" : "var(--text-secondary)"} />
@@ -236,11 +248,12 @@ export function AcousticWarfareModal() {
                 <button
                     onClick={() => setActiveTab("binaural")}
                     style={{
-                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        flex: "1 0 auto", minWidth: "165px", padding: "8px 12px", borderRadius: "10px",
                         background: activeTab === "binaural" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(10, 35, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
                         border: activeTab === "binaural" ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
                         color: activeTab === "binaural" ? "#00E5FF" : "var(--text-secondary)",
-                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                        whiteSpace: "nowrap"
                     }}
                 >
                     <TacIcon name="activity" size={14} color={activeTab === "binaural" ? "#00E5FF" : "var(--text-secondary)"} />
@@ -316,7 +329,7 @@ export function AcousticWarfareModal() {
                             {scramblerState.isRunning && (
                                 <div style={{
                                     background: "rgba(255, 51, 85, 0.15)", border: "1.5px solid #FF3355",
-                                    borderRadius: "14px", padding: "14px", display: "flex", justifyContent: "space-between", alignItems: "center"
+                                    borderRadius: "14px", padding: "14px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px"
                                 }}>
                                     <div>
                                         <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 900, fontSize: "0.88rem", color: "#FF3355" }}>
@@ -440,7 +453,7 @@ export function AcousticWarfareModal() {
                             {binauralState.isRunning && (
                                 <div style={{
                                     background: "rgba(0, 229, 255, 0.15)", border: "1.5px solid #00E5FF",
-                                    borderRadius: "14px", padding: "14px", display: "flex", justifyContent: "space-between", alignItems: "center"
+                                    borderRadius: "14px", padding: "14px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px"
                                 }}>
                                     <div>
                                         <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 900, fontSize: "0.88rem", color: "#00E5FF" }}>
@@ -466,7 +479,7 @@ export function AcousticWarfareModal() {
                                 </div>
                             )}
 
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))", gap: "10px" }}>
                                 {Object.entries(TacticalBinauralEngine.PRESETS).map(([key, preset]) => {
                                     const isCurrent = binauralState.isRunning && binauralState.activePreset === key;
                                     return (

@@ -83,9 +83,7 @@ export default function GlobalShieldPanel() {
             goBack();
             return true;
         });
-        const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); BackHandlerRegistry.executeTop(); } };
-        document.addEventListener('keydown', onEsc);
-        return () => { unregister(); document.removeEventListener('keydown', onEsc); };
+        return unregister;
     }, [goBack]);
 
     const handleSelectDefcon = (level: DefconLevel) => {

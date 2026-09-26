@@ -9,7 +9,6 @@ import {
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacIcon } from "../ui/TacIcon";
-import { toast } from "../Toast";
 
 export interface EpistemicRadarModalProps {
   isOpen: boolean;
@@ -48,8 +47,6 @@ export const EpistemicRadarModal: React.FC<EpistemicRadarModalProps> = ({ isOpen
 
   if (!isOpen) return null;
 
-  const engine = TheoryOfMindEpistemicEngine.getInstance();
-
   return (
     <div
       style={{
@@ -62,11 +59,10 @@ export const EpistemicRadarModal: React.FC<EpistemicRadarModalProps> = ({ isOpen
         flexDirection: 'column',
         color: '#E0E7FF',
         fontFamily: 'monospace',
-        overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch'
+        overflow: 'hidden'
       }}
     >
-      {/* Cabecera */}
+      {/* Cabecera Táctica Fija */}
       <div
         style={{
           display: 'flex',
@@ -74,18 +70,20 @@ export const EpistemicRadarModal: React.FC<EpistemicRadarModalProps> = ({ isOpen
           justifyContent: 'space-between',
           padding: '12px 16px',
           background: '#0B0F19',
-          borderBottom: '1px solid #1E293B'
+          borderBottom: '1px solid #1E293B',
+          flexShrink: 0,
+          gap: '12px'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ color: '#F59E0B' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+          <div style={{ color: '#F59E0B', flexShrink: 0 }}>
             <TacIcon name="shield" size={22} />
           </div>
-          <div>
-            <div style={{ fontSize: '0.90rem', fontWeight: 'bold', color: '#F8FAFC' }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: '0.90rem', fontWeight: 'bold', color: '#F8FAFC', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               TEORÍA DE LA MENTE • RADAR EPISTÉMICO
             </div>
-            <div style={{ fontSize: '0.65rem', color: '#F59E0B' }}>
+            <div style={{ fontSize: '0.65rem', color: '#F59E0B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               DETECCIÓN DE DECEPCIÓN RF, EMBOSCADAS & NODOS HONEY-POT
             </div>
           </div>
@@ -106,7 +104,8 @@ export const EpistemicRadarModal: React.FC<EpistemicRadarModalProps> = ({ isOpen
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            fontSize: '0.75rem'
+            fontSize: '0.75rem',
+            flexShrink: 0
           }}
         >
           <TacIcon name="x" size={16} />
@@ -114,7 +113,24 @@ export const EpistemicRadarModal: React.FC<EpistemicRadarModalProps> = ({ isOpen
         </button>
       </div>
 
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '640px', margin: '0 auto', width: '100%' }}>
+      {/* Cuerpo scrolleable aislado */}
+      <div
+        className="scroll-container"
+        style={{
+          flex: '1 1 0%',
+          minHeight: 0,
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          maxWidth: '640px',
+          margin: '0 auto',
+          width: '100%',
+          boxSizing: 'border-box'
+        }}
+      >
         
         {/* Banner de alerta de emboscada / decepción activa */}
         {telemetry.activeAmbushAlertsCount > 0 && (
@@ -151,7 +167,7 @@ export const EpistemicRadarModal: React.FC<EpistemicRadarModalProps> = ({ isOpen
             borderRadius: '8px',
             padding: '14px',
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
             gap: '8px',
             textAlign: 'center'
           }}
@@ -231,30 +247,31 @@ export const EpistemicRadarModal: React.FC<EpistemicRadarModalProps> = ({ isOpen
                     gap: '6px'
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
                       <span style={{
                         padding: '2px 6px',
                         borderRadius: '4px',
                         fontSize: '0.65rem',
                         fontWeight: 'bold',
                         background: isHostile ? '#7F1D1D' : isSuspicious ? '#78350F' : '#065F46',
-                        color: isHostile ? '#FEE2E2' : isSuspicious ? '#FEF3C7' : '#ECFDF5'
+                        color: isHostile ? '#FEE2E2' : isSuspicious ? '#FEF3C7' : '#ECFDF5',
+                        flexShrink: 0
                       }}>
                         {a.status}
                       </span>
-                      <span style={{ fontWeight: 'bold', color: '#F8FAFC', fontSize: '0.85rem' }}>
+                      <span style={{ fontWeight: 'bold', color: '#F8FAFC', fontSize: '0.85rem', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {a.peerId}
                       </span>
                     </div>
 
-                    <div style={{ fontSize: '0.80rem', fontWeight: 'bold', color: a.trustScore >= 0.7 ? '#10B981' : '#EF4444' }}>
+                    <div style={{ fontSize: '0.80rem', fontWeight: 'bold', color: a.trustScore >= 0.7 ? '#10B981' : '#EF4444', flexShrink: 0 }}>
                       CONFIANZA: {Math.round(a.trustScore * 100)}%
                     </div>
                   </div>
 
                   {/* Datos RF y Cinemáticos */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', fontSize: '0.65rem', color: '#94A3B8' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(95px, 1fr))', gap: '6px', fontSize: '0.65rem', color: '#94A3B8' }}>
                     <div>
                       DISTANCIA: <span style={{ color: '#F8FAFC', fontWeight: 'bold' }}>{Math.round(a.lastObservedDistanceMeters)}m</span>
                     </div>

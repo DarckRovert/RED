@@ -123,7 +123,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
 
         setIsSaving(true);
         try {
-            const resultHash = await addContact(cleanDid, cleanName || undefined!);
+            const resultHash = await addContact(cleanDid, cleanName);
             TacticalAudioEngine.playRogerBeep();
             toast.success(`✅ Contacto guardado. Abriendo chat...`);
             onClose();
@@ -167,6 +167,8 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                     alignItems: "center",
                     justifyContent: "center",
                     padding: "16px",
+                    overflowY: "auto",
+                    WebkitOverflowScrolling: "touch",
                     animation: "fadeIn 0.15s ease-out"
                 }}
                 onClick={() => {
@@ -179,6 +181,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                     style={{
                         width: "100%",
                         maxWidth: "440px",
+                        maxHeight: "min(90vh, 620px)",
                         backgroundColor: "#111B21",
                         border: "1px solid rgba(255, 255, 255, 0.12)",
                         borderRadius: "20px",
@@ -186,6 +189,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                         overflow: "hidden",
                         display: "flex",
                         flexDirection: "column",
+                        margin: "auto"
                     }}
                     onClick={e => e.stopPropagation()}
                 >
@@ -197,6 +201,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
+                        flexShrink: 0
                     }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                             <div style={{
@@ -236,7 +241,19 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                     </div>
 
                     {/* ── Form ── */}
-                    <div style={{ padding: "20px 18px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div
+                        className="scroll-container"
+                        style={{
+                            padding: "20px 18px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "16px",
+                            overflowY: "auto",
+                            WebkitOverflowScrolling: "touch",
+                            flex: 1,
+                            minHeight: 0
+                        }}
+                    >
 
                         {/* Name field */}
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -385,6 +402,15 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
                     isOpen={showQr}
                     initialTab="scan"
                     onClose={() => setShowQr(false)}
+                    onSelectContact={({ hash, name: scannedName }) => {
+                        handleDidChange(hash);
+                        if (scannedName && !name.trim()) {
+                            setName(scannedName);
+                        }
+                        setShowQr(false);
+                        TacticalAudioEngine.playNotification();
+                        toast.success("Código QR detectado e importado");
+                    }}
                 />
             )}
         </>

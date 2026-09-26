@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRedStore } from "../../store/useRedStore";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { RedAPI } from "../../lib/api";
@@ -37,7 +37,6 @@ async function computeSafetyNumber(myKey: string, peerKey: string): Promise<stri
     }
 
     if (!hashHex) {
-        // Deterministic fallback hash
         let h1 = 0xdeadbeef;
         let h2 = 0x41c6ce57;
         for (let i = 0; i < combined.length; i++) {
@@ -48,7 +47,6 @@ async function computeSafetyNumber(myKey: string, peerKey: string): Promise<stri
         hashHex = (Math.abs(h1).toString(16) + Math.abs(h2).toString(16)).padStart(64, "0");
     }
 
-    // Convert hex characters into 12 chunks of 5 digits (60 digits total)
     const blocks: string[] = [];
     for (let i = 0; i < 12; i++) {
         const slice = hashHex.slice((i * 5) % (hashHex.length - 5), ((i * 5) % (hashHex.length - 5)) + 5);
@@ -69,7 +67,7 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
     onClose,
     onVerifiedChange,
 }) => {
-    const { identity, contacts, fetchData } = useRedStore();
+    const { identity, fetchData } = useRedStore();
     const { t } = useTranslation();
     const [blocks, setBlocks] = useState<string[]>([]);
     const [isVerified, setIsVerified] = useState(initialVerified);
@@ -77,7 +75,7 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
     const [scanInput, setScanInput] = useState("");
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // Intercepción LIFO (retroceso físico / Esc)
+    // Intercepción LIFO protegida (retroceso físico / Esc)
     useEffect(() => {
         const unregister = BackHandlerRegistry.register(() => {
             TacticalAudioEngine.playTap();
@@ -100,11 +98,12 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
 
     const fullSafetyString = useMemo(() => blocks.join(" "), [blocks]);
 
-    const handleToggleVerify = async () => {
+    // Mutación idempotente explícita
+    const executeVerification = async (targetVerified: boolean) => {
+        if (isProcessing) return;
         setIsProcessing(true);
         try {
-            const next = !isVerified;
-            if (next) {
+            if (targetVerified) {
                 await RedAPI.verifyContact(peerHash);
                 TacticalAudioEngine.playRogerBeep();
                 toast.success(`🛡️ Identidad de ${peerName} verificada`);
@@ -113,8 +112,8 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
                 TacticalAudioEngine.playTap();
                 toast.info(`Identidad de ${peerName} desmarcada`);
             }
-            setIsVerified(next);
-            if (onVerifiedChange) onVerifiedChange(next);
+            setIsVerified(targetVerified);
+            if (onVerifiedChange) onVerifiedChange(targetVerified);
             await fetchData();
         } catch {
             TacticalAudioEngine.playWarning();
@@ -122,6 +121,10 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
         } finally {
             setIsProcessing(false);
         }
+    };
+
+    const handleToggleVerify = () => {
+        executeVerification(!isVerified);
     };
 
     const fallbackCopy = (text: string) => {
@@ -151,12 +154,28 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
         }
     };
 
+    // Validación criptográfica estricta de 60 dígitos exactos
     const handleVerifyScan = (inputVal: string) => {
-        const clean = inputVal.replace(/\s+/g, "").trim();
+        const clean = inputVal.replace(/[\s\-_:]+/g, "").trim();
         const expected = blocks.join("");
-        if (clean.includes(expected) || expected.includes(clean) || clean === expected) {
+
+        if (!clean) {
+            TacticalAudioEngine.playWarning();
+            toast.error("Ingresa los 60 dígitos del número de seguridad");
+            return;
+        }
+
+        if (clean.length < 60) {
+            TacticalAudioEngine.playWarning();
+            toast.error(`⚠️ Longitud insuficiente: se requieren 60 dígitos (${clean.length}/60 ingresados)`);
+            return;
+        }
+
+        if (clean === expected) {
             TacticalAudioEngine.playRogerBeep();
-            handleToggleVerify();
+            if (!isVerified) {
+                executeVerification(true);
+            }
             setIsScanning(false);
             setScanInput("");
             toast.success("✅ ¡Safety Number coincide al 100%! Identidad autenticada.");
@@ -171,46 +190,66 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
             style={{
                 position: "fixed", inset: 0, zIndex: 10000,
                 background: "rgba(4, 6, 14, 0.88)", backdropFilter: "blur(18px)",
-                display: "flex", alignItems: "center", justifyContent: "center", padding: "16px"
+                display: "flex", alignItems: "center", justifyContent: "center", padding: "16px",
+                animation: "fadeIn 0.15s ease-out"
             }}
-            onClick={onClose}
+            onClick={() => {
+                TacticalAudioEngine.playTap();
+                onClose();
+            }}
         >
             <div
-                className="card-tactical animate-enter"
+                className="card-tactical animate-enter scroll-container"
                 style={{
                     width: "100%", maxWidth: "460px", padding: "22px",
                     boxShadow: "0 24px 64px rgba(0,0,0,0.85)",
                     display: "flex", flexDirection: "column", gap: "16px",
-                    maxHeight: "90vh", overflowY: "auto"
+                    maxHeight: "min(90vh, 680px)", overflowY: "auto",
+                    boxSizing: "border-box"
                 }}
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", minWidth: 0 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span style={{ fontSize: "1.2rem" }}>🛡️</span>
-                            <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 800, color: "#FFFFFF" }}>
-                                {t('safety_number.title')}
+                            <span style={{ fontSize: "1.2rem", flexShrink: 0 }}>🛡️</span>
+                            <h2 style={{
+                                margin: 0, fontSize: "1.05rem", fontWeight: 800, color: "#FFFFFF",
+                                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                            }}>
+                                {t('safety_number.title', undefined, 'Número de Seguridad')}
                             </h2>
                         </div>
-                        <div style={{ fontSize: "0.72rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", marginTop: "2px" }}>
+                        <div style={{
+                            fontSize: "0.72rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace",
+                            marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                        }}>
                             {peerName} · ED25519 / BLAKE3
                         </div>
                     </div>
-                    <button onClick={onClose} className="btn-icon" style={{ width: 32, height: 32, flexShrink: 0 }}>✕</button>
+                    <button
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            onClose();
+                        }}
+                        className="btn-icon"
+                        style={{ width: 32, height: 32, flexShrink: 0 }}
+                    >
+                        ✕
+                    </button>
                 </div>
 
-                {/* Explanation */}
+                {/* Explicación */}
                 <div style={{
                     fontSize: "0.75rem", lineHeight: 1.5, color: "var(--text-secondary)",
                     background: "rgba(255,255,255,0.03)", padding: "10px 12px",
                     borderRadius: "var(--radius-sm)", border: "1px solid var(--glass-border)"
                 }}>
-                    {t('safety_number.instructions')}
+                    {t('safety_number.instructions', undefined, 'Compara este número de seguridad con el del par para verificar el cifrado E2E.')}
                 </div>
 
-                {/* 60-digit Matrix Display */}
+                {/* Matriz de 60 Dígitos */}
                 <div style={{
                     background: "rgba(0, 0, 0, 0.45)",
                     border: `1px solid ${isVerified ? "rgba(0, 230, 118, 0.4)" : "rgba(255, 255, 255, 0.12)"}`,
@@ -224,8 +263,8 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
                                 key={idx}
                                 style={{
                                     fontFamily: "JetBrains Mono, monospace",
-                                    fontSize: "0.95rem", fontWeight: 800,
-                                    letterSpacing: "1.5px",
+                                    fontSize: "clamp(0.80rem, 2.5vw, 0.92rem)", fontWeight: 800,
+                                    letterSpacing: "clamp(0.5px, 1vw, 1.2px)",
                                     color: isVerified ? "var(--accent-emerald, #00E676)" : "var(--accent-cyan, #00F0FF)"
                                 }}
                             >
@@ -239,7 +278,7 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
                     )}
                 </div>
 
-                {/* Verification Status Badge */}
+                {/* Insignia de Estado */}
                 <div style={{
                     display: "flex", alignItems: "center", justifyContent: "space-between",
                     padding: "10px 14px", borderRadius: "var(--radius-sm)",
@@ -259,19 +298,19 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
                     </div>
                 </div>
 
-                {/* Scanner / Manual Compare Input */}
+                {/* Comparación Manual */}
                 {isScanning ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                         <input
                             type="text"
-                            placeholder="Pega o escribe el número de seguridad del par…"
+                            placeholder="Pega los 60 dígitos del par…"
                             value={scanInput}
                             onChange={(e) => setScanInput(e.target.value)}
                             style={{
                                 width: "100%", padding: "10px 12px", borderRadius: "var(--radius-sm)",
                                 background: "var(--bg-card)", color: "#FFFFFF",
                                 border: "1px solid var(--glass-border)", fontSize: "0.82rem",
-                                fontFamily: "JetBrains Mono, monospace"
+                                fontFamily: "JetBrains Mono, monospace", boxSizing: "border-box"
                             }}
                         />
                         <div style={{ display: "flex", gap: "8px" }}>
@@ -283,7 +322,10 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
                                 Comparar y Validar
                             </button>
                             <button
-                                onClick={() => setIsScanning(false)}
+                                onClick={() => {
+                                    TacticalAudioEngine.playTap();
+                                    setIsScanning(false);
+                                }}
                                 className="btn-secondary"
                                 style={{ padding: "8px 14px", fontSize: "0.8rem" }}
                             >
@@ -293,20 +335,23 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
                     </div>
                 ) : null}
 
-                {/* Actions */}
+                {/* Acciones */}
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     <button
                         onClick={handleCopySafetyNumber}
                         className="btn-secondary"
-                        style={{ flex: 1, padding: "9px 12px", fontSize: "0.78rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                        style={{ flex: 1, minWidth: "140px", padding: "9px 12px", fontSize: "0.78rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                     >
                         📋 Copiar 60 Dígitos
                     </button>
                     {!isScanning && (
                         <button
-                            onClick={() => setIsScanning(true)}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setIsScanning(true);
+                            }}
                             className="btn-secondary"
-                            style={{ flex: 1, padding: "9px 12px", fontSize: "0.78rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                            style={{ flex: 1, minWidth: "140px", padding: "9px 12px", fontSize: "0.78rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                         >
                             🔍 Comparar Código
                         </button>
@@ -320,7 +365,8 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
                             display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
                             background: isVerified ? "rgba(255, 60, 95, 0.15)" : undefined,
                             borderColor: isVerified ? "rgba(255, 60, 95, 0.4)" : undefined,
-                            color: isVerified ? "var(--accent-crimson, #FF3C5F)" : undefined
+                            color: isVerified ? "var(--accent-crimson, #FF3C5F)" : undefined,
+                            cursor: isProcessing ? "wait" : "pointer"
                         }}
                     >
                         {isVerified ? "Desmarcar como Verificado" : "🛡️ Marcar como Verificado"}

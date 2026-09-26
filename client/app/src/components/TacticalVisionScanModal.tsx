@@ -281,30 +281,30 @@ export function TacticalVisionScanModal() {
         }}>
             {/* Header Táctico */}
             <div style={{
-                padding: "12px 16px", background: "rgba(10, 15, 30, 0.98)",
+                padding: "10px 14px", background: "rgba(10, 15, 30, 0.98)",
                 borderBottom: "1px solid rgba(0, 229, 255, 0.3)",
                 display: "flex", justifyContent: "space-between", alignItems: "center",
-                zIndex: 10
+                gap: "8px", zIndex: 10
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flex: 1 }}>
                     <div style={{
-                        width: 32, height: 32, borderRadius: 8,
+                        width: 32, height: 32, borderRadius: 8, flexShrink: 0,
                         background: "rgba(0, 229, 255, 0.15)", border: "1px solid #00E5FF",
                         display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem"
                     }}>
                         👁️
                     </div>
-                    <div>
-                        <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#00E5FF", letterSpacing: "0.5px" }}>
+                    <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#00E5FF", letterSpacing: "0.5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {t('tactical_vision_modal.title')}
                         </div>
-                        <div style={{ fontSize: "0.65rem", color: "#94A3B8" }}>
+                        <div style={{ fontSize: "0.62rem", color: "#94A3B8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {t('tactical_vision_modal.subtitle')}
                         </div>
                     </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
                     {hasTorch && (
                         <button
                             onClick={toggleTorch}
@@ -312,8 +312,8 @@ export function TacticalVisionScanModal() {
                                 background: torchOn ? "rgba(255, 220, 0, 0.25)" : "rgba(255,255,255,0.06)",
                                 border: torchOn ? "1px solid #FFD700" : "1px solid rgba(255,255,255,0.15)",
                                 color: torchOn ? "#FFD700" : "#AAA",
-                                padding: "6px 10px", borderRadius: "8px", cursor: "pointer",
-                                fontSize: "0.72rem", fontWeight: 800
+                                padding: "6px 8px", borderRadius: "8px", cursor: "pointer",
+                                fontSize: "0.70rem", fontWeight: 800
                             }}
                             title="Iluminador Táctico LED"
                         >
@@ -325,8 +325,8 @@ export function TacticalVisionScanModal() {
                         onClick={captureForensicSnapshot}
                         style={{
                             background: "rgba(0, 229, 255, 0.15)", border: "1px solid #00E5FF",
-                            color: "#00E5FF", padding: "6px 10px", borderRadius: "8px",
-                            cursor: "pointer", fontSize: "0.72rem", fontWeight: 800
+                            color: "#00E5FF", padding: "6px 8px", borderRadius: "8px",
+                            cursor: "pointer", fontSize: "0.70rem", fontWeight: 800
                         }}
                         title="Capturar fotograma analizado"
                     >
@@ -337,8 +337,8 @@ export function TacticalVisionScanModal() {
                         onClick={() => { TacticalAudioEngine.playTap(); stopCamera(); goBack(); }}
                         style={{
                             background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
-                            color: "#FFF", padding: "6px 12px", borderRadius: "8px",
-                            cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"
+                            color: "#FFF", padding: "6px 10px", borderRadius: "8px",
+                            cursor: "pointer", fontWeight: 800, fontSize: "0.72rem"
                         }}
                     >
                         ✕ {t('common.close')}
@@ -348,7 +348,7 @@ export function TacticalVisionScanModal() {
 
             {/* Video Canvas Container */}
             <div style={{
-                flex: 1, position: "relative", background: "#000",
+                flex: "1 1 0%", minHeight: 0, position: "relative", background: "#000",
                 display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden"
             }}>
                 <video
@@ -386,11 +386,11 @@ export function TacticalVisionScanModal() {
                         display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
                         zIndex: 25
                     }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span style={{ fontSize: "1.2rem" }}>⚠️</span>
-                            <div>
-                                <div style={{ letterSpacing: "0.5px" }}>{detections.length} AMENAZA(S) IDENTIFICADA(S)</div>
-                                <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#FFD2D2" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+                            <span style={{ fontSize: "1.2rem", flexShrink: 0 }}>⚠️</span>
+                            <div style={{ minWidth: 0 }}>
+                                <div style={{ letterSpacing: "0.5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{detections.length} AMENAZA(S) IDENTIFICADA(S)</div>
+                                <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#FFD2D2", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                     {detections[0].label} ({detections[0].confidencePct}%) {detections[0].details ? `· ${detections[0].details}` : ""}
                                 </div>
                             </div>
@@ -412,6 +412,7 @@ export function TacticalVisionScanModal() {
                                 alignItems: "center",
                                 gap: "4px",
                                 whiteSpace: "nowrap",
+                                flexShrink: 0,
                                 boxShadow: "0 2px 8px rgba(0,0,0,0.4)"
                             }}
                         >
@@ -423,81 +424,85 @@ export function TacticalVisionScanModal() {
 
             {/* Controles Tácticos Inferiores */}
             <div style={{
-                padding: "14px 16px", background: "rgba(8, 12, 24, 0.98)",
+                padding: "10px 14px", background: "rgba(8, 12, 24, 0.98)",
                 borderTop: "1px solid rgba(255, 255, 255, 0.12)",
-                display: "flex", flexDirection: "column", gap: "10px",
+                display: "flex", flexDirection: "column", gap: "8px",
+                flexShrink: 0,
                 zIndex: 10
             }}>
                 {/* Selector de Modo Óptico (3 Modos con respuesta instantánea y shaders reales) */}
-                <div style={{ display: "flex", gap: "8px" }}>
+                <div style={{ display: "flex", gap: "6px" }}>
                     <button
                         onClick={() => handleFilterChange("NORMAL")}
                         style={{
-                            flex: 1, padding: "10px 8px", borderRadius: "10px", fontSize: "0.75rem", fontWeight: 900,
+                            flex: 1, padding: "8px 4px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 900,
                             background: filter === "NORMAL" ? "linear-gradient(135deg, #FFFFFF 0%, #E2E8F0 100%)" : "rgba(255,255,255,0.05)",
                             color: filter === "NORMAL" ? "#0A0E1A" : "#94A3B8",
                             border: filter === "NORMAL" ? "2px solid #00E5FF" : "1px solid rgba(255,255,255,0.1)",
                             cursor: "pointer",
                             boxShadow: filter === "NORMAL" ? "0 0 16px rgba(0, 229, 255, 0.4)" : "none",
-                            transition: "all 0.15s ease"
+                            transition: "all 0.15s ease",
+                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
                         }}
                     >
-                        👁️ Óptico Normal
+                        👁️ Normal
                     </button>
 
                     <button
                         onClick={() => handleFilterChange("NVG_PHOSPHOR")}
                         style={{
-                            flex: 1, padding: "10px 8px", borderRadius: "10px", fontSize: "0.75rem", fontWeight: 900,
+                            flex: 1, padding: "8px 4px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 900,
                             background: filter === "NVG_PHOSPHOR" ? "linear-gradient(135deg, #00FF66 0%, #00C853 100%)" : "rgba(255,255,255,0.05)",
                             color: filter === "NVG_PHOSPHOR" ? "#021A08" : "#94A3B8",
                             border: filter === "NVG_PHOSPHOR" ? "2px solid #00FF66" : "1px solid rgba(255,255,255,0.1)",
                             cursor: "pointer",
                             boxShadow: filter === "NVG_PHOSPHOR" ? "0 0 16px rgba(0, 255, 102, 0.5)" : "none",
-                            transition: "all 0.15s ease"
+                            transition: "all 0.15s ease",
+                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
                         }}
                     >
-                        🥽 NVG Fósforo Verde
+                        🥽 NVG Verde
                     </button>
 
                     <button
                         onClick={() => handleFilterChange("FLIR_THERMAL")}
                         style={{
-                            flex: 1, padding: "10px 8px", borderRadius: "10px", fontSize: "0.75rem", fontWeight: 900,
+                            flex: 1, padding: "8px 4px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 900,
                             background: filter === "FLIR_THERMAL" ? "linear-gradient(135deg, #FF3355 0%, #FF9900 100%)" : "rgba(255,255,255,0.05)",
                             color: filter === "FLIR_THERMAL" ? "#FFF" : "#94A3B8",
                             border: filter === "FLIR_THERMAL" ? "2px solid #FF3355" : "1px solid rgba(255,255,255,0.1)",
                             cursor: "pointer",
                             boxShadow: filter === "FLIR_THERMAL" ? "0 0 16px rgba(255, 51, 85, 0.5)" : "none",
-                            transition: "all 0.15s ease"
+                            transition: "all 0.15s ease",
+                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
                         }}
                     >
-                        🌡️ FLIR Pseudotérmico
+                        🌡️ FLIR Térmico
                     </button>
                 </div>
 
                 {/* Calibración de Entorno (Anti-Falsos Positivos) */}
                 <div style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "6px 12px", background: "rgba(0, 0, 0, 0.4)", borderRadius: "8px",
+                    display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px",
+                    padding: "5px 10px", background: "rgba(0, 0, 0, 0.4)", borderRadius: "8px",
                     border: "1px solid rgba(255, 255, 255, 0.06)", fontSize: "0.68rem"
                 }}>
-                    <span style={{ color: "#94A3B8", fontWeight: 700 }}>ENTORNO TÁCTICO:</span>
-                    <div style={{ display: "flex", gap: "6px" }}>
+                    <span style={{ color: "#94A3B8", fontWeight: 700, whiteSpace: "nowrap" }}>ENTORNO:</span>
+                    <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
                         {[
                             { id: "AUTO", label: "🌐 Auto" },
-                            { id: "INDOOR_CQB", label: "🏠 Interior (CQB)" },
-                            { id: "OUTDOOR_SKY", label: "☁️ Cielo (UAV)" }
+                            { id: "INDOOR_CQB", label: "🏠 CQB" },
+                            { id: "OUTDOOR_SKY", label: "☁️ UAV" }
                         ].map(env => (
                             <button
                                 key={env.id}
                                 onClick={() => handleEnvChange(env.id as TacticalEnvironmentMode)}
                                 style={{
-                                    padding: "4px 8px", borderRadius: "6px", fontSize: "0.65rem", fontWeight: 800,
+                                    padding: "3px 6px", borderRadius: "6px", fontSize: "0.62rem", fontWeight: 800,
                                     background: envMode === env.id ? "rgba(0, 229, 255, 0.25)" : "transparent",
                                     color: envMode === env.id ? "#00E5FF" : "#64748B",
                                     border: envMode === env.id ? "1px solid #00E5FF" : "1px solid transparent",
-                                    cursor: "pointer"
+                                    cursor: "pointer", whiteSpace: "nowrap"
                                 }}
                             >
                                 {env.label}

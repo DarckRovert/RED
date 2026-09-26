@@ -41,9 +41,7 @@ export const SecurityReportModal: React.FC<SecurityReportModalProps> = ({ onClos
             handleClose();
             return true;
         });
-        const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); BackHandlerRegistry.executeTop(); } };
-        document.addEventListener('keydown', onEsc);
-        return () => { unregister(); document.removeEventListener('keydown', onEsc); };
+        return unregister;
     }, [handleClose]);
 
     const [copied, setCopied] = useState(false);

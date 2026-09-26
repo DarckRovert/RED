@@ -227,21 +227,14 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
     };
   }, []);
 
-  // Registro de botón Atrás LIFO (Cierre modal interno prioritario)
-  useEffect(() => {
-    if (!showAttributionModal) return;
-    const unregister = BackHandlerRegistry.register(() => {
-      TacticalAudioEngine.playTap();
-      setShowAttributionModal(false);
-      return true;
-    });
-    return unregister;
-  }, [showAttributionModal]);
-
-  // Registro de botón Atrás LIFO (Cierre del HUD principal)
+  // Registro de botón Atrás LIFO jerárquico (Modal interno prioritario > Cierre del HUD principal)
   useEffect(() => {
     const unregister = BackHandlerRegistry.register(() => {
       TacticalAudioEngine.playTap();
+      if (showAttributionModal) {
+        setShowAttributionModal(false);
+        return true;
+      }
       if (onClose) {
         onClose();
         return true;
@@ -249,7 +242,7 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
       return false;
     });
     return unregister;
-  }, [onClose]);
+  }, [showAttributionModal, onClose]);
 
   // Referencias de alta velocidad para desacoplar telemetría de React (0 lag interno)
   const cxTelemRef = useRef<RingAttractorTelemetry>(cxTelemetry);

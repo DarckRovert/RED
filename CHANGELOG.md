@@ -1,5 +1,22 @@
 # Changelog
 
+## [126.0.0-estabilizacion-tactica-integral-y-resiliencia-ui-ux] - 2026-09-26
+
+### 🛡️📱 Estabilización Táctica Integral, Blindaje Viewport Móvil & Resiliencia UI/UX Soberana (Release Oficial v126.0.0)
+
+- **Blindaje Integral de Viewport Móvil & Prevención de Desbordamientos (32 Modales Tácticos):**
+  - Erradicación sistemática de explosiones de cabecera (>100px a 280px de desbordamiento horizontal) en pantallas de 360px como Motorola Moto G22 y Redmi Note 14.
+  - Implementación de arquitectura elástica con `minWidth: 0, flex: 1`, elipsis CSS y `flexShrink: 0` en botones y badges en: `SonarSeismicModal.tsx`, `RfSpectrumModal.tsx`, `LoraTransceiverModal.tsx`, `AcousticWarfareModal.tsx`, `ZkBarterSubsurfaceModal.tsx`, `MultiRailCheckoutModal.tsx`, `DigitalContractGateModal.tsx`, `MiniAppContainerModal.tsx`, `ImageViewerModal.tsx`, `TcccBallisticsModal.tsx`, `CalculatorScreen.tsx`, etc.
+- **Contenedores Táctiles Desplazables & Protección Safe-Area:**
+  - Conversión de barras de pestañas rígidas a scrollers horizontales (`.scroll-container`, `overflowX: "auto"`, `-webkit-overflow-scrolling: touch`, `whiteSpace: "nowrap"`) que previenen colapsos de texto irregulares en las 12 lenguas soportadas.
+  - Incorporación de márgenes de seguridad para hardware real: `calc(10px + var(--safe-top, 0px))` y `calc(16px + var(--safe-bottom, 0px))` para protección contra notch/punch-hole y gestos de navegación Android.
+- **Síntesis Acústica Táctica Canónica (`TacticalAudioEngine.ts`):**
+  - Incorporación de `playNotification()` y `playHangup()` como métodos estáticos canónicos en el motor piezoeléctrico Web Audio API nativo sin latencia ni carga de archivos externos.
+- **Pila de Navegación LIFO & Registro de Retorno (`BackHandlerRegistry.ts`):**
+  - Blindaje del botón atrás físico de Android con interceptación jerárquica LIFO en sub-estados de escaneo de cámara y visores de medios antes de cerrar el contenedor padre.
+- **Certificación en Hardware Físico Real:**
+  - Despliegue limpio simultáneo y validación en Motorola Moto G22 (`ZT322B386P`) y Lenovo Tab M8 (`HA2CHKZ2`): 0 crashes, 0 caídas, JNI (`libred_mobile.so`), servidor loopback `127.0.0.1:7333` y renderizado sin bloqueos en el hilo UI.
+
 ## [125.0.0-blindaje-legal-soberano-y-ecosistema-tri-mirror] - 2026-09-25
 
 ### 🏛️📜 Blindaje Legal Soberano, Salón de la Fama Open Source & Ecosistema Web Tri-Mirror (Release Oficial v125.0.0)

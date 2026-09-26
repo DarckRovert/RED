@@ -104,9 +104,7 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
       handleMinimize();
       return true;
     });
-    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); BackHandlerRegistry.executeTop(); } };
-    document.addEventListener('keydown', onEsc);
-    return () => { unregister(); document.removeEventListener('keydown', onEsc); };
+    return unregister;
   }, [minimized, alerts.length, showSightingForm]);
 
   if (alerts.length === 0) return null;

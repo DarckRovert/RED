@@ -63,47 +63,13 @@ export default function SecurityPanel() {
     const [backupModalOpen, setBackupModalOpen] = useState(false);
     const [companionModalOpen, setCompanionModalOpen] = useState(false);
 
-    // Register Back Interceptors for Sub-Modals (LIFO)
+    // Interceptor Base de Hardware (Android Back / Esc) para SecurityPanel
     useEffect(() => {
-        if (!healthModalOpen) return;
-        return BackHandlerRegistry.register(() => {
-            setHealthModalOpen(false);
-            return true;
-        });
-    }, [healthModalOpen]);
-
-    useEffect(() => {
-        if (!reportModalOpen) return;
-        return BackHandlerRegistry.register(() => {
-            setReportModalOpen(false);
-            return true;
-        });
-    }, [reportModalOpen]);
-
-    useEffect(() => {
-        if (!backupModalOpen) return;
-        return BackHandlerRegistry.register(() => {
-            setBackupModalOpen(false);
-            return true;
-        });
-    }, [backupModalOpen]);
-
-    useEffect(() => {
-        if (!companionModalOpen) return;
-        return BackHandlerRegistry.register(() => {
-            setCompanionModalOpen(false);
-            return true;
-        });
-    }, [companionModalOpen]);
-
-    // Interceptor Base de Hardware (Android Back / Esc) cuando no hay sub-modales abiertos
-    useEffect(() => {
-        if (healthModalOpen || reportModalOpen || backupModalOpen || companionModalOpen) return;
         return BackHandlerRegistry.register(() => {
             goBack();
             return true;
         });
-    }, [healthModalOpen, reportModalOpen, backupModalOpen, companionModalOpen, goBack]);
+    }, [goBack]);
 
     // ── Guardian AI Status (Live Polling) ──────────────────────────────────────
     const [guardianStatus, setGuardianStatus] = useState<GuardianStatus | null>(null);

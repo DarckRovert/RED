@@ -137,7 +137,7 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
                     </a>
 
                     <button
-                      onClick={onEnterApp}
+                      onClick={() => onEnterApp()}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -425,7 +425,7 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "16px", flexWrap: "wrap" }}>
           <button
-            onClick={onEnterApp}
+            onClick={() => onEnterApp()}
             style={{
               padding: "12px 24px", borderRadius: "12px",
               background: "linear-gradient(135deg, #00FF88 0%, #00F0FF 100%)",
@@ -449,15 +449,15 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
         </div>
 
         <div style={{ display: "flex", gap: "18px", flexWrap: "wrap", justifyContent: "center", fontSize: "12px", color: "#64748B" }}>
-          <a href="./privacy.html" target="_blank" rel="noreferrer" style={{ color: "#00E676", textDecoration: "none", fontWeight: 700 }}>
+          <a href="https://darckrovert.github.io/RED/privacy.html" target="_blank" rel="noreferrer" style={{ color: "#00E676", textDecoration: "none", fontWeight: 700 }}>
             🔒 Política de Privacidad
           </a>
           <span>•</span>
-          <a href="./terms.html" target="_blank" rel="noreferrer" style={{ color: "#00E5FF", textDecoration: "none", fontWeight: 700 }}>
+          <a href="https://darckrovert.github.io/RED/terms.html" target="_blank" rel="noreferrer" style={{ color: "#00E5FF", textDecoration: "none", fontWeight: 700 }}>
             📜 Términos de Servicio
           </a>
           <span>•</span>
-          <a href="./credits.html" target="_blank" rel="noreferrer" style={{ color: "#F59E0B", textDecoration: "none", fontWeight: 700 }}>
+          <a href="https://darckrovert.github.io/RED/credits.html" target="_blank" rel="noreferrer" style={{ color: "#F59E0B", textDecoration: "none", fontWeight: 700 }}>
             🎖️ Salón de la Fama & Atribución
           </a>
           <span>•</span>

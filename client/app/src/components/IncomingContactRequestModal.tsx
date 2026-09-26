@@ -66,9 +66,6 @@ export function IncomingContactRequestModal() {
                     osc.start();
                     osc.stop(ctx.currentTime + 0.5);
                     setTimeout(() => {
-                        try {
-                            if (ctx.state !== "closed") ctx.close();
-                        } catch {}
                         AudioContextManager.releaseDedicatedContext('contact_request').catch(() => {});
                     }, 600);
                 }
@@ -137,26 +134,32 @@ export function IncomingContactRequestModal() {
             />
 
             {/* Modal */}
-            <div style={{
-                position: "fixed",
-                bottom: 0, left: "50%",
-                transform: "translateX(-50%)",
-                width: "min(100vw, 480px)",
-                background: "linear-gradient(180deg, rgba(14,14,26,0.98) 0%, rgba(8,8,16,0.99) 100%)",
-                border: "1px solid rgba(0,229,255,0.25)",
-                borderBottom: "none",
-                borderRadius: "24px 24px 0 0",
-                boxShadow: "0 -12px 60px rgba(0,229,255,0.15), 0 -4px 20px rgba(0,0,0,0.8)",
-                zIndex: 9999,
-                padding: "24px 24px 40px 24px",
-                display: "flex", flexDirection: "column", gap: "20px",
-                animation: "slideUpModal 0.3s cubic-bezier(0.34,1.56,0.64,1)",
-            }}>
+            <div
+                className="scroll-container"
+                style={{
+                    position: "fixed",
+                    bottom: 0, left: "50%",
+                    transform: "translateX(-50%)",
+                    width: "min(100vw, 480px)",
+                    maxHeight: "min(92vh, 620px)",
+                    overflowY: "auto",
+                    WebkitOverflowScrolling: "touch",
+                    background: "linear-gradient(180deg, rgba(14,14,26,0.98) 0%, rgba(8,8,16,0.99) 100%)",
+                    border: "1px solid rgba(0,229,255,0.25)",
+                    borderBottom: "none",
+                    borderRadius: "24px 24px 0 0",
+                    boxShadow: "0 -12px 60px rgba(0,229,255,0.15), 0 -4px 20px rgba(0,0,0,0.8)",
+                    zIndex: 9999,
+                    padding: "20px 20px calc(24px + env(safe-area-inset-bottom, 16px)) 20px",
+                    display: "flex", flexDirection: "column", gap: "16px",
+                    animation: "slideUpModal 0.3s cubic-bezier(0.34,1.56,0.64,1)",
+                }}
+            >
                 {/* Handle bar */}
                 <div style={{
                     width: 40, height: 4, borderRadius: 2,
                     background: "rgba(255,255,255,0.2)",
-                    alignSelf: "center", marginBottom: 4,
+                    alignSelf: "center", marginBottom: 4, flexShrink: 0
                 }} />
 
                 {/* Alert badge */}
@@ -165,7 +168,7 @@ export function IncomingContactRequestModal() {
                     padding: "8px 14px", borderRadius: 10,
                     background: "rgba(255,107,0,0.12)",
                     border: "1px solid rgba(255,107,0,0.3)",
-                    alignSelf: "flex-start",
+                    alignSelf: "flex-start", flexShrink: 0
                 }}>
                     <div style={{
                         width: 8, height: 8, borderRadius: "50%",
@@ -185,6 +188,7 @@ export function IncomingContactRequestModal() {
                     background: "rgba(255,255,255,0.04)",
                     borderRadius: 16,
                     border: "1px solid rgba(255,255,255,0.08)",
+                    flexShrink: 0
                 }}>
                     <AvatarInitial name={req.senderName} hash={req.senderHash} />
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -237,7 +241,7 @@ export function IncomingContactRequestModal() {
                 </div>
 
                 {/* Action Buttons */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, flexShrink: 0 }}>
                     {/* Accept */}
                     <button
                         id="btn-accept-contact-request"

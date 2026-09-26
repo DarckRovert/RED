@@ -81,9 +81,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
             onClose();
             return true;
         });
-        const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); BackHandlerRegistry.executeTop(); } };
-        document.addEventListener('keydown', onEsc);
-        return () => { unregister(); document.removeEventListener('keydown', onEsc); };
+        return unregister;
     }, [selectedViewerMedia, qrContactOpen, onClose]);
 
     // Categorized shared media

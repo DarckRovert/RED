@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { tacticalRdf, TargetSignalType, PolarSector } from "../lib/sensors/TacticalRdfEngine";
-import { rdfTriangulation, LineOfBearing, RdfTargetFix } from "../lib/sensors/RdfTriangulationEngine";
+import { tacticalRdf, TargetSignalType } from "../lib/sensors/TacticalRdfEngine";
+import { rdfTriangulation, RdfTargetFix } from "../lib/sensors/RdfTriangulationEngine";
 import { rfSigintWatchdog, DetectedEmitter, SigintTelemetry } from "../lib/sensors/RfSigintWatchdogEngine";
 import { loraBridge, LoraTelemetry } from "../lib/hardware/LoraSerialBridgeEngine";
 import { tacticalCompass } from "../lib/sensors/TacticalCompassEngine";
@@ -12,11 +12,9 @@ import { meshRouter } from "../lib/mesh/meshRouter";
 import { copyToClipboard } from "../lib/clipboard";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
-import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export function TacticalFoxhuntModal() {
     const { navigate, goBack } = useRedStore();
-    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<"rdf" | "triangulation">("rdf");
 
     // RDF State
@@ -97,7 +95,7 @@ export function TacticalFoxhuntModal() {
 
         return () => {
             isMounted = false;
-            if (unsubGps) (unsubGps as any)();
+            if (unsubGps) (unsubGps as () => void)();
             unsubRdf();
             unsubTriang();
             unsubSigint();
@@ -310,44 +308,52 @@ export function TacticalFoxhuntModal() {
                 borderBottom: "1.5px solid rgba(0, 229, 255, 0.35)",
                 display: "flex", justifyContent: "space-between", alignItems: "center",
                 backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
-                zIndex: 10, flexShrink: 0
+                zIndex: 10, flexShrink: 0, gap: "10px"
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
                     <button
                         onClick={goBack}
                         style={{
                             width: 34, height: 34, borderRadius: "9px",
                             background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
                             color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
-                            display: "flex", alignItems: "center", justifyContent: "center"
+                            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
                         }}
                     >
                         ‹
                     </button>
                     <div style={{
-                        width: 38, height: 38, borderRadius: "12px",
+                        width: 36, height: 36, borderRadius: "10px",
                         background: "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(0, 150, 255, 0.15) 100%)",
                         border: "1px solid rgba(0, 229, 255, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 229, 255, 0.25)"
+                        fontSize: "1.15rem", boxShadow: "0 0 15px rgba(0, 229, 255, 0.25)", flexShrink: 0
                     }}>🦊</div>
-                    <div>
-                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             RADIOGONIOMETRÍA & CAZA FOXHUNT
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan, #00E5FF)", fontWeight: 800 }}>
+                        <div style={{ fontSize: "0.66rem", color: "var(--accent-cyan, #00E5FF)", fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             LOCALIZACIÓN RDF & TRIANGULACIÓN LOB
                         </div>
                     </div>
                 </div>
 
-                <div style={{ display: "flex", gap: "6px" }}>
+                <div
+                    className="scroll-container"
+                    style={{
+                        display: "flex", gap: "6px", alignItems: "center",
+                        overflowX: "auto", WebkitOverflowScrolling: "touch",
+                        flexShrink: 0, maxWidth: "50%"
+                    }}
+                >
                     <button
                         onClick={() => navigate("nodemap")}
                         style={{
                             padding: "6px 10px", borderRadius: "8px",
                             background: "rgba(0, 229, 255, 0.1)", border: "1px solid rgba(0, 229, 255, 0.3)",
-                            color: "#00E5FF", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer"
+                            color: "#00E5FF", fontSize: "0.72rem", fontWeight: 800, cursor: "pointer",
+                            whiteSpace: "nowrap", flexShrink: 0
                         }}
                     >
                         🗺️ MAPA
@@ -358,7 +364,7 @@ export function TacticalFoxhuntModal() {
                             padding: "6px 12px", borderRadius: "10px",
                             background: "rgba(0, 229, 255, 0.18)", border: "1.5px solid rgba(0, 229, 255, 0.5)",
                             color: "#00E5FF", fontSize: "0.74rem", fontWeight: 900, cursor: "pointer",
-                            boxShadow: "0 0 12px rgba(0, 229, 255, 0.25)"
+                            boxShadow: "0 0 12px rgba(0, 229, 255, 0.25)", whiteSpace: "nowrap", flexShrink: 0
                         }}
                     >
                         🎯 TRIANGULAR
@@ -367,19 +373,23 @@ export function TacticalFoxhuntModal() {
             </header>
 
             {/* Selector de Pestañas Segmentadas */}
-            <div style={{
-                display: "flex", background: "rgba(8, 10, 20, 0.95)",
-                padding: "8px 16px", gap: "6px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-                flexShrink: 0
-            }}>
+            <div
+                className="scroll-container"
+                style={{
+                    display: "flex", background: "rgba(8, 10, 20, 0.95)",
+                    padding: "8px 16px", gap: "6px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                    flexShrink: 0, overflowX: "auto", WebkitOverflowScrolling: "touch"
+                }}
+            >
                 <button
                     onClick={() => setActiveTab("rdf")}
                     style={{
-                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        flex: "1 0 auto", minWidth: "160px", padding: "8px 14px", borderRadius: "10px",
                         background: activeTab === "rdf" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(10, 35, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
                         border: activeTab === "rdf" ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
                         color: activeTab === "rdf" ? "#00E5FF" : "var(--text-secondary)",
-                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                        whiteSpace: "nowrap"
                     }}
                 >
                     <span>🧭</span> RADIOGONIOMETRÍA POLAR
@@ -387,11 +397,12 @@ export function TacticalFoxhuntModal() {
                 <button
                     onClick={() => setActiveTab("triangulation")}
                     style={{
-                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        flex: "1 0 auto", minWidth: "160px", padding: "8px 14px", borderRadius: "10px",
                         background: activeTab === "triangulation" ? "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(180, 20, 40, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
                         border: activeTab === "triangulation" ? "1.5px solid #FF3355" : "1px solid rgba(255, 255, 255, 0.08)",
                         color: activeTab === "triangulation" ? "#FF3355" : "var(--text-secondary)",
-                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                        whiteSpace: "nowrap"
                     }}
                 >
                     <span>🎯</span> TRIANGULACIÓN LOB ({triangState.lobs.length})
@@ -459,14 +470,14 @@ export function TacticalFoxhuntModal() {
                                 </select>
                             </div>
 
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div style={{ flex: 1 }}>
+                            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-end", gap: "10px" }}>
+                                <div style={{ flex: "1 1 200px", minWidth: "160px" }}>
                                     <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900, display: "block", marginBottom: "4px" }}>
                                         TIPO DE EMISOR A CAZAR (SIGINT)
                                     </label>
                                     <select
                                         value={rdfState.targetType}
-                                        onChange={(e: any) => tacticalRdf.setTargetType(e.target.value)}
+                                        onChange={(e) => tacticalRdf.setTargetType(e.target.value as TargetSignalType)}
                                         style={{
                                             width: "100%", padding: "10px 14px", background: "rgba(0, 0, 0, 0.5)",
                                             border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "10px",
@@ -482,10 +493,10 @@ export function TacticalFoxhuntModal() {
                                 <button
                                     onClick={handleClearRdf}
                                     style={{
-                                        marginLeft: "10px", marginTop: "18px", padding: "8px 12px",
+                                        padding: "10px 14px",
                                         background: "rgba(255, 51, 85, 0.12)", border: "1px solid rgba(255, 51, 85, 0.35)",
                                         borderRadius: "10px", color: "#FF3355", fontSize: "0.72rem", fontWeight: 800,
-                                        cursor: "pointer", whiteSpace: "nowrap"
+                                        cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0
                                     }}
                                     title="Reiniciar sectores de radiogoniometría"
                                 >
@@ -587,7 +598,8 @@ export function TacticalFoxhuntModal() {
                             {/* Peak Bearing Card */}
                             <div style={{
                                 background: "rgba(0, 229, 255, 0.08)", border: "1.5px solid rgba(0, 229, 255, 0.3)",
-                                borderRadius: "16px", padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center"
+                                borderRadius: "16px", padding: "16px", display: "flex", flexWrap: "wrap",
+                                justifyContent: "space-between", alignItems: "center", gap: "12px"
                             }}>
                                 <div>
                                     <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>RUMBO ESTIMADO DEL OBJETIVO:</div>

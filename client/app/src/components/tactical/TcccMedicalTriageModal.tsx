@@ -102,11 +102,10 @@ export const TcccMedicalTriageModal: React.FC<TcccMedicalTriageModalProps> = ({ 
         flexDirection: 'column',
         color: '#E0E7FF',
         fontFamily: 'monospace',
-        overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch'
+        overflow: 'hidden'
       }}
     >
-      {/* Cabecera */}
+      {/* Cabecera Táctica Fija */}
       <div
         style={{
           display: 'flex',
@@ -114,18 +113,20 @@ export const TcccMedicalTriageModal: React.FC<TcccMedicalTriageModalProps> = ({ 
           justifyContent: 'space-between',
           padding: '12px 16px',
           background: '#0B0F19',
-          borderBottom: '1px solid #1E293B'
+          borderBottom: '1px solid #1E293B',
+          flexShrink: 0,
+          gap: '12px'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ color: '#EF4444' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+          <div style={{ color: '#EF4444', flexShrink: 0 }}>
             <TacIcon name="hazard" size={22} />
           </div>
-          <div>
-            <div style={{ fontSize: '0.90rem', fontWeight: 'bold', color: '#F8FAFC' }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: '0.90rem', fontWeight: 'bold', color: '#F8FAFC', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               ÍNSULA ANTERIOR & PROTOCOLO TCCC • RED
             </div>
-            <div style={{ fontSize: '0.65rem', color: '#EF4444' }}>
+            <div style={{ fontSize: '0.65rem', color: '#EF4444', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               TRIAGE MARCH, CONTROL DE ISQUEMIA & BOX BREATHING 4-4-4-4
             </div>
           </div>
@@ -146,7 +147,8 @@ export const TcccMedicalTriageModal: React.FC<TcccMedicalTriageModalProps> = ({ 
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            fontSize: '0.75rem'
+            fontSize: '0.75rem',
+            flexShrink: 0
           }}
         >
           <TacIcon name="x" size={16} />
@@ -154,23 +156,36 @@ export const TcccMedicalTriageModal: React.FC<TcccMedicalTriageModalProps> = ({ 
         </button>
       </div>
 
-      {/* Selector de pestañas */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #1E293B', background: '#070B14' }}>
+      {/* Selector de pestañas táctico fijo */}
+      <div
+        className="scroll-container"
+        style={{
+          display: 'flex',
+          borderBottom: '1px solid #1E293B',
+          background: '#070B14',
+          flexShrink: 0,
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch'
+        }}
+      >
         <button
           onClick={() => {
             TacticalAudioEngine.playTap();
             setActiveTab('TRIAGE');
           }}
           style={{
-            flex: 1,
-            padding: '10px',
+            flex: '1 0 auto',
+            minWidth: '150px',
+            padding: '10px 14px',
             background: activeTab === 'TRIAGE' ? '#0F172A' : 'transparent',
             border: 'none',
-            borderBottom: activeTab === 'TRIAGE' ? '2px solid #EF4444' : 'none',
+            borderBottom: activeTab === 'TRIAGE' ? '2px solid #EF4444' : '2px solid transparent',
             color: activeTab === 'TRIAGE' ? '#F8FAFC' : '#64748B',
             fontSize: '0.75rem',
             fontWeight: 'bold',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            textAlign: 'center'
           }}
         >
           TRIAGE MARCH & TORNIQUETES ({casualties.length})
@@ -182,22 +197,42 @@ export const TcccMedicalTriageModal: React.FC<TcccMedicalTriageModalProps> = ({ 
             setActiveTab('BREATHING');
           }}
           style={{
-            flex: 1,
-            padding: '10px',
+            flex: '1 0 auto',
+            minWidth: '150px',
+            padding: '10px 14px',
             background: activeTab === 'BREATHING' ? '#0F172A' : 'transparent',
             border: 'none',
-            borderBottom: activeTab === 'BREATHING' ? '2px solid #06B6D4' : 'none',
+            borderBottom: activeTab === 'BREATHING' ? '2px solid #06B6D4' : '2px solid transparent',
             color: activeTab === 'BREATHING' ? '#F8FAFC' : '#64748B',
             fontSize: '0.75rem',
             fontWeight: 'bold',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            textAlign: 'center'
           }}
         >
           DESACELERACIÓN VAGAL (BOX BREATHING)
         </button>
       </div>
 
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '640px', margin: '0 auto', width: '100%' }}>
+      {/* Cuerpo scrolleable aislado */}
+      <div
+        className="scroll-container"
+        style={{
+          flex: '1 1 0%',
+          minHeight: 0,
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          maxWidth: '640px',
+          margin: '0 auto',
+          width: '100%',
+          boxSizing: 'border-box'
+        }}
+      >
         
         {/* Alerta crítica de torniquete */}
         {telemetry.criticalTourniquetWarning && (
@@ -241,14 +276,15 @@ export const TcccMedicalTriageModal: React.FC<TcccMedicalTriageModalProps> = ({ 
               }}
             >
               <div style={{ fontSize: '0.70rem', color: '#64748B' }}>REGISTRAR NUEVA BAJA BAJO FUEGO</div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 <input
                   type="text"
                   placeholder="Callsign / ID Herido..."
                   value={newCallsign}
                   onChange={(e) => setNewCallsign(e.target.value)}
                   style={{
-                    flex: 1,
+                    flex: '1 1 140px',
+                    minWidth: '130px',
                     background: '#0F172A',
                     border: '1px solid #334155',
                     borderRadius: '6px',
@@ -262,6 +298,8 @@ export const TcccMedicalTriageModal: React.FC<TcccMedicalTriageModalProps> = ({ 
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value as TriageCategory)}
                   style={{
+                    flex: '1 1 140px',
+                    minWidth: '130px',
                     background: '#0F172A',
                     border: '1px solid #334155',
                     borderRadius: '6px',
@@ -279,11 +317,13 @@ export const TcccMedicalTriageModal: React.FC<TcccMedicalTriageModalProps> = ({ 
                 <button
                   onClick={handleCreateCasualty}
                   style={{
+                    flex: '0 0 auto',
+                    minWidth: '100px',
                     background: '#7F1D1D',
                     border: '1px solid #EF4444',
                     borderRadius: '6px',
                     color: '#FEE2E2',
-                    padding: '8px 12px',
+                    padding: '8px 14px',
                     fontSize: '0.75rem',
                     fontWeight: 'bold',
                     cursor: 'pointer'
@@ -430,7 +470,7 @@ export const TcccMedicalTriageModal: React.FC<TcccMedicalTriageModalProps> = ({ 
                       <div style={{ fontSize: '0.65rem', color: '#94A3B8', marginBottom: '6px' }}>
                         APLICACIÓN DE TORNIQUETES (TQ)
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '6px' }}>
                         {(['BRAZO_IZQ', 'BRAZO_DER', 'PIERNA_IZQ', 'PIERNA_DER'] as const).map((limb) => (
                           <button
                             key={limb}
@@ -439,10 +479,12 @@ export const TcccMedicalTriageModal: React.FC<TcccMedicalTriageModalProps> = ({ 
                               background: '#1E293B',
                               border: '1px solid #334155',
                               borderRadius: '4px',
-                              padding: '4px',
+                              padding: '8px 6px',
                               color: '#E2E8F0',
-                              fontSize: '0.60rem',
-                              cursor: 'pointer'
+                              fontSize: '0.65rem',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              textAlign: 'center'
                             }}
                           >
                             + TQ {limb.replace('_', ' ')}
@@ -545,7 +587,7 @@ export const TcccMedicalTriageModal: React.FC<TcccMedicalTriageModalProps> = ({ 
                 gap: '8px'
               }}
             >
-              <TacIcon name={telemetry.isBoxBreathingActive ? "pause" as any : "zap"} size={18} />
+              <TacIcon name={telemetry.isBoxBreathingActive ? "x" : "zap"} size={18} />
               {telemetry.isBoxBreathingActive ? "DETENER BOX BREATHING" : "INICIAR RITMO VAGAL HÁPTICO"}
             </button>
           </div>

@@ -1077,11 +1077,15 @@ export default function CallScreen() {
 
     const handleUserEndCall = () => {
         endCallInternal();
-        goBack();
+        goBack({ skipInterceptors: true });
     };
 
     // ── Intercepción LIFO de Hardware Android / Escape (BackHandlerRegistry) ─
     useEffect(() => {
+        // Si la llamada está minimizada en Picture-in-Picture (PiP), NO debe interceptar el botón Atrás
+        // para permitir la navegación normal por el resto de módulos del SO.
+        if (isCallPipMinimized) return;
+
         const unregister = BackHandlerRegistry.register(() => {
             // 1. Si modal de verificación de seguridad está abierto, cerrarlo primero
             if (isSafetyModalOpen) {
@@ -1096,7 +1100,7 @@ export default function CallScreen() {
             // 3. Si la llamada está activa en curso: minimizar fluidamente a Picture-in-Picture
             if (callActive) {
                 setCallPipMinimized(true);
-                goBack();
+                goBack({ skipInterceptors: true });
                 return true;
             }
             // 4. Si está timbrando, conectando o en error: colgar / cancelar ordenadamente
@@ -1104,7 +1108,7 @@ export default function CallScreen() {
             return true;
         });
         return () => unregister();
-    }, [isSafetyModalOpen, showStats, callActive, setCallPipMinimized, goBack]);
+    }, [isCallPipMinimized, isSafetyModalOpen, showStats, callActive, setCallPipMinimized, goBack]);
 
     // ── Sincronización de Micrófono desde FloatingCallPIP ────────────────────
     useEffect(() => {
@@ -1450,6 +1454,7 @@ export default function CallScreen() {
                 <CallStatsModal
                     statsData={statsData}
                     isAudioOnly={isAudioOnly}
+                    onClose={() => setShowStats(false)}
                 />
             )}
 

@@ -1,7 +1,7 @@
 # SALÓN DE LA FAMA & ATRIBUCIÓN OPEN SOURCE / HALL OF FAME
 
 **PROYECTO RED (RED Sovereign Mesh OS)**  
-*Versión Canónica: v125.0.0 (Septiembre 2026)*  
+*Versión Canónica: v126.0.0 (Septiembre 2026)*  
 *Licencia Principal: GNU Affero General Public License v3.0 (AGPL-3.0)*  
 *Repositorio Oficial: [https://github.com/DarckRovert/RED](https://github.com/DarckRovert/RED)*
 
@@ -116,4 +116,4 @@ Rendimos honor a todos los radioaficionados independientes, brigadistas de resca
 
 ---
 
-*RED — Sovereign Tactical Mesh OS © 2026. Documento Canónico v125.0.0.*
+*RED — Sovereign Tactical Mesh OS © 2026. Documento Canónico v126.0.0.*
