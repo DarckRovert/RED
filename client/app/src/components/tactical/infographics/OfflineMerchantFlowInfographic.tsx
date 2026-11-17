@@ -1,0 +1,173 @@
+import React from "react";
+
+export const OfflineMerchantFlowInfographic: React.FC<{ style?: React.CSSProperties }> = ({ style }) => {
+  return (
+    <div
+      style={{
+        width: "100%",
+        borderRadius: "12px",
+        overflow: "hidden",
+        border: "1px solid rgba(0, 230, 118, 0.3)",
+        backgroundColor: "#070B12",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+        margin: "14px 0",
+        ...style,
+      }}
+    >
+      <svg
+        viewBox="0 0 720 340"
+        width="100%"
+        height="auto"
+        style={{ display: "block" }}
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <linearGradient id="stepGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0B1320" />
+            <stop offset="100%" stopColor="#060A10" />
+          </linearGradient>
+        </defs>
+
+        {/* Header */}
+        <rect x="0" y="0" width="720" height="42" fill="#0C1322" />
+        <text x="20" y="26" fill="#00E676" fontSize="13" fontWeight="800" letterSpacing="0.5" fontFamily="monospace">
+          PROTOCOLO COMERCIAL OFF-GRID · COBRO P2P EN 4 PASOS SIN INTERNET NI BANCOS
+        </text>
+
+        {/* 4 Pasos Horizontales */}
+        {/* PASO 1 */}
+        <g transform="translate(14, 54)">
+          <rect width="162" height="268" rx="8" fill="url(#stepGrad)" stroke="rgba(0,230,118,0.3)" strokeWidth="1" />
+          <circle cx="28" cy="24" r="14" fill="#00E676" />
+          <text x="28" y="29" fill="#04060A" fontSize="13" fontWeight="900" textAnchor="middle" fontFamily="monospace">1</text>
+          <text x="50" y="22" fill="#FFF" fontSize="11" fontWeight="800" fontFamily="sans-serif">Comprador</text>
+          <text x="50" y="34" fill="#8696A0" fontSize="9" fontFamily="sans-serif">Emite Vale QR</text>
+
+          {/* Gráfico Teléfono con QR */}
+          <rect x="14" y="48" width="134" height="88" rx="6" fill="#04070D" stroke="rgba(255,255,255,0.08)" />
+          {/* Teléfono */}
+          <rect x="42" y="54" width="46" height="74" rx="4" fill="#1E293B" stroke="#00E5FF" strokeWidth="1" />
+          <rect x="48" y="62" width="34" height="44" fill="#000" />
+          {/* QR Icon */}
+          <rect x="52" y="66" width="10" height="10" fill="#00E676" />
+          <rect x="68" y="66" width="10" height="10" fill="#00E676" />
+          <rect x="52" y="82" width="10" height="10" fill="#00E676" />
+          <rect x="68" y="82" width="10" height="10" fill="#00E5FF" />
+          <text x="106" y="96" fill="#00E5FF" fontSize="9" fontWeight="800" fontFamily="monospace">10 CR</text>
+
+          <text x="14" y="154" fill="#E2E8F0" fontSize="11" fontWeight="700" fontFamily="sans-serif">Firma Ed25519:</text>
+          <text x="14" y="172" fill="#94A3B8" fontSize="10" fontFamily="sans-serif">
+            <tspan x="14" dy="0">El teléfono del comprador</tspan>
+            <tspan x="14" dy="14">firma el vale con su llave</tspan>
+            <tspan x="14" dy="14">privada en el enclave</tspan>
+            <tspan x="14" dy="14">seguro del chip.</tspan>
+          </text>
+
+          <rect x="12" y="238" width="138" height="20" rx="4" fill="rgba(0,230,118,0.12)" />
+          <text x="81" y="252" fill="#00E676" fontSize="9" fontWeight="800" textAnchor="middle" fontFamily="monospace">
+            VALE FIRMADO
+          </text>
+        </g>
+
+        {/* Flecha 1 -> 2 */}
+        <polygon points="181,180 188,185 181,190" fill="#00E676" />
+
+        {/* PASO 2 */}
+        <g transform="translate(190, 54)">
+          <rect width="162" height="268" rx="8" fill="url(#stepGrad)" stroke="rgba(0,229,255,0.3)" strokeWidth="1" />
+          <circle cx="28" cy="24" r="14" fill="#00E5FF" />
+          <text x="28" y="29" fill="#04060A" fontSize="13" fontWeight="900" textAnchor="middle" fontFamily="monospace">2</text>
+          <text x="50" y="22" fill="#FFF" fontSize="11" fontWeight="800" fontFamily="sans-serif">Comerciante</text>
+          <text x="50" y="34" fill="#8696A0" fontSize="9" fontFamily="sans-serif">Escanea en Cámara</text>
+
+          {/* Gráfico Cámara Escaneando */}
+          <rect x="14" y="48" width="134" height="88" rx="6" fill="#04070D" stroke="rgba(255,255,255,0.08)" />
+          {/* Lente Cámara */}
+          <circle cx="81" cy="90" r="26" fill="#0F172A" stroke="#00E5FF" strokeWidth="2" />
+          <circle cx="81" cy="90" r="14" fill="#0284C7" />
+          {/* Mira Láser */}
+          <line x1="45" y1="90" x2="117" y2="90" stroke="#FF1744" strokeWidth="1.5" strokeDasharray="3,2" />
+
+          <text x="14" y="154" fill="#E2E8F0" fontSize="11" fontWeight="700" fontFamily="sans-serif">Modo Avión 100%:</text>
+          <text x="14" y="172" fill="#94A3B8" fontSize="10" fontFamily="sans-serif">
+            <tspan x="14" dy="0">El comerciante apunta la</tspan>
+            <tspan x="14" dy="14">cámara a la pantalla del</tspan>
+            <tspan x="14" dy="14">cliente. Cero datos cel-</tspan>
+            <tspan x="14" dy="14">ulares ni Wi-Fi requeridos.</tspan>
+          </text>
+
+          <rect x="12" y="238" width="138" height="20" rx="4" fill="rgba(0,229,255,0.12)" />
+          <text x="81" y="252" fill="#00E5FF" fontSize="9" fontWeight="800" textAnchor="middle" fontFamily="monospace">
+            CAPTURA ÓPTICA
+          </text>
+        </g>
+
+        {/* Flecha 2 -> 3 */}
+        <polygon points="357,180 364,185 357,190" fill="#00E5FF" />
+
+        {/* PASO 3 */}
+        <g transform="translate(366, 54)">
+          <rect width="162" height="268" rx="8" fill="url(#stepGrad)" stroke="rgba(255,214,0,0.3)" strokeWidth="1" />
+          <circle cx="28" cy="24" r="14" fill="#FFD600" />
+          <text x="28" y="29" fill="#04060A" fontSize="13" fontWeight="900" textAnchor="middle" fontFamily="monospace">3</text>
+          <text x="50" y="22" fill="#FFF" fontSize="11" fontWeight="800" fontFamily="sans-serif">Validación</text>
+          <text x="50" y="34" fill="#8696A0" fontSize="9" fontFamily="sans-serif">Anti-Doble Gasto</text>
+
+          {/* Gráfico Validación Local */}
+          <rect x="14" y="48" width="134" height="88" rx="6" fill="#04070D" stroke="rgba(255,255,255,0.08)" />
+          <rect x="24" y="60" width="114" height="24" rx="4" fill="#1C1502" stroke="#FFD600" strokeWidth="1" />
+          <text x="81" y="76" fill="#FFD600" fontSize="10" fontWeight="800" textAnchor="middle" fontFamily="monospace">NULLIFIER OK ✓</text>
+          <rect x="24" y="92" width="114" height="32" rx="4" fill="#031E12" stroke="#00E676" strokeWidth="1" />
+          <text x="81" y="112" fill="#00E676" fontSize="13" fontWeight="900" textAnchor="middle" fontFamily="monospace">+10 CR COBRADOS</text>
+
+          <text x="14" y="154" fill="#E2E8F0" fontSize="11" fontWeight="700" fontFamily="sans-serif">Base de Datos Local:</text>
+          <text x="14" y="172" fill="#94A3B8" fontSize="10" fontFamily="sans-serif">
+            <tspan x="14" dy="0">El saldo se abona en</tspan>
+            <tspan x="14" dy="14">tiempo real en SQLite.</tspan>
+            <tspan x="14" dy="14">El identificador único</tspan>
+            <tspan x="14" dy="14">se quema para siempre.</tspan>
+          </text>
+
+          <rect x="12" y="238" width="138" height="20" rx="4" fill="rgba(255,214,0,0.12)" />
+          <text x="81" y="252" fill="#FFD600" fontSize="9" fontWeight="800" textAnchor="middle" fontFamily="monospace">
+            PAGO APROBADO
+          </text>
+        </g>
+
+        {/* Flecha 3 -> 4 */}
+        <polygon points="533,180 540,185 533,190" fill="#FFD600" />
+
+        {/* PASO 4 */}
+        <g transform="translate(542, 54)">
+          <rect width="164" height="268" rx="8" fill="url(#stepGrad)" stroke="rgba(179,136,255,0.3)" strokeWidth="1" />
+          <circle cx="28" cy="24" r="14" fill="#B388FF" />
+          <text x="28" y="29" fill="#04060A" fontSize="13" fontWeight="900" textAnchor="middle" fontFamily="monospace">4</text>
+          <text x="50" y="22" fill="#FFF" fontSize="11" fontWeight="800" fontFamily="sans-serif">Malla Mesh</text>
+          <text x="50" y="34" fill="#8696A0" fontSize="9" fontFamily="sans-serif">Difusión Oportunista</text>
+
+          {/* Gráfico Difusión LoRa */}
+          <rect x="14" y="48" width="136" height="88" rx="6" fill="#04070D" stroke="rgba(255,255,255,0.08)" />
+          <circle cx="82" cy="85" r="14" fill="#4A148C" stroke="#B388FF" strokeWidth="1.5" />
+          <text x="82" y="89" fill="#FFF" fontSize="10" textAnchor="middle">📻</text>
+          <circle cx="44" cy="110" r="8" fill="#1F2937" stroke="#9CA3AF" />
+          <circle cx="120" cy="110" r="8" fill="#1F2937" stroke="#9CA3AF" />
+          <line x1="72" y1="94" x2="52" y2="104" stroke="#B388FF" strokeWidth="1" strokeDasharray="2,2" />
+          <line x1="92" y1="94" x2="112" y2="104" stroke="#B388FF" strokeWidth="1" strokeDasharray="2,2" />
+
+          <text x="14" y="154" fill="#E2E8F0" fontSize="11" fontWeight="700" fontFamily="sans-serif">Sincronización LoRa:</text>
+          <text x="14" y="172" fill="#94A3B8" fontSize="10" fontFamily="sans-serif">
+            <tspan x="14" dy="0">El nullifier quemado se</tspan>
+            <tspan x="14" dy="14">propaga a los nodos ve-</tspan>
+            <tspan x="14" dy="14">cinos por radio para que</tspan>
+            <tspan x="14" dy="14">nadie gaste dos veces.</tspan>
+          </text>
+
+          <rect x="12" y="238" width="140" height="20" rx="4" fill="rgba(179,136,255,0.12)" />
+          <text x="82" y="252" fill="#B388FF" fontSize="9" fontWeight="800" textAnchor="middle" fontFamily="monospace">
+            DIFUSIÓN COMUNITARIA
+          </text>
+        </g>
+      </svg>
+    </div>
+  );
+};

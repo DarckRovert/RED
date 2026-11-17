@@ -41,6 +41,8 @@ Si el dinero fiduciario colapsa por una emergencia extrema, el motor bio-neurom�
 
 El proceso de cobro se realiza en segundos entre dos teléfonos, incluso si ambos están completamente desconectados de internet y sin tarjeta SIM.
 
+> 📊 **Infografía Operativa:** Consulta el diagrama de flujo visual en [offline_merchant_qr_flow.svg](../client/app/public/assets/economy/offline_merchant_qr_flow.svg) o directamente en la pestaña **Calculadora & Comercio** dentro de la app RED.
+
 ```
 +-------------------+           +-------------------+
 |  TELÉFONO CLIENTE |           |  TELÉFONO NEGOCIO |

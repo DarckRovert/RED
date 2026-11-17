@@ -1,0 +1,141 @@
+import React from "react";
+
+export const SurvivalParityMatrixInfographic: React.FC<{ style?: React.CSSProperties }> = ({ style }) => {
+  return (
+    <div
+      style={{
+        width: "100%",
+        borderRadius: "12px",
+        overflow: "hidden",
+        border: "1px solid rgba(0, 230, 118, 0.3)",
+        backgroundColor: "#070B12",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+        margin: "14px 0",
+        ...style,
+      }}
+    >
+      <svg
+        viewBox="0 0 720 330"
+        width="100%"
+        height="auto"
+        style={{ display: "block" }}
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <linearGradient id="matrixGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0B1524" />
+            <stop offset="100%" stopColor="#060C14" />
+          </linearGradient>
+        </defs>
+
+        {/* Header */}
+        <rect x="0" y="0" width="720" height="42" fill="#0C1322" />
+        <text x="20" y="26" fill="#00E676" fontSize="13" fontWeight="800" letterSpacing="0.5" fontFamily="monospace">
+          MATRIZ DE PARIDAD DE SUPERVIVENCIA · 10 CRÉDITOS RED = SUMINISTROS TANGIBLES
+        </text>
+
+        {/* Banner Central de Referencia */}
+        <g transform="translate(16, 52)">
+          <rect width="688" height="46" rx="8" fill="#081E15" stroke="rgba(0,230,118,0.4)" strokeWidth="1" />
+          <circle cx="30" cy="23" r="14" fill="rgba(0,230,118,0.2)" />
+          <text x="30" y="28" fill="#00E676" fontSize="14" textAnchor="middle">⚖️</text>
+          <text x="56" y="23" fill="#FFF" fontSize="12" fontWeight="800" fontFamily="sans-serif">
+            Unidad Base: 10 Créditos RED
+          </text>
+          <text x="56" y="36" fill="#8696A0" fontSize="10" fontFamily="monospace">
+            Equivalente Oficial de Consenso: S/ 38.00 PEN · $ 10.00 USD
+          </text>
+          <rect x="520" y="10" width="154" height="26" rx="6" fill="#00E676" />
+          <text x="597" y="27" fill="#04060A" fontSize="11" fontWeight="900" textAnchor="middle" fontFamily="monospace">
+            RESPALDO FÍSICO
+          </text>
+        </g>
+
+        {/* 4 Tarjetas de Recursos Vitales */}
+        {/* Recurso 1: Agua */}
+        <g transform="translate(16, 110)">
+          <rect width="160" height="198" rx="8" fill="url(#matrixGrad)" stroke="rgba(0,229,255,0.3)" strokeWidth="1" />
+          <rect x="12" y="12" width="32" height="32" rx="6" fill="rgba(0,229,255,0.15)" />
+          <text x="28" y="34" fontSize="16" textAnchor="middle">💧</text>
+          <text x="52" y="24" fill="#E2E8F0" fontSize="11" fontWeight="700" fontFamily="sans-serif">Agua Potable</text>
+          <text x="52" y="38" fill="#00E5FF" fontSize="13" fontWeight="900" fontFamily="monospace">3.3 L</text>
+
+          {/* Medidor de Nivel */}
+          <rect x="16" y="60" width="128" height="56" rx="6" fill="#031620" />
+          <rect x="22" y="74" width="116" height="32" rx="4" fill="#0284C7" />
+          <text x="80" y="94" fill="#FFF" fontSize="11" fontWeight="800" textAnchor="middle" fontFamily="monospace">100% DIARIO</text>
+
+          <text x="14" y="136" fill="#94A3B8" fontSize="10" fontFamily="sans-serif">
+            <tspan x="14" dy="0">3.3 litros de agua</tspan>
+            <tspan x="14" dy="13">mineralizada o filtrada.</tspan>
+            <tspan x="14" dy="13">Cubre el requerimiento</tspan>
+            <tspan x="14" dy="13">de 1 adulto por 24 hrs.</tspan>
+          </text>
+        </g>
+
+        {/* Recurso 2: Ración MRE */}
+        <g transform="translate(192, 110)">
+          <rect width="160" height="198" rx="8" fill="url(#matrixGrad)" stroke="rgba(255,160,0,0.3)" strokeWidth="1" />
+          <rect x="12" y="12" width="32" height="32" rx="6" fill="rgba(255,160,0,0.15)" />
+          <text x="28" y="34" fontSize="16" textAnchor="middle">🥫</text>
+          <text x="52" y="24" fill="#E2E8F0" fontSize="11" fontWeight="700" fontFamily="sans-serif">Ración MRE</text>
+          <text x="52" y="38" fill="#FFB300" fontSize="13" fontWeight="900" fontFamily="monospace">1.0 ud</text>
+
+          {/* Medidor Calórico */}
+          <rect x="16" y="60" width="128" height="56" rx="6" fill="#241402" />
+          <rect x="22" y="74" width="116" height="32" rx="4" fill="#D97706" />
+          <text x="80" y="94" fill="#FFF" fontSize="11" fontWeight="800" textAnchor="middle" fontFamily="monospace">2,400 KCAL</text>
+
+          <text x="14" y="136" fill="#94A3B8" fontSize="10" fontFamily="sans-serif">
+            <tspan x="14" dy="0">Ración de combate</tspan>
+            <tspan x="14" dy="13">auto-calentable lista</tspan>
+            <tspan x="14" dy="13">para consumo sin fuego</tspan>
+            <tspan x="14" dy="13">ni cocina de campaña.</tspan>
+          </text>
+        </g>
+
+        {/* Recurso 3: Medicina */}
+        <g transform="translate(368, 110)">
+          <rect width="160" height="198" rx="8" fill="url(#matrixGrad)" stroke="rgba(255,23,68,0.3)" strokeWidth="1" />
+          <rect x="12" y="12" width="32" height="32" rx="6" fill="rgba(255,23,68,0.15)" />
+          <text x="28" y="34" fontSize="16" textAnchor="middle">💊</text>
+          <text x="52" y="24" fill="#E2E8F0" fontSize="11" fontWeight="700" fontFamily="sans-serif">Botiquín TCCC</text>
+          <text x="52" y="38" fill="#FF5252" fontSize="13" fontWeight="900" fontFamily="monospace">0.6 dosis</text>
+
+          {/* Medidor Médico */}
+          <rect x="16" y="60" width="128" height="56" rx="6" fill="#220608" />
+          <rect x="22" y="74" width="70" height="32" rx="4" fill="#E11D48" />
+          <text x="80" y="94" fill="#FFF" fontSize="10" fontWeight="800" textAnchor="middle" fontFamily="monospace">ANTIBIÓTICO</text>
+
+          <text x="14" y="136" fill="#94A3B8" fontSize="10" fontFamily="sans-serif">
+            <tspan x="14" dy="0">Dosis de antibiótico</tspan>
+            <tspan x="14" dy="13">de amplio espectro o</tspan>
+            <tspan x="14" dy="13">gasas hemostáticas</tspan>
+            <tspan x="14" dy="13">de trauma táctico.</tspan>
+          </text>
+        </g>
+
+        {/* Recurso 4: Energía Solar */}
+        <g transform="translate(544, 110)">
+          <rect width="160" height="198" rx="8" fill="url(#matrixGrad)" stroke="rgba(0,230,118,0.3)" strokeWidth="1" />
+          <rect x="12" y="12" width="32" height="32" rx="6" fill="rgba(0,230,118,0.15)" />
+          <text x="28" y="34" fontSize="16" textAnchor="middle">🔋</text>
+          <text x="52" y="24" fill="#E2E8F0" fontSize="11" fontWeight="700" fontFamily="sans-serif">Energía Solar</text>
+          <text x="52" y="38" fill="#00E676" fontSize="13" fontWeight="900" fontFamily="monospace">250 Wh</text>
+
+          {/* Medidor Eléctrico */}
+          <rect x="16" y="60" width="128" height="56" rx="6" fill="#041E11" />
+          <rect x="22" y="74" width="116" height="32" rx="4" fill="#059669" />
+          <text x="80" y="94" fill="#FFF" fontSize="11" fontWeight="800" textAnchor="middle" fontFamily="monospace">10 CARGAS</text>
+
+          <text x="14" y="136" fill="#94A3B8" fontSize="10" fontFamily="sans-serif">
+            <tspan x="14" dy="0">Almacenamiento en</tspan>
+            <tspan x="14" dy="13">batería LiFePO4.</tspan>
+            <tspan x="14" dy="13">Recarga hasta 10</tspan>
+            <tspan x="14" dy="13">teléfonos o 5 radios.</tspan>
+          </text>
+        </g>
+      </svg>
+    </div>
+  );
+};

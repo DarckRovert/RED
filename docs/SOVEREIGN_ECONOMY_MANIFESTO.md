@@ -157,6 +157,23 @@ El valor de RED no depende de que cotice en una bolsa de valores de Tokio o Nuev
 
 ---
 
+## 🎨 Galería de Infografías Vectoriales & Diagramas Tácticos
+
+Para una comprensión visual e inmediata de los pilares económicos de RED, se dispone de una suite de infografías vectoriales SVG de alta definición (renderizadas nativamente en la App móvil y en el portal web autónomo):
+
+1. **[Evolución del Consenso Monetario: Piedras Rai vs Fiat vs RED PoR](../client/app/public/assets/economy/rai_stones_vs_fiat_vs_por.svg):**
+   - Comparativa entre el consenso oral milenario de Micronesia, la devaluación del dinero fíat por decreto bancario y el respaldo tangible del Proof-of-Relay de RED.
+2. **[Eficiencia Energética: Proof-of-Work vs Proof-of-Relay](../client/app/public/assets/economy/pow_vs_por_energy.svg):**
+   - Desperdicio termodinámico de granjas de minería industrial frente a nodos repetidores solares autónomos de 5W que salvan vidas.
+3. **[Inmunidad Arquitectónica: Hacks a Puentes Web3 vs Bóveda P2P RED](../client/app/public/assets/economy/web3_bridge_hack_vs_red_p2p.svg):**
+   - Análisis forense del robo de $570M USD a BNB Token Hub frente a la arquitectura P2P 100% desconectada y matemática de RED.
+4. **[Matriz de Paridad de Supervivencia: 10 Créditos RED = Respaldo Tangible](../client/app/public/assets/economy/survival_parity_matrix.svg):**
+   - Equivalencia visual directa de 10 créditos frente a 3.3L de agua potable, 1 ración MRE, 0.6 dosis de botiquín TCCC y 250 Wh de energía solar.
+5. **[Protocolo Comercial Off-Grid: Cobro en 4 Pasos sin Internet ni Bancos](../client/app/public/assets/economy/offline_merchant_qr_flow.svg):**
+   - Flujo secuencial paso a paso de emisión de vale QR, captura óptica con cámara, validación anti-doble gasto y difusión por malla LoRa.
+
+---
+
 ## 📜 Conclusión: La Moneda del Hombre Libre
 
 El oro sirvió a los imperios. El papel moneda sirvió a los estados-nación. Las criptomonedas centralizadas sirvieron a los especuladores financieros.

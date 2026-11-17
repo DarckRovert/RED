@@ -7,6 +7,13 @@ import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 import { TacIcon } from "../ui/TacIcon";
 import { toast } from "../Toast";
 import { RED_CREDIT_PARITY_PEN, PEN_TO_USD_EXCHANGE_RATE } from "../../lib/network/TokenomicsEngine";
+import {
+    RaiStonesInfographic,
+    PowVsPorInfographic,
+    Web3BridgeHackInfographic,
+    OfflineMerchantFlowInfographic,
+    SurvivalParityMatrixInfographic,
+} from "./infographics";
 
 interface SovereignEconomyGuideModalProps {
     isOpen: boolean;
@@ -272,6 +279,8 @@ export const SovereignEconomyGuideModal: React.FC<SovereignEconomyGuideModalProp
                                 💡 "El dinero jamás ha sido metal ni papel; es un pacto social colectivo: un salto de fe de que otro ser humano lo aceptará mañana."
                             </div>
 
+                            <RaiStonesInfographic />
+
                             <div>
                                 <h4 style={{ color: "#fff", margin: "0 0 6px 0", fontSize: "0.95rem" }}>
                                     1. Las Piedras Rai de la Isla de Yap (Micronesia)
@@ -318,6 +327,8 @@ export const SovereignEconomyGuideModal: React.FC<SovereignEconomyGuideModalProp
                             >
                                 ⚠️ <strong>La falacia del pozo:</strong> Cavar un pozo gigante en el desierto por $50,000 y volver a taparlo por otros $50,000 gasta combustible y calor, pero el pozo tapado <strong>vale $0</strong> porque no generó utilidad humana.
                             </div>
+
+                            <PowVsPorInfographic />
 
                             <table
                                 style={{
@@ -389,6 +400,8 @@ export const SovereignEconomyGuideModal: React.FC<SovereignEconomyGuideModalProp
                                 </p>
                             </div>
 
+                            <Web3BridgeHackInfographic />
+
                             <div>
                                 <h4 style={{ color: "#fff", margin: "0 0 6px 0", fontSize: "0.95rem" }}>
                                     FTX, Celsius y Mt. Gox: La Falsa Custodia
@@ -419,6 +432,8 @@ export const SovereignEconomyGuideModal: React.FC<SovereignEconomyGuideModalProp
                     {/* PESTAÑA 4: CALCULADORA DE PARIDAD */}
                     {activeTab === "calculator" && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <SurvivalParityMatrixInfographic />
+
                             <div>
                                 <label style={{ display: "block", fontSize: "0.80rem", color: "#8696A0", marginBottom: "6px" }}>
                                     Ingresa una cantidad en Créditos RED:
@@ -529,6 +544,8 @@ export const SovereignEconomyGuideModal: React.FC<SovereignEconomyGuideModalProp
                                     </div>
                                 </div>
                             </div>
+
+                            <OfflineMerchantFlowInfographic />
 
                             {onOpenWallet && (
                                 <button
