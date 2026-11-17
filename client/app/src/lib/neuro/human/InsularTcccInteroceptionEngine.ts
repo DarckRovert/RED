@@ -22,6 +22,7 @@
 import { TacticalAudioEngine } from '../../audio/TacticalAudioEngine';
 import { meshRouter } from '../../mesh/meshRouter';
 import { tacticalTccc, LimbLocation as TacticalLimbLocation } from '../../tactical/TacticalTcccEngine';
+import { SettingsManager } from '../../settingsManager';
 
 export type TriageCategory = 'RED_IMMEDIATE' | 'YELLOW_DELAYED' | 'GREEN_MINIMAL' | 'BLACK_EXPECTANT';
 
@@ -176,6 +177,9 @@ export class InsularTcccInteroceptionEngine {
   private dispatchPhaseHaptic(phaseIndex: number): void {
     if (typeof navigator === 'undefined' || !navigator.vibrate) return;
     if (typeof document !== 'undefined' && document.hidden) return; // Suspender pulsos si la pantalla está bloqueada o en segundo plano
+    try {
+      if (SettingsManager.getPreferences()?.hapticsEnabled === false) return;
+    } catch {}
     // Patrones hápticos suaves de transición vagal
     switch (phaseIndex) {
       case 0: // Inhalar: vibración ascendente corta
@@ -247,7 +251,11 @@ export class InsularTcccInteroceptionEngine {
 
     TacticalAudioEngine.playRogerBeep();
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate([120, 80, 120]);
+      try {
+        if (SettingsManager.getPreferences()?.hapticsEnabled !== false) {
+          navigator.vibrate([120, 80, 120]);
+        }
+      } catch {}
     }
 
     this.notifyListeners();
@@ -280,7 +288,11 @@ export class InsularTcccInteroceptionEngine {
       if (hasWarning) {
         TacticalAudioEngine.playEmergencyAlarm();
         if (typeof navigator !== 'undefined' && navigator.vibrate && !(typeof document !== 'undefined' && document.hidden)) {
-          navigator.vibrate([300, 100, 300]);
+          try {
+            if (SettingsManager.getPreferences()?.hapticsEnabled !== false) {
+              navigator.vibrate([300, 100, 300]);
+            }
+          } catch {}
         }
       }
 

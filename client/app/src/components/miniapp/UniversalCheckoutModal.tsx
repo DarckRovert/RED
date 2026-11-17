@@ -314,7 +314,7 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                         <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
                             <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>SELECCIONA RIEL DE PAGO:</label>
                             
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
                                 {supportedRails.includes('paypal') && (
                                     <button
                                         type="button"

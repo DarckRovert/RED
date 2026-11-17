@@ -6,6 +6,7 @@
  */
 
 import { AudioContextManager } from '../audio/AudioContextManager';
+import { SettingsManager } from '../settingsManager';
 
 export interface SubsurfaceBeaconConfig {
     frequencyHz: number;
@@ -158,7 +159,9 @@ export class SubsurfaceAcousticEngine {
         // 2. Pulso háptico sísmico
         try {
             if (typeof navigator !== 'undefined' && navigator.vibrate) {
-                navigator.vibrate([200, 100, 200, 100, 400]);
+                if (SettingsManager.getPreferences()?.hapticsEnabled !== false) {
+                    navigator.vibrate([200, 100, 200, 100, 400]);
+                }
             }
         } catch {}
 

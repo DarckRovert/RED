@@ -19,6 +19,7 @@
  */
 
 import { TacticalAudioEngine } from '../../audio/TacticalAudioEngine';
+import { SettingsManager } from '../../settingsManager';
 
 export type TaskTriggerType = 'PROXIMITY_COORDS' | 'RADIO_CHANNEL' | 'TIME_ELAPSED' | 'MANUAL_TOUCH';
 
@@ -172,7 +173,11 @@ export class TacticalWorkingMemoryEngine {
 
     TacticalAudioEngine.playRogerBeep();
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate([80, 50, 80]); // Confirmación háptica ejecutiva
+      try {
+        if (SettingsManager.getPreferences()?.hapticsEnabled !== false) {
+          navigator.vibrate([80, 50, 80]); // Confirmación háptica ejecutiva
+        }
+      } catch {}
     }
 
     this.persistToStorage();

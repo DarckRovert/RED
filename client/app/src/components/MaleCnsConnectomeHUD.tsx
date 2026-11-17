@@ -35,6 +35,7 @@ import { bioCompassDualFusion, BioCompassDualTelemetry } from "../lib/neuro/BioC
 import { biocyberneticHabitat, HabitatTelemetry } from "../lib/neuro/habitat/BiocyberneticHabitatEngine";
 import { connectomeBioBridge } from "../lib/neuro/ConnectomeBioBridge";
 import { Connectome3DMultiBrainEngine, ConnectomeRaycastHit } from "../lib/neuro/Connectome3DMultiBrainEngine";
+import { SettingsManager } from "../lib/settingsManager";
 
 interface Point3D {
   x: number;
@@ -202,7 +203,11 @@ export function MaleCnsConnectomeHUD({ onClose }: MaleCnsConnectomeHUDProps) {
             if (telem.loomingThreat.isThreatDetected) {
               TacticalAudioEngine.playAlarm();
               if (typeof navigator !== "undefined" && navigator.vibrate) {
-                navigator.vibrate([150, 50, 150]);
+                try {
+                  if (SettingsManager.getPreferences()?.hapticsEnabled !== false) {
+                    navigator.vibrate([150, 50, 150]);
+                  }
+                } catch {}
               }
             }
           }

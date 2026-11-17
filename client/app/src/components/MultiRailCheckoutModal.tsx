@@ -373,10 +373,11 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
                 </div>
 
                 {/* 4 Tabs Bar */}
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(4, 1fr)',
-                    gap: '4px',
+                <div className="scroll-container" style={{
+                    display: 'flex',
+                    overflowX: 'auto',
+                    WebkitOverflowScrolling: 'touch',
+                    gap: '6px',
                     padding: '8px 12px',
                     background: 'rgba(0, 0, 0, 0.3)',
                     borderBottom: '1px solid rgba(255, 255, 255, 0.06)'
@@ -384,7 +385,10 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
                     <button
                         onClick={() => { TacticalAudioEngine.playTap(); setActiveTab('fiat'); }}
                         style={{
-                            padding: '8px 4px',
+                            flex: '1 1 0px',
+                            minWidth: '76px',
+                            whiteSpace: 'nowrap',
+                            padding: '8px 6px',
                             borderRadius: '10px',
                             background: activeTab === 'fiat' ? 'rgba(0, 230, 118, 0.18)' : 'transparent',
                             border: activeTab === 'fiat' ? '1px solid #00E676' : '1px solid transparent',
@@ -405,7 +409,10 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
                     <button
                         onClick={() => { TacticalAudioEngine.playTap(); setActiveTab('web3'); }}
                         style={{
-                            padding: '8px 4px',
+                            flex: '1 1 0px',
+                            minWidth: '76px',
+                            whiteSpace: 'nowrap',
+                            padding: '8px 6px',
                             borderRadius: '10px',
                             background: activeTab === 'web3' ? 'rgba(0, 229, 255, 0.18)' : 'transparent',
                             border: activeTab === 'web3' ? '1px solid #00E5FF' : '1px solid transparent',
@@ -426,7 +433,10 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
                     <button
                         onClick={() => { TacticalAudioEngine.playTap(); setActiveTab('lightning'); }}
                         style={{
-                            padding: '8px 4px',
+                            flex: '1 1 0px',
+                            minWidth: '76px',
+                            whiteSpace: 'nowrap',
+                            padding: '8px 6px',
                             borderRadius: '10px',
                             background: activeTab === 'lightning' ? 'rgba(255, 179, 0, 0.18)' : 'transparent',
                             border: activeTab === 'lightning' ? '1px solid #FFB300' : '1px solid transparent',
@@ -447,7 +457,10 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
                     <button
                         onClick={() => { TacticalAudioEngine.playTap(); setActiveTab('voucher'); }}
                         style={{
-                            padding: '8px 4px',
+                            flex: '1 1 0px',
+                            minWidth: '76px',
+                            whiteSpace: 'nowrap',
+                            padding: '8px 6px',
                             borderRadius: '10px',
                             background: activeTab === 'voucher' ? 'rgba(232, 33, 58, 0.18)' : 'transparent',
                             border: activeTab === 'voucher' ? '1px solid #E8213A' : '1px solid transparent',
