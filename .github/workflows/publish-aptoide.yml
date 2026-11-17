@@ -16,6 +16,10 @@ on:
         description: 'Release notes to show in store listing (optional)'
         required: false
         type: string
+      catappult_api_key:
+        description: 'Catappult API Key'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -53,11 +57,11 @@ jobs:
 
       - name: Check Catappult Secret Configuration
         env:
-          CATAPPULT_KEY: ${{ secrets['CATAPPULT_API_KEY'] }}
+          CATAPPULT_KEY: ${{ inputs.catappult_api_key }}
         run: |
           if [ -z "$CATAPPULT_KEY" ]; then
-            echo "::error::CATAPPULT_API_KEY secret is not configured in repository secrets."
-            echo "Please navigate to Settings > Secrets and variables > Actions and add CATAPPULT_API_KEY."
+            echo "::error::CATAPPULT_API_KEY is not configured in workflow inputs."
+            echo "Please provide catappult_api_key when triggering this workflow."
             exit 1
           fi
 
@@ -84,7 +88,7 @@ jobs:
 
       - name: Publish to Aptoide Uploader API
         env:
-          CATAPPULT_API_KEY: ${{ secrets['CATAPPULT_API_KEY'] }}
+          CATAPPULT_API_KEY: ${{ inputs.catappult_api_key }}
         run: |
           if [ -n "${{ steps.fetch_apk.outputs.apk_file }}" ]; then
             echo "Publishing via direct binary upload..."

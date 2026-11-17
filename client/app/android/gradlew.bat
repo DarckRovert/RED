@@ -39,13 +39,13 @@ for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
 set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
 
 @rem Find java.exe
+if exist "%USERPROFILE%\.jdk\jbr21\bin\java.exe" (
+    set "JAVA_HOME=%USERPROFILE%\.jdk\jbr21"
+    goto findJavaFromJavaHome
+)
 if defined JAVA_HOME goto findJavaFromJavaHome
 if exist "C:\Program Files\Android\Android Studio\jbr\bin\java.exe" (
     set "JAVA_HOME=C:\Program Files\Android\Android Studio\jbr"
-    goto findJavaFromJavaHome
-)
-if exist "%USERPROFILE%\.jdk\jbr21\bin\java.exe" (
-    set "JAVA_HOME=%USERPROFILE%\.jdk\jbr21"
     goto findJavaFromJavaHome
 )
 
