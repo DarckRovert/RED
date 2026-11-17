@@ -121,6 +121,7 @@ export interface RedStore {
     sendTyping:   () => void;
     sendTypingStatus: (status: 'typing' | 'recording_voice' | 'idle') => void;
     sendReaction: (messageId: string, emoji: string) => Promise<void>;
+    voteInPoll: (pollMsgId: string, optionIndex: number) => Promise<void>;
     deleteMessageForEveryone: (messageId: string) => Promise<void>;
     addIncomingMessage: (rawEvent: any) => void;
     addContact:   (identity_hash: string, display_name: string, public_key?: string | null, isAcceptingHandshake?: boolean, kyber_public_key?: string | null, x25519_public_key?: string | null) => Promise<string>;

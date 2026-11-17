@@ -1275,7 +1275,7 @@ export const MessageBubble = memo(({
                             )}
 
                             {/* Standard Text content — with URL & mention highlighting */}
-                            {!isPaymentMessage && !isVitalSignMessage && !isDocumentMessage && !isLocationMessage && !isContactMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && (
+                            {!isPaymentMessage && !isVitalSignMessage && !isDocumentMessage && !isLocationMessage && !isContactMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "poll_vote" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && (
                                 (() => {
                                     let displayContent = typeof msg.content === "string" ? msg.content : (msg.content ? JSON.stringify(msg.content) : "");
                                     if (displayContent.startsWith('{"text":')) {

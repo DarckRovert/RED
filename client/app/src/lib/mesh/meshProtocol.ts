@@ -19,6 +19,8 @@
  */
 
 export const MESH_MAGIC = 0x52454401;
+/** Canonical 32-byte (64 hex characters) broadcast address for all RED mesh transports */
+export const BROADCAST_RECIPIENT = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 /** True header size: 4+32+32+1+1+2+8+16 = 96 bytes */
 export const HEADER_SIZE_REAL = 96;
 export const MAX_HOPS = 20;    // maximum mesh relay hops
@@ -119,12 +121,16 @@ export function encode(packet: MeshPacket): Uint8Array {
   // Magic (4 bytes, offset 0)
   view.setUint32(0, MESH_MAGIC, false);
 
-  // Recipient (32 bytes, offset 4)
-  const recipientBytes = hexToBytes(packet.recipient.slice(0, 64).padEnd(64, '0'));
+  // Recipient (32 bytes, offset 4) — canonicalize broadcast alias to 32 bytes of 0xFF
+  const targetRecipient = (!packet.recipient || packet.recipient.toLowerCase() === 'broadcast' || packet.recipient === '*')
+    ? BROADCAST_RECIPIENT
+    : packet.recipient;
+  const recipientBytes = hexToBytes(targetRecipient.slice(0, 64).padEnd(64, '0'));
   u8.set(recipientBytes, 4);
 
-  // Sender (32 bytes, offset 36)
-  const senderBytes = hexToBytes(packet.sender.slice(0, 64).padEnd(64, '0'));
+  // Sender (32 bytes, offset 36) — strip did:red: prefix if present for clean hex wire serialization
+  const targetSender = packet.sender?.startsWith('did:red:') ? packet.sender.slice(8) : (packet.sender || '');
+  const senderBytes = hexToBytes(targetSender.slice(0, 64).padEnd(64, '0'));
   u8.set(senderBytes, 36);
 
   // TTL (1 byte, offset 68)
@@ -235,9 +241,13 @@ export function createPacket(
     }
   }
 
+  const normalizedRecipient = (!recipient || recipient.toLowerCase() === 'broadcast' || recipient === '*')
+    ? BROADCAST_RECIPIENT
+    : recipient;
+
   return {
     sender,
-    recipient,
+    recipient: normalizedRecipient,
     ttl: opts?.ttl ?? MAX_HOPS,
     flags: opts?.flags ?? 0x01, // encrypted by default
     timestamp: packetTimestamp,

@@ -6,7 +6,7 @@
  */
 
 import { meshRouter } from '../mesh/meshRouter';
-import { encode, createPacket } from '../mesh/meshProtocol';
+import { encode, createPacket, BROADCAST_RECIPIENT } from '../mesh/meshProtocol';
 import { PayloadCompressor } from './PayloadCompressor';
 
 export interface ProxyRequestPayload {
@@ -37,6 +37,8 @@ export class MeshGatewayEngine {
     private pendingRequests: Map<string, { resolve: (resp: ProxyResponsePayload) => void; reject: (err: Error) => void }> = new Map();
     /** Referencia almacenada al listener para poder desregistrarlo limpiamente */
     private boundMeshListener: ((event: any) => void) | null = null;
+    /** Desuscripción de entrega local directa en el enrutador de malla */
+    private unsubMeshDelivery: (() => void) | null = null;
 
     private constructor() {
         this.initMeshListener();
@@ -139,7 +141,10 @@ export class MeshGatewayEngine {
             // Broadcast request packet over mesh using wire-format encoding
             const reqEnvelope = { type: 'PROXY_REQUEST', ...requestPayload };
             const reqPayloadBytes = new TextEncoder().encode(JSON.stringify(reqEnvelope));
-            void meshRouter.broadcast(encode(createPacket(originDid, 'broadcast', reqPayloadBytes)));
+            const senderHash = (meshRouter.myIdentityHash && meshRouter.myIdentityHash.length === 64)
+                ? meshRouter.myIdentityHash
+                : originDid;
+            void meshRouter.broadcast(encode(createPacket(senderHash, BROADCAST_RECIPIENT, reqPayloadBytes)));
         });
     }
 
@@ -149,6 +154,61 @@ export class MeshGatewayEngine {
     private initMeshListener() {
         if (typeof window === 'undefined') return;
 
+        // 1. Suscripción directa al pipeline unificado de malla de RED
+        this.unsubMeshDelivery = meshRouter.onLocalDelivery(async (packet) => {
+            try {
+                const str = new TextDecoder().decode(packet.payload);
+                if (!str.startsWith('{')) return;
+                const data = JSON.parse(str);
+
+                // Handle incoming PROXY_REQUEST as a Gateway Node
+                if (data.type === 'PROXY_REQUEST' && this.isGatewayEnabled) {
+                    const req = data as ProxyRequestPayload;
+                    const hasInternet = await this.checkInternetConnectivity();
+
+                    if (hasInternet && req && req.url) {
+                        try {
+                            const startTime = Date.now();
+                            const resp = await fetch(req.url);
+                            const text = await resp.text();
+                            PayloadCompressor.compress(text).then(compressed => {
+                                const responsePayload: ProxyResponsePayload = {
+                                    requestId: req.requestId,
+                                    url: req.url,
+                                    status: resp.status,
+                                    statusText: resp.statusText,
+                                    headers: {},
+                                    compressedBody: compressed,
+                                    gatewayDid: (meshRouter.myIdentityHash && meshRouter.myIdentityHash.length === 64) ? meshRouter.myIdentityHash : 'did:red:gateway_node',
+                                    latencyMs: Date.now() - startTime,
+                                    timestamp: Date.now(),
+                                };
+
+                                // Broadcast response back into the mesh
+                                const respEnvelope = { type: 'PROXY_RESPONSE', target: req.originDid, ...responsePayload };
+                                const respBytes = new TextEncoder().encode(JSON.stringify(respEnvelope));
+                                const senderHash = (meshRouter.myIdentityHash && meshRouter.myIdentityHash.length === 64) ? meshRouter.myIdentityHash : 'did:red:gateway_node';
+                                void meshRouter.broadcast(encode(createPacket(senderHash, req.originDid || BROADCAST_RECIPIENT, respBytes)));
+                            }).catch(e => console.error('[MeshGatewayEngine] Compress error:', e));
+                        } catch (e) {
+                            console.error("[MeshGatewayEngine] Error processing gateway request:", e);
+                        }
+                    }
+                }
+
+                // Handle incoming PROXY_RESPONSE as the Requesting Client
+                if (data.type === 'PROXY_RESPONSE') {
+                    const resp = data as ProxyResponsePayload;
+                    if (resp && this.pendingRequests.has(resp.requestId)) {
+                        const resolver = this.pendingRequests.get(resp.requestId);
+                        this.pendingRequests.delete(resp.requestId);
+                        resolver?.resolve(resp);
+                    }
+                }
+            } catch {}
+        });
+
+        // 2. Listener de compatibilidad para eventos de depuración y testing DOM
         this.boundMeshListener = async (event: any) => {
             const packet = event.detail;
             if (!packet) return;
@@ -171,7 +231,7 @@ export class MeshGatewayEngine {
                                 statusText: resp.statusText,
                                 headers: {},
                                 compressedBody: compressed,
-                                gatewayDid: 'did:red:gateway_node',
+                                gatewayDid: (meshRouter.myIdentityHash && meshRouter.myIdentityHash.length === 64) ? meshRouter.myIdentityHash : 'did:red:gateway_node',
                                 latencyMs: Date.now() - startTime,
                                 timestamp: Date.now(),
                             };
@@ -179,7 +239,8 @@ export class MeshGatewayEngine {
                             // Broadcast response back into the mesh
                             const respEnvelope = { type: 'PROXY_RESPONSE', target: req.originDid, ...responsePayload };
                             const respBytes = new TextEncoder().encode(JSON.stringify(respEnvelope));
-                            void meshRouter.broadcast(encode(createPacket('did:red:gateway_node', req.originDid, respBytes)));
+                            const senderHash = (meshRouter.myIdentityHash && meshRouter.myIdentityHash.length === 64) ? meshRouter.myIdentityHash : 'did:red:gateway_node';
+                            void meshRouter.broadcast(encode(createPacket(senderHash, req.originDid || BROADCAST_RECIPIENT, respBytes)));
                         }).catch(e => console.error('[MeshGatewayEngine] Compress error:', e));
                     } catch (e) {
                         console.error("[MeshGatewayEngine] Error processing gateway request:", e);
@@ -206,6 +267,10 @@ export class MeshGatewayEngine {
      * Debe invocarse al desconectar el nodo gateway de la malla.
      */
     public destroy(): void {
+        if (this.unsubMeshDelivery) {
+            this.unsubMeshDelivery();
+            this.unsubMeshDelivery = null;
+        }
         if (typeof window !== 'undefined' && this.boundMeshListener) {
             window.removeEventListener('red_mesh_packet', this.boundMeshListener);
             this.boundMeshListener = null;

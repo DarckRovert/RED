@@ -544,9 +544,13 @@ export async function dispatchIncomingMessage(
         if (item.msg_type === 'ack' || item.msg_type === 'delivery_ack') {
             const targetId = (item as any).target_id || item.content;
             if (targetId) {
+                const rawAckTs = item.timestamp || Date.now();
+                const ackTs = rawAckTs > 1e11 ? Math.floor(rawAckTs / 1000) : rawAckTs;
                 set((s: any) => ({
                     messages: s.messages.map((m: any) =>
-                        (m.id === targetId || m.id === item.id) ? { ...m, status: 'Delivered' as const, delivered: true } : m
+                        (m.id === targetId || m.id === item.id) 
+                            ? { ...m, status: 'Delivered' as const, delivered: true, delivered_at: m.delivered_at || ackTs } 
+                            : m
                     )
                 }));
             }
@@ -1642,7 +1646,15 @@ export async function dispatchIncomingMessage(
                     });
                     const senderContact = (get().contacts || []).find((c: any) => c.identity_hash === senderHash);
                     const senderLabel = senderContact?.display_name || senderHash.slice(0, 8);
-                    const displaySnippet = msgType === 'image' ? '📷 Foto' : msgType === 'voice' ? '🎤 Nota de voz' : msgType === 'video' ? '🎬 Video' : msgContent;
+                    const displaySnippet = msgType === 'image' ? (item?.caption ? `📷 ${item.caption}` : '📷 Foto') :
+                                           msgType === 'voice' || msgType === 'audio' ? '🎤 Nota de voz' :
+                                           msgType === 'video' ? (item?.caption ? `📹 ${item.caption}` : '📹 Video') :
+                                           msgType === 'document' || msgType === 'file' ? ((item as any)?.file_name ? `📄 ${(item as any).file_name}` : '📄 Documento') :
+                                           msgType === 'location' ? '📍 Ubicación' :
+                                           msgType === 'poll' ? '📊 Encuesta' :
+                                           msgContent?.startsWith('red_vault://') ? '📷 Adjunto' :
+                                           msgContent?.startsWith('data:') ? '📄 Archivo adjunto' :
+                                           (typeof msgContent === 'string' && msgContent.length > 60 ? `${msgContent.slice(0, 57)}...` : (msgContent || 'Mensaje'));
                     const snippet = `${senderLabel}: ${displaySnippet.slice(0, 40)}`;
 
                     let updatedConvs = [...curConvs];
@@ -2083,6 +2095,116 @@ export async function dispatchIncomingMessage(
 
 
 
+        // ── Real-Time Poll Vote: update votes on target poll bubble, never append as new message ──
+        if (item.msg_type === 'poll_vote' || (typeof item.content === 'string' && item.content.startsWith('{') && item.content.includes('"msg_type":"poll_vote"'))) {
+            try {
+                let targetId = '';
+                let optionIndex: number = -1;
+                let voterHash = item.sender;
+
+                if (typeof item.content === 'string' && item.content.startsWith('{')) {
+                    const parsed = JSON.parse(item.content);
+                    targetId = parsed.target_id || parsed.targetMsgId || parsed.reply_to_id || (item as any).reply_to_id || '';
+                    if (parsed.option_index !== undefined) {
+                        optionIndex = Number(parsed.option_index);
+                    }
+                    if (parsed.voter_hash) {
+                        voterHash = parsed.voter_hash;
+                    }
+                } else if (typeof item.content === 'string') {
+                    optionIndex = parseInt(item.content.trim(), 10);
+                    targetId = (item as any).target_id || (item as any).reply_to_id || '';
+                }
+
+                if (targetId && !isNaN(optionIndex) && optionIndex >= 0) {
+                    const updated = messages.map((m: MessageItem) => {
+                        if (m.id !== targetId) return m;
+
+                        let pd: any = m.poll_data;
+                        if (!pd && m.content) {
+                            try {
+                                const parsed = typeof m.content === 'string' ? JSON.parse(m.content) : m.content;
+                                if (parsed && parsed.question && Array.isArray(parsed.options)) pd = { ...parsed };
+                            } catch {}
+                        }
+                        if (!pd) return m;
+
+                        const votes = { ...(pd.votes || {}) };
+                        const allowMultiple = Boolean(pd.allow_multiple);
+
+                        if (allowMultiple) {
+                            const currentVotes: number[] = Array.isArray(votes[voterHash])
+                                ? [...votes[voterHash]]
+                                : (votes[voterHash] !== undefined ? [Number(votes[voterHash])] : []);
+                            const existingIdx = currentVotes.indexOf(optionIndex);
+                            if (existingIdx >= 0) {
+                                currentVotes.splice(existingIdx, 1);
+                            } else {
+                                currentVotes.push(optionIndex);
+                            }
+                            if (currentVotes.length > 0) {
+                                votes[voterHash] = currentVotes;
+                            } else {
+                                delete votes[voterHash];
+                            }
+                        } else {
+                            if (String(votes[voterHash]) === String(optionIndex)) {
+                                delete votes[voterHash];
+                            } else {
+                                votes[voterHash] = optionIndex;
+                            }
+                        }
+
+                        const updatedPd = { ...pd, votes };
+                        return {
+                            ...m,
+                            poll_data: updatedPd,
+                            content: JSON.stringify(updatedPd)
+                        };
+                    });
+
+                    set({ messages: updated });
+
+                    const convId = (item as any).conversation_id || item.conversation_id || item.sender;
+                    if (convId && typeof window !== 'undefined') {
+                        try {
+                            const cleanConv = (convId || '').toLowerCase().replace(/^did:red:/i, '').trim();
+                            const keysToUpdate = [`red_web_messages_${cleanConv}`];
+                            const mapRaw = localStorage.getItem('red_device_canonical_map');
+                            if (mapRaw) {
+                                try {
+                                    const mappings: [string, string][] = JSON.parse(mapRaw);
+                                    for (const [hw, canon] of mappings) {
+                                        if (canon.toLowerCase() === cleanConv) keysToUpdate.push(`red_web_messages_${hw.toLowerCase()}`);
+                                        else if (hw.toLowerCase() === cleanConv) keysToUpdate.push(`red_web_messages_${canon.toLowerCase()}`);
+                                    }
+                                } catch {}
+                            }
+                            for (const k of keysToUpdate) {
+                                const raw = localStorage.getItem(k);
+                                if (raw) {
+                                    const list: any[] = JSON.parse(raw);
+                                    if (list.some((m: any) => m && m.id === targetId)) {
+                                        const updatedList = list.map((m: any) => {
+                                            if (m && m.id === targetId) {
+                                                const um = updated.find(u => u.id === targetId);
+                                                return um || m;
+                                            }
+                                            return m;
+                                        });
+                                        localStorage.setItem(k, JSON.stringify(updatedList));
+                                    }
+                                }
+                            }
+                        } catch {}
+                    }
+                }
+            } catch (e) {
+                console.warn('[Poll Vote Ingest Error]', e);
+            }
+            return;
+        }
+
         // ── Real-Time Reactions: apply to target bubble, never append as new message ──
         if (item.msg_type === 'reaction') {
             try {
@@ -2288,10 +2410,19 @@ export async function dispatchIncomingMessage(
             try {
                 const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
                 const readUpTo = parsed.read_up_to || parsed.readUpToTs || (Date.now() / 1000);
+                const rawReceiptTs = item.timestamp || Date.now();
+                const receiptTs = rawReceiptTs > 1e11 ? Math.floor(rawReceiptTs / 1000) : rawReceiptTs;
                 const updated = messages.map((m: MessageItem) => {
                     const mTs = m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp;
                     if (m.is_mine && mTs <= readUpTo) {
-                        return { ...m, status: 'Read' as const, read: true, delivered: true };
+                        return { 
+                            ...m, 
+                            status: 'Read' as const, 
+                            read: true, 
+                            delivered: true,
+                            read_at: m.read_at || receiptTs,
+                            delivered_at: m.delivered_at || mTs
+                        };
                     }
                     return m;
                 });
@@ -2474,17 +2605,23 @@ export async function dispatchIncomingMessage(
             // ── In-Memory & Storage Conversation List Update for Active Chat ──
             const msgType = normalizedItem.msg_type;
             const snippet = msgType === 'image' ? (normalizedItem.caption ? `📷 ${normalizedItem.caption}` : '📷 Foto') :
-                            msgType === 'voice' ? '🎤 Nota de voz' :
+                            msgType === 'voice' || msgType === 'audio' ? '🎤 Nota de voz' :
                             msgType === 'video' ? (normalizedItem.caption ? `📹 ${normalizedItem.caption}` : '📹 Video') :
+                            msgType === 'document' || msgType === 'file' ? ((normalizedItem as any).file_name ? `📄 ${(normalizedItem as any).file_name}` : '📄 Documento') :
                             msgType === 'location' ? '📍 Ubicación' :
                             msgType === 'contact' ? '👤 Contacto' :
                             msgType === 'poll' ? '📊 Encuesta' :
                             msgType === 'p2p_payment' ? '🪙 Pago RED P2P' :
                             msgType === 'p2p_voucher' ? '🪙 Vale RED P2P' :
+                            msgType === 'vital_sign' ? '🩺 Signos vitales' :
+                            msgType === 'medevac' ? '🚨 Solicitud 9-Line MEDEVAC' :
                             (normalizedItem.content?.startsWith('data:image') ? (normalizedItem.caption ? `📷 ${normalizedItem.caption}` : '📷 Foto') :
                              normalizedItem.content?.startsWith('data:audio') ? '🎤 Nota de voz' :
                              normalizedItem.content?.startsWith('data:video') ? (normalizedItem.caption ? `📹 ${normalizedItem.caption}` : '📹 Video') :
-                             (normalizedItem.content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (normalizedItem.content || 'Mensaje P2P')));
+                             normalizedItem.content?.startsWith('data:') ? ((normalizedItem as any).file_name ? `📄 ${(normalizedItem as any).file_name}` : '📄 Documento') :
+                             normalizedItem.content?.startsWith('red_vault://') ? '📷 Adjunto' :
+                             (normalizedItem.content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : 
+                              (typeof normalizedItem.content === 'string' && normalizedItem.content.length > 80 ? `${normalizedItem.content.slice(0, 77)}...` : (normalizedItem.content || 'Mensaje P2P'))));
 
             const canonicalSender = meshRouter.getCanonicalId(item.sender) || normalizeIdentity(item.sender);
             const isGroup = Boolean(item.msg_type === 'group_message' || (item as any).group_id);

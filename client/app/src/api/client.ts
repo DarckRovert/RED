@@ -267,21 +267,26 @@ export class RedAPIClient {
                     const chosenName = (existing.display_name && !isGenericName(existing.display_name))
                         ? existing.display_name
                         : (rc.display_name && !isGenericName(rc.display_name) ? rc.display_name : (existing.display_name || rc.display_name));
+                    const isVerified = (rc as any).is_verified ?? (rc as any).verified ?? existing.is_verified ?? false;
                     mergedMap.set(key, {
                         ...existing,
                         ...rc,
+                        is_verified: isVerified,
+                        verified: isVerified,
                         display_name: chosenName,
                         public_key: existing.public_key || rc.public_key
                     });
                 } else {
-                    mergedMap.set(key, rc);
+                    const isVerified = (rc as any).is_verified ?? (rc as any).verified ?? false;
+                    mergedMap.set(key, {
+                        ...rc,
+                        is_verified: isVerified,
+                        verified: isVerified
+                    });
                 }
             }
             const merged = Array.from(mergedMap.values());
-            // Only write to localStorage if the contact set changed.
-            if (merged.length !== localConts.length) {
-                this.setWebStore('red_web_contacts', merged);
-            }
+            this.setWebStore('red_web_contacts', merged);
             return merged;
         } catch {
             return localConts;
@@ -530,6 +535,7 @@ export class RedAPIClient {
             Boolean(options?.is_group) ||
             options?.msg_type === 'group_invite' ||
             options?.msg_type === 'group_message' ||
+            options?.msg_type === 'poll_vote' ||
             options?.msg_type === 'squad_msg' ||
             options?.msg_type === 'group_kick' ||
             options?.msg_type === 'group_leave' ||
@@ -591,17 +597,22 @@ export class RedAPIClient {
 
             const msgType = options?.msg_type;
             const snippet = msgType === 'image' ? (options?.caption ? `📷 ${options.caption}` : '📷 Foto') :
-                            msgType === 'voice' ? '🎤 Nota de voz' :
+                            msgType === 'voice' || msgType === 'audio' ? '🎤 Nota de voz' :
                             msgType === 'video' ? (options?.caption ? `📹 ${options.caption}` : '📹 Video') :
+                            msgType === 'document' || msgType === 'file' ? (options?.file_name ? `📄 ${options.file_name}` : '📄 Documento') :
                             msgType === 'location' ? '📍 Ubicación' :
                             msgType === 'contact' ? '👤 Contacto' :
                             msgType === 'poll' ? '📊 Encuesta' :
                             msgType === 'p2p_payment' ? '🪙 Pago RED P2P' :
                             msgType === 'p2p_voucher' ? '🪙 Vale RED P2P' :
+                            msgType === 'vital_sign' ? '🩺 Signos vitales' :
                             (content?.startsWith('data:image') ? (options?.caption ? `📷 ${options.caption}` : '📷 Foto') :
                              content?.startsWith('data:audio') ? '🎤 Nota de voz' :
                              content?.startsWith('data:video') ? (options?.caption ? `📹 ${options.caption}` : '📹 Video') :
-                             (content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (content || 'Mensaje P2P')));
+                             content?.startsWith('data:') ? (options?.file_name ? `📄 ${options.file_name}` : '📄 Archivo adjunto') :
+                             content?.startsWith('red_vault://') ? '📷 Adjunto' :
+                             (content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : 
+                              (typeof content === 'string' && content.length > 80 ? `${content.slice(0, 77)}...` : (content || 'Mensaje P2P'))));
 
             // Update conversation list
             const convs = this.getWebStore<ConversationItem[]>('red_web_conversations', []);
@@ -1077,10 +1088,16 @@ export class RedAPIClient {
                 // Keep conversation list entry up to date
                 const convs = this.getWebStore<ConversationItem[]>('red_web_conversations', []);
                 const convIdx = convs.findIndex(c => c.id === groupId || c.peer === groupId);
-                const snippet = options?.msg_type === 'image' ? '📷 Foto' :
-                                options?.msg_type === 'voice' ? '🎤 Nota de voz' :
-                                options?.msg_type === 'video' ? '📹 Video' :
-                                (content || 'Mensaje de escuadrón');
+                const snippet = options?.msg_type === 'image' ? (options?.caption ? `📷 ${options.caption}` : '📷 Foto') :
+                                options?.msg_type === 'voice' || options?.msg_type === 'audio' ? '🎤 Nota de voz' :
+                                options?.msg_type === 'video' ? (options?.caption ? `📹 ${options.caption}` : '📹 Video') :
+                                options?.msg_type === 'document' || options?.msg_type === 'file' ? (options?.file_name ? `📄 ${options.file_name}` : '📄 Documento') :
+                                options?.msg_type === 'location' ? '📍 Ubicación' :
+                                options?.msg_type === 'contact' ? '👤 Contacto' :
+                                options?.msg_type === 'poll' ? '📊 Encuesta' :
+                                (content?.startsWith('red_vault://') ? '📷 Adjunto' :
+                                 content?.startsWith('data:') ? '📄 Archivo adjunto' :
+                                 (typeof content === 'string' && content.length > 80 ? `${content.slice(0, 77)}...` : (content || 'Mensaje de escuadrón')));
                 const convData = {
                     id: groupId,
                     peer: groupId,
@@ -1593,7 +1610,7 @@ export class RedAPIClient {
         const contacts = this.getWebStore<ContactItem[]>('red_web_contacts', []);
         const idx = contacts.findIndex(c => c.identity_hash === cleanHash || c.identity_hash?.startsWith(cleanHash.slice(0, 8)));
         if (idx >= 0) {
-            contacts[idx] = { ...contacts[idx], is_verified: true, verified_at: Date.now() };
+            contacts[idx] = { ...contacts[idx], is_verified: true, verified: true, verified_at: Date.now() };
             this.setWebStore('red_web_contacts', contacts);
         }
         try {
@@ -1607,7 +1624,7 @@ export class RedAPIClient {
         const contacts = this.getWebStore<ContactItem[]>('red_web_contacts', []);
         const idx = contacts.findIndex(c => c.identity_hash === cleanHash || c.identity_hash?.startsWith(cleanHash.slice(0, 8)));
         if (idx >= 0) {
-            contacts[idx] = { ...contacts[idx], is_verified: false, verified_at: null };
+            contacts[idx] = { ...contacts[idx], is_verified: false, verified: false, verified_at: null };
             this.setWebStore('red_web_contacts', contacts);
         }
         try {
@@ -1941,7 +1958,8 @@ export class RedAPIClient {
         const eventTypes = [
             'new_message', 'message', 'conv_update', 'contact_update', 'typing',
             'contact_request', 'live_frame', 'live_announce', 'live_end',
-            'live_comment', 'status', 'peer_connected', 'peer_disconnected', 'sos_alert'
+            'live_comment', 'status', 'peer_connected', 'peer_disconnected', 'sos_alert',
+            'amber_alert', 'amber_resolved', 'amber_sighting'
         ];
 
         const handleEvent = (event: MessageEvent) => {

@@ -208,53 +208,7 @@ export class BiocyberneticMetropolisEngine {
     this.biopolymerStockpile = 85.0;
 
     // 0. Los 5 Distritos Funcionales de la Megalópolis Biocibernética (Vasto Territorio 24m)
-    this.districts = [
-      {
-        id: 'district-silo',
-        type: 'CIVIC_SILO_CORE',
-        name: 'Distrito Cívico Silo Alpha',
-        centerX: 0.0,
-        centerY: -3.5,
-        radiusMeters: 4.8,
-        colorHex: 0xf59e0b,
-      },
-      {
-        id: 'district-residential',
-        type: 'RESIDENTIAL_BIODWELLING',
-        name: 'Distrito Residencial Rascacielos',
-        centerX: -11.0,
-        centerY: 5.0,
-        radiusMeters: 7.5,
-        colorHex: 0xa855f7,
-      },
-      {
-        id: 'district-agora',
-        type: 'FINANCIAL_AGORA_P2P',
-        name: 'Gran Ágora & Mercado Central',
-        centerX: 11.0,
-        centerY: 5.0,
-        radiusMeters: 7.0,
-        colorHex: 0xf43f5e,
-      },
-      {
-        id: 'district-connectome',
-        type: 'QUANTUM_CONNECTOME_RESEARCH',
-        name: 'Ciudadela Conectómica I+D',
-        centerX: 0.0,
-        centerY: -14.0,
-        radiusMeters: 7.0,
-        colorHex: 0x06b6d4,
-      },
-      {
-        id: 'district-industry',
-        type: 'INDUSTRIAL_BIOMANUFACTURING',
-        name: 'Sector Industrial Bio-Circular',
-        centerX: 0.0,
-        centerY: 14.0,
-        radiusMeters: 7.0,
-        colorHex: 0x10b981,
-      },
-    ];
+    this.initDefaultDistricts();
 
     // 1. Silo Central de Reservas Estratégicas (distrito norte)
     this.structures.set('silo-alpha', {
@@ -557,6 +511,87 @@ export class BiocyberneticMetropolisEngine {
     });
 
     // 8. Farolas Cívicas Iluminadas en Intersecciones y Avenidas
+    this.initDefaultStreetLamps();
+
+    // 9. Corredores Aéreos 3D (Skyways) para Navegación de Drosophila y Drones (Vasto Espacio)
+    this.initDefaultSkyways();
+
+    // 10. Celdas Residenciales para Drosophila (18 Apartamentos en Rascacielos)
+    this.initDefaultLivingCells();
+
+    this.addCivicEvent('🏛️ Cimientos de la Megalópolis Biocibernética (5 Distritos) fundados con éxito.');
+  }
+
+  /**
+   * Garantiza la existencia de distritos, farolas, aerovías y celdas residenciales
+   * si se restaura un estado antiguo o incompleto de almacenamiento local.
+   */
+  public ensureCityInfrastructure(): void {
+    if (!this.districts || this.districts.length === 0) {
+      this.initDefaultDistricts();
+    }
+    if (!this.streetLamps || this.streetLamps.length === 0) {
+      this.initDefaultStreetLamps();
+    }
+    if (!this.skywayCorridors || this.skywayCorridors.length === 0) {
+      this.initDefaultSkyways();
+    }
+    if (!this.livingCells || this.livingCells.length === 0) {
+      this.initDefaultLivingCells();
+    }
+  }
+
+  private initDefaultDistricts(): void {
+    this.districts = [
+      {
+        id: 'district-silo',
+        type: 'CIVIC_SILO_CORE',
+        name: 'Distrito Cívico Silo Alpha',
+        centerX: 0.0,
+        centerY: -3.5,
+        radiusMeters: 4.8,
+        colorHex: 0xf59e0b,
+      },
+      {
+        id: 'district-residential',
+        type: 'RESIDENTIAL_BIODWELLING',
+        name: 'Distrito Residencial Rascacielos',
+        centerX: -11.0,
+        centerY: 5.0,
+        radiusMeters: 7.5,
+        colorHex: 0xa855f7,
+      },
+      {
+        id: 'district-agora',
+        type: 'FINANCIAL_AGORA_P2P',
+        name: 'Gran Ágora & Mercado Central',
+        centerX: 11.0,
+        centerY: 5.0,
+        radiusMeters: 7.0,
+        colorHex: 0xf43f5e,
+      },
+      {
+        id: 'district-connectome',
+        type: 'QUANTUM_CONNECTOME_RESEARCH',
+        name: 'Ciudadela Conectómica I+D',
+        centerX: 0.0,
+        centerY: -14.0,
+        radiusMeters: 7.0,
+        colorHex: 0x06b6d4,
+      },
+      {
+        id: 'district-industry',
+        type: 'INDUSTRIAL_BIOMANUFACTURING',
+        name: 'Sector Industrial Bio-Circular',
+        centerX: 0.0,
+        centerY: 14.0,
+        radiusMeters: 7.0,
+        colorHex: 0x10b981,
+      },
+    ];
+  }
+
+  private initDefaultStreetLamps(): void {
     const lampCoords = [
       { id: 'lamp-center', x: 0.4, y: 0.4 },
       { id: 'lamp-silo', x: 0.7, y: -3.5 },
@@ -578,19 +613,18 @@ export class BiocyberneticMetropolisEngine {
       { id: 'lamp-ring-sw', x: -4.7, y: -5.2 },
     ];
 
-    for (const lc of lampCoords) {
-      this.streetLamps.push({
-        id: lc.id,
-        x: lc.x,
-        y: lc.y,
-        heightMeters: 2.8,
-        lightColorHex: 0xffb703,
-        intensity: 1.6,
-        isLit: true,
-      });
-    }
+    this.streetLamps = lampCoords.map((lc) => ({
+      id: lc.id,
+      x: lc.x,
+      y: lc.y,
+      heightMeters: 2.8,
+      lightColorHex: 0xffb703,
+      intensity: 1.6,
+      isLit: true,
+    }));
+  }
 
-    // 9. Corredores Aéreos 3D (Skyways) para Navegación de Drosophila y Drones (Vasto Espacio)
+  private initDefaultSkyways(): void {
     this.skywayCorridors = [
       {
         id: 'skyway-axial-ns',
@@ -658,13 +692,15 @@ export class BiocyberneticMetropolisEngine {
         beaconLightColorHex: 0xf43f5e,
       },
     ];
+  }
 
-    // 10. Celdas Residenciales para Drosophila (18 Apartamentos en Rascacielos)
+  private initDefaultLivingCells(): void {
     const residentialTowers = [
       { id: 'tower-nexus', floors: 6 },
       { id: 'tower-helix', floors: 6 },
       { id: 'tower-apex', floors: 7 },
     ];
+    this.livingCells = [];
     for (const tw of residentialTowers) {
       for (let fl = 1; fl <= tw.floors; fl++) {
         for (let c = 1; c <= 2; c++) {
@@ -680,8 +716,6 @@ export class BiocyberneticMetropolisEngine {
         }
       }
     }
-
-    this.addCivicEvent('🏛️ Cimientos de la Megalópolis Biocibernética (5 Distritos) fundados con éxito.');
   }
 
   public getDistricts(): UrbanDistrict[] {
@@ -1102,6 +1136,10 @@ export class BiocyberneticMetropolisEngine {
       const payload = {
         structures: Array.from(this.structures.values()),
         highways: this.highways,
+        streetLamps: this.streetLamps,
+        districts: this.districts,
+        skywayCorridors: this.skywayCorridors,
+        livingCells: this.livingCells,
         biopolymerStockpile: this.biopolymerStockpile,
         totalGlucoseCollectedHistorical: this.totalGlucoseCollectedHistorical,
         totalAtpSynthesizedHistorical: this.totalAtpSynthesizedHistorical,
@@ -1130,11 +1168,18 @@ export class BiocyberneticMetropolisEngine {
         this.structures.set(s.id, s);
       }
       this.highways = Array.isArray(data.highways) ? data.highways : [];
+      this.districts = Array.isArray(data.districts) && data.districts.length > 0 ? data.districts : [];
+      this.streetLamps = Array.isArray(data.streetLamps) && data.streetLamps.length > 0 ? data.streetLamps : [];
+      this.skywayCorridors = Array.isArray(data.skywayCorridors) && data.skywayCorridors.length > 0 ? data.skywayCorridors : [];
+      this.livingCells = Array.isArray(data.livingCells) && data.livingCells.length > 0 ? data.livingCells : [];
       this.biopolymerStockpile = typeof data.biopolymerStockpile === 'number' ? data.biopolymerStockpile : 25.0;
       this.totalGlucoseCollectedHistorical = data.totalGlucoseCollectedHistorical || 0;
       this.totalAtpSynthesizedHistorical = data.totalAtpSynthesizedHistorical || 0;
       this.totalRecycledBiomassHistorical = data.totalRecycledBiomassHistorical || 0;
       this.recentCivicEvents = Array.isArray(data.recentCivicEvents) ? data.recentCivicEvents : [];
+
+      // Auto-reparar infraestructura si se cargó un snapshot previo incompleto
+      this.ensureCityInfrastructure();
       return true;
     } catch {
       return false;

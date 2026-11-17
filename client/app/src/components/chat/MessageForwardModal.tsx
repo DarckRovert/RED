@@ -5,6 +5,7 @@ import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
+import { indexedMediaVault } from "../../lib/storage/indexedMediaVault";
 
 interface MessageForwardModalProps {
     msg: MessageItem;
@@ -80,26 +81,51 @@ export const MessageForwardModal: React.FC<MessageForwardModalProps> = ({ msg, o
 
         const targetObj = targets.find(t => t.id === selectedTarget);
         try {
+            // Resolver punteros locales de IndexedDB antes de reenviar por la malla P2P
+            let resolvedMediaData = msg.media_data;
+            if (resolvedMediaData && resolvedMediaData.startsWith('red_vault://')) {
+                resolvedMediaData = await indexedMediaVault.resolveMediaUrl(resolvedMediaData);
+            }
+
+            let resolvedContent = msg.content || '';
+            if (resolvedContent && resolvedContent.startsWith('red_vault://')) {
+                resolvedContent = await indexedMediaVault.resolveMediaUrl(resolvedContent);
+            }
+
+            // Normalizar payload si content era la imagen/audio crudo
+            if (!resolvedMediaData && (resolvedContent.startsWith('data:image') || resolvedContent.startsWith('data:audio') || resolvedContent.startsWith('data:video'))) {
+                resolvedMediaData = resolvedContent;
+            }
+
+            const inferredType = msg.msg_type || (
+                resolvedMediaData?.startsWith('data:image') ? 'image' :
+                resolvedMediaData?.startsWith('data:audio') ? 'voice' :
+                resolvedMediaData?.startsWith('data:video') ? 'video' : 'text'
+            );
+
             const payload: any = {
-                msg_type: msg.msg_type || 'text',
-                media_data: msg.media_data,
+                msg_type: inferredType,
+                media_data: resolvedMediaData,
                 mime_type: msg.mime_type,
                 file_name: (msg as any).file_name,
                 file_size: (msg as any).file_size,
                 duration_ms: msg.duration_ms,
+                waveform: (msg as any).waveform,
+                caption: (msg as any).caption,
                 latitude: msg.latitude,
                 longitude: msg.longitude,
+                accuracy: (msg as any).accuracy,
                 forwarded: true
             };
 
             // Enrutamiento canónico según la naturaleza del destino
             if (selectedTarget === activeConversationId) {
-                await sendMessage(msg.content || '', payload);
+                await sendMessage(resolvedContent, payload);
             } else if (targetObj?.isGroup) {
-                await RedAPI.sendGroupMessage(selectedTarget, msg.content || '', payload);
+                await RedAPI.sendGroupMessage(selectedTarget, resolvedContent, payload);
                 fetchData().catch(() => {});
             } else {
-                await RedAPI.sendMessage(selectedTarget, msg.content || '', payload);
+                await RedAPI.sendMessage(selectedTarget, resolvedContent, payload);
                 fetchData().catch(() => {});
             }
 
@@ -196,11 +222,11 @@ export const MessageForwardModal: React.FC<MessageForwardModalProps> = ({ msg, o
                             fontSize: "0.82rem", color: "#FFFFFF",
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
                         }}>
-                            {msg.msg_type === 'image' ? '📷 Foto' :
-                             msg.msg_type === 'voice' ? '🎤 Nota de voz' :
-                             msg.msg_type === 'video' ? '📹 Video' :
+                            {msg.msg_type === 'image' || msg.media_data?.startsWith('data:image') || msg.media_data?.startsWith('red_vault://') ? ((msg as any).caption ? `📷 ${(msg as any).caption}` : '📷 Foto') :
+                             msg.msg_type === 'voice' || msg.msg_type === 'audio' || msg.media_data?.startsWith('data:audio') ? '🎤 Nota de voz' :
+                             msg.msg_type === 'video' || msg.media_data?.startsWith('data:video') ? ((msg as any).caption ? `📹 ${(msg as any).caption}` : '📹 Video') :
                              msg.msg_type === 'location' ? '📍 Ubicación táctica' :
-                             (msg.content || 'Mensaje')}
+                             (msg.content && !msg.content.startsWith('red_vault://') && !msg.content.startsWith('data:') ? msg.content : '📷 Adjunto multimedia')}
                         </div>
                     </div>
                 </div>

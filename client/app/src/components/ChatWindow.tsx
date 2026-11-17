@@ -49,7 +49,7 @@ export default function ChatWindow() {
     const { t } = useTranslation();
     const {
         activeConversationId, conversations, contacts, groups, messages,
-        sendMessage, sendTyping, sendTypingStatus, sendReaction, goBack, navigate, peerTyping, peerTypingStatus, addContact,
+        sendMessage, sendTyping, sendTypingStatus, sendReaction, voteInPoll, goBack, navigate, peerTyping, peerTypingStatus, addContact,
         deleteMessage, deleteMessageForEveryone, editMessage, clearConversation, starMessage, starredMessages,
         identity, peerPresence, markAsRead, preferences, setActiveCallType, deleteContact, blockNode, fetchData,
     } = useRedStore();
@@ -1331,7 +1331,8 @@ export default function ChatWindow() {
 
     const handleVote = async (msgId: string, optIdx: number) => {
         try {
-            await sendMessage(String(optIdx), { msg_type: "poll_vote", reply_to_id: msgId });
+            await voteInPoll(msgId, optIdx);
+            TacticalAudioEngine.playTap();
             toast.success("Voto registrado");
         } catch {
             // handled

@@ -7,7 +7,7 @@ import { RedAppManifest, RedAppBundle, RedPermissionScope, RedAppCategory } from
 import { redAppRegistry, InstalledAppEntry } from '../../lib/miniapp/RedAppRegistry';
 import { RedAppBundleEngine } from '../../lib/miniapp/RedAppBundleEngine';
 import { meshRouter } from '../../lib/mesh/meshRouter';
-import { encode, createPacket } from '../../lib/mesh/meshProtocol';
+import { encode, createPacket, BROADCAST_RECIPIENT } from '../../lib/mesh/meshProtocol';
 import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
 import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
 import { toast } from '../Toast';
@@ -286,16 +286,22 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
                 const data = JSON.parse(rawStr);
                 if ((data.type === 'MINIAPP_PACKAGE_BROADCAST' || data.type === 'MINIAPP_MANIFEST') && data.manifest && data.appId) {
                     setMeshDiscoveredApps(prev => {
-                        if (prev.some(a => a.appId === data.appId)) return prev;
-                        TacticalAudioEngine.playMessageReceived();
-                        toast.info(`📡 dApp recibida por radio/malla: ${data.manifest.name}`);
-                        return [{
+                        const existingIdx = prev.findIndex(a => a.appId === data.appId);
+                        const newEntry: MeshDiscoveredApp = {
                             appId: data.appId,
                             manifest: data.manifest,
-                            pkg: data.pkg || null,
+                            pkg: data.pkg || (existingIdx >= 0 ? prev[existingIdx].pkg : null),
                             authorDid: data.authorDid || packet.sender,
                             timestamp: data.timestamp || Date.now()
-                        }, ...prev];
+                        };
+                        TacticalAudioEngine.playMessageReceived();
+                        toast.info(`📡 dApp recibida por radio/malla: ${data.manifest.name}`);
+                        if (existingIdx >= 0) {
+                            const updated = [...prev];
+                            updated[existingIdx] = newEntry;
+                            return updated;
+                        }
+                        return [newEntry, ...prev];
                     });
                 }
             } catch {}
@@ -419,11 +425,22 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
         // Install locally
         redAppRegistry.installApp(bundle);
 
-        // Broadcast bundle manifest to the P2P mesh
+        // Broadcast bundle manifest and signed package to the P2P mesh
         try {
-            const manifestEnvelope = { type: 'MINIAPP_MANIFEST', appId: manifest.id, manifest, timestamp: Date.now() };
+            const pkg = redAppRegistry.exportAppPackage(bundle.manifest.id);
+            const manifestEnvelope = { 
+                type: 'MINIAPP_PACKAGE_BROADCAST', 
+                appId: manifest.id, 
+                manifest, 
+                pkg,
+                authorDid: userDid,
+                timestamp: Date.now() 
+            };
             const manifestBytes = new TextEncoder().encode(JSON.stringify(manifestEnvelope));
-            void meshRouter.broadcast(encode(createPacket(userDid, 'broadcast', manifestBytes)));
+            const senderHash = (meshRouter.myIdentityHash && meshRouter.myIdentityHash.length === 64)
+                ? meshRouter.myIdentityHash
+                : userDid;
+            void meshRouter.broadcast(encode(createPacket(senderHash, BROADCAST_RECIPIENT, manifestBytes)));
         } catch {}
 
         TacticalAudioEngine.playMessageSent();
@@ -461,7 +478,10 @@ export const SovereignAppStoreModal: React.FC<SovereignAppStoreModalProps> = ({
                 timestamp: Date.now() 
             };
             const manifestBytes = new TextEncoder().encode(JSON.stringify(manifestEnvelope));
-            void meshRouter.broadcast(encode(createPacket(userDid, 'broadcast', manifestBytes)));
+            const senderHash = (meshRouter.myIdentityHash && meshRouter.myIdentityHash.length === 64)
+                ? meshRouter.myIdentityHash
+                : userDid;
+            void meshRouter.broadcast(encode(createPacket(senderHash, BROADCAST_RECIPIENT, manifestBytes)));
             TacticalAudioEngine.playMessageSent();
             toast.success(`📡 Mini-App '${bundle.manifest.name}' transmitida por radio/mesh.`);
         } catch (e: any) {

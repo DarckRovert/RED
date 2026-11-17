@@ -8,6 +8,7 @@ import {
     getAmberAlerts,
     createAmberAlert,
     resolveAmberAlert,
+    RedAPI,
 } from "../lib/api";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
@@ -73,10 +74,14 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
 
     const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
+    const [resolutionNotes, setResolutionNotes] = useState("");
+
+    const isAlertResolved = (a: AmberAlert) => a.status === 'Resolved' || Boolean((a as any).resolved);
+
     const fetchAlerts = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await getAmberAlerts();
+            const data = await getAmberAlerts(true);
             setAlerts(Array.isArray(data) ? data : []);
         } catch {
             setAlerts([]);
@@ -87,6 +92,31 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
 
     useEffect(() => {
         fetchAlerts();
+        const interval = setInterval(fetchAlerts, 20_000);
+
+        const handleAmberUpdate = () => {
+            fetchAlerts();
+        };
+        window.addEventListener('red_amber_updated', handleAmberUpdate);
+        window.addEventListener('storage', handleAmberUpdate);
+
+        const es = RedAPI.subscribeToEvents((data) => {
+            if (data?.content) {
+                try {
+                    const parsed = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
+                    if (parsed?.event_type === 'amber_alert' || parsed?.event_type === 'amber_resolved' || parsed?.event_type === 'amber_sighting') {
+                        fetchAlerts();
+                    }
+                } catch {}
+            }
+        });
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('red_amber_updated', handleAmberUpdate);
+            window.removeEventListener('storage', handleAmberUpdate);
+            es?.close();
+        };
     }, [fetchAlerts]);
 
     // ── LIFO Back interception
@@ -190,6 +220,7 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
 
     const handleResolve = (alertId: string) => {
         TacticalAudioEngine.playTap();
+        setResolutionNotes("");
         setConfirmAlertId(alertId);
     };
 
@@ -203,9 +234,11 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
             await resolveAmberAlert(alertId, {
                 authority_node_id: nodeId,
                 authority_signature: resolveSig,
+                resolution_notes: resolutionNotes.trim() || undefined,
             });
             TacticalAudioEngine.playRogerBeep();
             toast.success("✅ Alerta marcada como resuelta");
+            setResolutionNotes("");
             fetchAlerts();
         } catch {
             TacticalAudioEngine.playWarning();
@@ -242,8 +275,8 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
         }
     };
 
-    const activeCount = alerts.filter(a => !(a as any).resolved && a.status !== 'Resolved').length;
-    const resolvedCount = alerts.filter(a => (a as any).resolved || a.status === 'Resolved').length;
+    const activeCount = alerts.filter(a => !isAlertResolved(a)).length;
+    const resolvedCount = alerts.filter(a => isAlertResolved(a)).length;
 
     return (
         <div style={{
@@ -362,18 +395,33 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                             ) : (
                                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                                     {alerts.map(a => (
-                                        <div key={a.id} className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "10px", borderColor: (a as any).resolved ? "var(--glass-border)" : "var(--accent-amber)" }}>
+                                        <div key={a.id} className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "10px", borderColor: isAlertResolved(a) ? "var(--glass-border)" : "var(--accent-amber)" }}>
                                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                                 <div>
-                                                    <div style={{ fontSize: "1rem", fontWeight: 800, color: (a as any).resolved ? "var(--text-muted)" : "var(--accent-amber)" }}>
+                                                    <div style={{ fontSize: "1rem", fontWeight: 800, color: isAlertResolved(a) ? "var(--text-muted)" : "var(--accent-amber)" }}>
                                                         {a.name} ({a.age} {t.amber_module?.age ? t.amber_module.age.toLowerCase() : "años"})
                                                     </div>
                                                     <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
                                                         {a.last_seen_location || "Ubicación desconocida"}
                                                     </div>
+                                                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px", marginTop: "4px" }}>
+                                                        <span style={{
+                                                            fontSize: "0.70rem",
+                                                            color: (a.sighting_count || 0) > 0 ? "var(--accent-cyan)" : "var(--text-muted)",
+                                                            fontFamily: "JetBrains Mono, monospace",
+                                                            fontWeight: 700
+                                                        }}>
+                                                            👁️ {a.sighting_count || 0} Avistamiento(s)
+                                                        </span>
+                                                        {a.resolution_notes && (
+                                                            <span style={{ fontSize: "0.70rem", color: "var(--accent-emerald)", fontStyle: "italic" }}>
+                                                                Nota: {a.resolution_notes}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
 
-                                                {(a as any).resolved ? (
+                                                {isAlertResolved(a) ? (
                                                     <span className="badge-tactical badge-tactical-emerald">RESUELTA</span>
                                                 ) : (
                                                     <button
@@ -390,13 +438,32 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                                                 {a.description}
                                             </div>
 
-                                            {a.photo_b64 && (
-                                                <img
-                                                    src={`data:image/jpeg;base64,${a.photo_b64}`}
-                                                    alt="Foto víctima"
-                                                    style={{ width: "100%", maxHeight: "200px", objectFit: "cover", borderRadius: "10px", border: "1px solid var(--glass-border)" }}
-                                                />
-                                            )}
+                                            {(() => {
+                                                const photoSrc = a.photo_b64 && a.photo_b64 !== '[PHOTO_AVAILABLE]'
+                                                    ? (a.photo_b64.startsWith('data:') ? a.photo_b64 : `data:image/jpeg;base64,${a.photo_b64}`)
+                                                    : null;
+                                                if (photoSrc) {
+                                                    return (
+                                                        <img
+                                                            src={photoSrc}
+                                                            alt="Foto víctima"
+                                                            style={{ width: "100%", maxHeight: "200px", objectFit: "cover", borderRadius: "10px", border: "1px solid var(--glass-border)" }}
+                                                        />
+                                                    );
+                                                }
+                                                if (a.photo_b64 === '[PHOTO_AVAILABLE]') {
+                                                    return (
+                                                        <div style={{
+                                                            padding: "8px 12px", borderRadius: "8px", background: "rgba(255,179,0,0.1)",
+                                                            border: "1px dashed rgba(255,179,0,0.4)", fontSize: "0.72rem", color: "var(--accent-amber)",
+                                                            display: "flex", alignItems: "center", gap: "6px"
+                                                        }}>
+                                                            📷 Fotografía disponible en nodo emisor (requiere enlace de banda ancha)
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
 
                                             {/* Acciones Tácticas y Ficha QR */}
                                             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "4px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px" }}>
@@ -418,7 +485,7 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                                                 >
                                                     📋 ID
                                                 </button>
-                                                {a.last_seen_lat !== undefined && a.last_seen_lon !== undefined && (
+                                                {typeof a.last_seen_lat === 'number' && typeof a.last_seen_lon === 'number' && isFinite(a.last_seen_lat) && isFinite(a.last_seen_lon) && (
                                                     <button
                                                         onClick={() => {
                                                             TacticalAudioEngine.playTap();
@@ -560,9 +627,23 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                         <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
                             ¿Confirmas que la víctima ha sido localizada y la alerta AMBER debe cerrarse en toda la malla P2P?
                         </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                NOTAS DE RESOLUCIÓN SAR (OPCIONAL):
+                            </label>
+                            <input
+                                value={resolutionNotes}
+                                onChange={(e) => setResolutionNotes(e.target.value)}
+                                placeholder="Ej: Localizado en refugio comunal por patrulla 2..."
+                                style={{ fontSize: "0.85rem", padding: "8px 10px", borderRadius: "8px", background: "rgba(0,0,0,0.4)", border: "1px solid var(--glass-border)", color: "#fff" }}
+                            />
+                        </div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "8px" }}>
                             <button
-                                onClick={() => setConfirmAlertId(null)}
+                                onClick={() => {
+                                    setResolutionNotes("");
+                                    setConfirmAlertId(null);
+                                }}
                                 className="btn-tactical-secondary"
                                 style={{ padding: "10px", fontSize: "0.82rem" }}
                             >

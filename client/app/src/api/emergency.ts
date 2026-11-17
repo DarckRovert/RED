@@ -2,10 +2,14 @@ import { AmberAlert, AmberAlertCreate, AmberSighting, SosBeacon, TriageReport, T
 import { fetchWithFallback, getStored, setStored, hashStringSha256, sha256Hex, stripExifCanvas, STORAGE_KEYS } from './core';
 import { RedAPI } from './client';
 
-export async function getAmberAlerts(): Promise<AmberAlert[]> {
-    const res = await fetchWithFallback<any>('/api/amber/alerts', undefined, () => {
+export async function getAmberAlerts(includeResolved = false): Promise<AmberAlert[]> {
+    const url = includeResolved ? '/api/amber/alerts?all=true' : '/api/amber/alerts';
+    const res = await fetchWithFallback<any>(url, undefined, () => {
         const alerts = getStored<AmberAlert[]>(STORAGE_KEYS.AMBER_ALERTS, []);
         const nowSecs = Math.floor(Date.now() / 1000);
+        if (includeResolved) {
+            return alerts;
+        }
         return alerts.filter(a => a.status === 'Active' && (!a.expires_at || a.expires_at > nowSecs));
     });
     if (Array.isArray(res)) return res;
@@ -28,7 +32,7 @@ export async function getAmberAlert(id: string): Promise<AmberAlert> {
 
 /** Crear nueva alerta AMBER (requiere autoridad) */
 export async function createAmberAlert(payload: AmberAlertCreate): Promise<{ ok: boolean; alert: AmberAlert }> {
-    return fetchWithFallback('/api/amber/alert', {
+    const res = await fetchWithFallback<{ ok: boolean; alert: AmberAlert }>('/api/amber/alert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -64,25 +68,43 @@ export async function createAmberAlert(payload: AmberAlertCreate): Promise<{ ok:
             status: 'Active',
             sighting_count: 0,
         };
+        return { ok: true, alert };
+    });
+
+    const createdAlert = res.alert;
+    if (createdAlert) {
+        // 1. Sincronizar en almacenamiento local siempre
         const alerts = getStored<AmberAlert[]>(STORAGE_KEYS.AMBER_ALERTS, []);
-        alerts.unshift(alert);
+        const idx = alerts.findIndex(a => a.id === createdAlert.id);
+        if (idx >= 0) {
+            alerts[idx] = createdAlert;
+        } else {
+            alerts.unshift(createdAlert);
+        }
         if (alerts.length > 200) alerts.length = 200;
         setStored(STORAGE_KEYS.AMBER_ALERTS, alerts);
 
-        // Broadcast AMBER alert across P2P Mesh
+        // 2. Difundir inmediatamente en la malla táctica P2P
         try {
             const { meshRouter } = await import('../lib/mesh/meshRouter');
             const payloadBytes = new TextEncoder().encode(JSON.stringify({
-                id: alert.id,
+                id: createdAlert.id,
                 msg_type: 'amber_alert',
-                alert,
-                timestamp: alert.issued_at
+                alert: createdAlert,
+                timestamp: createdAlert.issued_at
             }));
             await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
-        } catch {}
+        } catch (e) {
+            console.warn('[RED:AMBER] Error al difundir alerta AMBER en malla:', e);
+        }
 
-        return { ok: true, alert };
-    });
+        // 3. Notificar a toda la interfaz reactiva
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('red_amber_updated'));
+        }
+    }
+
+    return res;
 }
 
 /** Resolver alerta (persona encontrada) */
@@ -90,7 +112,7 @@ export async function resolveAmberAlert(
     id: string,
     payload: { authority_node_id: string; authority_signature: string; resolution_notes?: string }
 ): Promise<{ ok: boolean; alert: AmberAlert }> {
-    return fetchWithFallback(`/api/amber/alerts/${id}/resolve`, {
+    const res = await fetchWithFallback<{ ok: boolean; alert: AmberAlert }>(`/api/amber/alerts/${id}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -100,65 +122,82 @@ export async function resolveAmberAlert(
         if (!target) throw new Error(`Alerta AMBER ${id} no existe`);
         target.status = 'Resolved';
         target.resolution_notes = payload.resolution_notes;
-        setStored(STORAGE_KEYS.AMBER_ALERTS, alerts);
-
-        // Broadcast resolution packet across P2P Mesh
-        try {
-            const { meshRouter } = await import('../lib/mesh/meshRouter');
-            const payloadBytes = new TextEncoder().encode(JSON.stringify({
-                id: `resolve_${id}`,
-                msg_type: 'amber_resolved',
-                alert_id: id,
-                resolution_notes: payload.resolution_notes,
-                timestamp: Math.floor(Date.now() / 1000)
-            }));
-            await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
-        } catch {}
-
-        if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('red_amber_updated'));
-        }
-
         return { ok: true, alert: target };
     });
+
+    // 1. Actualizar estado en almacenamiento local incondicionalmente
+    const alerts = getStored<AmberAlert[]>(STORAGE_KEYS.AMBER_ALERTS, []);
+    const target = alerts.find(a => a.id === id);
+    if (target) {
+        target.status = 'Resolved';
+        target.resolution_notes = payload.resolution_notes;
+        setStored(STORAGE_KEYS.AMBER_ALERTS, alerts);
+    }
+
+    // 2. Difundir paquete de resolución en la malla táctica P2P
+    try {
+        const { meshRouter } = await import('../lib/mesh/meshRouter');
+        const payloadBytes = new TextEncoder().encode(JSON.stringify({
+            id: `resolve_${id}`,
+            msg_type: 'amber_resolved',
+            alert_id: id,
+            resolution_notes: payload.resolution_notes,
+            timestamp: Math.floor(Date.now() / 1000)
+        }));
+        await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+    } catch (e) {
+        console.warn('[RED:AMBER] Error al difundir resolución AMBER en malla:', e);
+    }
+
+    // 3. Notificación reactiva local inmediata para cerrar banners
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('red_amber_updated'));
+    }
+
+    return res;
 }
 
-/** Reportar avistamiento */
+/** Reportar avistamiento con propagación dual (Backend + Malla P2P) */
 export async function reportSighting(
     alertId: string,
     payload: { lat?: number; lon?: number; notes?: string }
 ): Promise<{ ok: boolean }> {
+    // 1. Actualizar contador de avistamientos localmente incondicionalmente
+    const alerts = getStored<AmberAlert[]>(STORAGE_KEYS.AMBER_ALERTS, []);
+    const target = alerts.find(a => a.id === alertId);
+    if (target) {
+        target.sighting_count = (target.sighting_count || 0) + 1;
+        setStored(STORAGE_KEYS.AMBER_ALERTS, alerts);
+    }
+
+    // 2. Difundir avistamiento incondicionalmente a la malla táctica P2P
+    try {
+        const { meshRouter } = await import('../lib/mesh/meshRouter');
+        const payloadBytes = new TextEncoder().encode(JSON.stringify({
+            id: `sighting_${alertId}_${Date.now()}`,
+            msg_type: 'amber_sighting',
+            alert_id: alertId,
+            lat: payload.lat,
+            lon: payload.lon,
+            notes: payload.notes,
+            timestamp: Math.floor(Date.now() / 1000)
+        }));
+        await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+    } catch (e) {
+        console.warn('[RED:AMBER] Error al difundir avistamiento en malla:', e);
+    }
+
+    // 3. Notificación reactiva local
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('red_amber_updated'));
+    }
+
+    // 4. Envío al backend
     return fetchWithFallback(`/api/amber/alerts/${alertId}/sighting`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     }, async () => {
-        const alerts = getStored<AmberAlert[]>(STORAGE_KEYS.AMBER_ALERTS, []);
-        const target = alerts.find(a => a.id === alertId);
-        if (target) {
-            target.sighting_count = (target.sighting_count || 0) + 1;
-            setStored(STORAGE_KEYS.AMBER_ALERTS, alerts);
-        }
-
-        // Broadcast sighting report across P2P Mesh
-        try {
-            const { meshRouter } = await import('../lib/mesh/meshRouter');
-            const payloadBytes = new TextEncoder().encode(JSON.stringify({
-                id: `sighting_${alertId}_${Date.now()}`,
-                msg_type: 'amber_sighting',
-                alert_id: alertId,
-                lat: payload.lat,
-                lon: payload.lon,
-                notes: payload.notes,
-                timestamp: Math.floor(Date.now() / 1000)
-            }));
-            await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
-        } catch {}
-
-        if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('red_amber_updated'));
-        }
-
         return { ok: true };
     });
 }

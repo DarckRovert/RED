@@ -223,12 +223,9 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
         setLoading(true);
         setError("");
-
-        const panicPin = await getSecurePin("panic_pin");
-        const decoyPin = await getSecurePin("decoy_pin");
-
         // 1. PANIC WIPE WITH PLAUSIBLE DENIABILITY (DURESS COERCION PROTOCOL)
-        if (panicPin && pwd === panicPin) {
+        const isPanic = await verifySecurePin("panic_pin", pwd);
+        if (isPanic) {
             // [PLAUSIBLE DENIABILITY]: Cero alarmas sonoras, cero toasts delatores.
             // Conmuta inmediatamente a la Bóveda Señuelo Civil (Decoy Vault) para aparentar
             // un desbloqueo exitoso ante un captor armado, mientras en segundo plano se purgan
@@ -247,7 +244,8 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
         }
 
         // 2. DECOY VAULT
-        if (decoyPin && pwd === decoyPin) {
+        const isDecoy = await verifySecurePin("decoy_pin", pwd);
+        if (isDecoy) {
             TacticalAudioEngine.playRogerBeep();
             useRedStore.getState().enableDecoyVault();
             setLoading(false);
@@ -473,17 +471,19 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             const isPanic = await verifySecurePin("panic_pin", typedPin);
             if (isPanic) {
                 await doLogin(typedPin);
-                return;
+                return true;
             }
             const isDecoy = await verifySecurePin("decoy_pin", typedPin);
             if (isDecoy) {
                 await doLogin(typedPin);
-                return;
+                return true;
             }
             const isMaster = await verifySecurePin("master_pin", typedPin);
             if (isMaster) {
                 await doLogin(typedPin);
+                return true;
             }
+            return false;
         }} />;
     }
 

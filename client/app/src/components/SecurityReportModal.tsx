@@ -78,7 +78,16 @@ export const SecurityReportModal: React.FC<SecurityReportModalProps> = ({ onClos
             const priv = typeof window !== "undefined" && localStorage.getItem("red_privacy_screen") === "true";
             const disg = typeof window !== "undefined" && localStorage.getItem("red_disguise_mode") === "true";
             const burn = typeof window !== "undefined" && localStorage.getItem("red_burner_chats") === "true";
-            const dms = typeof window !== "undefined" && !!localStorage.getItem("red_dms_config");
+            let dms = false;
+            if (typeof window !== "undefined") {
+                try {
+                    const rawDms = localStorage.getItem("red_dms_config");
+                    if (rawDms) {
+                        const parsedDms = JSON.parse(rawDms);
+                        dms = Boolean(parsedDms.enabled);
+                    }
+                } catch {}
+            }
 
             let bio = false;
             if (typeof window !== "undefined" && window.PublicKeyCredential) {
@@ -94,7 +103,7 @@ export const SecurityReportModal: React.FC<SecurityReportModalProps> = ({ onClos
             let fp = "A7F9-E201-B884-C339";
             if (typeof window !== "undefined" && window.crypto?.subtle) {
                 try {
-                    const raw = new TextEncoder().encode(`${idHash}:${priv}:${disg}:${burn}:${panic}:${decoy}:${time}`);
+                    const raw = new TextEncoder().encode(`${idHash}:${priv}:${disg}:${burn}:${panic}:${decoy}:${master}:${bio}:${dms}:${time}`);
                     const digest = await window.crypto.subtle.digest("SHA-256", raw);
                     const hex = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
                     fp = `${hex.slice(0, 4)}-${hex.slice(4, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}`;
@@ -128,7 +137,10 @@ export const SecurityReportModal: React.FC<SecurityReportModalProps> = ({ onClos
                 disguiseMode: auditData.disguiseMode,
                 burnerChats: auditData.burnerChats,
                 hasPanicPin: auditData.hasPanicPin,
-                hasDecoyPin: auditData.hasDecoyPin
+                hasDecoyPin: auditData.hasDecoyPin,
+                hasMasterPin: auditData.hasMasterPin,
+                hasBiometrics: auditData.hasBiometrics,
+                dmsActive: auditData.dmsActive,
             });
             setAiAudit(posture);
             TacticalAudioEngine.playRogerBeep();
@@ -283,6 +295,13 @@ ${aiAudit ? `\n[ DICTAMEN DE INTELIGENCIA LOCAL ]\nNivel: ${aiAudit.rating}\nÍn
                             </div>
 
                             <div style={{ padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: "6px" }}>
+                                <div style={{ color: "var(--text-muted)", fontSize: "0.68rem" }}>PIN MAESTRO KEYSTORE</div>
+                                <div style={{ fontWeight: 700, color: auditData.hasMasterPin ? "var(--accent-emerald)" : "var(--accent-amber)" }}>
+                                    {auditData.hasMasterPin ? "● CONFIGURADO" : "○ SIN CONFIGURAR"}
+                                </div>
+                            </div>
+
+                            <div style={{ padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: "6px" }}>
                                 <div style={{ color: "var(--text-muted)", fontSize: "0.68rem" }}>PIN DE PÁNICO (AUTO-WIPE)</div>
                                 <div style={{ fontWeight: 700, color: auditData.hasPanicPin ? "var(--accent-emerald)" : "var(--accent-crimson)" }}>
                                     {auditData.hasPanicPin ? "● BLINDADO EN KEYSTORE" : "○ SIN CONFIGURAR"}
@@ -300,6 +319,13 @@ ${aiAudit ? `\n[ DICTAMEN DE INTELIGENCIA LOCAL ]\nNivel: ${aiAudit.rating}\nÍn
                                 <div style={{ color: "var(--text-muted)", fontSize: "0.68rem" }}>BIOMETRÍA HARDWARE (WEBAUTHN)</div>
                                 <div style={{ fontWeight: 700, color: auditData.hasBiometrics ? "var(--accent-emerald)" : "var(--text-muted)" }}>
                                     {auditData.hasBiometrics ? "● SOPORTADA" : "○ NO DETECTADA"}
+                                </div>
+                            </div>
+
+                            <div style={{ padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: "6px" }}>
+                                <div style={{ color: "var(--text-muted)", fontSize: "0.68rem" }}>DEAD MAN'S SWITCH (AUTO-PURGA)</div>
+                                <div style={{ fontWeight: 700, color: auditData.dmsActive ? "var(--accent-emerald)" : "var(--accent-amber)" }}>
+                                    {auditData.dmsActive ? "● ACTIVO & ARMADO" : "○ DESACTIVADO"}
                                 </div>
                             </div>
                         </div>

@@ -65,12 +65,24 @@ export const TacticalQuickActionHUD: React.FC<TacticalQuickActionHUDProps> = ({ 
         const handleFocusOut = () => {
             setIsKeyboardOpen(false);
         };
+        const handleViewportResize = () => {
+            if (typeof window !== "undefined" && window.visualViewport) {
+                const isKb = window.innerHeight - window.visualViewport.height > 150;
+                setIsKeyboardOpen(isKb);
+            }
+        };
 
         window.addEventListener("focusin", handleFocusIn);
         window.addEventListener("focusout", handleFocusOut);
+        if (typeof window !== "undefined" && window.visualViewport) {
+            window.visualViewport.addEventListener("resize", handleViewportResize);
+        }
         return () => {
             window.removeEventListener("focusin", handleFocusIn);
             window.removeEventListener("focusout", handleFocusOut);
+            if (typeof window !== "undefined" && window.visualViewport) {
+                window.visualViewport.removeEventListener("resize", handleViewportResize);
+            }
         };
     }, []);
 
@@ -107,8 +119,8 @@ export const TacticalQuickActionHUD: React.FC<TacticalQuickActionHUDProps> = ({ 
 
     const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
 
-    // En Modo Familiar en pantalla principal móvil (sidebar), ocultar HUD para preservar la estética limpia de WhatsApp
-    if (isFamiliar && currentScreen === "sidebar" && !activeConversationId && !isTablet) {
+    // En Modo Familiar, ocultar por completo el HUD táctico para respetar la estética y ergonomía limpia de WhatsApp/Signal
+    if (isFamiliar) {
         return null;
     }
 
@@ -143,12 +155,20 @@ export const TacticalQuickActionHUD: React.FC<TacticalQuickActionHUDProps> = ({ 
         });
     };
 
-    // Ajuste de posición vertical en mobile: en sidebar táctica se posiciona a 144px (sobre el FAB de 76px) para evitar colisiones
+    // Ajuste de posición vertical en mobile:
+    // - En sidebar táctica: a 144px (sobre el FAB de 76px) para evitar colisiones
+    // - Dentro de chat: a 84px para flotar limpiamente sobre ChatInput sin obstruir micrófono/envío
+    // - En otras pantallas: a 16px
+    const isInsideChat = currentScreen === "chat" || !!activeConversationId;
+    const isSidebarWithoutChat = currentScreen === "sidebar" && !activeConversationId;
+
     const bottomPosition = isTablet 
         ? "24px" 
-        : (currentScreen === "sidebar" && !activeConversationId
+        : isSidebarWithoutChat
             ? "calc(144px + env(safe-area-inset-bottom, 0px))" 
-            : "calc(16px + env(safe-area-inset-bottom, 0px))");
+            : isInsideChat
+                ? "calc(84px + env(safe-area-inset-bottom, 0px))" 
+                : "calc(16px + env(safe-area-inset-bottom, 0px))";
 
     return (
         <>

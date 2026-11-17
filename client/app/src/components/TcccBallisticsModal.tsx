@@ -228,6 +228,7 @@ export function TcccBallisticsModal() {
             const alertPayload = new TextEncoder().encode(JSON.stringify({
                 type: "TACTICAL_MEDEVAC_9LINE",
                 sender: name,
+                senderHash: identity?.identity_hash,
                 triageCategory: triageIncident?.category || (tourniquets.length > 0 ? "URGENTE" : "PRIORITARIO"),
                 victimLabel: triageIncident?.victimLabel,
                 vitals: {

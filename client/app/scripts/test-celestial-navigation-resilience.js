@@ -52,7 +52,7 @@ runTest('2. CelestialNavigationEngine: Sanitización y clamping de coordenadas e
 
 runTest('3. CelestialNavigationEngine: Normalización canónica angular [0, 360) de azimut', () => {
     assert(engineCode.includes('((azimuthDeg % 360) + 360) % 360'), 'Debe normalizar azimut solar');
-    assert(engineCode.includes('((rawMoonAz % 360) + 360) % 360'), 'Debe normalizar azimut lunar');
+    assert(engineCode.includes('((moonAzimuthDeg % 360) + 360) % 360') || engineCode.includes('((rawMoonAz % 360) + 360) % 360'), 'Debe normalizar azimut lunar');
 });
 
 runTest('4. CelestialNavigationEngine: Día Juliano en UTC puro (sin resta de getTimezoneOffset)', () => {

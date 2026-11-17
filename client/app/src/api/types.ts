@@ -76,6 +76,8 @@ export interface MessageItem {
     recipient?: string;
     content: string;
     timestamp: number;
+    delivered_at?: number;
+    read_at?: number;
     is_mine?: boolean;
     msg_type?: string;
     status?: 'Pending' | 'Sent' | 'Delivered' | 'Read' | 'Failed';

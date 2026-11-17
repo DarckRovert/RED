@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { useRedStore } from "../store/useRedStore";
-import { antiForensicPanicWipe } from "../lib/security/AntiForensicPanicWipeEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 
@@ -156,22 +155,27 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
         const rawPin = display;
         setAwaitingUnlock(true);
 
-        // 1. Verificar si es el PIN de coacción / pánico (Duress Zeroization)
-        if (antiForensicPanicWipe.isDuressPin(rawPin)) {
-            TacticalAudioEngine.playWarning();
-            await antiForensicPanicWipe.triggerDuressPanicProtocol();
-            try {
-                await handleUnlock(rawPin);
-            } catch {}
-            setAwaitingUnlock(false);
-            return;
-        }
-
-        // 2. Intentar desbloqueo normal silencioso de la bóveda
+        // 1. Intentar desbloqueo seguro de la bóveda (Master, Decoy o Pánico con Plausible Deniability)
         try {
             const unlocked = await handleUnlock(rawPin);
             if (unlocked) {
                 TacticalAudioEngine.playRogerBeep();
+                setAwaitingUnlock(false);
+                return;
+            }
+        } catch {}
+
+        // Fallback defensivo: verificación directa de PIN de pánico si handleUnlock no fue provisto
+        try {
+            const { verifySecurePin } = await import("../lib/crypto/BiometricLockEngine");
+            const isPanic = await verifySecurePin("panic_pin", rawPin);
+            if (isPanic) {
+                TacticalAudioEngine.playRogerBeep();
+                useRedStore.getState().enableDecoyVault();
+                const { duressWipe } = await import("../lib/security/DuressWipeEngine");
+                duressWipe.executeZeroizeWipe({ silent: true, preserveDecoySession: true }).catch(() => {});
+                setAwaitingUnlock(false);
+                return;
             }
         } catch {}
 

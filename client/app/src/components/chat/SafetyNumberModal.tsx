@@ -5,6 +5,7 @@ import { RedAPI } from "../../lib/api";
 import { toast } from "../Toast";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { normalizeIdentity } from "../../lib/mesh/meshRouter";
 
 interface SafetyNumberModalProps {
     peerHash: string;
@@ -17,10 +18,14 @@ interface SafetyNumberModalProps {
 
 /**
  * Computes a deterministic 60-digit Signal-grade Safety Number
- * (12 blocks of 5 digits) from two Ed25519/BLAKE3 public keys or identity hashes.
+ * (12 blocks of 5 digits) symmetrically derived from both canonical identities.
  */
 async function computeSafetyNumber(myKey: string, peerKey: string): Promise<string[]> {
-    const sorted = [myKey.toLowerCase(), peerKey.toLowerCase()].sort();
+    const cleanMyKey = normalizeIdentity(myKey);
+    const cleanPeerKey = normalizeIdentity(peerKey);
+    if (!cleanMyKey || !cleanPeerKey) return [];
+
+    const sorted = [cleanMyKey, cleanPeerKey].sort();
     const combined = `${sorted[0]}:${sorted[1]}:RED_SAFETY_V42`;
 
     let hashHex = "";
@@ -49,11 +54,10 @@ async function computeSafetyNumber(myKey: string, peerKey: string): Promise<stri
 
     const blocks: string[] = [];
     for (let i = 0; i < 12; i++) {
-        const slice = hashHex.slice((i * 5) % (hashHex.length - 5), ((i * 5) % (hashHex.length - 5)) + 5);
-        let num = 0;
-        for (let j = 0; j < slice.length; j++) {
-            num = (num * 16 + slice.charCodeAt(j)) % 100000;
-        }
+        const start = (i * 4) % (hashHex.length - 4);
+        const chunkHex = hashHex.slice(start, start + 4);
+        const val = parseInt(chunkHex, 16);
+        const num = Math.floor((val / 65536) * 100000);
         blocks.push(String(num).padStart(5, "0"));
     }
     return blocks;
@@ -89,12 +93,13 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
         return unregister;
     }, [isScanning, onClose]);
 
-    const myKey = identity?.public_key || identity?.identity_hash || "my_local_identity";
-    const targetPeerKey = peerPublicKey || peerHash;
+    const myIdentityHash = identity?.identity_hash || "";
+    const targetPeerHash = peerHash || "";
 
     useEffect(() => {
-        computeSafetyNumber(myKey, targetPeerKey).then(setBlocks);
-    }, [myKey, targetPeerKey]);
+        if (!myIdentityHash || !targetPeerHash) return;
+        computeSafetyNumber(myIdentityHash, targetPeerHash).then(setBlocks);
+    }, [myIdentityHash, targetPeerHash]);
 
     const fullSafetyString = useMemo(() => blocks.join(" "), [blocks]);
 

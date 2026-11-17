@@ -1,12 +1,8 @@
 name: Build iOS Capacitor App
 
+# Desmantelado segun Politica Anti-Billing Soberana (Costo $0) - solo manual dispatch
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   build-ios:

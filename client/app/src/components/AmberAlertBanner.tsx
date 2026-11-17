@@ -107,10 +107,23 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
     return unregister;
   }, [minimized, alerts.length, showSightingForm]);
 
+  // Sincronizar índice seguro cuando cambie la cantidad de alertas
+  useEffect(() => {
+    if (currentIndex >= alerts.length && alerts.length > 0) {
+      setCurrentIndex(Math.max(0, alerts.length - 1));
+    }
+  }, [alerts.length, currentIndex]);
+
   if (alerts.length === 0) return null;
 
-  const currentAlert = alerts[currentIndex];
+  const safeIndex = currentIndex < alerts.length ? currentIndex : 0;
+  const currentAlert = alerts[safeIndex];
   if (!currentAlert) return null;
+
+  // Normalización higiénica del formato de la foto Base64
+  const photoSrc = currentAlert.photo_b64 && currentAlert.photo_b64 !== '[PHOTO_AVAILABLE]'
+    ? (currentAlert.photo_b64.startsWith('data:') ? currentAlert.photo_b64 : `data:image/jpeg;base64,${currentAlert.photo_b64}`)
+    : null;
 
   const handleMinimize = () => {
     TacticalAudioEngine.playTap();
@@ -242,9 +255,9 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
         <div className="amber-banner-body">
           {/* Foto */}
           <div className="amber-photo-container">
-            {currentAlert.photo_b64 && currentAlert.photo_b64 !== '[PHOTO_AVAILABLE]' ? (
+            {photoSrc ? (
               <img
-                src={`data:image/jpeg;base64,${currentAlert.photo_b64}`}
+                src={photoSrc}
                 alt={`Foto de ${currentAlert.name}`}
                 className="amber-photo"
               />

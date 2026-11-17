@@ -9,6 +9,8 @@ import { RED_VERSION } from '../../lib/version';
 import { StateIntegrityEngine } from '../../lib/storage/StateIntegrityEngine';
 import { indexedMediaVault } from '../../lib/storage/indexedMediaVault';
 import { companionSyncEngine } from '../../lib/mesh/companionSyncEngine';
+import { sitrepEngine } from '../../lib/tactical/SitrepEngine';
+import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
 
 let _fetchInterval: ReturnType<typeof setInterval> | null = null;
 let _mainSSE: EventSource | null = null;
@@ -184,6 +186,72 @@ function registerMeshLocalDeliveryListener(get: () => RedStore) {
                             });
                         });
                         toast.info(`🔑 Fragmento Shamir #${parsed.shareIndex} recibido de ${parsed.guardianName || 'Guardián'}`);
+                    }
+                    return;
+                }
+
+                // ── Intercepción Táctica de Alertas 9-Line MEDEVAC ─────────────────────
+                if (parsed.type === 'TACTICAL_MEDEVAC_9LINE') {
+                    let currentMyHash = get().identity?.identity_hash || '';
+                    if (!currentMyHash && typeof window !== 'undefined') {
+                        currentMyHash = localStorage.getItem('red_identity_hash') || '';
+                    }
+
+                    // Prevenir auto-eco en el dispositivo que originó la alerta
+                    const isSelfEcho = currentMyHash && parsed.senderHash &&
+                        currentMyHash.toLowerCase() === parsed.senderHash.toLowerCase();
+
+                    if (!isSelfEcho) {
+                        TacticalAudioEngine.playEmergencyAlarm();
+                        toast.error(`🚨 MEDEVAC 9-LINE RECIBIDO de ${parsed.sender || 'Operador'}: ${parsed.tourniquetsCount || 1} Torniquete(s) [${parsed.triageCategory || 'URGENTE'}]`);
+
+                        // 1. Integrar inmediatamente en el motor de Situación Táctica (SITREP) para que aparezca en el mapa
+                        sitrepEngine.createSitrep({
+                            unitCallsign: parsed.sender || 'Operador RED',
+                            operatorName: parsed.victimLabel || parsed.sender || 'Operador RED',
+                            location: {
+                                lat: typeof parsed.location?.lat === 'number' ? parsed.location.lat : 0,
+                                lon: typeof parsed.location?.lon === 'number' ? parsed.location.lon : 0
+                            },
+                            threatStatus: 'RED_CONTACT',
+                            friendlyTroopsCount: 1,
+                            casualties: {
+                                t1ImmediateRed: parsed.triageCategory === 'ROJO' || parsed.triageCategory === 'URGENTE' ? (parsed.tourniquetsCount || 1) : 0,
+                                t2DelayedYellow: parsed.triageCategory === 'AMARILLO' ? 1 : 0,
+                                t3MinimalGreen: parsed.triageCategory === 'VERDE' ? 1 : 0,
+                                t4ExpectantBlack: parsed.triageCategory === 'NEGRO' ? 1 : 0
+                            },
+                            suppliesAmmoPct: 100,
+                            suppliesMedicalPct: Math.max(10, 100 - ((parsed.tourniquetsCount || 1) * 25)),
+                            suppliesBatteryPct: 100,
+                            remarks: `🚨 MEDEVAC 9-LINE RECIBIDO: ${parsed.tourniquetsCount || 0} Torniquete(s) · Sangre: ${parsed.bloodType || 'DESCONOCIDO'} · Alergias: ${parsed.allergies || 'NINGUNA'}${parsed.victimLabel ? ` [Baja: ${parsed.victimLabel}]` : ''}`
+                        });
+
+                        // 2. Construir mensaje estructurado legible para el canal de comunicaciones tácticas
+                        const formattedContent = [
+                            `🚨 **SOLICITUD 9-LINE MEDEVAC URGENTE**`,
+                            `• **Operador / Víctima:** ${parsed.victimLabel || parsed.sender || 'Operador RED'}`,
+                            `• **Triage:** ${parsed.triageCategory || 'URGENTE'}`,
+                            `• **Torniquetes CAT:** ${parsed.tourniquetsCount || 0}`,
+                            `• **Grupo Sanguíneo:** ${parsed.bloodType || 'DESCONOCIDO'}`,
+                            `• **Alergias:** ${parsed.allergies || 'NINGUNA'}`,
+                            parsed.vitals?.bpm ? `• **Signos Vitales:** ${parsed.vitals.bpm} BPM / ${parsed.vitals.spo2 ?? '--'}% SpO2` : null,
+                            parsed.location?.lat ? `• **GPS:** ${parsed.location.lat.toFixed(5)}, ${parsed.location.lon.toFixed(5)}` : null,
+                            parsed.emergencyContact ? `• **Contacto Emergencia:** ${parsed.emergencyContact}` : null
+                        ].filter(Boolean).join('\n');
+
+                        const medevacMsg = {
+                            id: packet.nonce || `medevac_${(parsed.senderHash || packet.sender).slice(0, 8)}_${Math.floor(normTs)}`,
+                            sender: parsed.senderHash || packet.sender,
+                            recipient: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+                            content: formattedContent,
+                            timestamp: normTs,
+                            is_mine: false,
+                            msg_type: 'medevac',
+                            status: 'Delivered' as const,
+                            priority: 'EMERGENCY'
+                        };
+                        get().addIncomingMessage(medevacMsg);
                     }
                     return;
                 }
@@ -371,21 +439,16 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     } catch {}
                 }
 
-                // PANIC WIPE
+                // PANIC WIPE (Plausible Deniability Coercion Protocol)
                 if (storedPanicPin && password === storedPanicPin) {
-                    try {
-                        const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
-                        await SecureStoragePlugin.clear().catch(() => {});
-                        const RedNode = registerPlugin<any>('RedNode');
-                        await RedNode.destroy().catch(() => {});
-                    } catch {}
-                    if (typeof window !== 'undefined') {
-                        localStorage.clear();
-                        sessionStorage.clear();
-                    }
-                    toast.error("🔥 BÓVEDA DESTRUIDA POR PROTOCOLO DE PÁNICO");
-                    window.location.reload();
-                    return false;
+                    set({ isDecoyMode: true, isAuthenticated: true });
+                    import('../../lib/security/DuressWipeEngine').then(({ duressWipe }) => {
+                        duressWipe.executeZeroizeWipe({ silent: true, preserveDecoySession: true }).catch(err => {
+                            console.error("[authSlice Native] Error en purga de coacción silenciosa:", err);
+                        });
+                    }).catch(() => {});
+                    wireCompanionLiveSyncBridge(get, set);
+                    return true;
                 }
 
                 // DECOY VAULT (Únicamente si coincide con el decoy_pin configurado por el usuario; CERO fallback 9999)
@@ -453,16 +516,17 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 // Web Browser Platform (GitHub Pages SPA) - Zero-Trust Cryptographic Validation
                 const { verifySecurePin, hasSecurePin, setSecurePin } = await import('../../lib/crypto/BiometricLockEngine');
 
-                // 1. PROTOCOLO DE PÁNICO (Purga y reinicio seguro)
+                // 1. PROTOCOLO DE PÁNICO (Duress Coercion & Plausible Deniability)
                 const isPanic = await verifySecurePin("panic_pin", password);
                 if (isPanic) {
-                    if (typeof window !== 'undefined') {
-                        localStorage.clear();
-                        sessionStorage.clear();
-                    }
-                    toast.error("🔥 BÓVEDA DESTRUIDA POR PROTOCOLO DE PÁNICO");
-                    window.location.reload();
-                    return false;
+                    set({ isDecoyMode: true, isAuthenticated: true });
+                    import('../../lib/security/DuressWipeEngine').then(({ duressWipe }) => {
+                        duressWipe.executeZeroizeWipe({ silent: true, preserveDecoySession: true }).catch(err => {
+                            console.error("[authSlice Web] Error en purga de coacción silenciosa:", err);
+                        });
+                    }).catch(() => {});
+                    wireCompanionLiveSyncBridge(get, set);
+                    return true;
                 }
 
                 // 2. BÓVEDA DE SEÑUELO (Modo encubierto - NUNCA fallback 9999)

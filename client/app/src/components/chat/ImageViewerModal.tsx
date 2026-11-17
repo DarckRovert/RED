@@ -3,6 +3,7 @@ import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
+import { indexedMediaVault } from "../../lib/storage/indexedMediaVault";
 
 interface ImageViewerModalProps {
     src: string;
@@ -17,15 +18,38 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, on
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
     const [hasError, setHasError] = useState(false);
+    const [resolvedSrc, setResolvedSrc] = useState<string>(src.startsWith('red_vault://') ? '' : src);
+    const [isLoading, setIsLoading] = useState<boolean>(src.startsWith('red_vault://'));
     const didDragRef = useRef(false);
 
-    const [prevSrc, setPrevSrc] = useState(src);
-    if (prevSrc !== src) {
-        setPrevSrc(src);
+    useEffect(() => {
+        let active = true;
         setZoom(1);
         setPan({ x: 0, y: 0 });
         setHasError(false);
-    }
+
+        if (src.startsWith('red_vault://')) {
+            setIsLoading(true);
+            indexedMediaVault.resolveMediaUrl(src)
+                .then(resolved => {
+                    if (active) {
+                        setResolvedSrc(resolved);
+                        setIsLoading(false);
+                    }
+                })
+                .catch(() => {
+                    if (active) {
+                        setHasError(true);
+                        setIsLoading(false);
+                    }
+                });
+        } else {
+            setResolvedSrc(src);
+            setIsLoading(false);
+        }
+
+        return () => { active = false; };
+    }, [src]);
 
     // Intercepción LIFO (retroceso físico / Esc)
     useEffect(() => {
@@ -52,9 +76,13 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, on
     };
 
     const handleDownload = () => {
+        if (!resolvedSrc || resolvedSrc.startsWith('red_vault://')) {
+            toast.error("Adjunto no disponible para descargar");
+            return;
+        }
         TacticalAudioEngine.playTap();
         const a = document.createElement("a");
-        a.href = src;
+        a.href = resolvedSrc;
         a.download = `RED_media_${Date.now()}.jpg`;
         document.body.appendChild(a);
         a.click();
@@ -169,7 +197,21 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, on
                 onTouchEnd={handleTouchEnd}
                 onDoubleClick={handleToggleZoom}
             >
-                {hasError ? (
+                {isLoading ? (
+                    <div style={{
+                        display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
+                        color: "var(--accent-red, #E8213A)"
+                    }}>
+                        <div style={{
+                            width: "36px", height: "36px", border: "3px solid rgba(255,255,255,0.1)",
+                            borderTopColor: "var(--accent-red, #E8213A)", borderRadius: "50%",
+                            animation: "spin 0.8s linear infinite"
+                        }} />
+                        <span style={{ fontSize: "0.78rem", color: "var(--text-muted, #888)", fontFamily: "JetBrains Mono, monospace" }}>
+                            Decodificando almacén táctico...
+                        </span>
+                    </div>
+                ) : hasError ? (
                     <div style={{
                         padding: "24px", borderRadius: "16px", background: "rgba(255, 23, 68, 0.12)",
                         border: "1.5px solid var(--accent-crimson)", color: "#FFF", textAlign: "center",
@@ -192,7 +234,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, on
                         onClick={e => e.stopPropagation()}
                     >
                         <img
-                            src={src}
+                            src={resolvedSrc}
                             alt={alt || "Adjunto Táctico HD"}
                             onError={() => setHasError(true)}
                             draggable={false}

@@ -2040,10 +2040,19 @@ class LocalAIEngineClass {
         burnerChats: boolean;
         hasPanicPin: boolean;
         hasDecoyPin: boolean;
+        hasMasterPin?: boolean;
+        hasBiometrics?: boolean;
+        dmsActive?: boolean;
     }): Promise<{ rating: string; score: number; verdict: string; recommendations: string[]; executionTimeMs: number }> {
         const start = performance.now();
-        let score = 40; // Base: Cifrado Ed25519 / Noise Protocol XK activo
+        let score = 30; // Base: Cifrado Ed25519 / Noise Protocol XK activo
         const recommendations: string[] = [];
+
+        if (features.hasMasterPin) {
+            score += 15;
+        } else {
+            recommendations.push('Configurar PIN Maestro para blindar el Keystore local.');
+        }
 
         if (features.privacyScreen) {
             score += 15;
@@ -2052,7 +2061,7 @@ class LocalAIEngineClass {
         }
 
         if (features.hasPanicPin) {
-            score += 20;
+            score += 15;
         } else {
             recommendations.push('Configurar PIN de Pánico para borrado de emergencia en Keystore.');
         }
@@ -2063,11 +2072,21 @@ class LocalAIEngineClass {
             recommendations.push('Configurar PIN Señuelo para inspecciones forzadas.');
         }
 
-        if (features.burnerChats) {
+        if (features.dmsActive) {
             score += 10;
+        } else {
+            recommendations.push('Activar Dead Man\'s Switch (DMS) para autodestrucción por inactividad prolongada.');
+        }
+
+        if (features.burnerChats) {
+            score += 5;
         }
 
         if (features.disguiseMode) {
+            score += 5;
+        }
+
+        if (features.hasBiometrics) {
             score += 5;
         }
 

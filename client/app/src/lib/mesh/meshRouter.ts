@@ -2256,7 +2256,8 @@ class MeshRouter {
 
     const isBroadcast =
       packet.recipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
-      packet.recipient === '0000000000000000000000000000000000000000000000000000000000000000';
+      packet.recipient === '0000000000000000000000000000000000000000000000000000000000000000' ||
+      packet.recipient?.toLowerCase() === 'broadcast';
 
     const isDirectlyToMe =
       (!!myHash && packet.recipient === myHash) ||

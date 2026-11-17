@@ -45,15 +45,59 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
         if (!ts) return "—";
         const norm = ts < 1e10 ? ts * 1000 : ts;
         const d = new Date(norm);
-        return d.toLocaleDateString([], {
-            weekday: "long",
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit"
-        });
+        try {
+            return d.toLocaleString([], {
+                weekday: "long",
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit"
+            });
+        } catch {
+            return d.toLocaleString();
+        }
+    };
+
+    const renderPreviewContent = () => {
+        const type = message.msg_type;
+        const content = message.content || "";
+        const isVault = typeof content === "string" && content.startsWith("red_vault://");
+
+        if (type === "voice" || type === "audio" || (isVault && content.startsWith("red_vault://audio")) || content.startsWith("data:audio")) {
+            return <span>🎤 {t('message_info.p2p_voice_note') || "Nota de voz P2P"}</span>;
+        }
+        if (type === "image" || (isVault && content.startsWith("red_vault://image")) || content.startsWith("data:image")) {
+            return <span>📷 {message.caption || t('message_info.encrypted_image') || "Foto"}</span>;
+        }
+        if (type === "video" || (isVault && content.startsWith("red_vault://video")) || content.startsWith("data:video")) {
+            return <span>📹 {message.caption || "Video P2P"}</span>;
+        }
+        if (type === "document" || type === "file" || (isVault && content.startsWith("red_vault://file")) || (message as any).file_name) {
+            return <span>📄 {(message as any).file_name || "Documento adjunto"}</span>;
+        }
+        if (type === "location" || (typeof content === "string" && content.startsWith("{") && content.includes('"latitude"'))) {
+            return <span>📍 Ubicación táctica compartida</span>;
+        }
+        if (type === "contact" || (typeof content === "string" && content.startsWith("{") && content.includes('"contact"'))) {
+            return <span>👤 Contacto compartido</span>;
+        }
+        if (type === "poll" || (typeof content === "string" && content.startsWith("{") && content.includes('"options"'))) {
+            let question = "Encuesta P2P";
+            try {
+                const parsed = JSON.parse(content);
+                if (parsed.question) question = `Encuesta: ${parsed.question}`;
+            } catch {}
+            return <span>📊 {question}</span>;
+        }
+        if (type === "p2p_payment" || type === "p2p_voucher" || (typeof content === "string" && content.includes('"voucher_id"'))) {
+            return <span>🪙 Vale RED P2P</span>;
+        }
+        if (typeof content === "string" && content.startsWith("data:")) {
+            return <span>📎 Archivo adjunto</span>;
+        }
+        return content;
     };
 
     const sentDateStr = formatFullDate(message.timestamp);
@@ -173,13 +217,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                         boxShadow: "0 2px 8px rgba(0, 0, 0, 0.35)",
                         wordBreak: "break-word"
                     }}>
-                        {message.content?.startsWith("data:image") ? (
-                            <span>{t('message_info.encrypted_image')}</span>
-                        ) : message.content?.startsWith("data:audio") ? (
-                            <span>{t('message_info.p2p_voice_note')}</span>
-                        ) : (
-                            message.content
-                        )}
+                        {renderPreviewContent()}
                         <div style={{
                             fontSize: "0.68rem",
                             color: isMine ? "#8696A0" : "#8696A0",

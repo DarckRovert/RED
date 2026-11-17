@@ -44,7 +44,7 @@ runTest('2. IncomingCallBanner: Reutiliza unlockAudioContext y no crea instancia
 
 runTest('3. IncomingContactRequestModal: Cierra AudioContext tras reproducir tono de notificación', () => {
     const content = fs.readFileSync(path.join(componentsDir, 'IncomingContactRequestModal.tsx'), 'utf8');
-    assert(content.includes('ctx.close()'), 'Debe invocar ctx.close() para no fugar recursos');
+    assert(content.includes('AudioContextManager.releaseDedicatedContext') || content.includes('ctx.close()'), 'Debe invocar releaseDedicatedContext() o ctx.close() para no fugar recursos');
     assert(content.includes('setTimeout'), 'Debe temporizar el cierre tras finalizar el oscilador');
 });
 

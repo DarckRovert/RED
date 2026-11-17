@@ -161,6 +161,7 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
         // Control messages (handshake, reactions, typing, signals) are not appended as visible chat bubbles
         const isControlMessage = 
             options?.msg_type === 'reaction' ||
+            options?.msg_type === 'poll_vote' ||
             options?.msg_type === 'typing' ||
             options?.msg_type === 'typing_status' ||
             options?.msg_type === 'read_receipt' ||
@@ -225,15 +226,21 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             const currentConvs = get().conversations || [];
             const msgType = optimisticMsg.msg_type;
             const snippet = msgType === 'image' ? (options?.caption ? `📷 ${options.caption}` : '📷 Foto') :
-                            msgType === 'voice' ? '🎤 Nota de voz' :
+                            msgType === 'voice' || msgType === 'audio' ? '🎤 Nota de voz' :
                             msgType === 'video' ? (options?.caption ? `📹 ${options.caption}` : '📹 Video') :
+                            msgType === 'document' || msgType === 'file' ? (options?.file_name ? `📄 ${options.file_name}` : '📄 Documento') :
                             msgType === 'location' ? '📍 Ubicación' :
                             msgType === 'contact' ? '👤 Contacto' :
                             msgType === 'poll' ? '📊 Encuesta' :
+                            msgType === 'p2p_payment' ? '🪙 Pago RED P2P' :
+                            msgType === 'p2p_voucher' ? '🪙 Vale RED P2P' :
+                            msgType === 'vital_sign' ? '🩺 Signos vitales' :
                             (content?.startsWith('data:image') ? (options?.caption ? `📷 ${options.caption}` : '📷 Foto') :
                              content?.startsWith('data:audio') ? '🎤 Nota de voz' :
                              content?.startsWith('data:video') ? (options?.caption ? `📹 ${options.caption}` : '📹 Video') :
-                             content || 'Mensaje P2P');
+                             content?.startsWith('data:') ? (options?.file_name ? `📄 ${options.file_name}` : '📄 Archivo adjunto') :
+                             content?.startsWith('red_vault://') ? '📷 Adjunto' :
+                             (typeof content === 'string' && content.length > 80 ? `${content.slice(0, 77)}...` : (content || 'Mensaje P2P')));
 
             const canonicalPeer = isGroupConv ? cleanPeerHash : (meshRouter.getCanonicalId(cleanPeerHash) || cleanPeerHash);
             const groupName = matchedGroup?.name || `Escuadrón ${cleanPeerHash.slice(0, 6)}`;
@@ -881,6 +888,109 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 emoji: emoji,
                 sender_hash: myHash
             }), { msg_type: 'reaction' }).catch(() => {});
+        }
+    },
+
+    voteInPoll: async (pollMsgId: string, optionIndex: number) => {
+        const { activeConversationId, conversations, identity, messages } = get();
+        if (!activeConversationId) return;
+        const conv = conversations.find(c => c.id === activeConversationId || c.peer === activeConversationId);
+        const peerHash = conv?.peer || activeConversationId;
+        const myHash = identity?.identity_hash || 'me';
+
+        let targetMsgFound = false;
+        const updatedMessages = messages.map(m => {
+            if (m.id !== pollMsgId) return m;
+            targetMsgFound = true;
+
+            let pd: any = m.poll_data;
+            if (!pd && m.content) {
+                try {
+                    const parsed = typeof m.content === 'string' ? JSON.parse(m.content) : m.content;
+                    if (parsed && parsed.question && Array.isArray(parsed.options)) pd = { ...parsed };
+                } catch {}
+            }
+            if (!pd) return m;
+
+            const votes = { ...(pd.votes || {}) };
+            const allowMultiple = Boolean(pd.allow_multiple);
+
+            if (allowMultiple) {
+                const currentVotes: number[] = Array.isArray(votes[myHash]) 
+                    ? [...votes[myHash]] 
+                    : (votes[myHash] !== undefined ? [Number(votes[myHash])] : []);
+                const existingIdx = currentVotes.indexOf(optionIndex);
+                if (existingIdx >= 0) {
+                    currentVotes.splice(existingIdx, 1);
+                } else {
+                    currentVotes.push(optionIndex);
+                }
+                if (currentVotes.length > 0) {
+                    votes[myHash] = currentVotes;
+                } else {
+                    delete votes[myHash];
+                }
+            } else {
+                if (String(votes[myHash]) === String(optionIndex)) {
+                    delete votes[myHash];
+                } else {
+                    votes[myHash] = optionIndex;
+                }
+            }
+
+            const updatedPd = { ...pd, votes };
+            return {
+                ...m,
+                poll_data: updatedPd,
+                content: JSON.stringify(updatedPd)
+            };
+        });
+
+        if (targetMsgFound) {
+            set({ messages: updatedMessages });
+
+            if (typeof window !== 'undefined') {
+                try {
+                    const cleanConv = (activeConversationId || '').toLowerCase().replace(/^did:red:/i, '').trim();
+                    const storageKey = `red_web_messages_${cleanConv}`;
+                    const raw = localStorage.getItem(storageKey);
+                    if (raw) {
+                        const list: any[] = JSON.parse(raw);
+                        const updatedList = list.map((m: any) => {
+                            if (m && m.id === pollMsgId) {
+                                const um = updatedMessages.find(u => u.id === pollMsgId);
+                                return um || m;
+                            }
+                            return m;
+                        });
+                        localStorage.setItem(storageKey, JSON.stringify(updatedList));
+                    }
+                } catch {}
+            }
+        }
+
+        if (peerHash) {
+            const votePayload = JSON.stringify({
+                target_id: pollMsgId,
+                option_index: optionIndex,
+                voter_hash: myHash,
+                timestamp: Date.now()
+            });
+
+            const isGroupConv = Boolean(conv?.is_group);
+            if (isGroupConv) {
+                RedAPI.sendGroupMessage(peerHash, votePayload, {
+                    msg_type: 'poll_vote',
+                    target_message_id: pollMsgId,
+                    reply_to_id: pollMsgId
+                }).catch(() => {});
+            } else {
+                RedAPI.sendMessage(peerHash, votePayload, {
+                    msg_type: 'poll_vote',
+                    target_message_id: pollMsgId,
+                    reply_to_id: pollMsgId
+                }).catch(() => {});
+            }
         }
     },
 

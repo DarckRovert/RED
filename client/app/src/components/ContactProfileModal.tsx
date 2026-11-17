@@ -10,6 +10,7 @@ import { useRedStore } from "../store/useRedStore";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
+import { indexedMediaVault } from "../lib/storage/indexedMediaVault";
 
 /** Clipboard with textarea fallback for air-gapped / tactical WebView */
 function copyToClipboard(text: string, copiedMsg = 'Copiado al portapapeles'): void {
@@ -28,6 +29,167 @@ function legacyCopy(text: string, copiedMsg: string): void {
     try { document.execCommand('copy'); toast.success(copiedMsg); }
     finally { document.body.removeChild(ta); }
 }
+
+const parseLocationCoords = (m: MessageItem): { lat: number; lon: number } | null => {
+    if (typeof m.latitude === "number" && typeof m.longitude === "number") {
+        return { lat: m.latitude, lon: m.longitude };
+    }
+    if (typeof (m as any).lat === "number" && typeof (m as any).lon === "number") {
+        return { lat: (m as any).lat, lon: (m as any).lon };
+    }
+    if (typeof m.content === "string") {
+        if (m.content.startsWith("{")) {
+            try {
+                const parsed = JSON.parse(m.content);
+                const lat = parsed.lat ?? parsed.latitude;
+                const lon = parsed.lon ?? parsed.longitude ?? parsed.lng;
+                if (typeof lat === "number" && typeof lon === "number") return { lat, lon };
+            } catch {}
+        }
+        const match = m.content.match(/([-\d.]+)\s*,\s*([-\d.]+)/);
+        if (match) {
+            const lat = parseFloat(match[1]);
+            const lon = parseFloat(match[2]);
+            if (isFinite(lat) && isFinite(lon)) return { lat, lon };
+        }
+    }
+    return null;
+};
+
+const MediaThumbnail: React.FC<{ msg: MessageItem; onClick: () => void }> = ({ msg, onClick }) => {
+    const [src, setSrc] = useState<string>("");
+    useEffect(() => {
+        let isMounted = true;
+        const raw = msg.media_data || msg.content || "";
+        if (raw.startsWith("red_vault://")) {
+            indexedMediaVault.resolveMediaUrl(raw).then(res => {
+                if (isMounted) setSrc(res);
+            }).catch(() => {
+                if (isMounted) setSrc(raw);
+            });
+        } else {
+            setSrc(raw);
+        }
+        return () => { isMounted = false; };
+    }, [msg.media_data, msg.content]);
+
+    return (
+        <div
+            onClick={onClick}
+            style={{
+                aspectRatio: "1/1",
+                borderRadius: "8px",
+                overflow: "hidden",
+                background: "#000",
+                cursor: "pointer",
+                border: "1px solid var(--glass-border)",
+            }}
+        >
+            {src ? (
+                <img
+                    src={src}
+                    alt="Media"
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+            ) : (
+                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#8696A0", fontSize: "1.2rem" }}>
+                    📷
+                </div>
+            )}
+        </div>
+    );
+};
+
+const AudioItem: React.FC<{ msg: MessageItem }> = ({ msg }) => {
+    const [audioSrc, setAudioSrc] = useState<string>("");
+    useEffect(() => {
+        let isMounted = true;
+        const raw = msg.media_data || msg.content || "";
+        if (raw.startsWith("red_vault://")) {
+            indexedMediaVault.resolveMediaUrl(raw).then(res => {
+                if (isMounted) setAudioSrc(res);
+            }).catch(() => {});
+        } else {
+            setAudioSrc(raw);
+        }
+        return () => { isMounted = false; };
+    }, [msg.media_data, msg.content]);
+
+    return (
+        <div
+            style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "10px",
+                borderRadius: "8px",
+                background: "rgba(0,0,0,0.3)",
+                border: "1px solid var(--glass-border)",
+            }}
+        >
+            <span>🎙️</span>
+            {audioSrc ? (
+                <audio src={audioSrc} controls style={{ height: "32px", flex: 1 }} />
+            ) : (
+                <span style={{ fontSize: "0.75rem", color: "#8696A0" }}>Cargando nota de voz...</span>
+            )}
+        </div>
+    );
+};
+
+const DocumentItem: React.FC<{ msg: MessageItem }> = ({ msg }) => {
+    const handleDownload = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        const raw = msg.media_data || msg.content || "";
+        let finalSrc = raw;
+        if (raw.startsWith("red_vault://")) {
+            finalSrc = await indexedMediaVault.resolveMediaUrl(raw);
+        }
+        if (!finalSrc || finalSrc.startsWith("red_vault://")) {
+            toast.error("No se pudo recuperar el archivo de la bóveda");
+            return;
+        }
+        const a = document.createElement("a");
+        a.href = finalSrc;
+        a.download = msg.file_name || "documento";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
+
+    return (
+        <div
+            style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "10px",
+                borderRadius: "8px",
+                background: "rgba(0,0,0,0.3)",
+                border: "1px solid var(--glass-border)",
+            }}
+        >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", overflow: "hidden" }}>
+                <span style={{ fontSize: "1.4rem" }}>📄</span>
+                <div style={{ overflow: "hidden" }}>
+                    <div style={{ fontSize: "0.80rem", fontWeight: 700, color: "#fff", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                        {msg.file_name || "Documento sin nombre"}
+                    </div>
+                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                        {msg.file_size ? `${(msg.file_size / 1024).toFixed(1)} KB` : "Documento"}
+                    </div>
+                </div>
+            </div>
+            <button
+                onClick={handleDownload}
+                className="btn-tactical-secondary"
+                style={{ padding: "6px 10px", fontSize: "0.72rem", cursor: "pointer", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", color: "#fff" }}
+            >
+                📥
+            </button>
+        </div>
+    );
+};
 
 interface ContactProfileModalProps {
     contact: any;
@@ -90,7 +252,8 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
             (m) =>
                 m.msg_type === "image" ||
                 m.msg_type === "video" ||
-                (m.media_data && (m.media_data.startsWith("data:image/") || m.media_data.startsWith("data:video/")))
+                (m.media_data && (m.media_data.startsWith("data:image/") || m.media_data.startsWith("data:video/"))) ||
+                (m.content && (m.content.startsWith("red_vault://image") || m.content.startsWith("red_vault://video") || m.content.startsWith("data:image/") || m.content.startsWith("data:video/")))
         );
     }, [messages]);
 
@@ -99,7 +262,8 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
             (m) =>
                 m.msg_type === "document" ||
                 m.msg_type === "file" ||
-                (m.file_name && !m.media_data?.startsWith("data:image/"))
+                (m.file_name && !m.media_data?.startsWith("data:image/")) ||
+                (m.content && m.content.startsWith("red_vault://file"))
         );
     }, [messages]);
 
@@ -108,16 +272,19 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
             (m) =>
                 m.msg_type === "voice" ||
                 m.msg_type === "audio" ||
-                (m.media_data && m.media_data.startsWith("data:audio/"))
+                (m.media_data && m.media_data.startsWith("data:audio/")) ||
+                (m.content && (m.content.startsWith("red_vault://audio") || m.content.startsWith("data:audio/")))
         );
     }, [messages]);
 
     const linksAndLocations = useMemo(() => {
-        return messages.filter(
-            (m) =>
-                m.msg_type === "location" ||
-                (m.content && (m.content.includes("http://") || m.content.includes("https://") || m.content.includes("geo:")))
-        );
+        return messages.filter((m) => {
+            if (m.msg_type === "location") return true;
+            const c = m.content || "";
+            if (typeof c === "string" && (c.includes("http://") || c.includes("https://") || c.includes("geo:"))) return true;
+            if (typeof c === "string" && c.startsWith("{") && (c.includes('"lat"') || c.includes('"latitude"'))) return true;
+            return false;
+        });
     }, [messages]);
 
     const handleCopyDid = () => {
@@ -372,24 +539,11 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                             photosAndVideos.length > 0 ? (
                                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
                                     {photosAndVideos.map((m) => (
-                                        <div
+                                        <MediaThumbnail
                                             key={m.id}
+                                            msg={m}
                                             onClick={() => setSelectedViewerMedia(m)}
-                                            style={{
-                                                aspectRatio: "1/1",
-                                                borderRadius: "8px",
-                                                overflow: "hidden",
-                                                background: "#000",
-                                                cursor: "pointer",
-                                                border: "1px solid var(--glass-border)",
-                                            }}
-                                        >
-                                            <img
-                                                src={m.media_data || m.content}
-                                                alt="Media"
-                                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                                            />
-                                        </div>
+                                        />
                                     ))}
                                 </div>
                             ) : (
@@ -403,39 +557,8 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                             documents.length > 0 ? (
                                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                                     {documents.map((m) => (
-                                         <div
-                                             key={m.id}
-                                             style={{
-                                                 display: "flex",
-                                                 alignItems: "center",
-                                                 justifyContent: "space-between",
-                                                 padding: "10px",
-                                                 borderRadius: "8px",
-                                                 background: "rgba(0,0,0,0.3)",
-                                                 border: "1px solid var(--glass-border)",
-                                             }}
-                                         >
-                                             <div style={{ display: "flex", alignItems: "center", gap: "10px", overflow: "hidden" }}>
-                                                 <span style={{ fontSize: "1.4rem" }}>📄</span>
-                                                 <div style={{ overflow: "hidden" }}>
-                                                     <div style={{ fontSize: "0.80rem", fontWeight: 700, color: "#fff", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                                                         {m.file_name || "Documento sin nombre"}
-                                                     </div>
-                                                     <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
-                                                         {m.file_size ? `${(m.file_size / 1024).toFixed(1)} KB` : "Documento"}
-                                                     </div>
-                                                 </div>
-                                             </div>
-                                             <a
-                                                 href={m.media_data || m.content}
-                                                 download={m.file_name || "document"}
-                                                 className="btn-tactical-secondary"
-                                                 style={{ padding: "6px 10px", fontSize: "0.72rem", textDecoration: "none" }}
-                                             >
-                                                 📥
-                                             </a>
-                                         </div>
-                                     ))}
+                                        <DocumentItem key={m.id} msg={m} />
+                                    ))}
                                 </div>
                             ) : (
                                 <div style={{ textAlign: "center", padding: "24px", fontSize: "0.76rem", color: "var(--text-muted)" }}>
@@ -448,21 +571,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                             voiceNotes.length > 0 ? (
                                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                                     {voiceNotes.map((m) => (
-                                        <div
-                                            key={m.id}
-                                            style={{
-                                                display: "flex",
-                                                alignItems: "center",
-                                                gap: "10px",
-                                                padding: "10px",
-                                                borderRadius: "8px",
-                                                background: "rgba(0,0,0,0.3)",
-                                                border: "1px solid var(--glass-border)",
-                                            }}
-                                        >
-                                            <span>🎙️</span>
-                                            <audio src={m.media_data || m.content} controls style={{ height: "32px", flex: 1 }} />
-                                        </div>
+                                        <AudioItem key={m.id} msg={m} />
                                     ))}
                                 </div>
                             ) : (
@@ -475,28 +584,34 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                         {activeTab === "links" && (
                             linksAndLocations.length > 0 ? (
                                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                    {linksAndLocations.map((m) => (
-                                        <div
-                                            key={m.id}
-                                            style={{
-                                                padding: "10px",
-                                                borderRadius: "8px",
-                                                background: "rgba(0,0,0,0.3)",
-                                                border: "1px solid var(--glass-border)",
-                                                fontSize: "0.78rem",
-                                                wordBreak: "break-all",
-                                                color: "var(--accent-cyan)",
-                                            }}
-                                        >
-                                            {m.msg_type === "location" ? (
-                                                <span>📍 Coordenadas: {m.latitude}, {m.longitude}</span>
-                                            ) : (
-                                                <a href={m.content} target="_blank" rel="noreferrer" style={{ color: "var(--accent-cyan)" }}>
-                                                    {m.content}
-                                                </a>
-                                            )}
-                                        </div>
-                                    ))}
+                                    {linksAndLocations.map((m) => {
+                                        const loc = parseLocationCoords(m);
+                                        return (
+                                            <div
+                                                key={m.id}
+                                                style={{
+                                                    padding: "10px",
+                                                    borderRadius: "8px",
+                                                    background: "rgba(0,0,0,0.3)",
+                                                    border: "1px solid var(--glass-border)",
+                                                    fontSize: "0.78rem",
+                                                    wordBreak: "break-all",
+                                                    color: "var(--accent-cyan)",
+                                                }}
+                                            >
+                                                {loc ? (
+                                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                        <span>📍</span>
+                                                        <span>Coordenadas GPS: {loc.lat.toFixed(5)}, {loc.lon.toFixed(5)}</span>
+                                                    </div>
+                                                ) : (
+                                                    <a href={m.content} target="_blank" rel="noreferrer" style={{ color: "var(--accent-cyan)" }}>
+                                                        {m.content}
+                                                    </a>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             ) : (
                                 <div style={{ textAlign: "center", padding: "24px", fontSize: "0.76rem", color: "var(--text-muted)" }}>
