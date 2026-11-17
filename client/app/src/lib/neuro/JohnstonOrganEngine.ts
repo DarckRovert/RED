@@ -107,9 +107,9 @@ export class JohnstonOrganEngine {
         this.joCeDeflection = Math.min(1.0, mag / 12.0);
         this.windDeflectionAngle = (Math.atan2(x, y) * 180) / Math.PI;
 
-        // Detección de impacto mecánico súbito (golpe, caída, explosión cercana)
-        if (mag > 18.0) { // > 1.8G súbito
-          this.processShockDetection(Math.min(1.0, mag / 25.0), 60.0, 'SEISMIC_TREMOR', this.windDeflectionAngle);
+        // Detección de impacto mecánico súbito crítico (caída violenta, detonación balística)
+        if (mag > 45.0) { // > 4.5G súbito real para evitar falsos positivos con movimientos cotidianos
+          this.processShockDetection(Math.min(1.0, mag / 60.0), 60.0, 'SEISMIC_TREMOR', this.windDeflectionAngle);
         } else {
           this.notifyListeners(false);
         }
@@ -283,14 +283,14 @@ export class JohnstonOrganEngine {
     angleDeg: number
   ): void {
     const now = Date.now();
-    // Debounce de choque para evitar ráfagas descontroladas (mínimo 500 ms entre alarmas)
-    if (this.lastShock && (now - this.lastShock.timestamp < 500)) {
+    // Debounce de choque para evitar ráfagas descontroladas (mínimo 3000 ms entre alarmas)
+    if (this.lastShock && (now - this.lastShock.timestamp < 3000)) {
       return;
     }
 
     let triggeredReflex = false;
-    // Si el choque es crítico, se conecta directamente al arco reflejo de Giant Fiber
-    if (energy >= this.sensitivityThreshold) {
+    // Únicamente transitorios RF de guerra electrónica disparan el arco reflejo EW
+    if (source === 'RF_AMPLITUDE_SURGE' && energy >= this.sensitivityThreshold) {
       try {
         giantFiberReflex.triggerReflex('EW_JAMMING');
         triggeredReflex = true;

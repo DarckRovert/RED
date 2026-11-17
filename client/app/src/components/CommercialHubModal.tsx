@@ -13,6 +13,7 @@ import { MultiRailCheckoutModal } from './MultiRailCheckoutModal';
 import { TacIcon } from './ui/TacIcon';
 import { voucherVault, SovereignVoucher, VoucherAssetType } from '../lib/blockchain/VoucherVaultEngine';
 import { OfflineQrEngine } from '../lib/qr/OfflineQrEngine';
+import { SovereignEconomyGuideModal } from './tactical/SovereignEconomyGuideModal';
 
 import { useRedStore } from '../store/useRedStore';
 
@@ -47,6 +48,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
 
     // Multi-Rail Checkout Modal
     const [checkoutProduct, setCheckoutProduct] = useState<TacticalProduct | null>(null);
+    const [showEconomyGuide, setShowEconomyGuide] = useState(false);
 
     // P2P Voucher Modal
     const [p2pModalItem, setP2pModalItem] = useState<TacticalProduct | null>(null);
@@ -83,6 +85,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
     useEffect(() => {
         if (!isOpen) return;
         return BackHandlerRegistry.register(() => {
+            if (showEconomyGuide) {
+                setShowEconomyGuide(false);
+                return true;
+            }
             if (selectedVoucherQr) {
                 setSelectedVoucherQr(null);
                 return true;
@@ -400,16 +406,16 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '16px',
+            padding: 'calc(10px + var(--safe-top, 0px)) 10px calc(10px + var(--safe-bottom, 0px))',
             animation: 'fadeIn 0.2s ease-out'
         }}>
             <div style={{
                 width: '100%',
                 maxWidth: '680px',
-                maxHeight: '90vh',
+                maxHeight: '92vh',
                 backgroundColor: 'rgba(12, 16, 28, 0.95)',
-                border: '1px solid rgba(0, 229, 255, 0.2)',
-                borderRadius: '20px',
+                border: '1px solid rgba(0, 229, 255, 0.25)',
+                borderRadius: '18px',
                 boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(0, 229, 255, 0.1)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -418,225 +424,254 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
             }}>
                 {/* Header */}
                 <div style={{
-                    padding: '20px 24px',
+                    padding: '14px 18px',
                     borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%)'
+                    gap: '10px',
+                    background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 100%)'
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
                         <div style={{
-                            width: '40px',
-                            height: '40px',
-                            borderRadius: '12px',
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: '10px',
                             background: 'linear-gradient(135deg, rgba(255, 42, 81, 0.2) 0%, rgba(0, 229, 255, 0.2) 100%)',
                             border: '1px solid rgba(0, 229, 255, 0.4)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            flexShrink: 0
                         }}>
-                            <TacIcon name="wallet" size={20} color="#00E5FF" />
+                            <TacIcon name="wallet" size={18} color="#00E5FF" />
                         </div>
-                        <div>
-                            <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.3px' }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                            <h2 style={{
+                                margin: 0,
+                                fontSize: '1.05rem',
+                                fontWeight: 800,
+                                color: '#FFFFFF',
+                                letterSpacing: '-0.2px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                            }}>
                                 Hub Comercial & Financiación Mesh
                             </h2>
-                            <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)', marginTop: '2px' }}>
+                            <div style={{
+                                fontSize: '0.70rem',
+                                color: 'rgba(255, 255, 255, 0.65)',
+                                marginTop: '1px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                            }}>
                                 Micro-recompensas, Billetera Táctica y Catálogo Homologado
                             </div>
                         </div>
                     </div>
-                    <button
-                        onClick={() => {
-                            if (!BackHandlerRegistry.executeTop()) {
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                        <button
+                            type="button"
+                            onClick={() => {
                                 TacticalAudioEngine.playTap();
-                                onClose();
-                            }
-                        }}
-                        className="btn-icon"
-                        style={{ width: '36px', height: '36px' }}
-                        aria-label="Cerrar modal"
-                    >
-                        <TacIcon name="x" size={16} color="#FFF" />
-                    </button>
+                                setShowEconomyGuide(true);
+                            }}
+                            style={{
+                                background: 'rgba(0, 230, 118, 0.12)',
+                                border: '1px solid rgba(0, 230, 118, 0.35)',
+                                color: 'var(--accent-emerald, #00E676)',
+                                padding: '5px 9px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                flexShrink: 0
+                            }}
+                            title="Guía de Economía y Paridad Soberana"
+                        >
+                            <span>⚖️ Guía Económica</span>
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                if (!BackHandlerRegistry.executeTop()) {
+                                    TacticalAudioEngine.playTap();
+                                    onClose();
+                                }
+                            }}
+                            className="btn-icon"
+                            style={{ width: '32px', height: '32px' }}
+                            aria-label="Cerrar modal"
+                        >
+                            <TacIcon name="x" size={16} color="#FFF" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Status Bar */}
                 <div style={{
-                    padding: '12px 24px',
-                    background: 'rgba(0, 0, 0, 0.4)',
+                    padding: '10px 18px',
+                    background: 'rgba(0, 0, 0, 0.45)',
                     borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '10px'
+                    flexDirection: 'column',
+                    gap: '8px'
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                            Modo Táctico:
-                        </span>
-                        <span style={{
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            background: proStatus.isPro ? 'rgba(0, 230, 118, 0.15)' : 'rgba(255, 255, 255, 0.08)',
-                            color: proStatus.isPro ? 'var(--accent-emerald)' : 'var(--text-secondary)',
-                            border: proStatus.isPro ? '1px solid rgba(0, 230, 118, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                        }}>
-                            {proStatus.isPro ? (
-                                <>
-                                    <TacIcon name="zap" size={12} color="var(--accent-emerald)" />
-                                    <span>PRO ACTIVO ({proStatus.remainingHours}h)</span>
-                                </>
-                            ) : (
-                                <>
-                                    <TacIcon name="shield" size={12} color="var(--text-secondary)" />
-                                    <span>MODO ESTÁNDAR</span>
-                                </>
-                            )}
-                        </span>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                    {/* Upper Row: Mode & Bazaar CRDT Broadcast */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                Bóveda P2P:
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                Modo:
                             </span>
-                            <span className="tabular-telemetry" style={{
-                                fontSize: '12px',
+                            <span style={{
+                                fontSize: '10px',
                                 fontWeight: 800,
-                                color: '#00E676',
+                                padding: '2px 7px',
+                                borderRadius: '6px',
+                                background: proStatus.isPro ? 'rgba(0, 230, 118, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                                color: proStatus.isPro ? 'var(--accent-emerald)' : 'var(--text-secondary)',
+                                border: proStatus.isPro ? '1px solid rgba(0, 230, 118, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '4px'
                             }}>
-                                <TacIcon name="card" size={13} color="#00E676" />
+                                {proStatus.isPro ? (
+                                    <>
+                                        <TacIcon name="zap" size={11} color="var(--accent-emerald)" />
+                                        <span>PRO ACTIVO ({proStatus.remainingHours}h)</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <TacIcon name="shield" size={11} color="var(--text-secondary)" />
+                                        <span>MODO ESTÁNDAR</span>
+                                    </>
+                                )}
+                            </span>
+                        </div>
+
+                        <button
+                            onClick={handleBroadcastBazaarSync}
+                            style={{
+                                fontSize: '10px',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                background: 'rgba(0, 229, 255, 0.15)',
+                                color: 'var(--accent-cyan)',
+                                border: '1px solid rgba(0, 229, 255, 0.35)',
+                                cursor: 'pointer',
+                                fontWeight: 800,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                            }}
+                            title="Difundir catálogo CRDT a todos los nodos en la malla P2P"
+                        >
+                            <TacIcon name="radio" size={11} color="var(--accent-cyan)" />
+                            <span>BAZAAR CRDT ({catalog.length})</span>
+                        </button>
+                    </div>
+
+                    {/* Lower Row: Balances Micro-Grid */}
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                        gap: '6px'
+                    }}>
+                        <div style={{
+                            padding: '6px 10px',
+                            borderRadius: '8px',
+                            background: 'rgba(0, 230, 118, 0.07)',
+                            border: '1px solid rgba(0, 230, 118, 0.25)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '6px'
+                        }}>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Bóveda P2P:</span>
+                            <span className="tabular-telemetry" style={{ fontSize: '11px', fontWeight: 800, color: '#00E676', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                <TacIcon name="card" size={12} color="#00E676" />
                                 <span>{p2pWalletBalance !== null ? p2pWalletBalance : proStatus.credits} RED</span>
                             </span>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                Billetera Local:
-                            </span>
-                            <span className="tabular-telemetry" style={{
-                                fontSize: '12px',
-                                fontWeight: 800,
-                                color: 'var(--accent-amber)',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                            }}>
-                                <TacIcon name="wallet" size={13} color="var(--accent-amber)" />
+                        <div style={{
+                            padding: '6px 10px',
+                            borderRadius: '8px',
+                            background: 'rgba(255, 179, 0, 0.07)',
+                            border: '1px solid rgba(255, 179, 0, 0.25)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '6px'
+                        }}>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Billetera Local:</span>
+                            <span className="tabular-telemetry" style={{ fontSize: '11px', fontWeight: 800, color: 'var(--accent-amber)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                <TacIcon name="wallet" size={12} color="var(--accent-amber)" />
                                 <span>{proStatus.credits} RED</span>
                             </span>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <button
-                                onClick={handleBroadcastBazaarSync}
-                                style={{
-                                    fontSize: '10px',
-                                    padding: '4px 8px',
-                                    borderRadius: '6px',
-                                    background: 'rgba(0, 229, 255, 0.15)',
-                                    color: 'var(--accent-cyan)',
-                                    border: '1px solid rgba(0, 229, 255, 0.35)',
-                                    cursor: 'pointer',
-                                    fontWeight: 800,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '4px'
-                                }}
-                                title="Difundir catálogo CRDT a todos los nodos en la malla P2P"
-                            >
-                                <TacIcon name="radio" size={12} color="var(--accent-cyan)" />
-                                <span>BAZAAR CRDT ({catalog.length})</span>
-                            </button>
                         </div>
                     </div>
                 </div>
 
                 {/* Tabs */}
-                <div style={{
-                    display: 'flex',
-                    padding: '0 24px',
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                    background: 'rgba(0, 0, 0, 0.2)',
-                    gap: '4px',
-                    overflowX: 'auto'
-                }}>
-                    <button
-                        onClick={() => {
-                            TacticalAudioEngine.playTap();
-                            setActiveTab('catalog');
-                        }}
-                        className={activeTab === 'catalog' ? 'glow-pill-active' : 'btn-ghost'}
-                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}
-                    >
-                        <TacIcon name="box" size={15} />
-                        <span>Catálogo Homologado ({catalog.length})</span>
-                    </button>
-                    <button
-                        onClick={() => {
-                            TacticalAudioEngine.playTap();
-                            setActiveTab('vouchers');
-                        }}
-                        className={activeTab === 'vouchers' ? 'glow-pill-active' : 'btn-ghost'}
-                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}
-                    >
-                        <TacIcon name="card" size={15} />
-                        <span>Bóveda de Vales ({sovereignVouchers.length})</span>
-                    </button>
-                    <button
-                        onClick={() => {
-                            TacticalAudioEngine.playTap();
-                            setActiveTab('redeem');
-                        }}
-                        className={activeTab === 'redeem' ? 'glow-pill-active' : 'btn-ghost'}
-                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}
-                    >
-                        <TacIcon name="zap" size={15} />
-                        <span>Canjear Modo Pro</span>
-                    </button>
-                    <button
-                        onClick={() => {
-                            TacticalAudioEngine.playTap();
-                            setActiveTab('transactions');
-                        }}
-                        className={activeTab === 'transactions' ? 'glow-pill-active' : 'btn-ghost'}
-                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}
-                    >
-                        <TacIcon name="chats" size={15} />
-                        <span>Transacciones ({transactions.length})</span>
-                    </button>
-                    <button
-                        onClick={() => {
-                            TacticalAudioEngine.playTap();
-                            setActiveTab('create');
-                        }}
-                        className={activeTab === 'create' ? 'glow-pill-active' : 'btn-ghost'}
-                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}
-                    >
-                        <TacIcon name="plus" size={15} />
-                        <span>Añadir Equipo</span>
-                    </button>
+                <div
+                    className="scroll-container"
+                    style={{
+                        display: 'flex',
+                        padding: '6px 16px 0 16px',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                        background: 'rgba(0, 0, 0, 0.2)',
+                        gap: '6px',
+                        overflowX: 'auto',
+                        whiteSpace: 'nowrap',
+                        WebkitOverflowScrolling: 'touch'
+                    }}
+                >
+                    {[
+                        { id: 'catalog' as HubTab, icon: 'box', label: `Catálogo (${catalog.length})` },
+                        { id: 'vouchers' as HubTab, icon: 'card', label: `Vales (${sovereignVouchers.length})` },
+                        { id: 'redeem' as HubTab, icon: 'zap', label: 'Canjear Pro' },
+                        { id: 'transactions' as HubTab, icon: 'chats', label: `Historial (${transactions.length})` },
+                        { id: 'create' as HubTab, icon: 'plus', label: 'Añadir Equipo' },
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                setActiveTab(tab.id);
+                            }}
+                            className={activeTab === tab.id ? 'glow-pill-active' : 'btn-ghost'}
+                            style={{
+                                padding: '8px 12px',
+                                fontSize: '0.76rem',
+                                fontWeight: activeTab === tab.id ? 800 : 600,
+                                borderRadius: '8px 8px 0 0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                flexShrink: 0
+                            }}
+                        >
+                            <TacIcon name={tab.icon as any} size={13} />
+                            <span>{tab.label}</span>
+                        </button>
+                    ))}
                 </div>
 
                 {/* Content */}
                 <div style={{
-                    padding: '24px',
+                    padding: '16px 18px',
                     overflowY: 'auto',
                     flex: 1,
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '18px'
+                    gap: '16px'
                 }}>
                     {/* TAB: CATALOG */}
                     {activeTab === 'catalog' && (
@@ -723,72 +758,122 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                             </div>
 
                             {/* Lista de Productos Tácticos */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 {filteredCatalog.map((item) => (
                                     <div key={item.id} style={{
                                         padding: '14px 16px',
                                         borderRadius: '14px',
-                                        background: 'rgba(255, 255, 255, 0.03)',
+                                        background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%)',
                                         border: '1px solid rgba(255, 255, 255, 0.08)',
                                         display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        gap: '14px',
-                                        transition: 'transform 0.15s ease'
+                                        flexDirection: 'column',
+                                        gap: '10px',
+                                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)'
                                     }}>
-                                        <div style={{ fontSize: '28px', flexShrink: 0 }}>
-                                            {item.icon}
-                                        </div>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                                                <span style={{
-                                                    fontSize: '9px',
-                                                    padding: '2px 6px',
-                                                    borderRadius: '4px',
-                                                    background: 'rgba(0, 229, 255, 0.15)',
-                                                    color: 'var(--accent-cyan)',
-                                                    fontWeight: 800,
-                                                    fontFamily: 'JetBrains Mono, monospace'
+                                        {/* Card Header: Icon + Title & Tag + Price + Delete */}
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                                                <div style={{
+                                                    width: '38px',
+                                                    height: '38px',
+                                                    borderRadius: '10px',
+                                                    background: 'rgba(0, 229, 255, 0.1)',
+                                                    border: '1px solid rgba(0, 229, 255, 0.25)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    fontSize: '22px',
+                                                    flexShrink: 0
                                                 }}>
-                                                    {item.tag}
-                                                </span>
-                                                <span className="tabular-telemetry" style={{ fontSize: '11px', color: 'var(--accent-emerald)', fontWeight: 800, fontFamily: 'JetBrains Mono, monospace' }}>
-                                                    {item.priceEst}
-                                                </span>
+                                                    {item.icon}
+                                                </div>
+                                                <div style={{ minWidth: 0, flex: 1 }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                        <span style={{
+                                                            fontSize: '9px',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '4px',
+                                                            background: 'rgba(0, 229, 255, 0.15)',
+                                                            color: 'var(--accent-cyan)',
+                                                            fontWeight: 800,
+                                                            fontFamily: 'JetBrains Mono, monospace'
+                                                        }}>
+                                                            {item.tag}
+                                                        </span>
+                                                        <span style={{
+                                                            fontSize: '11px',
+                                                            fontWeight: 800,
+                                                            color: 'var(--accent-emerald, #00E676)',
+                                                            fontFamily: 'JetBrains Mono, monospace'
+                                                        }}>
+                                                            {item.priceEst}
+                                                        </span>
+                                                    </div>
+                                                    <div style={{
+                                                        fontSize: '0.90rem',
+                                                        fontWeight: 800,
+                                                        color: '#FFFFFF',
+                                                        marginTop: '2px',
+                                                        wordBreak: 'break-word',
+                                                        lineHeight: 1.25
+                                                    }}>
+                                                        {item.title}
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                {item.title}
-                                            </div>
-                                            <div style={{ fontSize: '0.74rem', color: 'rgba(255, 255, 255, 0.6)', marginTop: '2px', lineHeight: 1.35 }}>
-                                                {item.description}
-                                            </div>
-                                            {/* Badges de Rieles de Pago Aceptados */}
-                                            <div style={{ display: 'flex', gap: '5px', marginTop: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                                {item.sellerPaymentPassport?.evmAddress && (
-                                                    <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(0, 229, 255, 0.15)', color: '#00E5FF', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                        <TacIcon name="gem" size={10} color="#00E5FF" />
-                                                        <span>{item.sellerPaymentPassport.preferredChainId === 8453 ? 'Base' : 'USDT'}</span>
-                                                    </span>
-                                                )}
-                                                {item.sellerPaymentPassport?.fiatIdentifier && (
-                                                    <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(0, 230, 118, 0.15)', color: '#00E676', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                        <TacIcon name="card" size={10} color="#00E676" />
-                                                        <span>{item.sellerPaymentPassport.fiatType?.toUpperCase() || 'FIAT'}</span>
-                                                    </span>
-                                                )}
-                                                {item.sellerPaymentPassport?.lightningAddress && (
-                                                    <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255, 179, 0, 0.15)', color: '#FFB300', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                        <TacIcon name="zap" size={10} color="#FFB300" />
-                                                        <span>LN</span>
-                                                    </span>
-                                                )}
-                                                <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(232, 33, 58, 0.15)', color: '#E8213A', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                    <TacIcon name="shield" size={10} color="#E8213A" />
-                                                    <span>Vales</span>
-                                                </span>
-                                            </div>
+                                            <button
+                                                onClick={() => handleDeleteProduct(item.id, item.title)}
+                                                className="btn-icon"
+                                                style={{ width: '28px', height: '28px', color: 'var(--accent-crimson)', opacity: 0.6, flexShrink: 0 }}
+                                                title="Eliminar de catálogo local"
+                                            >
+                                                <TacIcon name="trash" size={14} color="var(--accent-crimson)" />
+                                            </button>
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+
+                                        {/* Description */}
+                                        <div style={{
+                                            fontSize: '0.76rem',
+                                            color: 'rgba(255, 255, 255, 0.72)',
+                                            lineHeight: 1.4,
+                                            margin: 0
+                                        }}>
+                                            {item.description}
+                                        </div>
+
+                                        {/* Badges de Rieles de Pago Aceptados */}
+                                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                            {item.sellerPaymentPassport?.evmAddress && (
+                                                <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(0, 229, 255, 0.15)', color: '#00E5FF', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                    <TacIcon name="gem" size={10} color="#00E5FF" />
+                                                    <span>{item.sellerPaymentPassport.preferredChainId === 8453 ? 'Base' : 'USDT'}</span>
+                                                </span>
+                                            )}
+                                            {item.sellerPaymentPassport?.fiatIdentifier && (
+                                                <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(0, 230, 118, 0.15)', color: '#00E676', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                    <TacIcon name="card" size={10} color="#00E676" />
+                                                    <span>{item.sellerPaymentPassport.fiatType?.toUpperCase() || 'FIAT'}</span>
+                                                </span>
+                                            )}
+                                            {item.sellerPaymentPassport?.lightningAddress && (
+                                                <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255, 179, 0, 0.15)', color: '#FFB300', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                    <TacIcon name="zap" size={10} color="#FFB300" />
+                                                    <span>LN</span>
+                                                </span>
+                                            )}
+                                            <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(232, 33, 58, 0.15)', color: '#E8213A', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                <TacIcon name="shield" size={10} color="#E8213A" />
+                                                <span>Vales Off-Grid</span>
+                                            </span>
+                                        </div>
+
+                                        {/* Action Buttons */}
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: item.affiliateUrl ? '1fr auto' : '1fr',
+                                            gap: '8px',
+                                            marginTop: '2px'
+                                        }}>
                                             <button
                                                 onClick={() => {
                                                     TacticalAudioEngine.playTap();
@@ -796,42 +881,40 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                                 }}
                                                 className="btn-tactical-secondary"
                                                 style={{
-                                                    padding: '8px 12px',
-                                                    fontSize: '0.74rem',
+                                                    padding: '9px 14px',
+                                                    fontSize: '0.78rem',
                                                     borderColor: 'rgba(0, 229, 255, 0.5)',
                                                     color: '#00E5FF',
                                                     fontWeight: 800,
-                                                    whiteSpace: 'nowrap',
                                                     display: 'flex',
                                                     alignItems: 'center',
-                                                    gap: '5px'
+                                                    justifyContent: 'center',
+                                                    gap: '6px'
                                                 }}
                                             >
-                                                <TacIcon name="card" size={13} color="#00E5FF" />
+                                                <TacIcon name="card" size={14} color="#00E5FF" />
                                                 <span>Adquirir / Pagar</span>
                                             </button>
-                                            <a
-                                                href={item.affiliateUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="btn-tactical-secondary"
-                                                style={{
-                                                    padding: '8px 12px',
-                                                    fontSize: '0.74rem',
-                                                    textDecoration: 'none',
-                                                    whiteSpace: 'nowrap'
-                                                }}
-                                            >
-                                                Ver Equipo ↗
-                                            </a>
-                                            <button
-                                                onClick={() => handleDeleteProduct(item.id, item.title)}
-                                                className="btn-icon"
-                                                style={{ width: '32px', height: '32px', color: 'var(--accent-crimson)', opacity: 0.7 }}
-                                                title="Eliminar de catálogo local"
-                                            >
-                                                <TacIcon name="trash" size={14} color="var(--accent-crimson)" />
-                                            </button>
+                                            {item.affiliateUrl && (
+                                                <a
+                                                    href={item.affiliateUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="btn-tactical-secondary"
+                                                    style={{
+                                                        padding: '9px 12px',
+                                                        fontSize: '0.76rem',
+                                                        textDecoration: 'none',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: '4px',
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                >
+                                                    <span>Ver Equipo ↗</span>
+                                                </a>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
@@ -862,7 +945,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                 </div>
 
                                 {/* Asset Types Breakdown */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px', marginTop: '6px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(75px, 1fr))', gap: '6px', marginTop: '6px' }}>
                                     {[
                                         { type: 'ENERGY_WH', label: 'Energía', icon: '⚡', unit: 'Wh' },
                                         { type: 'BANDWIDTH_MB', label: 'Datos', icon: '📶', unit: 'MB' },
@@ -893,7 +976,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                             </div>
 
                             {/* Two-Column Forms: Issue Voucher & Redeem Voucher */}
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
                                 {/* Issue Voucher Panel */}
                                 <div style={{
                                     padding: '16px', borderRadius: '12px',
@@ -1593,6 +1676,12 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                         }}
                     />
                 )}
+
+                {/* Modal de Guía de Economía Soberana */}
+                <SovereignEconomyGuideModal
+                    isOpen={showEconomyGuide}
+                    onClose={() => setShowEconomyGuide(false)}
+                />
             </div>
         </div>
     );

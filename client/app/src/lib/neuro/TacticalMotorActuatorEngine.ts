@@ -215,8 +215,10 @@ export class TacticalMotorActuatorEngine {
   /**
    * Dispara una ráfaga de vibración táctica de emergencia (colisión inminente / EW)
    * y conmuta el CPG a sprint de escape (8.0 Hz).
+   * Respeta rigurosamente el estado de activación (isEnabled) y sigilo táctico.
    */
   public triggerEmergencyBurst(): void {
+    if (!this.isEnabled || this.isStealthActive) return;
     this.currentMode = 'EMERGENCY';
     this.executeVibrationPattern([200, 80, 200, 80, 200]);
 
@@ -233,7 +235,7 @@ export class TacticalMotorActuatorEngine {
    * Despacha patrones de vibración basados en el régimen y temporización.
    */
   private dispatchHapticFeedback(): void {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled || this.isStealthActive) return;
     const now = Date.now();
     if (now - this.lastVibrateTime < this.minIntervalMs) return;
 
@@ -250,6 +252,15 @@ export class TacticalMotorActuatorEngine {
   }
 
   private executeVibrationPattern(pattern: number | number[]): void {
+    if (!this.isEnabled || this.isStealthActive) return;
+
+    // Respetar preferencia del operador en Ajustes Generales
+    try {
+      const { SettingsManager } = require('../settingsManager');
+      const settings = SettingsManager.getSettings();
+      if (settings && settings.vibration === false) return;
+    } catch {}
+
     this.lastVibrateTime = Date.now();
     this.totalPulses++;
 
