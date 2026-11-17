@@ -26,6 +26,7 @@ import { fanShapedBody, FanShapedBodyTelemetry } from './FanShapedBodyEngine';
 import { giantFiberReflex, GiantFiberTelemetry } from './GiantFiberReflexEngine';
 import { ringAttractor } from './RingAttractorEngine';
 import { centralPatternGenerator, CentralPatternGeneratorEngine, CpgLocomotionTelemetry } from './CentralPatternGeneratorEngine';
+import { SettingsManager } from '../settingsManager';
 
 export type HapticSteeringMode = 'ALIGNED' | 'TURN_LEFT' | 'TURN_RIGHT' | 'EMERGENCY' | 'IDLE';
 
@@ -256,9 +257,8 @@ export class TacticalMotorActuatorEngine {
 
     // Respetar preferencia del operador en Ajustes Generales
     try {
-      const { SettingsManager } = require('../settingsManager');
-      const settings = SettingsManager.getSettings();
-      if (settings && settings.vibration === false) return;
+      const prefs = SettingsManager.getPreferences();
+      if (prefs && prefs.hapticsEnabled === false) return;
     } catch {}
 
     this.lastVibrateTime = Date.now();

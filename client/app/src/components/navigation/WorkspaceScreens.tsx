@@ -113,6 +113,7 @@ const SovereignAppStoreModal = dynamic(() => import("../miniapp/SovereignAppStor
 const MiniAppContainerModal  = dynamic(() => import("../miniapp/MiniAppContainerModal").then(m => ({ default: m.MiniAppContainerModal })), { ssr: false, loading: () => <AppLoader /> });
 const TacticalGhostGpsModal  = dynamic(() => import("../modals/TacticalGhostGpsModal").then(m => ({ default: m.TacticalGhostGpsModal })), { ssr: false, loading: () => <AppLoader /> });
 const RedCyberTunnelModal    = dynamic(() => import("../modals/RedCyberTunnelModal").then(m => ({ default: m.RedCyberTunnelModal })), { ssr: false, loading: () => <AppLoader /> });
+const SovereignEconomyGuideModal = dynamic(() => import("../tactical/SovereignEconomyGuideModal").then(m => ({ default: m.SovereignEconomyGuideModal })), { ssr: false, loading: () => <AppLoader /> });
 const SovereignShieldDashboard = dynamic(() => import("../SovereignShieldDashboard"), { ssr: false, loading: () => <AppLoader /> });
 const MaleCnsConnectomeHUD    = dynamic(() => import("../MaleCnsConnectomeHUD").then(m => ({ default: m.MaleCnsConnectomeHUD })), { ssr: false, loading: () => <AppLoader /> });
 const TacticalVivariumModal   = dynamic(() => import("../tactical/TacticalVivariumModal").then(m => ({ default: m.TacticalVivariumModal })), { ssr: false, loading: () => <AppLoader /> });
@@ -496,6 +497,7 @@ export function WorkspaceScreens({ isTablet, onOpenTool }: WorkspaceScreensProps
       {(currentScreen === "idVault" || currentScreen === "identityVault")      && <IdentityVaultModal />}
       {(currentScreen === "p2pPay"  || currentScreen === "redP2PPay")          && <RedP2PPayModal />}
       {currentScreen === "zkBarterSubsurface"                                  && <ZkBarterSubsurfaceModal />}
+      {(currentScreen === "economyGuide" || currentScreen === "sovereignEconomy") && <SovereignEconomyGuideModal isOpen={true} onClose={goBack} />}
       {currentScreen === "commercialHub" || currentScreen === "hub"            ? <CommercialHubModal isOpen={true} onClose={goBack} /> : null}
       {currentScreen === "crypto"                                              && <CryptoPanel />}
       {currentScreen === "web3Vault"                                           && <Web3VaultModal onClose={goBack} />}

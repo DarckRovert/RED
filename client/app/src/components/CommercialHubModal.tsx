@@ -1324,7 +1324,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                 />
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
                                 <div>
                                     <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Categoría</label>
                                     <select
@@ -1363,7 +1363,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                 />
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
                                 <div>
                                     <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Etiqueta de Homologación</label>
                                     <input

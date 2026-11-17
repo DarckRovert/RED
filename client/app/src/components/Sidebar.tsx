@@ -330,6 +330,7 @@ export default function Sidebar() {
             tools: [
                 { icon: "🪪", label: t('tactical_hubs.tool_id_vault'), action: "idVault" },
                 { icon: "💳", label: t('tactical_hubs.tool_p2p_pay'), action: "p2pPay" },
+                { icon: "⚖️", label: t('tactical_hubs.tool_sovereign_economy') || "Economía Soberana", action: "economyGuide" },
                 { icon: "⚖️", label: t('tactical_hubs.tool_zk_barter'), action: "zkBarterSubsurface" },
                 { icon: "⚡", label: t('tactical_hubs.tool_commercial_hub'), action: "commercialHub" },
                 { icon: "🔐", label: t('tactical_hubs.tool_crypto'), action: "crypto" },
