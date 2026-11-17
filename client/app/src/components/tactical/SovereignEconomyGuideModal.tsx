@@ -598,7 +598,9 @@ export const SovereignEconomyGuideModal: React.FC<SovereignEconomyGuideModalProp
                     <button
                         onClick={() => {
                             TacticalAudioEngine.playTap();
-                            toast.info("Consulta docs/SOVEREIGN_ECONOMY_MANIFESTO.md en la raíz del proyecto.");
+                            if (typeof window !== "undefined") {
+                                window.open("./economy.html", "_blank");
+                            }
                         }}
                         style={{
                             background: "transparent",
