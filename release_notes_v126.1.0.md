@@ -102,7 +102,21 @@
   - Manual operativo para negocios y cooperativas locales para cobrar con códigos QR sin internet ni terminales bancarias, garantizado con firmas Ed25519 y Nullifiers anti-doble gasto.
 - **Componente Educativo Interactivo In-App (`SovereignEconomyGuideModal.tsx`):**
   - Modal interactivo con 4 pestañas pedagógicas y calculadora de paridad en vivo entre créditos RED, Soles/USD y materias primas de supervivencia (agua, raciones MRE, antibióticos, energía Wh).
-  - Enlace de apertura rápida integrado en `UniversalCheckoutModal.tsx`.
+  - Enlace de apertura rápida integrado en `UniversalCheckoutModal.tsx`, `CommercialHubModal.tsx` y acceso en `Sidebar.tsx` (Bóveda & Finanzas).
+
+---
+
+### 4. Optimización de UI Táctica & Silenciamiento de Vibraciones Espurias
+
+- **Rediseño Ergonómico de Hub Comercial & Financiación Mesh (`CommercialHubModal.tsx`):**
+  - Reemplazo de filas horizontales rígidas por tarjetas tácticas verticales adaptativas en 3 niveles (encabezado con precio, cuerpo informativo no truncado y botones de acción a ancho completo).
+  - Rejillas fluidas `repeat(auto-fit, minmax(...))` para el desglose de activos en vales y formularios de canje, eliminando solapamientos en pantallas compactas (<400px).
+- **Enrutamiento y Navegación Soberana (`WorkspaceScreens.tsx`, `Sidebar.tsx`, `types.ts`):**
+  - Integración de la vista `'economyGuide'` en el despachador central de pantallas SPA sin depender de router web.
+- **Erradicación de Vibraciones Fantasmas (`TacticalMotorActuatorEngine.ts`, `JohnstonOrganEngine.ts`):**
+  - Eliminación de falsos positivos en el arco reflejo mecánico/acústico: elevación del umbral de choque a 45.0 m/s² (4.5G) con debounce de 3000ms.
+  - Restricción de disparo de emergencia exclusivamente a perturbaciones de guerra electrónica (RF).
+  - Blindaje estricto de actuadores de vibración: respeto incondicional de los estados `isEnabled`, `isStealthActive` y la preferencia del operador en Ajustes (`hapticsEnabled`).
 
 ---
 
