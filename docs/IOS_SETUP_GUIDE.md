@@ -1,4 +1,4 @@
-# 🍏 Guía Técnica de Integración y Despliegue en iOS — RED v121.0.0
+# 🍏 Guía Técnica de Integración y Despliegue en iOS — RED v126.1.0
 
 Este documento detalla la arquitectura de integración, configuración de permisos en `Info.plist`, enlace estático de la biblioteca nativa en Rust (`libred_mobile.a`) y compilación para iOS y iPadOS mediante Capacitor 8 y Xcode 15/16.
 
@@ -85,11 +85,16 @@ npx cap open ios
 
 ---
 
-## ⚙️ 4. Pipeline Automatizado de CI/CD para iOS (`.github/workflows/build-ios.yml`)
+## ⚙️ 4. Pipeline Controlado de CI/CD para iOS (`.github/workflows/build-ios.yml`)
 
-El pipeline se ejecuta automáticamente en cada commit a `main` sobre runners `macos-latest`, ejecutando:
-1. `rustup target add aarch64-apple-ios-sim`.
-2. Compilación de `libred_mobile.a` mediante `./build_ios.sh`.
-3. Sincronización de `out/` con Capacitor.
-4. Compilación estricta de `App.app` con `xcodebuild -sdk iphonesimulator`.
-5. Publicación del artefacto de compilación para pruebas en simuladores de iPhone 15/16.
+Conforme a la **Política Anti-Billing & Soberanía Total (Costo $0.00)** de RED, los disparadores automáticos en la nube sobre runners `macos-latest` (altamente costosos en minutos) han sido completamente desmantelados.
+
+El pipeline opera exclusivamente bajo demanda controlada:
+- **Disparador Manual (`workflow_dispatch`):** Se ejecuta únicamente cuando el equipo de ingeniería lo dispara explícitamente desde la pestaña de Actions.
+- **Compilación Soberana Local (Recomendada):** Se compila directamente en terminales locales con macOS mediante `./build_ios.sh` y Xcode, garantizando costo permanente de $0.00 y evitando bloqueos de facturación en repositorios privados.
+- **Pasos de Compilación:**
+  1. `rustup target add aarch64-apple-ios-sim`.
+  2. Compilación de `libred_mobile.a` mediante `./build_ios.sh`.
+  3. Sincronización de `out/` con Capacitor (`npx cap sync ios`).
+  4. Compilación estricta de `App.app` con `xcodebuild -sdk iphonesimulator`.
+  5. Generación del artefacto de simulación para pruebas en iPhone 15/16.

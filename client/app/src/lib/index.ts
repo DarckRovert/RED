@@ -1,5 +1,5 @@
 /**
- * RED — Sovereign Mesh OS (v121.0.0)
+ * RED — Sovereign Mesh OS (v126.1.0)
  * Master Unified Library Barrel Export
  */
 

@@ -1,16 +1,16 @@
-# 🛡️ Solicitud de Propuesta de Auditoría Criptográfica (Security Audit RFP) — RED v121.0.0
+# 🛡️ Solicitud de Propuesta de Auditoría Criptográfica (Security Audit RFP) — RED v126.1.0
 
 **Para:** Firmas Auditoras de Criptografía y Ciberseguridad de Sistemas Distribuidos (*Trail of Bits*, *NCC Group*, *OpenZeppelin Security*, *Cure53*).  
 **De:** Equipo de Desarrollo de RED (Red Criptográfica Soberana Off-Grid & P2P Mesh).  
-**Fecha de Emisión:** Septiembre 2026  
-**Versión del Repositorio:** `v121.0.0` (`main` branch)  
+**Fecha de Emisión:** Noviembre 2026  
+**Versión del Repositorio:** `v126.1.0` (`main` branch)  
 **Contacto Confidencial:** `darckrovert@gmail.com` / [GitHub Security Advisories](https://github.com/DarckRovert/RED/security/advisories/new)
 
 ---
 
 ## 1. 🎯 Objetivo del Compromiso
 
-Contratar una auditoría de código fuente independiente y exhaustiva para evaluar la solidez matemática, la resistencia a ataques de canal lateral, la corrección de protocolos post-cuánticos y la resiliencia del almacenamiento cifrado en el ecosistema **RED v121.0.0**.
+Contratar una auditoría de código fuente independiente y exhaustiva para evaluar la solidez matemática, la resistencia a ataques de canal lateral, la corrección de protocolos post-cuánticos y la resiliencia del almacenamiento cifrado en el ecosistema **RED v126.1.0**.
 
 ---
 
@@ -44,6 +44,8 @@ Los auditores deberán evaluar activamente los siguientes vectores de amenaza:
    - Validar que el compromiso de una clave de sesión actual no permita descifrar mensajes históricos ni comprometa turnos futuros tras el siguiente salto DH.
 6. **Resiliencia de la Bóveda ante Coacción (Panic Wipe & Decoy Vault):**
    - Verificar que la derivación de clave con Argon2id no deje trazas recuperables en disco (Sled DB) tras la activación de un PIN de pánico.
+7. **Resiliencia de la Bóveda P2P Off-Grid & Nullifiers Anti-Doble Gasto:**
+   - Auditar la solidez criptográfica del esquema de vales fuera de línea (`RED-VOUCHER-V1`), garantizando que la liquidación por Nullifier $H(\text{Secret} \parallel \text{Nonce})$ sea determinista, resistente a colisiones e inmune a las vulnerabilidades de puentes cruzados Web3 (ej. manipulación de árboles IAVL en BSC Token Hub).
 
 ---
 

@@ -1,6 +1,6 @@
-# 📱 RED Client SPA — Next.js 16 + Capacitor Mobile App v121.0.0
+# 📱 RED Client SPA — Next.js 16 + Capacitor Mobile App v126.1.0
 
-Plataforma de interfaz táctica soberana (65 módulos modales), gestión de estado modular con Zustand Slices, llaves biométricas universales, llamadas full-mesh de escuadrón, atlas conectómico somático 3D (MaleCNS), Vivarium Biocibernético 3D, Hábitat Digital Biocibernético e integración nativa con el motor de Rust (`red_mobile` y `red_node`).
+Plataforma de interfaz táctica soberana (65 módulos modales), gestión de estado modular con Zustand Slices, llaves biométricas universales, llamadas full-mesh de escuadrón, atlas conectómico somático 3D (MaleCNS), Vivarium Biocibernético 3D, Hábitat Digital Biocibernético, suite pedagógica de economía soberana in-app e integración nativa con el motor de Rust (`red_mobile` y `red_node`).
 
 ---
 

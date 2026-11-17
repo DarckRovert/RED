@@ -1,4 +1,4 @@
-# Guía de Contribución — RED v121.0.0
+# Guía de Contribución — RED v126.1.0
 
 Bienvenido al proyecto **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Para mantener la integridad matemática, la seguridad zero-trust y la estabilidad en dispositivos reales, todas las contribuciones deben seguir estas directrices.
 
@@ -77,29 +77,38 @@ Seguimos estrictamente el formato **Conventional Commits**:
 - `refactor`: Refactorización interna sin cambio funcional externo.
 - `perf`: Mejoras de latencia, throughput o eficiencia energética.
 - `chore`: Tareas de mantenimiento, dependencias o scripts de compilación.
-- `ci`: Modificaciones en pipelines de GitHub Actions.
+- `ci`: Modificaciones en pipelines de GitHub Actions (estricto cumplimiento de soberanía $0.00: solo `workflow_dispatch`).
 
 ### Scopes Permitidos
-`crypto`, `mesh`, `auth`, `ui`, `android`, `ios`, `core`, `blockchain`, `storage`, `api`, `companion`, `governance`.
+`crypto`, `mesh`, `auth`, `ui`, `android`, `ios`, `core`, `blockchain`, `storage`, `api`, `companion`, `governance`, `economy`.
 
 ---
 
-## 5. Validaciones Pre-Commit
+## 5. Validaciones Pre-Commit & Soberanía Local
 
-Antes de enviar cualquier cambio, los siguientes comandos deben pasar con **cero errores**:
+Antes de enviar cualquier cambio, los siguientes comandos deben pasar con **cero errores** ejecutados localmente:
 
 ```bash
 # Formateo y linter estricto en Rust
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 
-# Linter y verificación TypeScript
-cd client/app && npm run lint
+# Verificación de compilación y pruebas en Rust
+cargo check --workspace
+cargo test --workspace
 
-# Validación de estructura y versiones
-bash scripts/validate-structure.sh
-bash scripts/validate-version.sh
+# Verificación estricta de TypeScript y Next.js
+cd client/app
+npx tsc --noEmit
+npm run build
+cd ../..
+
+# Verificación exhaustiva de integridad y SSOT (39 checks canónicos)
+node client/app/scripts/check_release_integrity.js --strict
 ```
+
+> [!IMPORTANT]
+> **Soberanía CI/CD Anti-Billing (Costo $0.00):** Está terminantemente prohibido reintroducir disparadores automáticos (`on: push`, `on: pull_request`) en `.github/workflows/` que consuman minutos de runners en la nube. Todas las validaciones deben pasar en local. Los workflows se ejecutan exclusivamente vía `workflow_dispatch`.
 
 ---
 
@@ -120,4 +129,4 @@ bash scripts/validate-version.sh
 ## 7. Proceso de Pull Request
 1. Abre un issue o discussion antes de realizar refactorizaciones arquitectónicas mayores.
 2. Asegúrate de incluir pruebas unitarias o de integración para cualquier nuevo endpoint o algoritmo criptográfico.
-3. El PR debe contar con la aprobación del CI/CD (8 workflows en verde) y revisión de código.
+3. El PR debe haber superado todas las validaciones locales (`check_release_integrity.js --strict`) y contar con revisión de código.

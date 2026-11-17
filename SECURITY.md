@@ -1,4 +1,4 @@
-# Política de Seguridad - RED v121.0.0
+# Política de Seguridad - RED v126.1.0
 
 ## Reporte Responsable de Vulnerabilidades
 
@@ -12,7 +12,7 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 
 ### Opción 2: Email Privado & Confidencial
 - Email: `darckrovert@gmail.com`
-- Asunto sugerido: `[SECURITY RED-v121] Vulnerability Report`
+- Asunto sugerido: `[SECURITY RED-v126] Vulnerability Report`
 
 ### Tiempo de Respuesta y SLAs
 
@@ -32,7 +32,7 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 
 ---
 
-## Prácticas de Seguridad en RED v121.0.0
+## Prácticas de Seguridad en RED v126.1.0
 
 ### Criptografía Post-Cuántica & Híbrida
 - ✅ **ML-KEM-768** (NIST FIPS 203) encapsulando secretos compartidos contra computación cuántica futura.
@@ -48,6 +48,11 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 - ✅ Sanitización de memoria volátil (`zeroize`) en estructuras de claves privadas.
 - ✅ **Zero Plaintext en Disco:** Prohibido almacenar PINs en texto plano en `localStorage`. En Android residen exclusivamente en hardware TEE (Android Keystore / StrongBox), y en web se validan mediante hashes criptográficos salteados con memoria volátil `sessionStorage`.
 - ✅ **Protocolo Anti-Coacción & Panic Wipe:** `DuressWipeEngine` con sobreescritura de 3 pasadas estándar militar **DoD 5220.22-M** sobre claves en RAM y purga criptográfica completa de Sled DB en $< 500\text{ ms}$. Cero PINs estáticos por defecto (CERO fallback 9999, CERO fallback 123456).
+
+### Bóveda P2P Desconectada & Blindaje Anti-Exploit
+- ✅ **Inmunidad a Hacks de Puentes Centralizados:** A diferencia de infraestructuras Web3 centralizadas y puentes vulnerables a falsificación de pruebas IAVL o validadores comprometidos (ej. el exploit de $570M USD en BNB Chain Token Hub en 2022), los vales y transacciones de RED son procesados localmente en terminales air-gapped sin intermediarios.
+- ✅ **Nullifiers Anti-Doble Gasto:** Cada vale emitido contiene un Nullifier $N = \text{BLAKE3}(\text{ID} \parallel \text{Secret} \parallel \text{PubKey})$ que se registra atómicamente en el almacenamiento del comerciante, impidiendo la reutilización de vales tanto en modo desconectado como en re-sincronización por malla.
+- ✅ **Firma Ed25519 Inalterable:** Cero contratos inteligentes en servidores externos; verificación matemática local de firma en menos de $0.2\text{ ms}$.
 
 ### Comunicaciones, API Local & Red Malla
 - ✅ Enrutamiento cebolla (Onion Routing) de 3 saltos para ofuscación de metadatos de transporte.
@@ -65,8 +70,8 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 
 | Versión | Lanzamiento | Fin de Soporte (EOL) | Estado |
 |---------|------------|---------------------|--------|
-| **v121.0.0** | 2026-09 | 2027-09 | 🟢 **Soporte Activo / Producción** |
-| **v120.0.0** | 2026-09 | 2027-03 | 🟡 Parches de Seguridad Críticos |
-| **v119.0.0** y anteriores | - | - | 🔴 Fin de Soporte (EOL) |
+| **v126.1.0** | 2026-11 | 2027-11 | 🟢 **Soporte Activo / Producción** |
+| **v125.0.0** | 2026-10 | 2027-04 | 🟡 Parches de Seguridad Críticos |
+| **v124.0.0** y anteriores | - | - | 🔴 Fin de Soporte (EOL) |
 
 *Solo las dos versiones mayores más recientes reciben parches de seguridad y backports.*

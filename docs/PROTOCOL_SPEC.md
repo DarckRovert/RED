@@ -1,4 +1,4 @@
-# Especificación Formal de Protocolo — RED v121.0.0
+# Especificación Formal de Protocolo — RED v126.1.0
 
 Este documento define la especificación matemática y estructural de tramas de paquetes, acuerdos de clave híbridos post-cuánticos, coordinación espectral LoRa TDMA con sincronización Kuramoto y PLL Lamport, enrutamiento geoespacial Geohash y filtros Bloom de deduplicación del ecosistema **RED**.
 
@@ -161,3 +161,22 @@ Para evitar ataques de denegación de servicio (DDoS) por inundación en canales
 $$\text{BLAKE3}(M_{ID} \parallel \text{Nonce} \parallel \text{Timestamp}) < 2^{256 - \text{Dificultad}}$$
 - **Dificultad Base:** 2 bits (computable en < 1ms en teléfonos de gama baja).
 - **Dificultad Adaptativa:** Aumenta dinámicamente hasta 5 bits si la tasa de tráfico local supera los 20 msg/segundo.
+
+---
+
+## 9. Protocolo de Economía Soberana Off-Grid, Vales QR & Nullifiers Deterministas
+
+Para permitir el intercambio económico y cobros comerciales en terminales desconectados sin riesgo de doble gasto:
+
+### 1. Formato Canónico de Vale QR (RED-VOUCHER-V1)
+El vale se serializa en una cadena compacta optimizada para escaneo óptico QR:
+$$\text{Payload} = \text{REDV1} \parallel V_{\text{id}} \parallel A_{\text{cents}} \parallel C_{\text{fiat}} \parallel K_{\text{comm}} \parallel PK_{\text{issuer}} \parallel T_{\text{exp}} \parallel \sigma_{\text{Ed25519}}$$
+
+### 2. Generación Determinista de Nullifier Anti-Doble Gasto
+Cada vale genera un Nullifier unívoco e irreversible:
+$$\text{Nullifier} = \text{BLAKE3}(V_{\text{id}} \parallel S_{\text{secret}} \parallel PK_{\text{issuer}})$$
+- El comerciante registra el `Nullifier` atómicamente en su base de datos local en $O(1)$.
+- Si el mismo vale o código QR se presenta una segunda vez, el terminal comerciante rechaza la transacción en $< 0.1\text{ ms}$ sin necesidad de consultar ninguna red externa.
+
+### 3. Reconciliación Asíncrona en Re-Enlace de Malla
+Al restablecerse la conectividad P2P (por BLE, Wi-Fi Direct o LoRa), los nodos comerciantes difunden sus listas de Nullifiers liquidados sobre el tópico gossipsub `/red/mesh/v1/nullifiers`, propagando el estado a toda la comunidad.

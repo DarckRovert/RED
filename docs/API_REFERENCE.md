@@ -1,4 +1,4 @@
-# Referencia Oficial de API REST & SSE — RED v121.0.0
+# Referencia Oficial de API REST & SSE — RED v126.1.0
 
 El nodo nativo de **RED** expone una API HTTP/SSE de ultra-baja latencia sobre la interfaz de bucle invertido (`127.0.0.1:7333`) mediante Axum y Tokio, con autenticación Zero-Trust (`X-API-Key`) y mitigación anti-timing.
 
@@ -133,13 +133,16 @@ Disparo del protocolo de pánico: sobreescritura de 3 pasadas de claves en memor
 
 ---
 
-## 💰 Economía P2P & Vales Criptográficos
+## 💰 Economía P2P, Vales Criptográficos & Paridad Off-Grid
 
 ### `GET /api/p2p/wallet`
-Consulta el saldo de tokens RED y la lista de transacciones del libro mayor local.
+Consulta el saldo de tokens RED, créditos Proof-of-Relay (PoR) y la lista de transacciones del libro mayor local.
 
-### `POST /api/p2p/voucher` / `POST /api/p2p/redeem`
-Emite o redime vales de pago firmados con Ed25519 con paridad 1:1 en Soles (PEN).
+### `POST /api/p2p/voucher`
+Emite un vale soberano off-grid firmado con Ed25519 con paridad 1:1 en Soles (PEN), USD o materias primas de supervivencia (agua, MRE, medicina, energía).
+
+### `POST /api/p2p/redeem`
+Redime un vale criptográfico verificando en tiempo real la firma Ed25519 del emisor y registrando atómicamente el Nullifier en el almacén local para prevenir el doble gasto sin conexión a internet.
 
 ---
 
@@ -163,6 +166,7 @@ Emite o consulta balizas de emergencia SOS con coordenadas GPS y nivel de severi
 
 ### `POST /api/amber/alert` / `GET /api/amber/alerts`
 Crea o consulta alertas de búsqueda de personas vulnerables (Sistema AMBER-RED).
+- **Parámetro `?all=true`:** Retorna el registro integral de alertas (tanto activas como resueltas/históricas) para sincronización completa del panel táctico.
 
 ### `POST /api/voice/send` / `GET /api/voice/bursts`
 Transmisión de ráfagas de voz ultracomprimidas Walkie-Talkie Push-To-Talk.
