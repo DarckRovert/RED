@@ -12,6 +12,7 @@ import { TacticalAudioEngine } from '../lib/audio/TacticalAudioEngine';
 import { toast } from './Toast';
 import { useRedStore } from '../store/useRedStore';
 import { TacIcon } from './ui/TacIcon';
+import { SovereignEconomyGuideModal } from './tactical/SovereignEconomyGuideModal';
 
 interface MultiRailCheckoutModalProps {
     isOpen: boolean;
@@ -52,6 +53,7 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
 
     // Web3 State
     const [web3State, setWeb3State] = useState(Web3BridgeEngine.getInstance().getState());
+    const [showEconomyGuide, setShowEconomyGuide] = useState<boolean>(false);
 
     // ── LIFO Hardware Back Navigation ───────────────────────────────────────
     useEffect(() => {
@@ -361,15 +363,36 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    fontSize: '0.74rem'
+                    fontSize: '0.74rem',
+                    gap: '10px'
                 }}>
                     <span style={{ color: '#00E5FF', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <TacIcon name="lock" size={14} color="#00E5FF" />
                         <strong>{t('multirail_modal.title')}</strong>
                     </span>
-                    <span style={{ color: 'var(--text-secondary, #8A92A6)' }}>
-                        {t('multirail_modal.subtitle')}
-                    </span>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setShowEconomyGuide(true);
+                        }}
+                        style={{
+                            background: 'rgba(0, 230, 118, 0.15)',
+                            border: '1px solid rgba(0, 230, 118, 0.4)',
+                            color: 'var(--accent-emerald, #00E676)',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                        }}
+                    >
+                        <span>⚖️</span>
+                        <span>Guía Económica</span>
+                    </button>
                 </div>
 
                 {/* 4 Tabs Bar */}
@@ -935,6 +958,14 @@ export const MultiRailCheckoutModal: React.FC<MultiRailCheckoutModalProps> = ({
                     )}
                 </div>
             </div>
+
+            {/* Guía Económica Soberana */}
+            {showEconomyGuide && (
+                <SovereignEconomyGuideModal
+                    isOpen={showEconomyGuide}
+                    onClose={() => setShowEconomyGuide(false)}
+                />
+            )}
         </div>
     );
 };

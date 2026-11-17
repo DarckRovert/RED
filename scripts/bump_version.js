@@ -301,11 +301,17 @@ updateFile('credits.html', (content) => {
     return content.replace(/HALL OF FAME v\d+\.\d+\.\d+/, `HALL OF FAME v${targetVersion}`);
 }, 'credits.html Salón de la Fama Canónico Web');
 
+// 28.1. economy.html (Root)
+updateFile('economy.html', (content) => {
+    return content.replace(/RED v\d+\.\d+\.\d+/g, `RED v${targetVersion}`);
+}, 'economy.html Economía Soberana Canónico Web');
+
 // 29. Sincronización Satélite Automática de Archivos Legales (Next.js public/ y Rust node/src/web/)
 const satelliteSyncTargets = [
     { src: 'terms.html', dests: ['client/app/public/terms.html', 'node/src/web/terms.html'] },
     { src: 'privacy.html', dests: ['client/app/public/privacy.html', 'node/src/web/privacy.html'] },
     { src: 'credits.html', dests: ['client/app/public/credits.html', 'node/src/web/credits.html'] },
+    { src: 'economy.html', dests: ['client/app/public/economy.html', 'node/src/web/economy.html'] },
 ];
 
 satelliteSyncTargets.forEach(({ src, dests }) => {

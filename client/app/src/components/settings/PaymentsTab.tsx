@@ -9,6 +9,7 @@ import { Web3BridgeEngine } from "../../lib/network/Web3BridgeEngine";
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 import { toast } from "../Toast";
 import { TacIcon } from "../ui/TacIcon";
+import { SovereignEconomyGuideModal } from "../tactical/SovereignEconomyGuideModal";
 
 export const PaymentsTab: React.FC = () => {
     const { t } = useTranslation();
@@ -31,6 +32,7 @@ export const PaymentsTab: React.FC = () => {
     );
 
     const [web3Account, setWeb3Account] = useState<string | null>(null);
+    const [showEconomyGuide, setShowEconomyGuide] = useState<boolean>(false);
 
     useEffect(() => {
         const web3 = Web3BridgeEngine.getInstance();
@@ -115,6 +117,48 @@ export const PaymentsTab: React.FC = () => {
                 <p style={{ fontSize: "0.78rem", color: "var(--text-secondary, #8A92A6)", lineHeight: "1.4", margin: 0 }}>
                     {t('payments_tab.subtitle')}
                 </p>
+            </div>
+
+            {/* Banner Pedagógico de Economía Soberana */}
+            <div style={{
+                padding: "14px 16px",
+                borderRadius: "14px",
+                background: "linear-gradient(135deg, rgba(0, 230, 118, 0.08) 0%, rgba(0, 229, 255, 0.04) 100%)",
+                border: "1px solid rgba(0, 230, 118, 0.25)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
+                flexWrap: "wrap"
+            }}>
+                <div style={{ minWidth: "220px", flex: 1 }}>
+                    <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#FFFFFF", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span>⚖️</span> Manifiesto de Economía Soberana & Paridades
+                    </div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--text-secondary, #8A92A6)", marginTop: "2px", lineHeight: "1.35" }}>
+                        Aprende por qué el Proof-of-Relay (PoR) y los vales Ed25519 tienen valor real intrínseco respaldado por infraestructura y supervivencia comunitaria.
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => {
+                        TacticalAudioEngine.playTap();
+                        setShowEconomyGuide(true);
+                    }}
+                    style={{
+                        background: "rgba(0, 230, 118, 0.15)",
+                        border: "1px solid rgba(0, 230, 118, 0.45)",
+                        color: "var(--accent-emerald, #00E676)",
+                        padding: "8px 14px",
+                        borderRadius: "10px",
+                        fontSize: "0.76rem",
+                        fontWeight: 800,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap"
+                    }}
+                >
+                    📖 Leer Manifiesto ↗
+                </button>
             </div>
 
             {/* SECCIÓN 1: DÓLARES DIGITALES ESTABLES (USDT / USDC) */}
@@ -478,6 +522,14 @@ export const PaymentsTab: React.FC = () => {
                 <TacIcon name="check" size={16} color="#FFF" />
                 <span>Guardar Pasaporte de Pagos Soberano</span>
             </button>
+
+            {/* Guía Económica Soberana */}
+            {showEconomyGuide && (
+                <SovereignEconomyGuideModal
+                    isOpen={showEconomyGuide}
+                    onClose={() => setShowEconomyGuide(false)}
+                />
+            )}
         </form>
     );
 };

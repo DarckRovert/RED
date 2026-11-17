@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { RED_VERSION, RED_APK_NAME } from '../../lib/version';
+import { SovereignEconomyGuideModal } from '../tactical/SovereignEconomyGuideModal';
 
 interface SlideData {
     id: number;
@@ -18,6 +19,7 @@ export const PitchDeck: React.FC = () => {
     const [currentSlide, setCurrentSlide] = useState(0);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [touchStartX, setTouchStartX] = useState<number | null>(null);
+    const [showEconomyGuide, setShowEconomyGuide] = useState(false);
 
     const isGhPages = typeof window !== "undefined" && window.location.pathname.includes("/RED");
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH || (isGhPages ? "/RED" : "");
@@ -549,15 +551,38 @@ export const PitchDeck: React.FC = () => {
 
                     <div style={{
                         padding: "16px", borderRadius: "14px",
-                        border: "1px solid rgba(255, 255, 255, 0.08)",
-                        background: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(16px)"
+                        border: "1px solid rgba(179, 136, 255, 0.35)",
+                        background: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(16px)",
+                        display: "flex", flexDirection: "column", gap: "8px"
                     }}>
-                        <div style={{ color: "#B388FF", fontWeight: 800, fontSize: "0.95rem", display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                        <div style={{ color: "#B388FF", fontWeight: 800, fontSize: "0.95rem", display: "flex", alignItems: "center", gap: "8px", marginBottom: "2px" }}>
                             <span>💳</span> Economía Soberana P2P
                         </div>
                         <p style={{ fontSize: "0.82rem", color: "#CBD5E1", lineHeight: 1.4, margin: 0 }}>
                             Billetera criptográfica offline con ledger inmutable DAG para intercambios comerciales de bienes y servicios sin bancos centrales.
                         </p>
+                        <button
+                            type="button"
+                            onClick={() => setShowEconomyGuide(true)}
+                            style={{
+                                marginTop: "4px",
+                                alignSelf: "flex-start",
+                                padding: "4px 10px",
+                                background: "rgba(179, 136, 255, 0.15)",
+                                border: "1px solid rgba(179, 136, 255, 0.4)",
+                                color: "#B388FF",
+                                borderRadius: "8px",
+                                fontSize: "0.72rem",
+                                fontWeight: 800,
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px"
+                            }}
+                        >
+                            <span>⚖️</span>
+                            <span>Ver Manifiesto & Calculadora ↗</span>
+                        </button>
                     </div>
 
                     <div style={{
@@ -926,6 +951,14 @@ export const PitchDeck: React.FC = () => {
                     </button>
                 </div>
             </footer>
+
+            {/* Guía Económica Soberana */}
+            {showEconomyGuide && (
+                <SovereignEconomyGuideModal
+                    isOpen={showEconomyGuide}
+                    onClose={() => setShowEconomyGuide(false)}
+                />
+            )}
         </div>
     );
 };

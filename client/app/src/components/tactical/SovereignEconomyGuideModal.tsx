@@ -12,6 +12,7 @@ interface SovereignEconomyGuideModalProps {
     isOpen: boolean;
     onClose: () => void;
     onOpenWallet?: () => void;
+    isStandalone?: boolean;
 }
 
 type GuideTab = "faith" | "pow_vs_por" | "hacks" | "calculator";
@@ -20,6 +21,7 @@ export const SovereignEconomyGuideModal: React.FC<SovereignEconomyGuideModalProp
     isOpen,
     onClose,
     onOpenWallet,
+    isStandalone = false,
 }) => {
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<GuideTab>("faith");
@@ -54,7 +56,15 @@ export const SovereignEconomyGuideModal: React.FC<SovereignEconomyGuideModalProp
 
     return (
         <div
-            style={{
+            style={isStandalone ? {
+                minHeight: "100vh",
+                width: "100%",
+                backgroundColor: "var(--bg-primary, #04060A)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "32px 16px",
+            } : {
                 position: "fixed",
                 inset: 0,
                 zIndex: 9999,
@@ -65,7 +75,7 @@ export const SovereignEconomyGuideModal: React.FC<SovereignEconomyGuideModalProp
                 justifyContent: "center",
                 padding: "calc(12px + var(--safe-top, 0px)) 14px calc(14px + var(--safe-bottom, 0px))",
             }}
-            onClick={() => {
+            onClick={isStandalone ? undefined : () => {
                 TacticalAudioEngine.playTap();
                 onClose();
             }}
@@ -76,8 +86,8 @@ export const SovereignEconomyGuideModal: React.FC<SovereignEconomyGuideModalProp
                     border: "1px solid rgba(0, 230, 118, 0.3)",
                     borderRadius: "14px",
                     width: "100%",
-                    maxWidth: "580px",
-                    maxHeight: "90vh",
+                    maxWidth: isStandalone ? "860px" : "580px",
+                    maxHeight: isStandalone ? "none" : "90vh",
                     display: "flex",
                     flexDirection: "column",
                     boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 230, 118, 0.15)",
@@ -138,25 +148,48 @@ export const SovereignEconomyGuideModal: React.FC<SovereignEconomyGuideModalProp
                             </div>
                         </div>
                     </div>
-                    <button
-                        onClick={() => {
-                            TacticalAudioEngine.playTap();
-                            onClose();
-                        }}
-                        style={{
-                            background: "transparent",
-                            border: "none",
-                            color: "#8696A0",
-                            fontSize: "1.4rem",
-                            cursor: "pointer",
-                            padding: "4px 8px",
-                            flexShrink: 0,
-                            lineHeight: 1,
-                        }}
-                        aria-label="Cerrar modal"
-                    >
-                        ✕
-                    </button>
+                    {isStandalone ? (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                if (typeof window !== "undefined") window.location.href = "./";
+                            }}
+                            style={{
+                                background: "rgba(255, 255, 255, 0.08)",
+                                border: "1px solid rgba(255, 255, 255, 0.15)",
+                                color: "#FFF",
+                                fontSize: "0.78rem",
+                                fontWeight: 800,
+                                cursor: "pointer",
+                                padding: "6px 12px",
+                                borderRadius: "8px",
+                                flexShrink: 0,
+                            }}
+                        >
+                            ← Ir a la App
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => {
+                                TacticalAudioEngine.playTap();
+                                onClose();
+                            }}
+                            style={{
+                                background: "transparent",
+                                border: "none",
+                                color: "#8696A0",
+                                fontSize: "1.4rem",
+                                cursor: "pointer",
+                                padding: "4px 8px",
+                                flexShrink: 0,
+                                lineHeight: 1,
+                            }}
+                            aria-label="Cerrar modal"
+                        >
+                            ✕
+                        </button>
+                    )}
                 </div>
 
                 {/* Scroller de Pestañas Táctil */}

@@ -9,6 +9,7 @@ import { useTranslation } from "../lib/i18n/i18nEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { SovereignEconomyGuideModal } from "./tactical/SovereignEconomyGuideModal";
 
 type WalletTab = "emit" | "redeem" | "ledger";
 
@@ -28,6 +29,7 @@ export const RedP2PPayModal: React.FC = () => {
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [isScanning, setIsScanning] = useState<boolean>(false);
+    const [showEconomyGuide, setShowEconomyGuide] = useState<boolean>(false);
     const shouldScanRef = React.useRef<boolean>(false);
 
     // ─── Intercepción Jerárquica LIFO de Hardware (Android Back / Esc) ───
@@ -406,12 +408,37 @@ export const RedP2PPayModal: React.FC = () => {
                     </div>
                 </div>
 
-                <div style={{
-                    fontSize: "0.75rem", padding: "4px 10px", borderRadius: "8px",
-                    background: "rgba(0, 230, 118, 0.15)", border: "1px solid rgba(0, 230, 118, 0.4)",
-                    color: "#00E676", fontWeight: 900
-                }}>
-                    {balance.toLocaleString()} CRÉDITOS
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            TacticalAudioEngine.playTap();
+                            setShowEconomyGuide(true);
+                        }}
+                        style={{
+                            background: "rgba(0, 230, 118, 0.12)",
+                            border: "1px solid rgba(0, 230, 118, 0.35)",
+                            color: "#00E676",
+                            padding: "6px 10px",
+                            borderRadius: "8px",
+                            cursor: "pointer",
+                            fontSize: "0.74rem",
+                            fontWeight: 800,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px"
+                        }}
+                    >
+                        <span>⚖️</span>
+                        <span>Guía Económica</span>
+                    </button>
+                    <div style={{
+                        fontSize: "0.75rem", padding: "6px 10px", borderRadius: "8px",
+                        background: "rgba(0, 230, 118, 0.15)", border: "1px solid rgba(0, 230, 118, 0.4)",
+                        color: "#00E676", fontWeight: 900
+                    }}>
+                        {balance.toLocaleString()} CRÉDITOS
+                    </div>
                 </div>
             </header>
 
@@ -806,6 +833,14 @@ export const RedP2PPayModal: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {/* Guía Económica Soberana */}
+            {showEconomyGuide && (
+                <SovereignEconomyGuideModal
+                    isOpen={showEconomyGuide}
+                    onClose={() => setShowEconomyGuide(false)}
+                />
+            )}
         </div>
     );
 };

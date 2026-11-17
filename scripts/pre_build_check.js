@@ -209,7 +209,8 @@ console.log("\n🌐 3.1. Verificando paridad bit-a-bit del ecosistema web de 3 d
 const satelliteTriplets = [
     { name: 'terms.html', root: 'terms.html', satellites: ['client/app/public/terms.html', 'node/src/web/terms.html'] },
     { name: 'privacy.html', root: 'privacy.html', satellites: ['client/app/public/privacy.html', 'node/src/web/privacy.html'] },
-    { name: 'credits.html', root: 'credits.html', satellites: ['client/app/public/credits.html', 'node/src/web/credits.html'] }
+    { name: 'credits.html', root: 'credits.html', satellites: ['client/app/public/credits.html', 'node/src/web/credits.html'] },
+    { name: 'economy.html', root: 'economy.html', satellites: ['client/app/public/economy.html', 'node/src/web/economy.html'] }
 ];
 
 satelliteTriplets.forEach(triplet => {

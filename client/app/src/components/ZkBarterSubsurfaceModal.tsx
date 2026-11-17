@@ -10,6 +10,7 @@ import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
 import { BackHandlerRegistry } from "../lib/navigation/BackHandlerRegistry";
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { SovereignEconomyGuideModal } from "./tactical/SovereignEconomyGuideModal";
 
 /** Clipboard with textarea fallback for air-gapped / WebView environments */
 function copyToClipboard(text: string, label: string): void {
@@ -47,6 +48,7 @@ export function ZkBarterSubsurfaceModal() {
     // Subsurface state
     const [medium, setMedium] = useState<"REINFORCED_CONCRETE" | "RUBBLE_EARTH" | "WATER_FLOODED">("REINFORCED_CONCRETE");
     const [freqHz, setFreqHz] = useState<number>(35);
+    const [showEconomyGuide, setShowEconomyGuide] = useState<boolean>(false);
 
     useEffect(() => {
         const unsub = subsurfaceAcoustic.subscribe(setSubsurface);
@@ -374,27 +376,52 @@ export function ZkBarterSubsurfaceModal() {
                         </div>
                     </div>
                 </div>
-                <button
-                    onClick={() => {
-                        if (!BackHandlerRegistry.executeTop()) {
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                    <button
+                        type="button"
+                        onClick={() => {
                             TacticalAudioEngine.playTap();
-                            goBack();
-                        }
-                    }}
-                    style={{
-                        background: "rgba(232, 33, 58, 0.2)",
-                        border: "1px solid #E8213A",
-                        color: "#FFF",
-                        padding: "6px 12px",
-                        borderRadius: "8px",
-                        cursor: "pointer",
-                        fontWeight: 800,
-                        fontSize: "0.75rem",
-                        flexShrink: 0
-                    }}
-                >
-                    ✕ {t('common.close')}
-                </button>
+                            setShowEconomyGuide(true);
+                        }}
+                        style={{
+                            background: "rgba(0, 230, 118, 0.15)",
+                            border: "1px solid rgba(0, 230, 118, 0.4)",
+                            color: "var(--accent-emerald, #00E676)",
+                            padding: "6px 10px",
+                            borderRadius: "8px",
+                            cursor: "pointer",
+                            fontSize: "0.74rem",
+                            fontWeight: 800,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px"
+                        }}
+                    >
+                        <span>⚖️</span>
+                        <span>Guía Económica</span>
+                    </button>
+                    <button
+                        onClick={() => {
+                            if (!BackHandlerRegistry.executeTop()) {
+                                TacticalAudioEngine.playTap();
+                                goBack();
+                            }
+                        }}
+                        style={{
+                            background: "rgba(232, 33, 58, 0.2)",
+                            border: "1px solid #E8213A",
+                            color: "#FFF",
+                            padding: "6px 12px",
+                            borderRadius: "8px",
+                            cursor: "pointer",
+                            fontWeight: 800,
+                            fontSize: "0.75rem",
+                            flexShrink: 0
+                        }}
+                    >
+                        ✕ {t('common.close')}
+                    </button>
+                </div>
             </div>
 
             {/* Tab Selector */}
@@ -673,6 +700,14 @@ export function ZkBarterSubsurfaceModal() {
                 )}
 
             </div>
+
+            {/* Guía Económica Soberana */}
+            {showEconomyGuide && (
+                <SovereignEconomyGuideModal
+                    isOpen={showEconomyGuide}
+                    onClose={() => setShowEconomyGuide(false)}
+                />
+            )}
         </div>
     );
 }
