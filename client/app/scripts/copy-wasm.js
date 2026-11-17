@@ -96,6 +96,17 @@ if (fs.existsSync(ENV_JS_PATH)) {
     }
 }
 
+// Auto-patch @capacitor-community/barcode-scanner build.gradle to replace obsolete jcenter() with mavenCentral()
+const BARCODE_GRADLE_PATH = path.join(__dirname, '..', 'node_modules', '@capacitor-community', 'barcode-scanner', 'android', 'build.gradle');
+if (fs.existsSync(BARCODE_GRADLE_PATH)) {
+    let gradleContent = fs.readFileSync(BARCODE_GRADLE_PATH, 'utf8');
+    if (gradleContent.includes('jcenter()')) {
+        gradleContent = gradleContent.replace(/jcenter\(\)/g, 'mavenCentral()');
+        fs.writeFileSync(BARCODE_GRADLE_PATH, gradleContent, 'utf8');
+        console.log('[copy-wasm] 🛠️ Patched @capacitor-community/barcode-scanner android/build.gradle (replaced deprecated jcenter with mavenCentral).');
+    }
+}
+
 if (copied > 0) {
     console.log(`[copy-wasm] Done. ${copied} file(s) copied to /public/ort-wasm/ for offline ONNX inference.`);
 } else {

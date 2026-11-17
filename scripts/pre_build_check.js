@@ -293,6 +293,20 @@ if (fs.existsSync(cargoLockPath)) {
     });
 }
 
+// ── PASO 5: Higiene de Dependencias Gradle (Eliminación de jcenter obsoleto) ─
+console.log("\n📦 5. Verificando higiene de plugins Android en node_modules...");
+const barcodeGradlePath = path.join(CLIENT_APP, 'node_modules', '@capacitor-community', 'barcode-scanner', 'android', 'build.gradle');
+if (fs.existsSync(barcodeGradlePath)) {
+    let bgContent = fs.readFileSync(barcodeGradlePath, 'utf8');
+    if (bgContent.includes('jcenter()')) {
+        bgContent = bgContent.replace(/jcenter\(\)/g, 'mavenCentral()');
+        fs.writeFileSync(barcodeGradlePath, bgContent, 'utf8');
+        console.log("  🛠️ [AUTO-CORREGIDO] @capacitor-community/barcode-scanner: 'jcenter()' sustituido por 'mavenCentral()'.");
+    } else {
+        console.log("  ✅ @capacitor-community/barcode-scanner libre de jcenter().");
+    }
+}
+
 // ── RESULTADO FINAL ──────────────────────────────────────────────────────────
 console.log(`\n${"=".repeat(70)}`);
 if (hasError) {

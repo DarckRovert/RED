@@ -37,15 +37,9 @@ jobs:
       - name: Determine Release Parameters
         id: params
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ inputs.version_tag }}"
-            APK_URL="${{ inputs.apk_url }}"
-            NOTES="${{ inputs.release_notes }}"
-          else
-            TAG="${{ github.event.release.tag_name }}"
-            APK_URL=""
-            NOTES="${{ github.event.release.body }}"
-          fi
+          TAG="${{ inputs.version_tag }}"
+          APK_URL="${{ inputs.apk_url }}"
+          NOTES="${{ inputs.release_notes }}"
 
           if [ -z "$APK_URL" ]; then
             APK_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/red-${TAG}-release.apk"
@@ -59,7 +53,7 @@ jobs:
 
       - name: Check Catappult Secret Configuration
         env:
-          CATAPPULT_KEY: ${{ secrets.CATAPPULT_API_KEY }}
+          CATAPPULT_KEY: ${{ secrets['CATAPPULT_API_KEY'] }}
         run: |
           if [ -z "$CATAPPULT_KEY" ]; then
             echo "::error::CATAPPULT_API_KEY secret is not configured in repository secrets."
@@ -90,7 +84,7 @@ jobs:
 
       - name: Publish to Aptoide Uploader API
         env:
-          CATAPPULT_API_KEY: ${{ secrets.CATAPPULT_API_KEY }}
+          CATAPPULT_API_KEY: ${{ secrets['CATAPPULT_API_KEY'] }}
         run: |
           if [ -n "${{ steps.fetch_apk.outputs.apk_file }}" ]; then
             echo "Publishing via direct binary upload..."

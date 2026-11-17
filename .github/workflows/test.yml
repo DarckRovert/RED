@@ -36,7 +36,6 @@ jobs:
         with:
           files: ./cobertura.xml
           flags: rust
-          token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
   
   javascript-tests:
