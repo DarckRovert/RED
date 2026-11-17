@@ -11,6 +11,7 @@ import {
 import { TacticalAudioEngine } from "../../lib/audio/TacticalAudioEngine";
 import { BackHandlerRegistry } from "../../lib/navigation/BackHandlerRegistry";
 import { toast } from "../Toast";
+import { SovereignEconomyGuideModal } from "./SovereignEconomyGuideModal";
 
 interface OfcBarterMarketModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
   const [telemetry, setTelemetry] = useState<OrbitofrontalTelemetry>(() => ofc.getTelemetry());
   const [contracts, setContracts] = useState<BarterContract[]>(() => ofc.getContracts());
   const [activeTab, setActiveTab] = useState<'matrix' | 'propose' | 'contracts' | 'inventory'>('matrix');
+  const [showEconomyGuide, setShowEconomyGuide] = useState(false);
 
   // Formulario de propuesta
   const [offeredComm, setOfferedComm] = useState<SurvivalCommodity>('RATION_MRE_KCAL');
@@ -188,6 +190,30 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
               </div>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              TacticalAudioEngine.playTap();
+              setShowEconomyGuide(true);
+            }}
+            style={{
+              background: "rgba(20, 184, 166, 0.15)",
+              border: "1px solid rgba(20, 184, 166, 0.4)",
+              color: "#14B8A6",
+              padding: "5px 9px",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              flexShrink: 0
+            }}
+            title="Guía de Economía y Paridad Soberana"
+          >
+            <span>⚖️ Guía Económica</span>
+          </button>
           <button
             onClick={() => {
               if (isBroadcasting) return;
@@ -559,6 +585,11 @@ export const OfcBarterMarketModal: React.FC<OfcBarterMarketModalProps> = ({ isOp
 
         </div>
       </div>
+
+      <SovereignEconomyGuideModal
+        isOpen={showEconomyGuide}
+        onClose={() => setShowEconomyGuide(false)}
+      />
     </div>
   );
 };
