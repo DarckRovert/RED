@@ -20,6 +20,7 @@
 12. [Mapa Visual 11: Hábitat Digital Biocibernético In-Silico & Ecosistema Multi-Cerebro A-Life](#12-mapa-visual-11-hábitat-digital-biocibernético-in-silico--ecosistema-multi-cerebro-a-life)
 13. [Mapa Visual 12: Motor de Ajedrez Táctico Autónomo In-Silico & Cognición Inter-Especies](#13-mapa-visual-12-motor-de-ajedrez-táctico-autónomo-in-silico--cognición-inter-especies)
 14. [Mapa Visual 13: El Paraíso Biocibernético In-Silico & Aprendizaje Autónomo Permanente](#14-mapa-visual-13-el-paraíso-biocibernético-in-silico--aprendizaje-autónomo-permanente)
+15. [Mapa Visual 14: Economía Soberana, Proof-of-Relay & Vales Criptográficos Off-Grid](#15-mapa-visual-14-economía-soberana-proof-of-relay--vales-criptográficos-off-grid)
 
 ---
 
@@ -680,5 +681,53 @@ graph TD
 1. **Conservación de Sabiduría Intergeneracional:** Los pesos sinápticos y libros de aperturas de ajedrez persisten entre reinicios de la aplicación, permitiendo que las especies acumulen pericia táctica durante días y semanas.
 2. **Ciclos de Sueño REM y Plasticidad:** Los organismos experimentan fases naturales de vigilia (exploración activa) y reposo en el Santuario (replay episódico fuera de línea), evitando la catástrofe de saturación sináptica.
 3. **Química de Bienestar y Fick 5D:** La inclusión de `SEROTONIN` modula los estados afectivos hacia `SERENITY` y `TRANSCENDENCE`, reduciendo el conflicto y potenciando la inteligencia colectiva.
+
+---
+
+## 15. Mapa Visual 14: Economía Soberana, Proof-of-Relay & Vales Criptográficos Off-Grid
+
+La arquitectura económica de RED opera bajo un modelo desacoplado y 100% desconectado de la infraestructura bancaria o de servidores en la nube:
+
+```mermaid
+graph TD
+    subgraph INCENTIVOS_POR ["1. Motor de Emisión por Utilidad Real (Proof-of-Relay)"]
+        MESH_TRAFFIC["Tráfico Retransmitido en la Malla LoRa / BLE"] --> RELAY_RECORD["TokenomicsEngine.recordPacketRelayed(bytes)"]
+        RELAY_RECORD --> POR_REWARD["+0.05 Créditos RED por KB Retransmitido"]
+        POR_REWARD --> LOCAL_CREDITS["Saldo en Bóveda Criptográfica Local"]
+    end
+
+    subgraph PREVENCION_FRAUDE ["2. Prevención de Doble Gasto & Vales Nominativos"]
+        VOUCHER_GEN["VoucherVaultEngine.ts: Generación de Vales QR Ed25519"] --> NULLIFIER["Nullifier Hash: SHA-256(Secret || Nonce || VoucherID)"]
+        NULLIFIER --> SPENT_REGISTRY["red_spent_nullifiers_registry_v1"]
+        VOUCHER_GEN --> NOMINATIVE["recipientDid: Destinatario Criptográfico Fijo"]
+        NOMINATIVE --> RECIPIENT_CHECK["Verificación Local en < 50ms"]
+    end
+
+    subgraph TASACION_BIOLOGICA ["3. Anclaje a Materias Primas de Supervivencia (Modo Black Sky)"]
+        OFC_ENGINE["OrbitofrontalValuationEngine.ts"] --> MARGINAL_UTIL["Ley de Gossen Neuromórfica: U(q) = alpha * ln(1 + q / (beta * (1 + stock)))"]
+        MARGINAL_UTIL --> COMMODITY_WEIGHTS["Pesos Biológicos: Agua (10.0), Antibióticos (9.5), Raciones MRE (8.5), Energía Wh (7.0)"]
+        COMMODITY_WEIGHTS --> FAIR_RATIO["Matriz de Paridad de Trueque Justo (Fair Exchange Ratio)"]
+    end
+
+    subgraph INTERFACES_COMERCIO ["4. Puntos de Venta & Experiencia In-App"]
+        UNIVERSAL_CHECKOUT["UniversalCheckoutModal.tsx (Riel 'offgrid_voucher')"]
+        OFC_BARTER["OfcBarterMarketModal.tsx (Contratos de Trueque P2P)"]
+        EDU_MODAL["SovereignEconomyGuideModal.tsx (Guía Pedagógica & Calculadora de Paridad)"]
+        UNIVERSAL_CHECKOUT --> EDU_MODAL
+        OFC_BARTER --> EDU_MODAL
+    end
+
+    LOCAL_CREDITS --> VOUCHER_GEN
+    SPENT_REGISTRY --> UNIVERSAL_CHECKOUT
+    FAIR_RATIO --> OFC_BARTER
+```
+
+### Especificaciones de la Capa Económica:
+1. **Proof-of-Relay (PoR) vs PoW:** El valor no proviene de la quema inútil de electricidad resolviendo sudokus criptográficos vacíos, sino de la provisión demostrable de infraestructura de telecomunicaciones físicas y retransmisión de emergencias SOS para la comunidad.
+2. **Inmunidad a Hacks Centralizados:** Cero dependencia de puentes (*bridges*) entre cadenas o servidores cloud (vulnerabilidad que causó el robo de $570M USD en Binance BNB Chain Token Hub en 2022). Las transacciones son P2P puras de chip a chip mediante firmas Ed25519 y códigos QR.
+3. **Documentación de Referencia:**
+   - [Manifiesto de la Economía Soberana (docs/SOVEREIGN_ECONOMY_MANIFESTO.md)](docs/SOVEREIGN_ECONOMY_MANIFESTO.md)
+   - [Guía Táctica del Comerciante Off-Grid (docs/MERCHANT_OFFLINE_GUIDE.md)](docs/MERCHANT_OFFLINE_GUIDE.md)
+
 
 

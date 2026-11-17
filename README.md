@@ -21,6 +21,8 @@ Accede a la documentación técnica y operativa completa del proyecto:
 - 🛰️ **[Firmware de Repetidores Solares (firmware/esp32-repeater/README.md)](firmware/esp32-repeater/README.md)**: Guía de montaje de hardware de bajo costo (~$15-20 USD), esquema solar TP4056 y flasheo PlatformIO.
 - 📡 **[Especificación Formal de Protocolo (docs/PROTOCOL_SPEC.md)](docs/PROTOCOL_SPEC.md)**: Formato de trama binaria RED de 96 bytes, acuerdos HPKE y filtros Bloom de deduplicación.
 - 📜 **[Historial de Versiones (CHANGELOG.md)](CHANGELOG.md)**: Registro exhaustivo de cambios y novedades de cada release.
+- 🏛️ **[Manifiesto de la Economía Soberana (docs/SOVEREIGN_ECONOMY_MANIFESTO.md)](docs/SOVEREIGN_ECONOMY_MANIFESTO.md)**: Fundamentación económica, salto de fe comunitario, crítica al gasto termo-calórico y desmitificación de hacks en exchanges centralizados (Binance).
+- 🏪 **[Guía Táctica del Comerciante Off-Grid (docs/MERCHANT_OFFLINE_GUIDE.md)](docs/MERCHANT_OFFLINE_GUIDE.md)**: Manual práctico para cobro y canje de vales con códigos QR sin internet ni bancos.
 - 🚀 **[Guía de Inicio Rápido (GETTING_STARTED.md)](GETTING_STARTED.md)**: Instrucciones para desarrolladores y configuración de dependencias.
 
 ---
@@ -244,9 +246,10 @@ RED implementa una suite criptográfica híbrida diseñada para resistir tanto a
 
 El sistema integra una economía descentralizada autónoma para incentivar la retransmisión de paquetes y el comercio offline:
 
-1. **Proof-of-Relay (PoR):** Cada nodo que actúa como repetidor de paquetes para la malla acumula créditos de retransmisión computados localmente.
-2. **Consenso Proof-of-Stake Soberano:** Motor de cadena local con árbol de Merkle real, cálculo de nonces y forja de bloques por ranuras de tiempo (`slots`).
-3. **Vales P2P Criptográficos Off-Grid:** Emisión de comprobantes de pago firmados con SHA-256 y códigos QR bidimensionales para transacciones comerciales sin conexión a Internet, con prevención de doble gasto mediante libro mayor local.
+1. **Proof-of-Relay (PoR):** Cada nodo que actúa como repetidor de paquetes para la malla acumula créditos de retransmisión computados localmente (`0.05 créditos RED por KB retransmitido`). En RED no se gasta energía en sudokus computacionales vacíos (Proof-of-Work tradicional); el valor respalda la infraestructura y las telecomunicaciones físicas que mantienen comunicada a la comunidad.
+2. **Consenso Proof-of-Stake Soberano:** Motor de cadena local con árbol de Merkle real, cálculo de nonces y forja de bloques por ranuras de tiempo (`slots`) en [LocalChainLedger.ts](client/app/src/lib/blockchain/LocalChainLedger.ts).
+3. **Vales P2P Criptográficos Off-Grid:** Emisión y canje de comprobantes firmados con Ed25519 y protegidos con **Nullifiers deterministas** en [VoucherVaultEngine.ts](client/app/src/lib/blockchain/VoucherVaultEngine.ts) para transacciones comerciales sin conexión a Internet, con prevención matemática de doble gasto.
+4. **Paridad Soberana & Tasación Biológica:** Paridad referencial 1 RED = S/. 1.00 PEN (≈ $0.27 USD) en [TokenomicsEngine.ts](client/app/src/lib/network/TokenomicsEngine.ts) con anclaje a materias primas de supervivencia (agua, raciones, antibióticos, energía Wh) mediante [OrbitofrontalValuationEngine.ts](client/app/src/lib/neuro/human/OrbitofrontalValuationEngine.ts). Consulte el [Manifiesto de la Economía Soberana](docs/SOVEREIGN_ECONOMY_MANIFESTO.md) y la [Guía del Comerciante Off-Grid](docs/MERCHANT_OFFLINE_GUIDE.md).
 
 ---
 

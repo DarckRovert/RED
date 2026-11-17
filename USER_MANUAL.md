@@ -138,9 +138,13 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 
 ## 6. Tokenomics DePIN, Vales Criptográficos & Paridad PEN
 
-- **Proof-of-Relay:** Tu nodo gana recompensas en tokens RED automáticamente al retransmitir paquetes para otros usuarios en la red malla.
-- **Vales Offline:** Crea vales de transferencia firmados criptográficamente con Ed25519 para pagar bienes y servicios en zonas sin internet ni bancos.
-- **Paridad 1:1:** Cada token RED equivale a **S/. 1.00 PEN**, permitiendo economía circular en situaciones de colapso monetario o bancario.
+- **Proof-of-Relay (PoR):** Tu nodo gana recompensas en tokens RED automáticamente al retransmitir paquetes para otros usuarios en la red malla (`0.05 créditos por KB retransmitido`). No quema energía en acertijos vacíos; cada crédito premia infraestructura y telecomunicaciones útiles para la comunidad.
+- **Vales Soberanos Offline:** Crea y canjea vales de transferencia firmados con Ed25519 y protegidos con **Nullifier Hashes deterministas** $H(\text{Secret} \parallel \text{Nonce})$ en [VoucherVaultEngine.ts](client/app/src/lib/blockchain/VoucherVaultEngine.ts) para pagar bienes y servicios en zonas sin internet ni bancos, inmunes al doble gasto.
+- **Paridad 1:1:** Cada token RED equivale a **S/. 1.00 PEN** (≈ $0.27 USD), garantizando una economía circular estable en situaciones de colapso monetario o bancario.
+- **Anclaje a Materias Primas de Supervivencia:** Integración con [OrbitofrontalValuationEngine.ts](client/app/src/lib/neuro/human/OrbitofrontalValuationEngine.ts) para tasar productos directamente en agua potable, raciones de combate MRE, antibióticos y vatios-hora de batería.
+- **Documentación Económica Oficial:**
+  - 📖 **[Manifiesto de la Economía Soberana (docs/SOVEREIGN_ECONOMY_MANIFESTO.md)](docs/SOVEREIGN_ECONOMY_MANIFESTO.md)**: Fundamentos antropológicos, el "salto de fe" (Piedras Rai de Yap vs Consenso Social), la falacia termo-calórica de la minería PoW y el análisis forense del hack de $570M a Binance BNB Chain.
+  - 🏪 **[Manual Táctico del Comerciante (docs/MERCHANT_OFFLINE_GUIDE.md)](docs/MERCHANT_OFFLINE_GUIDE.md)**: Guía práctica paso a paso para cobros y pagos off-grid con códigos QR de alta densidad y verificación acústica piezoeléctrica.
 
 ---
 

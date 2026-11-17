@@ -25,6 +25,11 @@
 - **Soberanía Absoluta de CI/CD & Política Anti-Billing (Costo $0):**
   - Desmantelamiento total de triggers automáticos (`push`, `pull_request`, `schedule`, `release`) en todos los workflows de `.github/workflows/` (`build-android.yml`, `build-ios.yml`, `build.yml`, `lint.yml`, `proverif.yml`, `publish-aptoide.yml`, `release.yml`, `security.yml`, `test.yml`, `deploy-pages.yml`).
   - Restricción exclusiva a ejecución manual (`workflow_dispatch`), garantizando consumo de $0.00 en infraestructura en la nube y blindaje contra bloqueos de facturación en repositorios privados.
+- **Fundamentación, Pedagogía & Economía Soberana:**
+  - Publicación del **Manifiesto de la Economía Soberana** (`docs/SOVEREIGN_ECONOMY_MANIFESTO.md`): Explicación antropológica del "salto de fe" (Piedras Rai de Yap vs. moneda fiduciaria), crítica al desgaste termo-calórico del minado PoW y análisis forense del hack de $570M a Binance BNB Chain.
+  - Publicación de la **Guía Táctica del Comerciante Off-Grid** (`docs/MERCHANT_OFFLINE_GUIDE.md`): Manual operativo para cobro y canje de vales QR de alta densidad sin internet ni intermediarios bancarios.
+  - Implementación de `SovereignEconomyGuideModal.tsx`: Modal educativo interactivo in-app con 4 pestañas pedagógicas y calculadora de paridad táctica anclada a materias primas de supervivencia (agua, raciones MRE, antibióticos, energía Wh).
+  - Integración del riel educativo en `UniversalCheckoutModal.tsx` con apertura directa de la guía económica.
 
 ## [126.0.0-estabilizacion-tactica-integral-y-resiliencia-ui-ux] - 2026-09-26
 

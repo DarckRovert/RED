@@ -9,6 +9,7 @@ import { MonetizationEngine } from '../../lib/network/MonetizationEngine';
 import { toast } from '../Toast';
 import { BackHandlerRegistry } from '../../lib/navigation/BackHandlerRegistry';
 import { TacticalAudioEngine } from '../../lib/audio/TacticalAudioEngine';
+import { SovereignEconomyGuideModal } from '../tactical/SovereignEconomyGuideModal';
 
 interface UniversalCheckoutModalProps {
     intent: PaymentIntentRequest;
@@ -32,6 +33,7 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
     const [isProcessing, setIsProcessing] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [completedReceipt, setCompletedReceipt] = useState<PaymentReceipt | null>(null);
+    const [showEconomyGuide, setShowEconomyGuide] = useState(false);
 
     // Registro LIFO de retroceso físico / Esc
     useEffect(() => {
@@ -445,7 +447,31 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
 
                                 {selectedRail === 'offgrid_voucher' && (
                                     <div>
-                                        <p style={{ color: "#FFFFFF", fontWeight: 800, margin: 0 }}>Pagaré Criptográfico Off-Grid (Ed25519)</p>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                            <p style={{ color: "#FFFFFF", fontWeight: 800, margin: 0 }}>Pagaré Criptográfico Off-Grid (Ed25519)</p>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    TacticalAudioEngine.playTap();
+                                                    setShowEconomyGuide(true);
+                                                }}
+                                                style={{
+                                                    background: "rgba(0, 230, 118, 0.12)",
+                                                    border: "1px solid rgba(0, 230, 118, 0.35)",
+                                                    borderRadius: "6px",
+                                                    padding: "2px 7px",
+                                                    color: "#00E676",
+                                                    fontSize: "0.65rem",
+                                                    fontWeight: 700,
+                                                    cursor: "pointer",
+                                                    display: "inline-flex",
+                                                    alignItems: "center",
+                                                    gap: "3px"
+                                                }}
+                                            >
+                                                <span>⚖️ ¿Cómo funciona?</span>
+                                            </button>
+                                        </div>
                                         <p style={{ color: "var(--text-secondary)", fontSize: "0.72rem", margin: "2px 0 0 0" }}>
                                             Tu Saldo Local: <span style={{ color: "var(--accent-emerald)", fontWeight: 900 }}>{userCredits} Créditos</span>
                                         </p>
@@ -511,6 +537,11 @@ export const UniversalCheckoutModal: React.FC<UniversalCheckoutModalProps> = ({
                     </>
                 )}
             </div>
+
+            <SovereignEconomyGuideModal
+                isOpen={showEconomyGuide}
+                onClose={() => setShowEconomyGuide(false)}
+            />
         </div>
     );
 };

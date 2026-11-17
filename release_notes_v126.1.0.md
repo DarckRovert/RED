@@ -92,6 +92,20 @@
 
 ---
 
+### 3. Fundamentación, Pedagogía & Economía Soberana Off-Grid
+
+- **Publicación del Manifiesto de la Economía Soberana (`docs/SOVEREIGN_ECONOMY_MANIFESTO.md`):**
+  - Desmitificación del respaldo físico y análisis antropológico de las Piedras Rai de Yap como el primer libro mayor distribuido de la historia.
+  - Crítica a la falacia del costo termo-calórico en minería PoW frente al **Proof-of-Relay (PoR)** de RED (`0.05 créditos/KB`), que premia infraestructura y telecomunicaciones de emergencia reales.
+  - Análisis forense de la fragilidad de la Web3 y del hack de $570M USD a Binance BNB Chain Token Hub en 2022 frente a la Bóveda P2P 100% desconectada de RED.
+- **Guía Táctica del Comerciante Off-Grid (`docs/MERCHANT_OFFLINE_GUIDE.md`):**
+  - Manual operativo para negocios y cooperativas locales para cobrar con códigos QR sin internet ni terminales bancarias, garantizado con firmas Ed25519 y Nullifiers anti-doble gasto.
+- **Componente Educativo Interactivo In-App (`SovereignEconomyGuideModal.tsx`):**
+  - Modal interactivo con 4 pestañas pedagógicas y calculadora de paridad en vivo entre créditos RED, Soles/USD y materias primas de supervivencia (agua, raciones MRE, antibióticos, energía Wh).
+  - Enlace de apertura rápida integrado en `UniversalCheckoutModal.tsx`.
+
+---
+
 ## 📱 Verificación Técnica y Paridad del Sistema
 
 - **Compilación Frontend TypeScript:** `tsc --noEmit` completado con 0 errores.
