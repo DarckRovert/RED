@@ -155,18 +155,15 @@ export const TacticalQuickActionHUD: React.FC<TacticalQuickActionHUDProps> = ({ 
         });
     };
 
-    // Ajuste de posición vertical en mobile:
+    // Ajuste de posición vertical en mobile según la pantalla activa:
     // - En sidebar táctica: a 144px (sobre el FAB de 76px) para evitar colisiones
     // - Dentro de chat: a 84px para flotar limpiamente sobre ChatInput sin obstruir micrófono/envío
-    // - En otras pantallas: a 16px
-    const isInsideChat = currentScreen === "chat" || !!activeConversationId;
-    const isSidebarWithoutChat = currentScreen === "sidebar" && !activeConversationId;
-
+    // - En otras pantallas (radar, mapa, ajustes, vault): a 16px
     const bottomPosition = isTablet 
         ? "24px" 
-        : isSidebarWithoutChat
+        : currentScreen === "sidebar"
             ? "calc(144px + env(safe-area-inset-bottom, 0px))" 
-            : isInsideChat
+            : currentScreen === "chat"
                 ? "calc(84px + env(safe-area-inset-bottom, 0px))" 
                 : "calc(16px + env(safe-area-inset-bottom, 0px))";
 

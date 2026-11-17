@@ -53,6 +53,7 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
     const [zoomScale, setZoomScale] = useState(1);
     const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
     const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState<boolean>(false);
     const [imgError, setImgError] = useState(false);
 
     const currentItem = mediaItems[currentIndex] || activeMedia;
@@ -65,26 +66,40 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
 
         if (!currentItem) {
             setResolvedSrc(null);
+            setIsLoading(false);
             return;
         }
 
         const rawSrc = currentItem.media_data || currentItem.content;
         if (!rawSrc) {
             setResolvedSrc(null);
+            setIsLoading(false);
             return;
         }
 
         if (rawSrc.startsWith("red_vault://")) {
-            const vaultId = rawSrc.replace("red_vault://", "");
-            indexedMediaVault.getMedia(vaultId).then((data) => {
+            setIsLoading(true);
+            indexedMediaVault.resolveMediaUrl(rawSrc).then((data) => {
                 if (isMounted) {
-                    setResolvedSrc(data || rawSrc);
+                    if (data && !data.startsWith("red_vault://")) {
+                        setResolvedSrc(data);
+                        setImgError(false);
+                    } else {
+                        setImgError(true);
+                        setResolvedSrc(null);
+                    }
+                    setIsLoading(false);
                 }
             }).catch(() => {
-                if (isMounted) setResolvedSrc(rawSrc);
+                if (isMounted) {
+                    setImgError(true);
+                    setResolvedSrc(null);
+                    setIsLoading(false);
+                }
             });
         } else {
             setResolvedSrc(rawSrc);
+            setIsLoading(false);
         }
 
         return () => { isMounted = false; };
@@ -135,9 +150,16 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
 
     const handleSaveMedia = async () => {
         TacticalAudioEngine.playTap();
-        if (!resolvedSrc && !currentItem?.media_data && !currentItem?.content) return;
-        const dataUrl = resolvedSrc || currentItem?.media_data || currentItem?.content || "";
-        if (!isValidMediaSource(dataUrl)) {
+        if (isLoading) {
+            toast.info("Decodificando archivo multimedia...");
+            return;
+        }
+        if (!resolvedSrc || resolvedSrc.startsWith("red_vault://")) {
+            toast.error("El contenido multimedia no está disponible para guardar.");
+            return;
+        }
+        const dataUrl = resolvedSrc;
+        if (!isValidMediaSource(dataUrl) || dataUrl.startsWith("red_vault://")) {
             toast.error("El contenido no es un archivo multimedia válido para guardar.");
             return;
         }
@@ -170,8 +192,15 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
 
     const handleShareMedia = async () => {
         TacticalAudioEngine.playTap();
-        const dataUrl = resolvedSrc || currentItem?.media_data || currentItem?.content || "";
-        if (!dataUrl) return;
+        if (isLoading) {
+            toast.info("Decodificando archivo multimedia...");
+            return;
+        }
+        if (!resolvedSrc || resolvedSrc.startsWith("red_vault://")) {
+            toast.error("El contenido multimedia no está disponible para compartir.");
+            return;
+        }
+        const dataUrl = resolvedSrc;
         try {
             const { Share } = await import("@capacitor/share");
             await Share.share({
@@ -296,7 +325,31 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
                 }}
                 onDoubleClick={handleDoubleTap}
             >
-                {!isValid || imgError ? (
+                {isLoading ? (
+                    <div style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "12px",
+                        color: "var(--accent-red, #E8213A)"
+                    }}>
+                        <div style={{
+                            width: "36px",
+                            height: "36px",
+                            border: "3px solid rgba(255,255,255,0.1)",
+                            borderTopColor: "var(--accent-red, #E8213A)",
+                            borderRadius: "50%",
+                            animation: "spin 0.8s linear infinite"
+                        }} />
+                        <span style={{
+                            fontSize: "0.78rem",
+                            color: "var(--text-muted, #888)",
+                            fontFamily: "JetBrains Mono, monospace"
+                        }}>
+                            Decodificando almacén táctico...
+                        </span>
+                    </div>
+                ) : !isValid || imgError || !resolvedSrc || resolvedSrc.startsWith("red_vault://") ? (
                     <div style={{
                         display: "flex",
                         flexDirection: "column",
@@ -316,12 +369,12 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
                             Archivo multimedia no disponible
                         </div>
                         <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
-                            {currentItem.content && !currentItem.content.startsWith("data:") ? currentItem.content : "La carga multimedia no contiene un formato de imagen válido o ha expirado."}
+                            {currentItem.content && !currentItem.content.startsWith("data:") && !currentItem.content.startsWith("red_vault://") ? currentItem.content : "La carga multimedia no contiene un formato de imagen válido o ha expirado."}
                         </div>
                     </div>
                 ) : isVideo ? (
                     <video
-                        src={resolvedSrc!}
+                        src={resolvedSrc}
                         controls
                         autoPlay
                         playsInline
@@ -335,7 +388,7 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
                     />
                 ) : (
                     <img
-                        src={resolvedSrc!}
+                        src={resolvedSrc}
                         alt="RED Media Viewer"
                         onError={() => setImgError(true)}
                         style={{

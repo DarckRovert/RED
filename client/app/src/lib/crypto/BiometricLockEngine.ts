@@ -145,6 +145,16 @@ export class BiometricLockEngine {
         if (typeof window !== "undefined") {
             try {
                 localStorage.setItem(STORAGE_LAST_ACTIVE_KEY, Date.now().toString());
+
+                // Actualizar automáticamente la presencia del operador para el DMS
+                const rawDms = localStorage.getItem('red_dms_config');
+                if (rawDms) {
+                    const cfg = JSON.parse(rawDms);
+                    if (cfg && cfg.enabled) {
+                        cfg.last_active_timestamp = Math.floor(Date.now() / 1000);
+                        localStorage.setItem('red_dms_config', JSON.stringify(cfg));
+                    }
+                }
             } catch {}
         }
     }

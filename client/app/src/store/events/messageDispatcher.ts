@@ -418,14 +418,18 @@ export async function dispatchIncomingMessage(
         }
 
         // ── Social Feed Mesh Synchronization ──────────────────────────────────
-        if (item.msg_type === 'social_post') {
+        if (item.msg_type === 'social_post' || item.msg_type === 'SOCIAL_POST_BROADCAST') {
             try {
-                const rawPost = (item as any).post || (typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : null);
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{')
+                    ? JSON.parse(item.content)
+                    : item;
+                const rawPost = (parsed as any).post || (parsed.id && (parsed.author_hash || parsed.author_name) ? parsed : null);
+
                 if (rawPost && rawPost.id) {
                     const currentPosts = get().socialPosts || [];
-                    if (!currentPosts.some(p => p.id === rawPost.id)) {
+                    if (!currentPosts.some((p: any) => p.id === rawPost.id)) {
                         set((s: any) => ({
-                            socialPosts: [rawPost, ...s.socialPosts]
+                            socialPosts: [rawPost, ...(s.socialPosts || [])]
                         }));
                         if (typeof window !== 'undefined') {
                             try {
@@ -447,7 +451,7 @@ export async function dispatchIncomingMessage(
                 const rawReact = (item as any) || (typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : null);
                 if (rawReact && rawReact.post_id && rawReact.emoji && rawReact.author_hash) {
                     set((s: any) => {
-                        const updated = s.socialPosts.map((p: any) => {
+                        const updated = (s.socialPosts || []).map((p: any) => {
                             if (p.id === rawReact.post_id) {
                                 const reactions = { ...(p.reactions || {}) };
                                 if (!reactions[rawReact.emoji]) reactions[rawReact.emoji] = [];
@@ -460,6 +464,24 @@ export async function dispatchIncomingMessage(
                         });
                         return { socialPosts: updated };
                     });
+
+                    if (typeof window !== 'undefined') {
+                        try {
+                            const stored = JSON.parse(localStorage.getItem('red_social_posts') || '[]');
+                            const updated = stored.map((p: any) => {
+                                if (p.id === rawReact.post_id) {
+                                    const reactions = { ...(p.reactions || {}) };
+                                    if (!reactions[rawReact.emoji]) reactions[rawReact.emoji] = [];
+                                    if (!reactions[rawReact.emoji].includes(rawReact.author_hash)) {
+                                        reactions[rawReact.emoji].push(rawReact.author_hash);
+                                    }
+                                    return { ...p, reactions };
+                                }
+                                return p;
+                            });
+                            localStorage.setItem('red_social_posts', JSON.stringify(updated));
+                        } catch {}
+                    }
                 }
             } catch {}
             return;
@@ -571,19 +593,36 @@ export async function dispatchIncomingMessage(
                     : (item as any);
                 const audioPayload = parsedBurst.audio_b64 || parsedBurst.audio_opus_b64 || (item as any).audio_b64 || (item as any).audio_opus_b64;
                 if (audioPayload) {
+                    const burstId = parsedBurst.id || item.id || `vburst_${item.timestamp || Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+                    
+                    // Deduplicación contra el almacén físico persistente
+                    const raw = typeof window !== 'undefined' ? localStorage.getItem('red_voice_bursts') : null;
+                    const bursts: VoiceBurst[] = raw ? JSON.parse(raw) : [];
+                    if (bursts.some((b: any) => b.id === burstId)) {
+                        return; // Ya procesado, evitar duplicación de audio y doble Roger Beep
+                    }
+
                     const senderName = parsedBurst.sender || parsedBurst.sender_name || (item as any).sender || `Operador ${(item.sender || '').slice(0, 6)}`;
                     const duration = parsedBurst.duration || parsedBurst.duration_seconds || (item as any).duration || 2;
-                    const channel = parsedBurst.channel || (item as any).channel || 'CH-01 · TÁCTICO';
-                    const burstId = parsedBurst.id || item.id || `burst_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+                    const channel = parsedBurst.channel || (item as any).channel || '#general';
                     const burstObj: VoiceBurst = {
                         id: burstId,
-                        sender_did: item.sender || parsedBurst.sender || 'OPERADOR',
+                        sender_did: item.sender || parsedBurst.sender_did || parsedBurst.sender || 'OPERADOR',
                         sender_name: senderName,
                         duration_seconds: duration,
                         audio_opus_b64: audioPayload,
                         timestamp: typeof item.timestamp === 'number' ? (item.timestamp > 1e11 ? item.timestamp : item.timestamp * 1000) : Date.now(),
                         channel: channel
                     };
+
+                    // Persistencia real en almacenamiento local para sobrevivir a reinicios
+                    bursts.unshift(burstObj);
+                    if (typeof window !== 'undefined') {
+                        try {
+                            localStorage.setItem('red_voice_bursts', JSON.stringify(bursts.slice(0, 50)));
+                        } catch {}
+                    }
+
                     get().addVoiceBurst(burstObj);
                     TacticalAudioEngine.playRogerBeep();
                     toast.info(`📻 Ráfaga PTT de ${senderName} (${channel})`);
@@ -596,17 +635,21 @@ export async function dispatchIncomingMessage(
 
         // ── Emergency SOS Distress Beacon & Resolution Pipeline ──────────────
         const executeSosResolution = (targetId: string) => {
-            get().resolveSosBeacon(targetId);
+            const cleanId = typeof targetId === 'string' ? targetId.replace(/^(cancel_|resolve_)/, '') : targetId;
+            const normId = typeof cleanId === 'string' ? cleanId.replace(/^sos_/i, '') : cleanId;
+
+            get().resolveSosBeacon(cleanId);
 
             // Persistencia física en red_sos_beacons
             try {
                 const rawSos = localStorage.getItem('red_sos_beacons');
                 const sosList: any[] = rawSos ? JSON.parse(rawSos) : [];
-                const updatedSos = sosList.map((b: any) =>
-                    (b.id === targetId || b.beacon_id === targetId || (targetId.startsWith('did:red:') && b.sender_did === targetId))
+                const updatedSos = sosList.map((b: any) => {
+                    const bNorm = (b.id || b.beacon_id || '').replace(/^sos_/i, '');
+                    return (b.id === cleanId || b.beacon_id === cleanId || bNorm === normId || (cleanId.startsWith('did:red:') && b.sender_did === cleanId))
                         ? { ...b, is_active: false, active: false }
-                        : b
-                );
+                        : b;
+                });
                 localStorage.setItem('red_sos_beacons', JSON.stringify(updatedSos));
                 void setSecureStored('red_sos_beacons', updatedSos);
             } catch {}
@@ -615,28 +658,32 @@ export async function dispatchIncomingMessage(
             try {
                 const rawEmerg = localStorage.getItem('red_emergency_beacons');
                 const emergList: any[] = rawEmerg ? JSON.parse(rawEmerg) : [];
-                const updatedEmerg = emergList.map((b: any) =>
-                    (b.id === targetId || b.beacon_id === targetId || (targetId.startsWith('did:red:') && b.sender_did === targetId))
+                const updatedEmerg = emergList.map((b: any) => {
+                    const bNorm = (b.id || b.beacon_id || '').replace(/^sos_/i, '');
+                    return (b.id === cleanId || b.beacon_id === cleanId || bNorm === normId || (cleanId.startsWith('did:red:') && b.sender_did === cleanId))
                         ? { ...b, is_active: false, active: false }
-                        : b
-                );
+                        : b;
+                });
                 localStorage.setItem('red_emergency_beacons', JSON.stringify(updatedEmerg));
                 void setSecureStored('red_emergency_beacons', updatedEmerg);
             } catch {}
 
             // Sincronización con MeshSosBeaconEngine
             try {
-                meshSosBeacon.deactivateRemoteBeacon(targetId);
+                meshSosBeacon.deactivateRemoteBeacon(cleanId);
+                if (cleanId !== normId) meshSosBeacon.deactivateRemoteBeacon(normId);
                 const myBeacon = meshSosBeacon.getMyActiveBeacon();
-                if (myBeacon && (myBeacon.id === targetId || myBeacon.id === `sos_${targetId}`)) {
-                    void meshSosBeacon.deactivateSosBeacon(targetId);
+                if (myBeacon && (myBeacon.id === cleanId || myBeacon.id === `sos_${cleanId}` || myBeacon.id === normId)) {
+                    void meshSosBeacon.deactivateSosBeacon(myBeacon.id);
                 }
             } catch {}
 
             // Purga determinista en bóveda DTN
             try {
-                dtnStorage.remove(`sos_${targetId}`);
-                dtnStorage.remove(targetId);
+                dtnStorage.remove(`sos_${cleanId}`);
+                dtnStorage.remove(cleanId);
+                dtnStorage.remove(`sos_${normId}`);
+                dtnStorage.remove(normId);
             } catch {}
         };
 
@@ -734,7 +781,10 @@ export async function dispatchIncomingMessage(
                 const parsed = typeof item.content === 'string' && item.content.startsWith('{')
                     ? JSON.parse(item.content)
                     : (item as any);
-                const targetId = parsed.sos_id || parsed.id || parsed.beacon_id || (item as any).sos_id || (item as any).beacon_id;
+                const rawTarget = parsed.sos_id || parsed.beacon_id || (item as any).sos_id || (item as any).beacon_id || parsed.id || (item as any).id;
+                const targetId = typeof rawTarget === 'string' && (rawTarget.startsWith('cancel_') || rawTarget.startsWith('resolve_'))
+                    ? rawTarget.replace(/^(cancel_|resolve_)/, '')
+                    : rawTarget;
                 if (targetId) {
                     executeSosResolution(targetId);
                 }
@@ -1235,27 +1285,6 @@ export async function dispatchIncomingMessage(
                 }
             } catch (e) {
                 console.warn('[WebRTC Signal Parse Error]', e);
-            }
-            return;
-        }
-
-        // ── Walkie-Talkie Voice Burst: ingest and save to bursts store ──
-        if (item.msg_type === 'voice_burst') {
-            try {
-                const burst = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
-                const raw = localStorage.getItem('red_voice_bursts');
-                const bursts: any[] = raw ? JSON.parse(raw) : [];
-                if (!bursts.some((b: any) => b.id === burst.id)) {
-                    bursts.unshift(burst);
-                    localStorage.setItem('red_voice_bursts', JSON.stringify(bursts.slice(0, 50)));
-                    try {
-                        get().addVoiceBurst(burst);
-                        TacticalAudioEngine.playRogerBeep();
-                    } catch {}
-                    toast.info(`🎙️ Ráfaga PTT de ${burst.sender_name || 'Operador RED'}`);
-                }
-            } catch (e) {
-                console.warn('[Voice Burst Parse Error]', e);
             }
             return;
         }
@@ -1922,10 +1951,14 @@ export async function dispatchIncomingMessage(
                     const raw = localStorage.getItem('red_p2p_vouchers');
                     const vouchers: any[] = raw ? JSON.parse(raw) : [];
                     if (!vouchers.some((v: any) => v.id === voucher.id)) {
-                        vouchers.unshift({ ...voucher, is_outgoing: false });
+                        vouchers.unshift({ ...voucher, is_outgoing: false, is_redeemed: false, redeemed: false });
                         localStorage.setItem('red_p2p_vouchers', JSON.stringify(vouchers));
                         void setSecureStored('red_p2p_vouchers', vouchers);
+                        TacticalAudioEngine.playRogerBeep();
                         toast.success(`💳 ¡Vale P2P recibido de ${voucher.amount} créditos RED!`);
+                        if (typeof window !== 'undefined') {
+                            window.dispatchEvent(new CustomEvent('red:wallet_updated'));
+                        }
                     }
                 }
             } catch (e) {
@@ -1934,60 +1967,18 @@ export async function dispatchIncomingMessage(
             return;
         }
 
-        // ── Decentralized Social Post & Reactions ──
-        if (item.msg_type === 'social_post') {
+
+        // ── Dead Man's Switch: Contingency Broadcast Received ──
+        if (item.msg_type === 'dms_dead_message') {
             try {
                 const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
-                const post = (parsed as any).post || parsed;
-                if (post && post.id) {
-                    const raw = localStorage.getItem('red_social_posts');
-                    const posts: any[] = raw ? JSON.parse(raw) : [];
-                    if (!posts.some((p: any) => p.id === post.id)) {
-                        posts.unshift(post);
-                        localStorage.setItem('red_social_posts', JSON.stringify(posts.slice(0, 100)));
-                    }
-                }
+                const senderName = parsed.sender_name || item.sender || 'Operador';
+                const deadMsg = parsed.dead_message || (typeof parsed.content === 'string' ? parsed.content : 'Alerta de contingencia DMS');
+                TacticalAudioEngine.playEmergencyAlarm();
+                toast.error(`⚠️ MENSAJE PÓSTUMO DMS de ${senderName}: "${deadMsg}"`);
             } catch (e) {
-                console.warn('[Social Post Ingest Error]', e);
+                console.warn('[DMS Dead Message Ingest Error]', e);
             }
-            return;
-        }
-
-        if (item.msg_type === 'social_react') {
-            try {
-                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
-                const postId = (parsed as any).post_id;
-                const emoji = (parsed as any).emoji;
-                const authorHash = (parsed as any).author_hash;
-                if (postId && emoji) {
-                    const raw = localStorage.getItem('red_social_posts');
-                    const posts: any[] = raw ? JSON.parse(raw) : [];
-                    const target = posts.find((p: any) => p.id === postId);
-                    if (target) {
-                        if (!target.reactions) target.reactions = {};
-                        if (!target.reactions[emoji]) target.reactions[emoji] = [];
-                        if (!target.reactions[emoji].includes(authorHash)) {
-                            target.reactions[emoji].push(authorHash);
-                        }
-                        localStorage.setItem('red_social_posts', JSON.stringify(posts));
-                    }
-                }
-            } catch (e) {}
-            return;
-        }
-
-        if (item.msg_type === 'social_delete') {
-            try {
-                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
-                const postId = (parsed as any).post_id || (parsed as any).id;
-                if (postId && typeof window !== 'undefined') {
-                    const raw = localStorage.getItem('red_social_posts');
-                    if (raw) {
-                        const posts = JSON.parse(raw).filter((p: any) => p.id !== postId);
-                        localStorage.setItem('red_social_posts', JSON.stringify(posts));
-                    }
-                }
-            } catch (e) {}
             return;
         }
 
@@ -2036,6 +2027,7 @@ export async function dispatchIncomingMessage(
                 RedAPI.sendMessage(requesterHash, JSON.stringify(responsePayload), {
                     msg_type: 'group_history_response',
                     group_id: groupId,
+                    is_control: true
                 }).catch(() => {});
             } catch (e) {
                 console.warn('[DTN GroupHistoryRequest Error]', e);

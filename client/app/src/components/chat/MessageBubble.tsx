@@ -25,6 +25,7 @@ interface MessageBubbleProps {
     starredMessages: string[];
     searchQuery: string;
     isSearchHighlight: boolean;
+    isPinned?: boolean;
     isSwiping: boolean;
     onTouchStart: (e: React.TouchEvent, msg: MessageItem) => void;
     onTouchMove: (e: React.TouchEvent, msg: MessageItem) => void;
@@ -151,9 +152,9 @@ const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🔥"];
 
 // Context menu floating
 function ContextMenu({
-    x, y, isMine, isDeleted, isStarred, onReply, onForward, onCopy, onPin, onStar, onEdit, onDeleteForEveryone, onDeleteLocal, onSelect, onReact, onTranslate, onAskCopilot, onSpeakMessage, onShowInfo, onClose
+    x, y, isMine, isDeleted, isStarred, isPinned, onReply, onForward, onCopy, onPin, onStar, onEdit, onDeleteForEveryone, onDeleteLocal, onSelect, onReact, onTranslate, onAskCopilot, onSpeakMessage, onShowInfo, onClose
 }: {
-    x: number; y: number; isMine: boolean; isDeleted: boolean; isStarred?: boolean;
+    x: number; y: number; isMine: boolean; isDeleted: boolean; isStarred?: boolean; isPinned?: boolean;
     onReply: () => void; onForward?: () => void; onCopy: () => void; onPin?: () => void; onStar?: () => void;
     onEdit?: () => void; onDeleteForEveryone?: () => void; onDeleteLocal: () => void;
     onSelect?: () => void; onReact: (e: string) => void;
@@ -210,7 +211,7 @@ function ContextMenu({
                     ...(!isDeleted && onForward ? [{ label: t.chat_extended?.forward_btn || "Reenviar", icon: <TacIcon name="forward" size={16} color="currentColor" />, action: onForward }] : []),
                     ...(!isDeleted ? [{ label: t.radar?.copy_did || "Copiar", icon: <TacIcon name="copy" size={16} color="currentColor" />, action: onCopy }] : []),
                     ...(!isDeleted && onSelect ? [{ label: "Seleccionar", icon: <TacIcon name="check" size={16} color="currentColor" />, action: onSelect }] : []),
-                    ...(onPin && !isDeleted ? [{ label: "Fijar Mensaje", icon: <TacIcon name="pin" size={16} color="currentColor" />, action: onPin }] : []),
+                    ...(onPin && !isDeleted ? [{ label: isPinned ? "Desfijar Mensaje" : "Fijar Mensaje", icon: <TacIcon name="pin" size={16} color={isPinned ? "#3B82F6" : "currentColor"} />, action: onPin }] : []),
                     ...(onEdit && isMine && !isDeleted ? [{ label: t.profile?.edit_alias || "Editar", icon: <TacIcon name="edit" size={16} color="currentColor" />, action: onEdit }] : []),
                     ...(onDeleteForEveryone && isMine && !isDeleted ? [{ label: t.chat?.wipe_chat || "Eliminar para todos", icon: <TacIcon name="trash" size={16} color="#FF4B6B" />, action: onDeleteForEveryone, danger: true }] : []),
                     { label: t.chat?.delete_chat || "Eliminar", icon: <TacIcon name="trash" size={16} color="#FF4B6B" />, action: onDeleteLocal, danger: true },
@@ -241,7 +242,7 @@ function ContextMenu({
 
 export const MessageBubble = memo(({
     msg, isMine, isFirst, isLast, showDate, peerName, starredMessages,
-    searchQuery, isSearchHighlight, isSwiping, onTouchStart, onTouchMove, onTouchEnd,
+    searchQuery, isSearchHighlight, isPinned = false, isSwiping, onTouchStart, onTouchMove, onTouchEnd,
     onLongPress, onCancelLongPress, onReaction, onVote, onPin, onStar, onReply, onForward, onEdit, onDelete, onDeleteForEveryone, onOpenMediaGallery,
     isSelectionMode = false, isSelected = false, onToggleSelect, onSelectMode,
     isGroupChat,
@@ -304,11 +305,11 @@ export const MessageBubble = memo(({
 
     // Media Type Detectors
     const isAudioMessage = msg.msg_type === "voice" || msg.msg_type === "audio" || msg.media_data?.startsWith("data:audio") || msg.content?.startsWith("data:audio");
-    const isVideoMessage = msg.msg_type === "video" || msg.media_data?.startsWith("data:video") || msg.content?.startsWith("data:video");
+    const isVideoMessage = msg.msg_type === "video" || msg.media_data?.startsWith("data:video") || msg.content?.startsWith("data:video") || (msg.msg_type === "video" && (msg.media_data?.startsWith("red_vault://") || msg.content?.startsWith("red_vault://")));
     const isImageMessage = !isAudioMessage && !isVideoMessage && (
         msg.msg_type === "image" ||
         (msg.media_data?.startsWith("data:image") || msg.media_data?.startsWith("/9j/") || msg.media_data?.startsWith("iVBORw0") || (msg.msg_type === "image" && msg.media_data?.startsWith("red_vault://"))) ||
-        (msg.content?.startsWith("data:image") || msg.content?.startsWith("/9j/") || msg.content?.startsWith("iVBORw0"))
+        (msg.content?.startsWith("data:image") || msg.content?.startsWith("/9j/") || msg.content?.startsWith("iVBORw0") || (msg.msg_type === "image" && msg.content?.startsWith("red_vault://")))
     );
 
     // Resolve Image from IndexedDB strictly when message is an image
@@ -316,7 +317,9 @@ export const MessageBubble = memo(({
         (msg.media_data && !msg.media_data.startsWith("data:audio") && !msg.media_data.startsWith("data:video")) ? msg.media_data : (
             msg.content?.startsWith("data:image") ? msg.content : (
                 msg.content?.startsWith("/9j/") ? `data:image/jpeg;base64,${msg.content}` : (
-                    msg.content?.startsWith("iVBORw0") ? `data:image/png;base64,${msg.content}` : null
+                    msg.content?.startsWith("iVBORw0") ? `data:image/png;base64,${msg.content}` : (
+                        msg.content?.startsWith("red_vault://") ? msg.content : null
+                    )
                 )
             )
         )
@@ -339,6 +342,34 @@ export const MessageBubble = memo(({
         }
         return () => { active = false; };
     }, [rawImageCandidate]);
+
+    // Resolve Video from IndexedDB strictly when message is a video
+    const [resolvedVideo, setResolvedVideo] = useState<string>("");
+    const rawVideoCandidate = isVideoMessage ? (
+        (msg.media_data && !msg.media_data.startsWith("data:audio") && !msg.media_data.startsWith("data:image")) ? msg.media_data : (
+            msg.content?.startsWith("data:video") ? msg.content : (
+                msg.content?.startsWith("red_vault://") ? msg.content : null
+            )
+        )
+    ) : null;
+
+    useEffect(() => {
+        let active = true;
+        if (rawVideoCandidate) {
+            if (rawVideoCandidate.startsWith("red_vault://")) {
+                indexedMediaVault.resolveMediaUrl(rawVideoCandidate).then(resolved => {
+                    if (active) setResolvedVideo(resolved);
+                }).catch(() => {
+                    if (active) setResolvedVideo("");
+                });
+            } else {
+                setResolvedVideo(rawVideoCandidate);
+            }
+        } else {
+            setResolvedVideo("");
+        }
+        return () => { active = false; };
+    }, [rawVideoCandidate]);
 
     // Payment / Voucher message detector
     const isPaymentMessage = msg.msg_type === "p2p_payment" || msg.msg_type === "p2p_voucher" || (
@@ -404,15 +435,42 @@ export const MessageBubble = memo(({
         }
     };
 
-    const handleDownloadDocument = () => {
-        const url = resolvedImage || msg.media_data || msg.content;
-        if (!url || (!url.startsWith("data:") && !url.startsWith("blob:"))) return;
+    const handleDownloadDocument = async () => {
+        const rawUrl = msg.media_data || msg.content;
+        if (!rawUrl) return;
+        let url = rawUrl;
+        if (rawUrl.startsWith("red_vault://")) {
+            url = await indexedMediaVault.resolveMediaUrl(rawUrl);
+        }
+        if (!url || (!url.startsWith("data:") && !url.startsWith("blob:") && !url.startsWith("http"))) {
+            toast.error("Archivo no disponible para descarga");
+            return;
+        }
+        const fileName = (msg as any).file_name || `archivo_${msg.id.substring(0, 8)}.dat`;
+        try {
+            const { Capacitor } = await import("@capacitor/core");
+            if (Capacitor.isNativePlatform()) {
+                const { Filesystem, Directory } = await import("@capacitor/filesystem");
+                const base64Data = url.includes(",") ? url.split(",")[1] : url;
+                await Filesystem.writeFile({
+                    path: fileName,
+                    data: base64Data,
+                    directory: Directory.Documents,
+                    recursive: true
+                });
+                toast.success(`Guardado en Documentos: ${fileName}`);
+                return;
+            }
+        } catch (err) {
+            console.warn("[MessageBubble] Descarga nativa falló, recurriendo a web:", err);
+        }
         const a = document.createElement("a");
         a.href = url;
-        a.download = (msg as any).file_name || `archivo_${msg.id.substring(0, 8)}.dat`;
+        a.download = fileName;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        toast.success(`Descargando: ${fileName}`);
     };
 
     const scrollToRepliedMessage = (repliedId: string) => {
@@ -577,10 +635,14 @@ export const MessageBubble = memo(({
         )
     );
 
-    // Document detector
+    // Document / File detector
     const isDocumentMessage = msg.msg_type === "document" ||
-        (msg.content && msg.content.startsWith("data:") && !msg.content.startsWith("data:image") && !msg.content.startsWith("data:video") && !msg.content.startsWith("data:audio")) ||
-        (msg.media_data && msg.media_data.startsWith("data:") && !msg.media_data.startsWith("data:image") && !msg.media_data.startsWith("data:video") && !msg.media_data.startsWith("data:audio"));
+        msg.msg_type === "file" ||
+        Boolean((msg as any).file_name) ||
+        (typeof msg.content === "string" && msg.content.startsWith("red_vault://file")) ||
+        (typeof msg.media_data === "string" && msg.media_data.startsWith("red_vault://file")) ||
+        (typeof msg.content === "string" && msg.content.startsWith("data:") && !msg.content.startsWith("data:image") && !msg.content.startsWith("data:video") && !msg.content.startsWith("data:audio")) ||
+        (typeof msg.media_data === "string" && msg.media_data.startsWith("data:") && !msg.media_data.startsWith("data:image") && !msg.media_data.startsWith("data:video") && !msg.media_data.startsWith("data:audio"));
 
     const documentName = (msg as any).file_name || "Documento Adjunto";
     const documentSize = (msg as any).file_size || 0;
@@ -665,6 +727,7 @@ export const MessageBubble = memo(({
                 <ContextMenu
                     x={contextMenu.x} y={contextMenu.y} isMine={isMine} isDeleted={isDeleted}
                     isStarred={Boolean(starredMessages?.includes(msg.id))}
+                    isPinned={isPinned}
                     onClose={() => setContextMenu(null)}
                     onReply={() => onReply ? onReply(msg) : onLongPress({} as any, msg)}
                     onForward={onForward ? () => onForward(msg) : undefined}
@@ -986,10 +1049,10 @@ export const MessageBubble = memo(({
                             )}
 
                             {/* Media Video */}
-                            {!isPaymentMessage && (msg.msg_type === "video" || msg.media_data?.startsWith("data:video") || msg.content?.startsWith("data:video")) && (
+                            {!isPaymentMessage && isVideoMessage && Boolean(resolvedVideo || msg.media_data || msg.content) && (
                                 <div className="chat-media-container" style={{ margin: "2px 0" }}>
                                     <video 
-                                        src={msg.media_data || (msg.content?.startsWith("data:video") ? msg.content : "")} 
+                                        src={resolvedVideo || msg.media_data || (msg.content?.startsWith("data:video") ? msg.content : "")} 
                                         controls 
                                         playsInline 
                                         style={{ maxWidth: "100%", maxHeight: "min(260px, 42vh)", borderRadius: "10px", display: "block", background: "#000" }} 
@@ -1275,7 +1338,7 @@ export const MessageBubble = memo(({
                             )}
 
                             {/* Standard Text content — with URL & mention highlighting */}
-                            {!isPaymentMessage && !isVitalSignMessage && !isDocumentMessage && !isLocationMessage && !isContactMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "poll_vote" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && (
+                            {!isPaymentMessage && !isVitalSignMessage && !isDocumentMessage && !isLocationMessage && !isContactMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "poll_vote" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && !resolvedVideo && (
                                 (() => {
                                     let displayContent = typeof msg.content === "string" ? msg.content : (msg.content ? JSON.stringify(msg.content) : "");
                                     if (displayContent.startsWith('{"text":')) {
@@ -1382,6 +1445,11 @@ export const MessageBubble = memo(({
                             </span>
                         )}
                         {isEdited && !isDeleted && <span>(editado)</span>}
+                        {isPinned && !isDeleted && (
+                            <span title="Mensaje fijado en el canal" style={{ color: "#3B82F6", display: "inline-flex", alignItems: "center", marginRight: "2px" }}>
+                                <TacIcon name="pin" size={11} color="#3B82F6" />
+                            </span>
+                        )}
                         {starredMessages?.includes(msg.id) && (
                             <span title="Mensaje destacado" style={{ color: "#F0B90B", display: "inline-flex", alignItems: "center", marginRight: "2px" }}>
                                 <TacIcon name="star" size={11} color="#F0B90B" />

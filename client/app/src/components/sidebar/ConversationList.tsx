@@ -227,9 +227,26 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                             if (content.startsWith("{")) {
                                 try {
                                     const parsed = JSON.parse(content);
-                                    const SIGNAL_TYPES = ['IDENTITY_ANNOUNCE','IDENTITY_RESPONSE','IDENTITY_REQUEST','SHAKE_PAIR_BROADCAST','SHAKE_PAIR_ACCEPT','DELIVERY_ACK','PROFILE_UPDATE','NODE_LOCATION_UPDATE','group_invite'];
+                                    const parsedType = (parsed.type || parsed.msg_type || "") as string;
+                                    const SIGNAL_TYPES = [
+                                        'IDENTITY_ANNOUNCE','IDENTITY_RESPONSE','IDENTITY_REQUEST',
+                                        'SHAKE_PAIR_BROADCAST','SHAKE_PAIR_ACCEPT','DELIVERY_ACK',
+                                        'PROFILE_UPDATE','NODE_LOCATION_UPDATE','group_invite',
+                                        'dtn_history_request','dtn_history_response',
+                                        'group_history_request','group_history_response',
+                                        'group_member_add','group_member_remove','group_member_list',
+                                        'channel_history_request','channel_history_response',
+                                        'channel_sync_request','channel_sync_response',
+                                        'read_receipt','sync_request','sync_response',
+                                        'key_exchange','session_handshake','relay_dtn_bundle',
+                                        'wallet_transfer','emergency_sos','emergency_beacon',
+                                        'emergency_cancel','dms_heartbeat','dms_status_sync',
+                                        'dms_wipe_remote','webrtc_offer','webrtc_answer',
+                                        'webrtc_ice','webrtc_hangup','amber_alert_sync',
+                                        'stealth_ping','beacon_scan'
+                                    ];
                                     const SIGNAL_KEYS = ['read_up_to','reader_hash','offer','answer','candidate','hangup','sender_hash','sender_pk','beacon_id'];
-                                    if (parsed.type === 'group_message' || parsed.type === 'squad_msg') {
+                                    if (parsedType === 'group_message' || parsedType === 'squad_msg') {
                                         if (c.is_group) {
                                             const subText = parsed.content || 'Mensaje de grupo';
                                             snippet = subText.length > 38 ? subText.substring(0, 38) + "…" : subText;
@@ -237,12 +254,36 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                         } else {
                                             isSignalingJson = true;
                                         }
-                                    } else if (parsed.type && SIGNAL_TYPES.some(t => parsed.type.startsWith(t.split('_')[0]) || parsed.type === t)) {
+                                    } else if (parsed.msg_type === 'image') {
+                                        snippet = "📷 Foto";
                                         isSignalingJson = true;
+                                    } else if (parsed.msg_type === 'voice' || parsed.msg_type === 'audio') {
+                                        snippet = "🎤 Mensaje de voz";
+                                        isSignalingJson = true;
+                                    } else if (parsed.msg_type === 'video') {
+                                        snippet = "📹 Video";
+                                        isSignalingJson = true;
+                                    } else if (parsed.msg_type === 'location') {
+                                        snippet = "📍 Ubicación";
+                                        isSignalingJson = true;
+                                    } else if (parsed.msg_type === 'poll') {
+                                        snippet = "📊 Encuesta";
+                                        isSignalingJson = true;
+                                    } else if (parsed.msg_type === 'document') {
+                                        snippet = "📄 Documento";
+                                        isSignalingJson = true;
+                                    } else if ((parsed.msg_type === 'text' || !parsed.msg_type) && typeof parsed.content === 'string') {
+                                        snippet = parsed.content.length > 38 ? parsed.content.substring(0, 38) + "…" : parsed.content;
+                                        isSignalingJson = true;
+                                    } else if (parsed.is_control || (parsedType && SIGNAL_TYPES.some(t => parsedType.toLowerCase() === t.toLowerCase() || parsedType.startsWith(t.split('_')[0])))) {
+                                        isSignalingJson = true;
+                                        snippet = "Mensaje cifrado";
                                     } else if (SIGNAL_KEYS.filter(k => k in parsed).length >= 2) {
                                         isSignalingJson = true;
+                                        snippet = "Mensaje cifrado";
                                     } else if (parsed.reason === 'user_remote_wipe') {
                                         isSignalingJson = true;
+                                        snippet = "Mensaje cifrado";
                                     }
                                 } catch {}
                             }

@@ -121,6 +121,7 @@ export async function sendVoiceBurst(payload: {
     sender_name: string;
     duration_seconds: number;
     audio_opus_b64: string;
+    channel?: string;
 }): Promise<{ ok: boolean; burst: VoiceBurst }> {
     return fetchWithFallback('/api/voice/send', {
         method: 'POST',
@@ -140,6 +141,7 @@ export async function sendVoiceBurst(payload: {
             audio_opus_b64: payload.audio_opus_b64,
             timestamp: now,
             sample_rate: 48000,
+            channel: payload.channel || '#general',
         };
         const bursts = getStored<VoiceBurst[]>(STORAGE_KEYS.VOICE_BURSTS, []);
         bursts.unshift(burst);

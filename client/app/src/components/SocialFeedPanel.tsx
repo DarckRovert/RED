@@ -201,24 +201,23 @@ export const SocialFeedPanel: React.FC = () => {
         
         setIsPublishing(true);
         try {
-            await createSocialPost({
+            const created = await createSocialPost({
                 author_name: identity?.nickname || identity?.display_name || 'Operador RED',
                 content: newPostContent.trim(),
                 media_data: mediaData || undefined,
                 reply_to: replyingTo ? replyingTo.id : undefined
             });
 
-            // Difusión P2P del post por la malla (off-grid)
-            const postPayload = new TextEncoder().encode(JSON.stringify({
-                id: `social_post_${Date.now()}`,
-                msg_type: 'SOCIAL_POST_BROADCAST',
-                author_hash: identity?.identity_hash || 'did:red:local',
-                author_name: identity?.nickname || identity?.display_name || 'Operador RED',
-                content: newPostContent.trim(),
-                reply_to: replyingTo?.id || null,
-                timestamp: Date.now()
-            }));
-            meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', postPayload).catch(() => {});
+            // Difusión P2P canónica del post por la malla táctica
+            if (created) {
+                const postPayload = new TextEncoder().encode(JSON.stringify({
+                    id: created.id,
+                    msg_type: 'social_post',
+                    post: created,
+                    timestamp: created.timestamp
+                }));
+                meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', postPayload).catch(() => {});
+            }
 
             setNewPostContent('');
             setMediaData(null);

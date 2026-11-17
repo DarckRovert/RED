@@ -745,6 +745,11 @@ pub struct SendMessageRequest {
 }
 
 #[derive(Deserialize)]
+pub struct EditMessageRequest {
+    pub content: String,
+}
+
+#[derive(Deserialize)]
 pub struct AddContactRequest {
     pub identity_hash: String,
     pub display_name: String,
@@ -962,6 +967,16 @@ pub fn build_router(state: ApiState) -> Router {
         .route(
             "/api/conversations/:id/read",
             post(handle_mark_conversation_read),
+        )
+        // A2: Delete individual message
+        .route(
+            "/api/conversations/:id/messages/:msg_id",
+            axum::routing::delete(handle_delete_message),
+        )
+        // A3: Edit individual message
+        .route(
+            "/api/conversations/:id/messages/:msg_id",
+            axum::routing::patch(handle_edit_message),
         )
         .route(
             "/api/conversations/:id/clear",
@@ -1241,6 +1256,39 @@ async fn handle_clear_conversation(
         None => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"ok": false, "error": "Conversation not found"})),
+        )
+            .into_response(),
+    }
+}
+
+// ─── A2: Delete message ───────────────────────────────────────────────────────
+async fn handle_delete_message(
+    State(state): State<ApiState>,
+    Path((conv_id, msg_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let mut node = state.node.lock().await;
+    match node.delete_message(&conv_id, &msg_id).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": format!("{}", e)})),
+        )
+            .into_response(),
+    }
+}
+
+// ─── A3: Edit message ────────────────────────────────────────────────────────
+async fn handle_edit_message(
+    State(state): State<ApiState>,
+    Path((conv_id, msg_id)): Path<(String, String)>,
+    Json(req): Json<EditMessageRequest>,
+) -> impl IntoResponse {
+    let mut node = state.node.lock().await;
+    match node.edit_message(&conv_id, &msg_id, req.content).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": format!("{}", e)})),
         )
             .into_response(),
     }
@@ -2655,6 +2703,16 @@ pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>
         .route("/api/settings/burner", post(handle_set_burner_mode_async))
         .route("/api/settings/lora", post(handle_set_lora_async))
         .route("/api/conversations/:id/read", post(handle_mark_read_async))
+        // A2: Delete individual message
+        .route(
+            "/api/conversations/:id/messages/:msg_id",
+            axum::routing::delete(handle_delete_message_async),
+        )
+        // A3: Edit individual message
+        .route(
+            "/api/conversations/:id/messages/:msg_id",
+            axum::routing::patch(handle_edit_message_async),
+        )
         .route(
             "/api/conversations/:id/clear",
             axum::routing::delete(handle_clear_async),
@@ -3024,6 +3082,41 @@ async fn handle_clear_async(
     let s = state.lock().await;
     match &*s {
         Some(ready) => handle_clear_conversation(State(ready.clone()), path)
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"})),
+        )
+            .into_response(),
+    }
+}
+
+async fn handle_delete_message_async(
+    State(state): State<AsyncState>,
+    path: Path<(String, String)>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(ready) => handle_delete_message(State(ready.clone()), path)
+            .await
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"})),
+        )
+            .into_response(),
+    }
+}
+
+async fn handle_edit_message_async(
+    State(state): State<AsyncState>,
+    path: Path<(String, String)>,
+    body: Json<EditMessageRequest>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(ready) => handle_edit_message(State(ready.clone()), path, body)
             .await
             .into_response(),
         None => (
@@ -3628,9 +3721,17 @@ async fn handle_create_amber_alert(
     }
 }
 
-async fn handle_list_amber_alerts(State(state): State<ApiState>) -> impl IntoResponse {
-    let alerts = state.amber_store.list_active_alerts();
-    Json(serde_json::json!({ "ok": true, "alerts": alerts })).into_response()
+async fn handle_list_amber_alerts(
+    State(state): State<ApiState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let show_all = params.get("all").map(|v| v == "true" || v == "1").unwrap_or(false);
+    let alerts = if show_all {
+        state.amber_store.list_all_alerts()
+    } else {
+        state.amber_store.list_active_alerts()
+    };
+    Json(serde_json::json!({ "ok": true, "alerts": alerts, "total": alerts.len() })).into_response()
 }
 
 async fn handle_get_amber_alert(
@@ -5801,10 +5902,13 @@ async fn handle_create_amber_alert_async(
     }
 }
 
-async fn handle_list_amber_alerts_async(State(state): State<AsyncState>) -> impl IntoResponse {
+async fn handle_list_amber_alerts_async(
+    State(state): State<AsyncState>,
+    query: axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
     let s = state.lock().await;
     match &*s {
-        Some(r) => handle_list_amber_alerts(State(r.clone()))
+        Some(r) => handle_list_amber_alerts(State(r.clone()), query)
             .await
             .into_response(),
         None => (

@@ -56,8 +56,22 @@ const parseLocationCoords = (m: MessageItem): { lat: number; lon: number } | nul
     return null;
 };
 
+function formatAudioSrc(dataStr: string, mimeType?: string): string {
+    if (!dataStr) return "";
+    if (dataStr.startsWith("data:") || dataStr.startsWith("http") || dataStr.startsWith("blob:")) return dataStr;
+    if (dataStr.startsWith("GkXf")) return `data:audio/webm;base64,${dataStr}`;
+    if (dataStr.startsWith("AAAA")) return `data:audio/mp4;base64,${dataStr}`;
+    if (dataStr.startsWith("UklG")) return `data:audio/wav;base64,${dataStr}`;
+    if (dataStr.startsWith("T2dn")) return `data:audio/ogg;base64,${dataStr}`;
+    return `data:${mimeType || "audio/webm"};base64,${dataStr}`;
+}
+
 const MediaThumbnail: React.FC<{ msg: MessageItem; onClick: () => void }> = ({ msg, onClick }) => {
     const [src, setSrc] = useState<string>("");
+    const isVideo = msg.msg_type === "video" || 
+        (typeof msg.media_data === "string" && msg.media_data.startsWith("data:video/")) || 
+        (typeof msg.content === "string" && msg.content.startsWith("data:video/"));
+
     useEffect(() => {
         let isMounted = true;
         const raw = msg.media_data || msg.content || "";
@@ -83,17 +97,36 @@ const MediaThumbnail: React.FC<{ msg: MessageItem; onClick: () => void }> = ({ m
                 background: "#000",
                 cursor: "pointer",
                 border: "1px solid var(--glass-border)",
+                position: "relative"
             }}
         >
             {src ? (
-                <img
-                    src={src}
-                    alt="Media"
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
+                isVideo ? (
+                    <div style={{ width: "100%", height: "100%", position: "relative" }}>
+                        <video
+                            src={src}
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            muted
+                            playsInline
+                            preload="metadata"
+                        />
+                        <div style={{
+                            position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                            background: "rgba(0,0,0,0.35)"
+                        }}>
+                            <span style={{ fontSize: "1.2rem", color: "#fff", textShadow: "0 2px 6px rgba(0,0,0,0.8)" }}>▶</span>
+                        </div>
+                    </div>
+                ) : (
+                    <img
+                        src={src}
+                        alt="Media"
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                )
             ) : (
                 <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#8696A0", fontSize: "1.2rem" }}>
-                    📷
+                    {isVideo ? "📹" : "📷"}
                 </div>
             )}
         </div>
@@ -107,13 +140,13 @@ const AudioItem: React.FC<{ msg: MessageItem }> = ({ msg }) => {
         const raw = msg.media_data || msg.content || "";
         if (raw.startsWith("red_vault://")) {
             indexedMediaVault.resolveMediaUrl(raw).then(res => {
-                if (isMounted) setAudioSrc(res);
+                if (isMounted) setAudioSrc(formatAudioSrc(res, msg.mime_type));
             }).catch(() => {});
         } else {
-            setAudioSrc(raw);
+            setAudioSrc(formatAudioSrc(raw, msg.mime_type));
         }
         return () => { isMounted = false; };
-    }, [msg.media_data, msg.content]);
+    }, [msg.media_data, msg.content, msg.mime_type]);
 
     return (
         <div
@@ -149,12 +182,31 @@ const DocumentItem: React.FC<{ msg: MessageItem }> = ({ msg }) => {
             toast.error("No se pudo recuperar el archivo de la bóveda");
             return;
         }
+        const fileName = msg.file_name || `archivo_${msg.id.substring(0, 8)}.dat`;
+        try {
+            const { Capacitor } = await import("@capacitor/core");
+            if (Capacitor.isNativePlatform()) {
+                const { Filesystem, Directory } = await import("@capacitor/filesystem");
+                const base64Data = finalSrc.includes(",") ? finalSrc.split(",")[1] : finalSrc;
+                await Filesystem.writeFile({
+                    path: fileName,
+                    data: base64Data,
+                    directory: Directory.Documents,
+                    recursive: true
+                });
+                toast.success(`Guardado en Documentos: ${fileName}`);
+                return;
+            }
+        } catch (err) {
+            console.warn("[ContactProfileModal] Descarga nativa falló, fallback web:", err);
+        }
         const a = document.createElement("a");
         a.href = finalSrc;
-        a.download = msg.file_name || "documento";
+        a.download = fileName;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        toast.success(`Descargando: ${fileName}`);
     };
 
     return (
@@ -248,33 +300,38 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
 
     // Categorized shared media
     const photosAndVideos = useMemo(() => {
-        return messages.filter(
-            (m) =>
-                m.msg_type === "image" ||
-                m.msg_type === "video" ||
-                (m.media_data && (m.media_data.startsWith("data:image/") || m.media_data.startsWith("data:video/"))) ||
-                (m.content && (m.content.startsWith("red_vault://image") || m.content.startsWith("red_vault://video") || m.content.startsWith("data:image/") || m.content.startsWith("data:video/")))
-        );
+        return messages.filter((m) => {
+            if (m.msg_type === "image" || m.msg_type === "video") return true;
+            const md = m.media_data || "";
+            const ct = typeof m.content === "string" ? m.content : "";
+            if (md.startsWith("data:image/") || md.startsWith("data:video/")) return true;
+            if (ct.startsWith("data:image/") || ct.startsWith("data:video/")) return true;
+            if (m.mime_type?.startsWith("image/") || m.mime_type?.startsWith("video/")) return true;
+            return false;
+        });
     }, [messages]);
 
     const documents = useMemo(() => {
-        return messages.filter(
-            (m) =>
-                m.msg_type === "document" ||
-                m.msg_type === "file" ||
-                (m.file_name && !m.media_data?.startsWith("data:image/")) ||
-                (m.content && m.content.startsWith("red_vault://file"))
-        );
+        return messages.filter((m) => {
+            if (m.msg_type === "document" || m.msg_type === "file") return true;
+            if (Boolean((m as any).file_name) && !m.media_data?.startsWith("data:image/") && !m.media_data?.startsWith("data:video/")) return true;
+            if (m.mime_type && !m.mime_type.startsWith("image/") && !m.mime_type.startsWith("video/") && !m.mime_type.startsWith("audio/")) return true;
+            const md = m.media_data || "";
+            const ct = typeof m.content === "string" ? m.content : "";
+            if (md.startsWith("data:application/") || ct.startsWith("data:application/")) return true;
+            return false;
+        });
     }, [messages]);
 
     const voiceNotes = useMemo(() => {
-        return messages.filter(
-            (m) =>
-                m.msg_type === "voice" ||
-                m.msg_type === "audio" ||
-                (m.media_data && m.media_data.startsWith("data:audio/")) ||
-                (m.content && (m.content.startsWith("red_vault://audio") || m.content.startsWith("data:audio/")))
-        );
+        return messages.filter((m) => {
+            if (m.msg_type === "voice" || m.msg_type === "audio") return true;
+            if (m.mime_type?.startsWith("audio/")) return true;
+            const md = m.media_data || "";
+            const ct = typeof m.content === "string" ? m.content : "";
+            if (md.startsWith("data:audio/") || ct.startsWith("data:audio/")) return true;
+            return false;
+        });
     }, [messages]);
 
     const linksAndLocations = useMemo(() => {
@@ -604,11 +661,15 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                                         <span>📍</span>
                                                         <span>Coordenadas GPS: {loc.lat.toFixed(5)}, {loc.lon.toFixed(5)}</span>
                                                     </div>
-                                                ) : (
-                                                    <a href={m.content} target="_blank" rel="noreferrer" style={{ color: "var(--accent-cyan)" }}>
-                                                        {m.content}
-                                                    </a>
-                                                )}
+                                                ) : (() => {
+                                                    const urlMatch = typeof m.content === "string" ? m.content.match(/https?:\/\/[^\s]+/i) : null;
+                                                    const targetUrl = urlMatch ? urlMatch[0] : (m.content?.startsWith("http") ? m.content : `https://${m.content}`);
+                                                    return (
+                                                        <a href={targetUrl} target="_blank" rel="noreferrer" style={{ color: "var(--accent-cyan)", textDecoration: "underline" }}>
+                                                            {targetUrl}
+                                                        </a>
+                                                    );
+                                                })()}
                                             </div>
                                         );
                                     })}

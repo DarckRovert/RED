@@ -78,11 +78,17 @@ export const createEmergencySlice: StateCreator<RedStore, [], [], Partial<RedSto
     resolveSosBeacon: (id: string) => {
         const current = get().activeSosBeacons || [];
         const prevCount = current.length;
-        const filtered = current.filter((b: any) => 
-            b.id !== id && 
-            b.beacon_id !== id &&
-            (id.startsWith('did:red:') ? b.sender_did !== id : (b.sender_did !== `did:red:${id}` && b.sender_did !== id))
-        );
+        const cleanId = (id || '').replace(/^(cancel_|resolve_)/, '');
+        const normId = cleanId.replace(/^sos_/i, '');
+        const filtered = current.filter((b: any) => {
+            const bId = (b.id || '').replace(/^sos_/i, '');
+            const bBeaconId = (b.beacon_id || '').replace(/^sos_/i, '');
+            if (b.id === id || b.beacon_id === id || b.id === cleanId || b.beacon_id === cleanId) return false;
+            if (bId === normId || bBeaconId === normId) return false;
+            if (cleanId.startsWith('did:red:') && b.sender_did === cleanId) return false;
+            if (b.sender_did === `did:red:${cleanId}` || b.sender_did === cleanId) return false;
+            return true;
+        });
         if (filtered.length !== prevCount) {
             set({ activeSosBeacons: filtered });
             toast.info("Baliza SOS resuelta por la red");

@@ -1,5 +1,31 @@
 # Changelog
 
+## [126.1.0-depuracion-tactica-profunda-y-resiliencia-c4isr] - 2026-11-17
+
+### 🛠️⚡ Depuración Táctica Profunda, Resiliencia C4ISR & Soberanía Anti-Billing CI/CD (Release v126.1.0)
+
+- **Ciclo Completo de Depuración Táctica (17 Bugs Críticos Subsanados de Extremo a Extremo):**
+  - **Bug 1: Protocolo Amber Alert & Sincronización de Consulta (`node/src/api.rs`, `red_mobile/src/api.rs`):** Corrección del parámetro de consulta `?all=true` para recuperar alertas activas e históricas sin desincronización ni omisión en la API Axum Rust.
+  - **Bug 2: Visor de Bóveda Táctica & Exportación de Medios (`MediaGalleryViewer.tsx`):** Supresión de parpadeos y fallas de exportación de URIs `red_vault://` mediante resolución asíncrona desacoplada y generación de blobs BlobURL seguros.
+  - **Bug 3: Enrutamiento de Canales & Desplazamiento HUD (`Sidebar.tsx`, `TacticalQuickActionHUD.tsx`):** Eliminación del truncamiento de prefijo en canales (`slice(0, 16)`) y resolución del solapamiento del HUD táctico con la barra de navegación inferior en dispositivos móviles.
+  - **Bug 4: Reproducción de Medios Cifrados en Burbujas de Chat (`MessageBubble.tsx`):** Soporte completo para renderizado de video y descarga de documentos protegidos con protocolo `red_vault://`.
+  - **Bug 5: Normalización de URIs en Perfil de Contactos (`ContactProfileModal.tsx`):** Corrección de prefijos inválidos (`red_vault://image`) y soporte para previsualización directa de audios y videos codificados en base64.
+  - **Bug 6: Deduplicación Inteligente de Mensajes (`ChatWindow.tsx`):** Prevención del descarte erróneo de afirmaciones cortas consecutivas idénticas mediante discriminación temporal estricta de ID y timestamp.
+  - **Bug 7: Flujo de Edición de Mensajes en el Cliente (`ChatInput.tsx`, `ChatWindow.tsx`):** Enrutamiento correcto de la acción de edición a través de `RedAPI.editMessage()` con actualización reactiva en pantalla.
+  - **Bug 8: Rutas Axum Backend para Edición y Borrado (`red_mobile/src/api.rs`):** Implementación de endpoints REST y handlers Axum `/api/messages/:id` (`PUT`, `DELETE`) para propagación en la base de datos local y sincronización en la malla.
+  - **Bug 9: Sincronización de Mensajes Fijados (`ChatWindow.tsx`, `MessageBubble.tsx`, `chatSlice.ts`):** Unificación del estado de mensajes anclados entre el store Zustand y la vista, con persistencia atómica en el almacenamiento local.
+  - **Bug 10: Supresión de Tormenta de Paquetes PTT Walkie-Talkie & Doble Roger Beep (`messageDispatcher.ts`, `channels.ts`, `P2PWalkieTalkieModal.tsx`, `ExtremeSurvivalHudModal.tsx`):** Supresión de la retransmisión en bucle de ráfagas de audio PTT y eliminación del doble pitido de confirmación (Roger Beep) en canales tácticos y HUD de supervivencia.
+  - **Bug 11: Congelamiento de Cámara Radar & Visualización CSS (`RadarWindow.tsx`):** Corrección del bloqueo de cámara en Android al escanear códigos QR y eliminación del reseteo indebido de display CSS en clases `.scanner-active`.
+  - **Bug 12: Bóveda Esteganográfica & Extracción JPEG (`StegoVaultModal.tsx`):** Resolución de fallos en la descarga de archivos ocultos en imágenes y compatibilidad con extracción de portadores JPEG capturados por cámara directa.
+  - **Bug 13: Protocolo Social P2P & Persistencia de Reacciones (`SocialFeedPanel.tsx`, `messageDispatcher.ts`):** Alineación de constantes de difusión de red (`SOCIAL_POST_BROADCAST` vs `social_post`), transporte de `media_data` adjunto, persistencia de reacciones emoji y eliminación de código sombreado.
+  - **Bug 14: Balizas de Emergencia SOS & Cancelación Desincronizada (`emergency.ts`, `messageDispatcher.ts`, `emergencySlice.ts`):** Erradicación del sombreado de IDs (`cancel_${id}`), unificación de tablas `red_sos_beacons` y `red_emergency_beacons`, despacho reactivo en Zustand y eliminación de latidos residuales en segundo plano.
+  - **Bug 15: Monedero P2P & Prevención de Corrupción de Saldo (`economy.ts`, `messageDispatcher.ts`):** Corrección de la mutación recursiva en `STORAGE_KEYS.P2P_WALLET`, blindaje contra reseteos a saldo cero ("dinero infinito" / balances fantasmas), decodificación robusta de vales QR `VOUCHER:1:` y despacho del evento `red:wallet_updated`.
+  - **Bug 16: Interruptor del Hombre Muerto / Dead Man's Switch (`sensors.ts`, `client.ts`, `DMSSettings.tsx`, `BiometricLockEngine.ts`, `messageDispatcher.ts`):** Respeto a la bandera `wipe_identity: false` (previniendo borrados involuntarios de identidad), transmisión garantizada del mensaje de contingencia (`dead_message`), y sincronización global de presencia para erradicar falsos positivos.
+  - **Bug 17: Filtrado de Paquetes de Control DTN & Formateo en Lista de Conversaciones (`client.ts`, `messageDispatcher.ts`, `ConversationList.tsx`):** Clasificación estricta de más de 30 tipos de señalización interna como mensajes de control, evitando la polución de burbujas de chat y filtrando cadenas JSON crudas en las previsualizaciones de la barra lateral.
+- **Soberanía Absoluta de CI/CD & Política Anti-Billing (Costo $0):**
+  - Desmantelamiento total de triggers automáticos (`push`, `pull_request`, `schedule`, `release`) en todos los workflows de `.github/workflows/` (`build-android.yml`, `build-ios.yml`, `build.yml`, `lint.yml`, `proverif.yml`, `publish-aptoide.yml`, `release.yml`, `security.yml`, `test.yml`, `deploy-pages.yml`).
+  - Restricción exclusiva a ejecución manual (`workflow_dispatch`), garantizando consumo de $0.00 en infraestructura en la nube y blindaje contra bloqueos de facturación en repositorios privados.
+
 ## [126.0.0-estabilizacion-tactica-integral-y-resiliencia-ui-ux] - 2026-09-26
 
 ### 🛡️📱 Estabilización Táctica Integral, Blindaje Viewport Móvil & Resiliencia UI/UX Soberana (Release Oficial v126.0.0)

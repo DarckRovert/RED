@@ -264,12 +264,42 @@ export async function emitSos(payload: {
         if (beacons.length > 200) beacons.length = 200;
         setStored(STORAGE_KEYS.SOS_BEACONS, beacons);
 
+        // Sincronizar en STORAGE_KEYS.EMERGENCY_BEACONS
+        const emergList = getStored<EmergencyBeaconRecord[]>(STORAGE_KEYS.EMERGENCY_BEACONS, []);
+        emergList.unshift({
+            id: sos.id,
+            beacon_id: sos.id,
+            beacon_type: 'general_sos',
+            distress_type: 'SOS_GENERAL',
+            lat: sos.lat || 0,
+            latitude: sos.lat,
+            lon: sos.lon || 0,
+            longitude: sos.lon,
+            altitude: sos.altitude,
+            message: sos.note,
+            custom_note: sos.note,
+            battery_pct: sos.battery_level,
+            sender_did: sos.sender_did,
+            timestamp: sos.timestamp,
+            is_active: true,
+            active: true
+        });
+        if (emergList.length > 200) emergList.length = 200;
+        setStored(STORAGE_KEYS.EMERGENCY_BEACONS, emergList);
+
+        // Sincronizar reactivamente en Zustand
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            useRedStore.getState().addSosBeacon(sos);
+        } catch {}
+
         // Broadcast SOS packet across P2P Mesh
         try {
             const { meshRouter } = await import('../lib/mesh/meshRouter');
             const payloadBytes = new TextEncoder().encode(JSON.stringify({
                 id: sos.id,
                 beacon_id: sos.id,
+                sos_id: sos.id,
                 msg_type: 'sos_beacon',
                 beacon: sos,
                 sender: sos.sender_did,
@@ -304,6 +334,17 @@ export async function resolveSos(sosId: string): Promise<{ ok: boolean; resolved
             target.is_active = false;
             setStored(STORAGE_KEYS.SOS_BEACONS, beacons);
         }
+
+        // Sincronizar en STORAGE_KEYS.EMERGENCY_BEACONS
+        const emergList = getStored<EmergencyBeaconRecord[]>(STORAGE_KEYS.EMERGENCY_BEACONS, []);
+        const updatedEmerg = emergList.map(b => (b.beacon_id === sosId || b.id === sosId) ? { ...b, active: false } : b);
+        setStored(STORAGE_KEYS.EMERGENCY_BEACONS, updatedEmerg);
+
+        // Resolver en el almacén reactivo Zustand
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            useRedStore.getState().resolveSosBeacon(sosId);
+        } catch {}
 
         // Broadcast resolution packet across P2P Mesh
         try {
@@ -363,11 +404,39 @@ export async function broadcastEmergencyBeacon(beacon: EmergencyBeaconRecord): P
         list.unshift(record);
         setStored(STORAGE_KEYS.EMERGENCY_BEACONS, list);
 
+        // Sincronizar en STORAGE_KEYS.SOS_BEACONS
+        const sosList = getStored<SosBeacon[]>(STORAGE_KEYS.SOS_BEACONS, []);
+        const validId = record.beacon_id || id;
+        const sosItem: SosBeacon = {
+            id: validId,
+            beacon_id: validId,
+            sender_did: beacon.sender_did || 'did:red:local',
+            sender_name: 'Operador en Peligro',
+            lat: beacon.latitude,
+            lon: beacon.longitude,
+            altitude: beacon.altitude,
+            battery_level: beacon.battery_pct ?? 100,
+            note: beacon.custom_note || 'ALERTA SOS SOLICITANDO AUXILIO',
+            is_active: true,
+            distress_type: beacon.distress_type || 'SOS_GENERAL',
+            timestamp: record.timestamp
+        };
+        sosList.unshift(sosItem);
+        setStored(STORAGE_KEYS.SOS_BEACONS, sosList);
+
+        // Sincronizar en el almacén reactivo Zustand
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            useRedStore.getState().addSosBeacon(sosItem);
+        } catch {}
+
         // Broadcast SOS packet across P2P Mesh
         try {
             const { meshRouter } = await import('../lib/mesh/meshRouter');
             const payloadBytes = new TextEncoder().encode(JSON.stringify({
                 id: record.beacon_id,
+                beacon_id: record.beacon_id,
+                sos_id: record.beacon_id,
                 msg_type: 'emergency_beacon',
                 beacon: record,
                 sender: beacon.sender_did || 'did:red:sos',
@@ -383,15 +452,33 @@ export async function broadcastEmergencyBeacon(beacon: EmergencyBeaconRecord): P
 export async function cancelEmergencyBeacon(id: string): Promise<{ ok: boolean; cancelled: string }> {
     return fetchWithFallback('/api/emergency/beacons/' + id + '/cancel', { method: 'POST' }, async () => {
         const list = getStored<EmergencyBeaconRecord[]>(STORAGE_KEYS.EMERGENCY_BEACONS, []);
-        const updated = list.map(b => b.beacon_id === id ? { ...b, active: false } : b);
+        const updated = list.map(b => (b.beacon_id === id || b.id === id) ? { ...b, active: false } : b);
         setStored(STORAGE_KEYS.EMERGENCY_BEACONS, updated);
+
+        // Sincronizar en STORAGE_KEYS.SOS_BEACONS
+        const sosList = getStored<SosBeacon[]>(STORAGE_KEYS.SOS_BEACONS, []);
+        const updatedSos = sosList.map(b => (b.id === id || b.beacon_id === id) ? { ...b, is_active: false } : b);
+        setStored(STORAGE_KEYS.SOS_BEACONS, updatedSos);
+
+        // Resolver en el store reactivo de inmediato
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            useRedStore.getState().resolveSosBeacon(id);
+        } catch {}
+
+        // Desactivar motor de latidos local
+        try {
+            const { meshSosBeacon } = await import('../lib/emergency/MeshSosBeaconEngine');
+            await meshSosBeacon.deactivateSosBeacon(id);
+        } catch {}
 
         try {
             const { meshRouter } = await import('../lib/mesh/meshRouter');
             const payloadBytes = new TextEncoder().encode(JSON.stringify({
                 id: `cancel_${id}`,
-                msg_type: 'emergency_beacon_cancel',
+                sos_id: id,
                 beacon_id: id,
+                msg_type: 'emergency_beacon_cancel',
                 timestamp: Date.now()
             }));
             await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);

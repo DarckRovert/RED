@@ -4040,9 +4040,17 @@ async fn handle_create_amber_alert(
     }
 }
 
-/// GET /api/amber/alerts — Lista de alertas activas
-async fn handle_list_amber_alerts(State(state): State<ApiState>) -> impl IntoResponse {
-    let alerts = state.amber_store.list_active_alerts();
+/// GET /api/amber/alerts — Lista de alertas activas o todas si all=true
+async fn handle_list_amber_alerts(
+    State(state): State<ApiState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let show_all = params.get("all").map(|v| v == "true" || v == "1").unwrap_or(false);
+    let alerts = if show_all {
+        state.amber_store.list_all_alerts()
+    } else {
+        state.amber_store.list_active_alerts()
+    };
     Json(serde_json::json!({
         "alerts": alerts,
         "total": alerts.len()

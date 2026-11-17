@@ -487,6 +487,7 @@ export default function ChatWindow() {
         const deduped: MessageItem[] = [];
         const seenIds = new Set<string>();
         const contentWindowMap = new Map<string, { ts: number; index: number }>();
+        const isProvisionalId = (id?: string) => !id || id.startsWith('temp_') || id.startsWith('mesh_') || id.startsWith('msg_pending_');
 
         for (const m of validMsgs) {
             if (m.id && seenIds.has(m.id)) continue;
@@ -494,18 +495,23 @@ export default function ChatWindow() {
             const mTs = m.timestamp ? (m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp) : 0;
             const mLat = (m as any).latitude ?? (m as any).lat ?? '';
             const mLon = (m as any).longitude ?? (m as any).lon ?? '';
-            const contentKey = `${m.is_mine ? '1' : '0'}_${m.msg_type || 'text'}_${(m.content || '').trim()}_${mLat}_${mLon}`;
+            const senderKey = (m.sender || (m.is_mine ? 'me' : 'peer')).toLowerCase();
+            const contentKey = `${senderKey}_${m.msg_type || 'text'}_${(m.content || '').trim()}_${mLat}_${mLon}`;
             
             const existingEntry = contentWindowMap.get(contentKey);
             if (existingEntry && Math.abs(existingEntry.ts - mTs) < 15) {
-                // Si el nuevo mensaje tiene un ID definitivo de servidor/base de datos y el anterior era provisional (temp_/mesh_), actualizarlo
                 const prev = deduped[existingEntry.index];
-                if (prev && (prev.id?.startsWith('temp_') || prev.id?.startsWith('mesh_') || prev.id?.startsWith('msg_pending_')) && m.id && !m.id.startsWith('temp_') && !m.id.startsWith('mesh_') && !m.id.startsWith('msg_pending_')) {
-                    deduped[existingEntry.index] = m;
-                    seenIds.add(m.id);
+                const prevIsProv = isProvisionalId(prev?.id);
+                const curIsProv = isProvisionalId(m.id);
+
+                // Solo fusionar si al menos uno de los dos es un ID provisional (optimista o malla sin confirmar)
+                if (prevIsProv || curIsProv) {
+                    if (prevIsProv && !curIsProv && prev) {
+                        deduped[existingEntry.index] = m;
+                        if (m.id) seenIds.add(m.id);
+                    }
+                    continue;
                 }
-                // Duplicado idéntico dentro de la ventana de 15s — omitir burbuja redundante
-                continue;
             }
 
             if (m.id) seenIds.add(m.id);
@@ -526,6 +532,37 @@ export default function ChatWindow() {
 
     // Keep ref in sync with latest convMessages
     useEffect(() => { convMessagesRef.current = convMessages; }, [convMessages]);
+
+    // Keep pinnedMessage synchronized with live convMessages (handle edits, deletions, and wipes)
+    useEffect(() => {
+        if (!pinnedMessage) return;
+        if (convMessages.length > 0) {
+            const liveMsg = convMessages.find(m => m.id === pinnedMessage.id);
+            if (!liveMsg || liveMsg.is_deleted) {
+                setPinnedMessage(null);
+                if (pinStorageKey && typeof window !== 'undefined') {
+                    try { localStorage.removeItem(pinStorageKey); } catch {}
+                }
+            } else if (
+                liveMsg.content !== pinnedMessage.content ||
+                liveMsg.media_data !== pinnedMessage.media_data ||
+                liveMsg.is_edited !== pinnedMessage.is_edited
+            ) {
+                setPinnedMessage(liveMsg);
+                if (pinStorageKey && typeof window !== 'undefined') {
+                    try { localStorage.setItem(pinStorageKey, JSON.stringify(liveMsg)); } catch {}
+                }
+            }
+        }
+    }, [convMessages, pinnedMessage, pinStorageKey]);
+
+    const handleClearChat = async () => {
+        await clearConversation();
+        setPinnedMessage(null);
+        if (pinStorageKey && typeof window !== 'undefined') {
+            try { localStorage.removeItem(pinStorageKey); } catch {}
+        }
+    };
 
     const searchMatches = useMemo(() => {
         if (!searchQuery.trim()) return [];
@@ -623,7 +660,7 @@ export default function ChatWindow() {
             await sendMessage(JSON.stringify({ reason: "user_remote_wipe", timestamp: Date.now() / 1000 }), {
                 msg_type: "conversation_wipe",
             });
-            await clearConversation();
+            await handleClearChat();
             toast.success("💣 Orden de borrado remoto enviada y chat purgado.");
             setIsWipeConfirmOpen(false);
         } catch {
@@ -798,8 +835,23 @@ export default function ChatWindow() {
         }
     };
 
-    const handleSendText = async (text: string, replyToMsg?: MessageItem | null) => {
+    const handleSendText = async (text: string, replyToMsg?: MessageItem | null, targetEditingMsg?: MessageItem | null) => {
         if (!text.trim() || !peerHash) return;
+
+        // Si se está editando un mensaje previo, ejecutar editMessage en lugar de crear un mensaje nuevo
+        const activeEdit = targetEditingMsg || editingMsg;
+        if (activeEdit) {
+            const targetId = activeEdit.id;
+            setEditingMsg(null);
+            try {
+                await editMessage(targetId, text.trim());
+                TacticalAudioEngine.playMessageSent();
+                toast.success("Mensaje editado");
+            } catch {
+                toast.error("Error al editar mensaje");
+            }
+            return;
+        }
 
         // Command /pay support
         if (text.startsWith("/pay ") || text === "/pay") {
@@ -2011,6 +2063,7 @@ export default function ChatWindow() {
                                 onReaction={(msgId, emoji) => sendReaction(msgId, emoji)}
                                 onVote={handleVote}
                                 onPin={handlePinMessage}
+                                isPinned={pinnedMessage?.id === msg.id}
                                 onReply={(m) => setReplyTo(m)}
                                 onForward={(m) => setForwardingMsg(m)}
                                 onEdit={(m) => setEditingMsg(m)}
@@ -2385,7 +2438,7 @@ export default function ChatWindow() {
                             });
                             navigate("call", target);
                         }}
-                        onClearChat={clearConversation}
+                        onClearChat={handleClearChat}
                         onDeleteContact={() => {
                             const target = fullPeerHash || peerHash;
                             deleteContact(target);
@@ -2575,7 +2628,7 @@ export default function ChatWindow() {
                             </button>
                             <button
                                 onClick={async () => {
-                                    await clearConversation();
+                                    await handleClearChat();
                                     setIsClearChatConfirmOpen(false);
                                     toast.success("Chat vaciado");
                                 }}

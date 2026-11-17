@@ -128,12 +128,18 @@ export default function DMSSettings() {
     };
 
     // ── 3. Purga Inmediata (Panic Wipe) ─────────────────────────────────────────────
-    const handleImmediateWipe = async () => {
+    const handleImmediateWipe = async (customConfig?: SaveDmsConfigRequest | React.MouseEvent) => {
         TacticalAudioEngine.playEmergencyAlarm();
         setIsWiping(true);
         try {
-            await RedAPI.panicWipe();
-            toast.success("⚠️ Bóveda criptográfica purgada por completo.");
+            const activeCfg = (customConfig && typeof customConfig === 'object' && 'wipe_messages' in customConfig)
+                ? customConfig
+                : config;
+            await RedAPI.panicWipe({
+                wipe_identity: activeCfg.wipe_identity,
+                dead_message: activeCfg.dead_message
+            });
+            toast.success("⚠️ Bóveda criptográfica purgada por protocolo DMS.");
             setShowPanicModal(false);
             goBack();
         } catch (err: any) {
@@ -434,7 +440,7 @@ export default function DMSSettings() {
                                 {t('common.cancel')}
                             </button>
                             <button
-                                onClick={handleImmediateWipe}
+                                onClick={() => handleImmediateWipe()}
                                 disabled={isWiping}
                                 className="btn-tactical-primary"
                                 style={{ flex: 1, padding: "12px", background: "linear-gradient(135deg, #FF3355 0%, #990000 100%)" }}

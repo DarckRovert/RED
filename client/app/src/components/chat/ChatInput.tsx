@@ -12,7 +12,7 @@ export interface ChatInputProps {
     inputText?: string;
     setInputText?: (text: string) => void;
     handleSend?: () => void;
-    onSendMessage?: (text: string, replyToMsg?: MessageItem | null) => Promise<void> | void;
+    onSendMessage?: (text: string, replyToMsg?: MessageItem | null, editingMsg?: MessageItem | null) => Promise<void> | void;
     onSendVoice?: (blob?: Blob) => void;
     sendTyping?: () => void;
     attachOpen?: boolean;
@@ -313,7 +313,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         if (typeof navigator !== "undefined" && navigator.vibrate) {
             try { navigator.vibrate(12); } catch {}
         }
-        if (onSendMessage) onSendMessage(text.trim(), replyTo);
+        const currentEditing = editingMsg;
+        if (onSendMessage) onSendMessage(text.trim(), replyTo, currentEditing);
         else if (handleSend) handleSend();
         setText("");
         setMultiline(false);
@@ -324,7 +325,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         if (setEditingMsg) setEditingMsg(null);
         const ta = textareaRef.current;
         if (ta) { ta.style.height = "auto"; ta.style.overflowY = "hidden"; }
-    }, [text, onSendMessage, handleSend, setText, replyTo, setReplyTo, setEditingMsg, draftKey]);
+    }, [text, onSendMessage, handleSend, setText, replyTo, setReplyTo, editingMsg, setEditingMsg, draftKey]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -860,20 +861,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                     width: 44,
                                     height: 44,
                                     borderRadius: "50%",
-                                    background: isFamiliar ? "#00A884" : "var(--primary)",
+                                    background: editingMsg ? "var(--accent-amber, #FFBA00)" : (isFamiliar ? "#00A884" : "var(--primary)"),
                                     border: "none",
                                     display: "flex",
                                     alignItems: "center",
                                     justifyContent: "center",
                                     cursor: "pointer",
-                                    color: "#FFFFFF",
-                                    boxShadow: isFamiliar ? "0 2px 10px rgba(0, 168, 132, 0.4)" : "0 0 12px rgba(232,33,58,0.4)",
+                                    color: editingMsg ? "#000000" : "#FFFFFF",
+                                    boxShadow: editingMsg ? "0 0 14px rgba(255, 186, 0, 0.45)" : (isFamiliar ? "0 2px 10px rgba(0, 168, 132, 0.4)" : "0 0 12px rgba(232,33,58,0.4)"),
                                     flexShrink: 0,
                                     transition: "all 0.15s ease",
                                 }}
-                                title="Enviar mensaje"
+                                title={editingMsg ? "Guardar edición" : "Enviar mensaje"}
                             >
-                                <TacIcon name="send" size={20} color="#FFFFFF" />
+                                <TacIcon name={editingMsg ? "check" : "send"} size={20} color={editingMsg ? "#000000" : "#FFFFFF"} />
                             </button>
                         ) : (
                             <button

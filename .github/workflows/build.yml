@@ -1,10 +1,8 @@
 name: Build Pipeline
 
+# Desmantelado segun Politica Anti-Billing Soberana (Costo $0) - solo manual dispatch
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+  workflow_dispatch:
 
 jobs:
   build-rust:

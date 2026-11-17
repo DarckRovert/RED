@@ -305,16 +305,62 @@ export async function pingDmsActivity(): Promise<{ success: boolean; last_active
     });
 }
 
-export async function panicWipe(): Promise<{ success: boolean; wiped: boolean }> {
-    return fetchWithFallback('/api/settings/dms/panic_wipe', { method: 'POST' }, () => {
+export async function panicWipe(options?: { wipe_identity?: boolean; dead_message?: string }): Promise<{ success: boolean; wiped: boolean }> {
+    return fetchWithFallback('/api/settings/dms/panic_wipe', { method: 'POST', body: JSON.stringify(options || {}) }, async () => {
         try {
+            // 1. Si hay dead_message configurado, difundirlo por la malla antes de borrar
+            if (options?.dead_message && options.dead_message.trim()) {
+                try {
+                    const { meshRouter } = await import('../lib/mesh/meshRouter');
+                    const identityStr = typeof window !== 'undefined' ? localStorage.getItem('red_identity') : null;
+                    let senderDid = 'did:red:dms';
+                    let senderName = 'Operador en Peligro';
+                    if (identityStr) {
+                        try {
+                            const parsedId = JSON.parse(identityStr);
+                            senderDid = parsedId.identity_hash || senderDid;
+                            senderName = parsedId.nickname || parsedId.display_name || senderName;
+                        } catch {}
+                    }
+                    const payloadBytes = new TextEncoder().encode(JSON.stringify({
+                        id: `dms_dead_${Date.now()}`,
+                        msg_type: 'dms_dead_message',
+                        sender: senderDid,
+                        sender_name: senderName,
+                        dead_message: options.dead_message.trim(),
+                        timestamp: Date.now()
+                    }));
+                    await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+                } catch (e) {
+                    console.warn('[DMS] Error broadcasting dead message:', e);
+                }
+            }
+
+            // 2. Ejecución selectiva de purga en almacenamiento local
             if (typeof window !== 'undefined') {
-                const preserveKeys = ['red_node_url', 'red_p2p_power_mode'];
+                const wipeIdentity = options?.wipe_identity ?? true;
+                const preserveAlways = ['red_node_url', 'red_p2p_power_mode', 'red_theme'];
+                const identityKeys = [
+                    'red_identity',
+                    'red_identity_hash',
+                    'red_identity_nickname',
+                    'red_identity_public_key',
+                    'red_identity_avatar',
+                    'profile_created',
+                    'user_nickname',
+                    'red_displayName'
+                ];
+
+                const keysToPreserve = wipeIdentity ? preserveAlways : [...preserveAlways, ...identityKeys];
                 const saved: Record<string, string | null> = {};
-                preserveKeys.forEach(k => { saved[k] = localStorage.getItem(k); });
+                keysToPreserve.forEach(k => { saved[k] = localStorage.getItem(k); });
+
                 localStorage.clear();
                 sessionStorage.clear();
-                preserveKeys.forEach(k => { if (saved[k]) localStorage.setItem(k, saved[k]!); });
+
+                keysToPreserve.forEach(k => {
+                    if (saved[k]) localStorage.setItem(k, saved[k]!);
+                });
             }
         } catch {}
         return { success: true, wiped: true };

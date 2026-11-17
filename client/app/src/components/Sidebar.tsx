@@ -173,16 +173,35 @@ export default function Sidebar() {
         for (const c of conversations) {
             if (!c || (!c.peer && !c.id) || c.peer?.startsWith("00000000") || c.id?.startsWith("00000000") || c.peer === 'me' || c.peer === 'local') continue;
             const rawP = c.peer || c.id || '';
-            const canonical = (meshRouter.getCanonicalId(rawP) || rawP).toLowerCase();
-            const shortP = canonical.slice(0, 16);
-            if (seenCanonical.has(canonical) || seenCanonical.has(shortP)) continue;
-            seenCanonical.add(canonical);
-            seenCanonical.add(shortP);
+            const isGroup = Boolean(c.is_group) || rawP.startsWith('group_') || groups.some((g: any) => g.id === c.id || g.id === c.peer);
+            const isChannel = Boolean(c.is_channel) || rawP.startsWith('chan_');
+
+            let canonical = rawP;
+            let dedupKey = rawP;
+
+            if (isGroup || isChannel) {
+                // Preservar ID exacto de escuadrones y canales sin truncamiento de prefijo
+                dedupKey = (isGroup ? `grp_${c.id || c.peer}` : `chan_${c.id || c.peer}`).toLowerCase();
+                if (seenCanonical.has(dedupKey)) continue;
+                seenCanonical.add(dedupKey);
+            } else {
+                // Normalización canónica exclusiva para identidades P2P directas
+                canonical = (meshRouter.getCanonicalId(rawP) || rawP).toLowerCase();
+                const isHexIdentity = /^[0-9a-f]{16,64}$/i.test(canonical);
+                const shortP = isHexIdentity ? canonical.slice(0, 16) : canonical;
+
+                if (seenCanonical.has(canonical) || (isHexIdentity && seenCanonical.has(shortP))) continue;
+                seenCanonical.add(canonical);
+                if (isHexIdentity) seenCanonical.add(shortP);
+            }
+
             if (resolvePeerName(c.peer || c.id || "").toLowerCase().includes(searchQuery.toLowerCase())) {
                 deduped.push({
                     ...c,
-                    id: canonical,
-                    peer: canonical
+                    id: isGroup || isChannel ? (c.id || rawP) : canonical,
+                    peer: isGroup || isChannel ? (c.peer || rawP) : canonical,
+                    is_group: isGroup,
+                    is_channel: isChannel
                 });
             }
         }

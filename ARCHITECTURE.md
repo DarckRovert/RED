@@ -1,4 +1,4 @@
-# 🛡️ RED OS v122.0.0 — Arquitectura Técnica & Especificación Planetaria
+# 🛡️ RED OS v126.1.0 — Arquitectura Técnica & Especificación Planetaria
 
 > Documento maestro de ingeniería de software y especificación arquitectónica de **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Describe en detalle la topología de 7 capas, los protocolos criptográficos híbridos post-cuánticos (ML-KEM-768), la coordinación espectral LoRa TDMA con sincronización Kuramoto y PLL de reloj Lamport, el enrutamiento geoespacial Geohash DTN, la flota de repetidores solares autónomos ESP32-S3, la capa bio-cibernética conectómica, el catálogo consolidado de 65 módulos tácticos, el gemelo digital interactivo Vivarium Biocibernético 3D y el Hábitat Digital Biocibernético In-Silico.
 
@@ -25,7 +25,7 @@
 
 ## 1. Mapa Visual 1: Topología Global del Sistema & Conexión de 7 Capas
 
-El ecosistema RED v122.0.0 opera bajo una arquitectura desacoplada de 7 capas horizontales con aislamiento estricto de memoria y enlaces de comunicación IPC seguros:
+El ecosistema RED v126.1.0 opera bajo una arquitectura desacoplada de 7 capas horizontales con aislamiento estricto de memoria y enlaces de comunicación IPC seguros:
 
 ```mermaid
 graph TD

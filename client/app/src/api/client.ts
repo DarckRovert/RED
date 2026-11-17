@@ -62,7 +62,7 @@ export class RedAPIClient {
         return res || { epoch: 1, current_slot: 1, total_stake: 0, active_validators: 0, chain_height: 0 };
     }
     async pingDmsActivity(): Promise<{ success: boolean; last_active_timestamp: number }> { return pingDmsActivity(); }
-    async panicWipe(): Promise<{ success: boolean; wiped: boolean }> { return panicWipe(); }
+    async panicWipe(options?: { wipe_identity?: boolean; dead_message?: string }): Promise<{ success: boolean; wiped: boolean }> { return panicWipe(options); }
     async configureHardwareLoRa(config: Record<string, unknown>): Promise<{ ok: boolean; config?: Record<string, unknown>; error?: string }> {
         const payload = {
             port: String(config.port || ''),
@@ -532,11 +532,12 @@ export class RedAPIClient {
         };
 
         const isControlMessage = 
+            Boolean(options?.is_control) ||
             Boolean(options?.is_group) ||
+            Boolean(options?.group_id && options?.msg_type !== 'group_message') ||
             options?.msg_type === 'group_invite' ||
-            options?.msg_type === 'group_message' ||
-            options?.msg_type === 'poll_vote' ||
-            options?.msg_type === 'squad_msg' ||
+            options?.msg_type === 'group_history_request' ||
+            options?.msg_type === 'group_history_response' ||
             options?.msg_type === 'group_kick' ||
             options?.msg_type === 'group_leave' ||
             options?.msg_type === 'group_admin' ||
@@ -547,6 +548,7 @@ export class RedAPIClient {
             options?.msg_type === 'typing' ||
             options?.msg_type === 'typing_status' ||
             options?.msg_type === 'read_receipt' ||
+            options?.msg_type === 'read_up_to' ||
             options?.msg_type === 'message_edit' ||
             options?.msg_type === 'message_delete' ||
             options?.msg_type === 'contact_request' ||
@@ -563,12 +565,39 @@ export class RedAPIClient {
             options?.msg_type === 'status' ||
             options?.msg_type === 'status_packet' ||
             options?.msg_type === 'story_reply' ||
-            (typeof content === 'string' && content.startsWith('{') && content.includes('"type":"group_invite"')) ||
-            (typeof content === 'string' && content.startsWith('{') && content.includes('"type":"group_message"')) ||
-            (typeof content === 'string' && content.startsWith('{') && content.includes('"type":"squad_msg"')) ||
-            (typeof content === 'string' && content.startsWith('{') && content.includes('"reason":"user_remote_wipe"')) ||
-            (typeof content === 'string' && content.startsWith('{') && content.includes('"status":') && content.includes('"sender_hash"')) ||
-            (typeof content === 'string' && content.startsWith('{') && content.includes('"sender_hash"') && content.includes('"sender_pk"'));
+            options?.msg_type === 'poll_vote' ||
+            options?.msg_type === 'voice_burst' ||
+            options?.msg_type === 'voice_burst_ack' ||
+            options?.msg_type === 'p2p_voice_burst' ||
+            options?.msg_type === 'voice_burst_delete' ||
+            options?.msg_type === 'p2p_voucher' ||
+            options?.msg_type === 'triage_report' ||
+            options?.msg_type === 'weather_report' ||
+            options?.msg_type === 'sos_beacon' ||
+            options?.msg_type === 'sos_resolve' ||
+            options?.msg_type === 'emergency_beacon' ||
+            options?.msg_type === 'emergency_beacon_cancel' ||
+            options?.msg_type === 'dms_dead_message' ||
+            options?.msg_type === 'blockchain_block' ||
+            options?.msg_type === 'blockchain_tx' ||
+            options?.msg_type === 'seismic_geophone_hit' ||
+            options?.msg_type === 'canvas_stroke' ||
+            options?.msg_type === 'canvas_stroke_batch' ||
+            options?.msg_type === 'canvas_clear' ||
+            (typeof content === 'string' && content.startsWith('{') && (
+                content.includes('"msg_type":"group_history_request"') ||
+                content.includes('"msg_type":"group_history_response"') ||
+                content.includes('"msg_type":"poll_vote"') ||
+                content.includes('"msg_type":"read_receipt"') ||
+                content.includes('"msg_type":"delivery_ack"') ||
+                content.includes('"msg_type":"dms_dead_message"') ||
+                content.includes('"type":"group_invite"') ||
+                content.includes('"type":"group_message"') ||
+                content.includes('"type":"squad_msg"') ||
+                content.includes('"reason":"user_remote_wipe"') ||
+                (content.includes('"status":') && content.includes('"sender_hash"')) ||
+                (content.includes('"sender_hash"') && content.includes('"sender_pk"'))
+            ));
 
         // 1. Save in Web / local store for instant UI rendering and persistence (only for real direct user chat messages)
         if (!isControlMessage && cleanRecipient !== 'me' && cleanRecipient !== 'local') {

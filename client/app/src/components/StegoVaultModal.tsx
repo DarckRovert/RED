@@ -187,21 +187,9 @@ export function StegoVaultModal() {
     };
 
     const handleTakeExtractPhoto = async () => {
-        try {
-            const photo = await Camera.getPhoto({
-                quality: 100,
-                allowEditing: false,
-                resultType: CameraResultType.DataUrl,
-                source: CameraSource.Prompt
-            });
-            if (photo.dataUrl) {
-                setCustomExtractImage(photo.dataUrl);
-                setExtractResult(null);
-                toast.success("Foto cargada para análisis esteganográfico");
-            }
-        } catch {
-            extractFileInputRef.current?.click();
-        }
+        // La esteganografía LSB requiere el archivo PNG original sin compresión con pérdidas de la cámara
+        toast.info("Selecciona el archivo PNG sin pérdidas original para preservar los píxeles LSB");
+        extractFileInputRef.current?.click();
     };
 
     const handleEmbedImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -323,12 +311,29 @@ export function StegoVaultModal() {
         }
     };
 
-    const handleDownloadPng = (dataUrl: string, title?: string) => {
+    const handleDownloadPng = async (dataUrl: string, title?: string) => {
         try {
             TacticalAudioEngine.playMessageSent();
-            const link = document.createElement("a");
             const sanitized = (title || "stego_capsule").replace(/[^a-zA-Z0-9_-]/g, "_");
-            link.download = `${sanitized}_${Date.now()}.png`;
+            const fileName = `${sanitized}_${Date.now()}.png`;
+
+            const { Capacitor } = await import("@capacitor/core");
+            if (Capacitor.isNativePlatform()) {
+                const { Filesystem, Directory } = await import("@capacitor/filesystem");
+                const base64Data = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+                await Filesystem.writeFile({
+                    path: fileName,
+                    data: base64Data,
+                    directory: Directory.Documents,
+                    recursive: true
+                });
+                toast.success(`💾 Cápsula guardada en Documentos: ${fileName}`);
+                return;
+            }
+
+            // Web / Desktop Fallback
+            const link = document.createElement("a");
+            link.download = fileName;
             link.href = dataUrl;
             document.body.appendChild(link);
             link.click();
@@ -342,11 +347,35 @@ export function StegoVaultModal() {
 
     const handleShareImage = async (dataUrl: string, title?: string) => {
         TacticalAudioEngine.playTap();
-        if (typeof navigator !== "undefined" && navigator.share) {
-            try {
+        try {
+            const { Capacitor } = await import("@capacitor/core");
+            const sanitized = (title || "stego_capsule").replace(/[^a-zA-Z0-9_-]/g, "_");
+            const fileName = `${sanitized}_${Date.now()}.png`;
+            const base64Data = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+
+            if (Capacitor.isNativePlatform()) {
+                const { Filesystem, Directory } = await import("@capacitor/filesystem");
+                const { Share } = await import("@capacitor/share");
+                const fileRes = await Filesystem.writeFile({
+                    path: fileName,
+                    data: base64Data,
+                    directory: Directory.Cache,
+                    recursive: true
+                });
+                await Share.share({
+                    title: title || "Cápsula Esteganográfica RED",
+                    text: "Cápsula táctica protegida con esteganografía LSB y cifrado soberano.",
+                    url: fileRes.uri
+                });
+                TacticalAudioEngine.playMessageSent();
+                toast.success("Compartido exitosamente");
+                return;
+            }
+
+            if (typeof navigator !== "undefined" && navigator.share) {
                 const res = await fetch(dataUrl);
                 const blob = await res.blob();
-                const file = new File([blob], `${(title || "stego_capsule").replace(/[^a-zA-Z0-9_-]/g, "_")}.png`, { type: "image/png" });
+                const file = new File([blob], fileName, { type: "image/png" });
                 if (navigator.canShare && navigator.canShare({ files: [file] })) {
                     await navigator.share({
                         title: title || "Cápsula Esteganográfica RED",
@@ -357,14 +386,11 @@ export function StegoVaultModal() {
                     toast.success("Compartido exitosamente");
                     return;
                 }
-            } catch (err: any) {
-                if (err.name !== "AbortError") {
-                    handleDownloadPng(dataUrl, title);
-                }
-                return;
             }
+        } catch (err: any) {
+            if (err.name === "AbortError") return;
         }
-        handleDownloadPng(dataUrl, title);
+        await handleDownloadPng(dataUrl, title);
     };
 
     const handleExtractSecret = async () => {

@@ -462,26 +462,12 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                 const res = await sendVoiceBurst({
                     audio_opus_b64: base64Audio,
                     duration_seconds: duration,
-                    sender_name: myNickname
+                    sender_name: myNickname,
+                    channel: selectedChannel
                 });
 
                 if (res && res.burst) {
                     addVoiceBurst(res.burst);
-                }
-
-                // Radiodifusión en Malla Táctica Off-Grid P2P
-                try {
-                    const meshPayload = new TextEncoder().encode(JSON.stringify({
-                        type: "P2P_VOICE_BURST",
-                        channel: selectedChannel,
-                        sender: myNickname,
-                        duration,
-                        audio_b64: base64Audio,
-                        timestamp: Date.now()
-                    }));
-                    await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", meshPayload);
-                } catch (meshErr) {
-                    console.warn("[P2PWalkieTalkie] Error al difundir ráfaga por malla:", meshErr);
                 }
 
                 // Radiodifusión acústica ultrasónica complementaria si está activa

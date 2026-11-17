@@ -1,8 +1,7 @@
 name: Sync Release to Aptoide Connect
 
+# Desmantelado segun Politica Anti-Billing Soberana (Costo $0) - solo manual dispatch
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       version_tag:

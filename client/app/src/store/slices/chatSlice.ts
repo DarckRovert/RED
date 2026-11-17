@@ -833,6 +833,14 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
 
         // 3. Clear local storage and IndexedDB in RedAPI
         await RedAPI.clearConversation(activeConversationId).catch(e => console.error('Clear failed', e));
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.removeItem(`red_pinned_${activeConversationId}`);
+                if (canonicalPeer && canonicalPeer !== activeConversationId) {
+                    localStorage.removeItem(`red_pinned_${canonicalPeer}`);
+                }
+            } catch {}
+        }
 
         // 4. Mirror to active Live Companion
         try {

@@ -1,16 +1,8 @@
 name: ProVerif Formal Verification
 
+# Desmantelado segun Politica Anti-Billing Soberana (Costo $0) - solo manual dispatch
 on:
-  push:
-    branches: [main, develop]
-    paths:
-      - 'proofs/**'
-      - 'core/src/crypto/**'
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - 'proofs/**'
-      - 'core/src/crypto/**'
+  workflow_dispatch:
 
 jobs:
   proverif:

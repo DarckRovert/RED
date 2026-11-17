@@ -479,25 +479,11 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
                 const res = await sendVoiceBurst({
                     audio_opus_b64: base64Audio,
                     duration_seconds: durationSec,
-                    sender_name: myName
+                    sender_name: myName,
+                    channel: "#general"
                 });
                 if (res && res.burst) {
                     addVoiceBurst(res.burst);
-                }
-
-                // Radiodifusión directa en Malla Táctica Off-Grid P2P
-                try {
-                    const meshPayload = new TextEncoder().encode(JSON.stringify({
-                        type: "P2P_VOICE_BURST",
-                        channel: "#general",
-                        sender: myName,
-                        duration: durationSec,
-                        audio_b64: base64Audio,
-                        timestamp: Date.now()
-                    }));
-                    await meshRouter.send("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", meshPayload).catch(() => {});
-                } catch (meshErr) {
-                    console.warn("[ExtremeSurvivalHud] Error al difundir ráfaga por malla:", meshErr);
                 }
 
                 toast.success(t('extreme_survival_hud.voice_burst_sent', { duration: durationSec }) || `🎙️ Ráfaga de voz transmitida (${durationSec}s) a #general`);

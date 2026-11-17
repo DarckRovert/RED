@@ -17,17 +17,32 @@ export async function getP2PWallet(): Promise<any> {
             }
         } catch {}
 
-        const wallet = getStored<any>(STORAGE_KEYS.P2P_WALLET, {
-            balance: initialBalance,
-            address: 'RED-SOVEREIGN-VAULT',
-            pending_vouchers: [],
-            transactions_count: 0,
-            chain_height: 1
-        });
-        if (wallet.balance === 0 || wallet.balance === undefined) {
-            wallet.balance = initialBalance;
-            setStored(STORAGE_KEYS.P2P_WALLET, wallet);
+        const raw = getStored<any>(STORAGE_KEYS.P2P_WALLET, null);
+        let wallet: any;
+        if (raw && typeof raw === 'object') {
+            const innerWallet = raw.wallet && typeof raw.wallet === 'object' ? raw.wallet : raw;
+            const bal = typeof raw.balance === 'number' && isFinite(raw.balance)
+                ? raw.balance
+                : (typeof innerWallet.balance === 'number' && isFinite(innerWallet.balance) ? innerWallet.balance : initialBalance);
+            wallet = {
+                balance: bal,
+                address: innerWallet.address || 'RED-SOVEREIGN-VAULT',
+                pending_vouchers: Array.isArray(innerWallet.pending_vouchers) ? innerWallet.pending_vouchers : [],
+                transactions_count: typeof innerWallet.transactions_count === 'number' ? innerWallet.transactions_count : 0,
+                chain_height: typeof innerWallet.chain_height === 'number' ? innerWallet.chain_height : 1
+            };
+        } else {
+            wallet = {
+                balance: initialBalance,
+                address: 'RED-SOVEREIGN-VAULT',
+                pending_vouchers: [],
+                transactions_count: 0,
+                chain_height: 1
+            };
         }
+
+        setStored(STORAGE_KEYS.P2P_WALLET, wallet);
+
         const localVouchers = getStored<P2PVoucher[]>(STORAGE_KEYS.P2P_VOUCHERS, []);
         return {
             ok: true,
@@ -66,9 +81,10 @@ export async function createP2PVoucher(amount: number | { amount: number; recipi
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(typeof amount === 'object' ? amount : { amount: numericAmount })
     }, async () => {
-        const wallet = await getP2PWallet();
-        if (wallet.balance < numericAmount) {
-            return { ok: false, error: 'Saldo insuficiente en la billetera P2P off-grid.', new_balance: wallet.balance } as any;
+        const walletRes = await getP2PWallet();
+        const currentBalance = typeof walletRes.balance === 'number' ? walletRes.balance : 0;
+        if (currentBalance < numericAmount) {
+            return { ok: false, error: 'Saldo insuficiente en la billetera P2P off-grid.', new_balance: currentBalance } as any;
         }
         const now = Date.now();
         const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
@@ -83,9 +99,15 @@ export async function createP2PVoucher(amount: number | { amount: number; recipi
             }
         } catch {}
 
-        wallet.balance = Math.max(0, wallet.balance - numericAmount);
-        wallet.transactions_count = (wallet.transactions_count || 0) + 1;
-        setStored(STORAGE_KEYS.P2P_WALLET, wallet);
+        const newBalance = Math.round(Math.max(0, currentBalance - numericAmount) * 100) / 100;
+        const cleanWallet = {
+            balance: newBalance,
+            address: walletRes.wallet?.address || 'RED-SOVEREIGN-VAULT',
+            pending_vouchers: Array.isArray(walletRes.wallet?.pending_vouchers) ? walletRes.wallet.pending_vouchers : [],
+            transactions_count: (walletRes.wallet?.transactions_count || 0) + 1,
+            chain_height: walletRes.wallet?.chain_height || 1
+        };
+        setStored(STORAGE_KEYS.P2P_WALLET, cleanWallet);
 
         const voucher: P2PVoucher = {
             id: voucherId,
@@ -95,7 +117,7 @@ export async function createP2PVoucher(amount: number | { amount: number; recipi
             created_at: Math.floor(now / 1000),
             expires_at: Math.floor(now / 1000) + 86400 * 7,
             ok: true,
-            new_balance: wallet.balance,
+            new_balance: newBalance,
             is_outgoing: true,
             is_redeemed: false,
             redeemed: false,
@@ -103,8 +125,12 @@ export async function createP2PVoucher(amount: number | { amount: number; recipi
         };
 
         const vouchers = getStored<P2PVoucher[]>(STORAGE_KEYS.P2P_VOUCHERS, []);
-        vouchers.push(voucher);
+        vouchers.unshift(voucher);
         setStored(STORAGE_KEYS.P2P_VOUCHERS, vouchers);
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('red:wallet_updated'));
+        }
 
         // Broadcast or send voucher directly across mesh if recipient designated
         try {
@@ -126,7 +152,7 @@ export async function createP2PVoucher(amount: number | { amount: number; recipi
             voucher_id: voucherId,
             amount: numericAmount,
             signature: sig,
-            new_balance: wallet.balance,
+            new_balance: newBalance,
             created_at: Math.floor(now / 1000),
             voucher
         };
@@ -176,6 +202,21 @@ export async function redeemP2PVoucher(idOrPayload: any): Promise<any> {
             voucherId = parts[1]?.trim() || '';
             parsedAmount = parseFloat(parts[2]);
             signature = parts[3]?.trim() || '';
+        } else if (rawId.startsWith('VOUCHER:1:')) {
+            const parts = rawId.split(':');
+            if (parts.length >= 6) {
+                voucherId = parts[2]?.trim() || '';
+                parsedAmount = parseFloat(parts[5]);
+                signature = parts[8]?.trim() || '';
+                try {
+                    const { voucherVault } = await import('../lib/blockchain/VoucherVaultEngine');
+                    const parsedV = voucherVault.parseVoucherFromQrString(rawId);
+                    if (parsedV) {
+                        const identity = await RedAPI.getIdentity().catch(() => null);
+                        await voucherVault.redeemVoucher(parsedV, identity?.identity_hash || 'did:red:local');
+                    }
+                } catch {}
+            }
         } else if (rawId.startsWith('voucher_')) {
             voucherId = rawId;
             const allVouchers = getStored<P2PVoucher[]>(STORAGE_KEYS.P2P_VOUCHERS, []);
@@ -197,11 +238,18 @@ export async function redeemP2PVoucher(idOrPayload: any): Promise<any> {
             return { ok: false, error: 'Vale ya redimido. Prevención criptográfica de doble gasto activa.' };
         }
 
-        // 4. Acreditación en la billetera P2P
-        const wallet = await getP2PWallet();
-        wallet.balance = Math.round(((wallet.balance || 0) + parsedAmount) * 100) / 100;
-        wallet.transactions_count = (wallet.transactions_count || 0) + 1;
-        setStored(STORAGE_KEYS.P2P_WALLET, wallet);
+        // 4. Acreditación limpia en la billetera P2P
+        const walletRes = await getP2PWallet();
+        const currentBalance = typeof walletRes.balance === 'number' ? walletRes.balance : 0;
+        const newBalance = Math.round((currentBalance + parsedAmount) * 100) / 100;
+        const cleanWallet = {
+            balance: newBalance,
+            address: walletRes.wallet?.address || 'RED-SOVEREIGN-VAULT',
+            pending_vouchers: Array.isArray(walletRes.wallet?.pending_vouchers) ? walletRes.wallet.pending_vouchers : [],
+            transactions_count: (walletRes.wallet?.transactions_count || 0) + 1,
+            chain_height: walletRes.wallet?.chain_height || 1
+        };
+        setStored(STORAGE_KEYS.P2P_WALLET, cleanWallet);
 
         // 5. Registrar identificador canónico y rawId en la lista de canjeados
         redeemed.push(voucherId);
@@ -218,7 +266,7 @@ export async function redeemP2PVoucher(idOrPayload: any): Promise<any> {
             created_at: Math.floor(now / 1000),
             expires_at: Math.floor(now / 1000) + 86400 * 30,
             ok: true,
-            new_balance: wallet.balance,
+            new_balance: newBalance,
             is_outgoing: false,
             is_redeemed: true,
             redeemed: true,
@@ -231,11 +279,15 @@ export async function redeemP2PVoucher(idOrPayload: any): Promise<any> {
             setStored(STORAGE_KEYS.P2P_VOUCHERS, vouchers);
         }
 
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('red:wallet_updated'));
+        }
+
         return {
             ok: true,
             redeemed_id: voucherId,
             credited_amount: parsedAmount,
-            new_balance: wallet.balance,
+            new_balance: newBalance,
             voucher: incomingVoucher,
             timestamp: now
         };
